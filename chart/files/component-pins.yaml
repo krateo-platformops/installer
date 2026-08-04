@@ -87,3 +87,98 @@ components:
   - oasgen-provider-crd
   tier: platform
   feature: oasgenProvider
+# ---- agents (PRIVATE krateo-agentiko registry) ----------------------------------------
+# Every agent chart lives in the private krateo-agentiko/charts OCI registry (repo override
+# below), so pulling them needs registryAuth.enabled=true + a read:packages credential
+# (the license, model A). kagent stays ClusterIP: the frontend nginx `/autopilot/` proxies
+# to the kagent-ui Service in-cluster, so the Autopilot toggle works without an external LB.
+# Kinds are crdgen PascalCase(chart name): the 5 specialists dropped the krateo- prefix in the
+# migration, so authn-agent -> AuthnAgent (NOT KrateoAuthnAgent). vertexAI:true injects
+# .Values.vertexAI; modelOwner (autopilot) owns the shared ModelConfigs and auto-derives its
+# extraAgents fleet from every feature-enabled vertexAI agent.
+- name: kagent-crds
+  kind: KagentCrds
+  version: 0.1.3
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  tier: observability
+  feature: coreAgents
+- name: kagent
+  kind: Kagent
+  version: 0.1.7
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent-crds
+  tier: observability
+  feature: coreAgents
+- name: fetch-mcp-server
+  kind: FetchMcpServer
+  version: 0.1.1
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: coreAgents
+- name: krateo-autopilot
+  kind: KrateoAutopilot
+  version: 0.1.51
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: coreAgents
+  vertexAI: true
+  modelOwner: true
+- name: clickhouse-mcp-server
+  kind: ClickhouseMcpServer
+  version: 0.1.8
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: specialistAgents
+- name: authn-agent
+  kind: AuthnAgent
+  version: 0.22.22
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: specialistAgents
+  vertexAI: true
+- name: snowplow-agent
+  kind: SnowplowAgent
+  version: 1.0.87
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: specialistAgents
+  vertexAI: true
+- name: frontend-agent
+  kind: FrontendAgent
+  version: 1.3.94
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: specialistAgents
+  vertexAI: true
+  requireApproval: []
+- name: clickstack-agent
+  kind: ClickstackAgent
+  version: 3.0.32
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: specialistAgents
+  vertexAI: true
+- name: core-provider-agent
+  kind: CoreProviderAgent
+  version: 0.53.14
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: specialistAgents
+  vertexAI: true
