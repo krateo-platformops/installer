@@ -1,0 +1,89 @@
+components:
+- name: authn-crd
+  kind: AuthnCrds
+  chart: authn-crds
+  version: 0.26.0
+  tier: platform
+  feature: portal
+- name: oasgen-provider-crd
+  kind: OasgenProviderCrds
+  chart: oasgen-provider-crds
+  version: 0.20.0
+  tier: platform
+  feature: oasgenProvider
+- name: frontend-crd
+  kind: FrontendCrds
+  chart: frontend-crds
+  version: 1.4.0
+  tier: platform
+  feature: portal
+- name: snowplow-crd
+  kind: SnowplowCrds
+  chart: snowplow-crds
+  version: 1.9.0
+  tier: platform
+  feature: portal
+- name: authn
+  kind: Authn
+  chart: authn
+  version: 0.26.0
+  deps:
+  - authn-crd
+  tier: platform
+  feature: portal
+  expose: true
+  exposePort: 8082
+  svcMatch: authn
+  configKeys:
+  - AUTHN_API_BASE_URL
+- name: snowplow
+  kind: Snowplow
+  chart: snowplow
+  version: 1.9.0
+  deps:
+  - snowplow-crd
+  - authn
+  tier: platform
+  feature: portal
+  expose: true
+  exposePort: 8081
+  svcMatch: snowplow
+  configKeys:
+  - SNOWPLOW_API_BASE_URL
+  frontendConfigEnv: FRONTEND_CONFIG_CONFIGMAP
+- name: frontend
+  kind: Frontend
+  chart: frontend
+  version: 1.4.1
+  deps:
+  - frontend-crd
+  - authn
+  - snowplow
+  tier: platform
+  feature: portal
+  expose: true
+  exposePort: 8080
+  svcMatch: frontend
+  consumer: true
+- name: portal
+  kind: Portal
+  version: 1.6.0
+  deps:
+  - frontend
+  tier: platform
+  feature: portal
+  chart: portal
+- name: krateo-helm-render-service
+  kind: KrateoHelmRenderService
+  version: 0.3.0
+  tier: platform
+  feature: portal
+  chart: krateo-helm-render-service
+- name: oasgen-provider
+  kind: OasgenProvider
+  chart: oasgen-provider
+  version: 0.20.0
+  deps:
+  - oasgen-provider-crd
+  tier: platform
+  feature: oasgenProvider

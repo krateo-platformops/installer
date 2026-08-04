@@ -1,0 +1,5 @@
+# Helm build artifacts — deps are pulled from OCI at release time, never committed.
+chart/charts/
+chart/Chart.lock
+*.tgz
+dist/

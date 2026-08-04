@@ -1,0 +1,115 @@
+{{- /*
+  HOOK 1 — intra-tree reverse-dependency teardown (composition-release pre-delete).
+
+  Problem: the app compositions embed CRs of kinds provided by OTHER compositions —
+    - portal's widget/User/RESTAction CRs   <- frontend-crd / authn-crd / snowplow-crd
+    - hyperdx-provider's RestDefinition      <- oasgen-provider (clears its finalizer)
+  If a provider composition (or its controller) is torn down before its consumers finish
+  draining, the orphaned CRs' finalizers can never clear -> the release wedges and its
+  helm-owned resources (the portal's demo-system namespace, devs-* cluster-roles, the
+  hyperdx RestDefinition) leak.
+
+  Fix (helm construct + reconciliation loop, NO controller change): helm runs ALL
+  pre-delete hooks to completion BEFORE deleting any normal resource — so every component
+  controller is still alive here. We delete the component Composition CRs in the EXACT
+  REVERSE of the dependency-ordered component-pins list (files/component-pins.yaml; consumers before the
+  providers they depend on), waiting for each kind to fully drain before the next. Because
+  every controller is alive throughout, each CR's finalizer clears in order: portal drains
+  (demo-system auto-deletes) before frontend-crd/authn-crd/snowplow-crd; hyperdx-provider's
+  RestDefinition drains (oasgen-provider clears its finalizer) before oasgen-provider. helm
+  then deletes the CompositionDefinitions and core-provider GCs the generated CRDs — no
+  orphans, because every consuming CR is already gone.
+
+  Order comes from the chart (reverse of the topologically-sorted components list); the
+  plural (e.g. KrateoSseProxy -> krateosseproxies, NOT ...proxys) is resolved at RUNTIME
+  from the live CRD by matching spec.names.kind + group, so irregular pluralization can't
+  drift. Runs as the cdc SA (installers-v<ver>); self-bootstrap grants it composition.*
+  delete + apiextensions read. Best-effort (set +e / exit 0) so it never blocks uninstall.
+*/}}
+{{- if not .Values.bootstrap.coreProvider.enabled }}
+{{- $cdcSA := printf "installers-v%s" (.Chart.Version | toString | replace "." "-") }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: installer-ordered-teardown
+  namespace: {{ .Values.namespaces.krateo }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      serviceAccountName: {{ $cdcSA }}
+      restartPolicy: Never
+      containers:
+        - name: order
+          image: alpine/k8s:1.31.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set +e
+              NS={{ .Values.namespaces.krateo }}
+              # Component Kinds in REVERSE dependency order (consumers first). Rendered from
+              # the chart's dependency-sorted components list, so the order can never drift
+              # from the install order. Disabled/absent kinds resolve to nothing and skip.
+              KINDS="{{- range $c := reverse (include "inst.componentsYaml" $ | fromYaml).components }}{{ $c.kind }} {{ end }}"
+              echo "pre-delete: draining component compositions in reverse-dependency order, controllers still alive"
+              for kind in $KINDS; do
+                # OasgenProvider holds the finalizer on ogen RestDefinitions (spawned by the
+                # hyperdx-provider composition, already deleted earlier in this reverse order).
+                # A composition CR reports gone while its RestDefinitions are still terminating,
+                # so gate ONLY oasgen-provider's deletion on RestDefinitions reaching zero — it
+                # must outlive them or their finalizer orphans. (Coupling this into every kind's
+                # drain instead would stall every kind before hyperdx-provider, since
+                # RestDefinitions exist until hyperdx-provider drains.)
+                if [ "$kind" = "OasgenProvider" ]; then
+                  echo "  gating: waiting for ogen RestDefinitions to clear before deleting oasgen-provider"
+                  for i in $(seq 1 24); do
+                    out=$(kubectl get restdefinitions.ogen.krateo.io -n "$NS" --no-headers 2>/dev/null); rc=$?
+                    # only trust a zero when the read succeeded (a failed get must not count as cleared)
+                    if [ $rc -eq 0 ] && [ "$(printf '%s\n' "$out" | grep -c .)" -eq 0 ]; then
+                      echo "    RestDefinitions cleared"; break
+                    fi
+                    sleep 5
+                  done
+                fi
+                # resolve Kind -> live CRD plural (composition.krateo.io group only)
+                res=$(kubectl get crd --no-headers \
+                      -o custom-columns=N:.metadata.name,K:.spec.names.kind,G:.spec.group 2>/dev/null \
+                      | awk -v k="$kind" '$2==k && $3=="composition.krateo.io"{print $1}')
+                [ -z "$res" ] && continue
+                n=$(kubectl get "$res" -n "$NS" --no-headers 2>/dev/null | wc -l | tr -d ' ')
+                [ "$n" = "0" ] && continue
+                echo "  deleting $res ($n) and waiting for drain"
+                kubectl delete "$res" --all -n "$NS" --wait=false 2>/dev/null
+                for i in $(seq 1 24); do
+                  out=$(kubectl get "$res" -n "$NS" --no-headers 2>/dev/null); rc=$?
+                  # a failed read must NOT be mistaken for drained (which would move to the next
+                  # kind early and break the reverse-dependency ordering) — only trust rc=0 + zero.
+                  if [ $rc -eq 0 ] && [ "$(printf '%s\n' "$out" | grep -c .)" -eq 0 ]; then
+                    echo "    $res drained"; break
+                  fi
+                  sleep 5
+                done
+              done
+              # Reap orphaned ClickHouse/Keeper PVCs (#93). KrateoObservability drained above, so its
+              # ClickHouseCluster/KeeperCluster CRs are gone and the operator tore down the StatefulSets —
+              # but it sets no ownerReference / retentionPolicy on the data PVCs (clickhouse-storage-volume-*),
+              # so they orphan. Bounded wait then delete; best-effort (the Job already has set +e / exit 0).
+              echo "pre-delete: reaping orphaned clickhouse-storage-volume-* PVCs in $NS"
+              for i in $(seq 1 12); do
+                pvcs=$(kubectl get pvc -n "$NS" --no-headers -o custom-columns=N:.metadata.name 2>/dev/null \
+                       | grep '^clickhouse-storage-volume-'); rc=$?
+                [ $rc -ne 0 ] && { sleep 5; continue; }
+                [ -z "$pvcs" ] && { echo "  no clickhouse-storage-volume-* PVCs remain"; break; }
+                echo "$pvcs" | while read -r pvc; do
+                  [ -n "$pvc" ] && echo "  deleting PVC $pvc" && kubectl delete pvc "$pvc" -n "$NS" --wait=false 2>/dev/null
+                done
+                sleep 5
+              done
+              echo "pre-delete done — helm deletes the CompositionDefinitions; core-provider GCs the generated CRDs (no orphans)"
+              exit 0
+{{- end }}

@@ -1,0 +1,31 @@
+annotations:
+  krateo.io/category: application
+  krateo.io/display-name: Krateo Installer
+  krateo.io/maturity: stable
+  krateoSupportedVersion: '>= 2.5.1'
+apiVersion: v2
+appVersion: CHART_VERSION
+dependencies:
+- condition: bootstrap.coreProvider.enabled
+  name: core-provider
+  repository: oci://ghcr.io/krateo-platformops/charts
+  version: 2.12.0
+- condition: bootstrap.coreProvider.enabled
+  name: core-provider-crds
+  repository: oci://ghcr.io/krateo-platformops/charts
+  version: 0.36.16
+description: Umbrella orchestrator blueprint that sequences the per-component Krateo
+  PlatformOps blueprints into one ordered, readiness-gated install.
+home: https://krateo.io
+icon: https://raw.githubusercontent.com/krateoplatformops/krateo/main/docs/media/logo.svg
+keywords:
+- krateo
+- platformops
+- installer
+- blueprint
+- orchestrator
+name: installer
+sources:
+- https://github.com/krateo-platformops/installer
+type: application
+version: CHART_VERSION

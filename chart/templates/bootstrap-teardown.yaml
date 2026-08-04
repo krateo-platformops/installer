@@ -1,0 +1,92 @@
+{{- /*
+  HOOK 2 — drain-the-whole-footprint before controller removal (bootstrap-release pre-delete).
+
+  Problem: on `helm uninstall installer` (symmetric teardown of the ONE bootstrap install),
+  helm deletes EVERY resource in the bootstrap release in one pass — and core-provider lives
+  in that release. If helm removes core-provider while ANY krateo object it finalizes still
+  exists, that object's finalizer can never clear: the `installer` CompositionDefinition
+  sticks Terminating (still-exist-compositions-finalizer), the per-composition cdc Deployment
+  (installers-v<ver>-controller, created by core-provider at runtime -> NOT helm-owned) is
+  orphaned, and the namespace can never finalize.
+
+  Fix (helm construct + reconciliation loop): helm runs ALL pre-delete hooks to completion
+  BEFORE deleting any normal resource — so core-provider and every controller are still alive
+  here. We delete the TOP-LEVEL `installer` CompositionDefinition and let core-provider's own
+  reconciliation cascade the entire teardown while alive:
+    installer CompositionDefinition deleted
+      -> core-provider deletes its composition (the Installer CR)
+        -> the Installer cdc uninstalls the composition release -> HOOK 1 drains the
+           component tree in reverse-dependency order (controllers all alive)
+        -> component CompositionDefinitions deleted, core-provider GCs the generated CRDs
+      -> Installer CR finalizer clears -> still-exist finalizer clears
+      -> core-provider Undeploys: removes the installers cdc Deployment + the installers CRD
+      -> installer CompositionDefinition GONE
+  This hook BLOCKS until that whole footprint is gone (no CompositionDefinitions, no
+  composition.krateo.io CRDs, no ogen RestDefinitions). Only then does it return and let helm
+  remove core-provider + the bootstrap scaffolding — nothing left to finalize, no orphan, the
+  namespace finalizes cleanly.
+
+  Runs as the admin-granted installer-self-bootstrap SA (NOT the cdc SA), so it needs no
+  chart-inspector hook-RBAC workaround. activeDeadlineSeconds backstops a stuck object so the
+  uninstall can never block forever.
+*/}}
+{{- if .Values.bootstrap.coreProvider.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: installer-bootstrap-teardown
+  namespace: {{ .Values.namespaces.krateo }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  template:
+    spec:
+      serviceAccountName: installer-self-bootstrap
+      restartPolicy: Never
+      containers:
+        - name: drain
+          image: alpine/k8s:1.31.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set +e
+              NS={{ .Values.namespaces.krateo }}
+              echo "pre-delete: deleting the installer CompositionDefinition — core-provider (alive) cascades the whole ordered teardown"
+              kubectl delete compositiondefinitions.core.krateo.io installer -n "$NS" --wait=false 2>/dev/null
+              echo "waiting for the ENTIRE krateo footprint to drain while controllers are alive..."
+              # Robust drain wait. Two guards against a premature exit that leaves a straggler
+              # (e.g. a portal CompositionDefinition stuck on its managedresource finalizer):
+              #   1. Only TRUST a zero count when the API read SUCCEEDED. A transient kubectl
+              #      failure yields empty stdout, which a naive `| wc -l` reads as 0 == "drained".
+              #      We capture $? and treat any list failure as "not drained, retry".
+              #   2. Require the all-zero state to hold for STABLE consecutive polls, so a single
+              #      blip can't end the wait while core-provider is mid-finalize.
+              STABLE_NEEDED=3
+              stable=0
+              for i in $(seq 1 120); do
+                cds=$(kubectl get compositiondefinitions.core.krateo.io -A --no-headers 2>/dev/null); rc1=$?
+                crd=$(kubectl get crd -o name 2>/dev/null); rc2=$?
+                rds=$(kubectl get restdefinitions.ogen.krateo.io -A --no-headers 2>/dev/null); rc3=$?
+                if [ $rc1 -ne 0 ] || [ $rc2 -ne 0 ]; then
+                  echo "  ...api read failed (rc1=$rc1 rc2=$rc2), retrying"; stable=0; sleep 5; continue
+                fi
+                ndef=$(printf '%s\n' "$cds" | grep -c .)
+                ncrd=$(printf '%s\n' "$crd" | grep -c 'composition\.krateo\.io')
+                # restdefinitions CRD may be absent (oasgen not installed) -> rc3!=0 -> treat as 0
+                if [ $rc3 -eq 0 ]; then nrd=$(printf '%s\n' "$rds" | grep -c .); else nrd=0; fi
+                if [ "$ndef" -eq 0 ] && [ "$ncrd" -eq 0 ] && [ "$nrd" -eq 0 ]; then
+                  stable=$((stable + 1))
+                  [ "$stable" -ge "$STABLE_NEEDED" ] && { echo "krateo footprint fully drained (stable x$STABLE_NEEDED) — core-provider GC'd the installers CRD + cdc and cleared every finalizer"; break; }
+                else
+                  stable=0
+                  echo "  ...$ndef CompositionDefinitions, $ncrd composition CRDs, $nrd RestDefinitions still draining"
+                fi
+                sleep 5
+              done
+              echo "pre-delete done — helm now removes core-provider + bootstrap scaffolding cleanly (nothing left to finalize)"
+              exit 0
+{{- end }}

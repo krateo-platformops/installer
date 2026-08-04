@@ -1,0 +1,39 @@
+{{/* Pass A: register a CompositionDefinition per component whose feature is enabled OR whose
+     Composition still exists. The second clause keeps a CD (and thus its generated CRD) registered
+     while a feature-disabled component is still DRAINING (Pass B / inst.dependentsGone removes the
+     Composition CRs leaves-first; this keeps each CRD alive until its CR is gone) — so the CRD is
+     never GC'd out from under a still-present Composition, which would leave the umbrella's helm
+     release referencing a CRD-less kind ("resource mapping not found") and deadlock every later
+     upgrade. The CD is dropped only once its component is fully gone. Composition mode only — the
+     bootstrap helm install registers the Installer composition (self-bootstrap.yaml). */}}
+{{- if and .Values.installDefinitions (not .Values.bootstrap.coreProvider.enabled) }}
+{{- $components := (include "inst.componentsYaml" $ | fromYaml).components }}
+{{/* LIST all CRDs ONCE and thread the slice into the gating helpers, instead of each inst.crdExists
+     re-LISTing all CRDs — see inst.crdExists (D9). */}}
+{{- $allCRDs := (lookup "apiextensions.k8s.io/v1" "CustomResourceDefinition" "" "").items }}
+{{- range $c := $components }}
+{{/* registerOnly (catalog) blueprints are always registered while installDefinitions is on, so the
+     blueprint appears in the portal; their Composition emission is suppressed in compositions.yaml. */}}
+{{- if or $c.registerOnly (eq (include "inst.featureEnabled" (list $ $c.feature)) "true") (eq (include "inst.compositionExists" (list $ $c.kind $c.name $c.version $allCRDs)) "true") }}
+---
+apiVersion: core.krateo.io/v1alpha1
+kind: CompositionDefinition
+metadata:
+  name: {{ $c.name }}
+  namespace: {{ $.Values.namespaces.krateo }}
+  labels:
+    # NB: app.kubernetes.io/managed-by is intentionally NOT set — helm forces it to
+    # "Helm" on every release resource, so a chart-set value never converges and makes
+    # the cdc reconcile churn a revision every cycle. Let helm own it.
+    krateo.io/tier: {{ $c.tier }}
+spec:
+  chart:
+    url: {{ default $.Values.ociRepo $c.repo }}/{{ default $c.name $c.chart }}
+    version: {{ $c.version | quote }}
+    {{- if $c.chartRepo }}
+    repo: {{ $c.chartRepo | quote }}
+    {{- end }}
+    {{- include "inst.chartExtras" (list $) | nindent 4 }}
+{{- end }}
+{{- end }}
+{{- end }}

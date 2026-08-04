@@ -1,0 +1,4720 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "type": "object",
+  "title": "Krateo PlatformOps Installer",
+  "description": "Umbrella orchestrator. Create one Installer Composition per Krateo platform installation. It registers and emits the component blueprints (forked into the braghettos org) in dependency order. Pinned to installer 2.7.0.",
+  "additionalProperties": false,
+  "properties": {
+    "ociRepo": {
+      "type": "string",
+      "title": "OCI chart repository",
+      "default": "oci://ghcr.io/braghettos/krateo"
+    },
+    "installDefinitions": {
+      "type": "boolean",
+      "title": "Register component CompositionDefinitions",
+      "default": true
+    },
+    "global": {
+      "type": "object"
+    },
+    "bootstrap": {
+      "type": "object",
+      "title": "Bootstrap (composition engine)",
+      "description": "When true, install core-provider as a conditional subchart dependency (gated by bootstrap.coreProvider.enabled) so a bare-cluster helm install self-bootstraps. The hook-weighting that orders bootstrap is on the installer's own self-bootstrap Job, not the subchart.",
+      "additionalProperties": false,
+      "properties": {
+        "coreProvider": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        }
+      }
+    },
+    "krateo-core-provider": {
+      "type": "object",
+      "title": "core-provider subchart values",
+      "description": "Passthrough to the bootstrap core-provider subchart."
+    },
+    "krateo-core-provider-crd": {
+      "type": "object",
+      "title": "core-provider-crd subchart values",
+      "description": "Passthrough to the bootstrap core-provider-crd subchart (engine core.krateo.io CRDs)."
+    },
+    "namespaces": {
+      "type": "object",
+      "title": "Namespaces",
+      "additionalProperties": false,
+      "properties": {
+        "krateo": {
+          "type": "string",
+          "default": "krateo-system"
+        }
+      }
+    },
+    "exposure": {
+      "type": "object",
+      "title": "Exposure",
+      "description": "Exposure model for browser-facing components. NodePort/LoadBalancer are resolved via Helm lookup at reconcile time and set spec.service.type via exposure.type.",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "NodePort",
+            "LoadBalancer"
+          ],
+          "default": "LoadBalancer"
+        },
+        "port": {
+          "type": "integer",
+          "title": "Exposure port",
+          "description": "Optional. Overrides the single port browser-facing (expose:true, top-level Service) components are exposed on \u2014 sets both their Service port and the frontend config.json peer URLs (http://<lb-ip>:<port>). Unset => each component keeps its per-component exposePort default. Nested-Service (kagent) and own-LB (hyperdx) components are set via componentValues.",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      }
+    },
+    "features": {
+      "type": "object",
+      "title": "Feature flags",
+      "additionalProperties": false,
+      "properties": {
+        "coreProvider": {
+          "type": "boolean",
+          "default": true,
+          "description": "Engine-present marker (core-provider is always-on via bootstrap). Gates no component."
+        },
+        "coreAgents": {
+          "type": "boolean",
+          "default": true,
+          "description": "Base agent layer: kagent + fetch-mcp + krateo-autopilot + krateo-installer-agent."
+        },
+        "portal": {
+          "type": "boolean",
+          "default": true,
+          "description": "The non-agent platform: authn/snowplow/frontend/portal + portal-starter + the observability stack (operators, krateo-observability, otel collectors, sse-proxy the portal's events bell consumes)."
+        },
+        "oasgenProvider": {
+          "type": "boolean",
+          "default": true,
+          "description": "Deploy oasgen-provider (generates operators from OpenAPI specs)."
+        },
+        "specialistAgents": {
+          "type": "boolean",
+          "description": "Deploy the 5 component specialist agents (authn/snowplow/frontend/clickstack/core-provider) + clickhouse-mcp (needs coreAgents)."
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "title": "Component DAG (advanced override)",
+      "description": "Advanced: override the built-in component list/versions/dependencies.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "deps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "platform",
+              "observability",
+              "catalog"
+            ]
+          },
+          "feature": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string",
+            "description": "OCI registry base overriding ociRepo for this component's chart URL."
+          },
+          "chart": {
+            "type": "string",
+            "description": "Chart artifact name overriding the component name in the OCI URL (e.g. krateo-snowplow). The component name stays the CompositionDefinition/Composition identity; only the chart path changes."
+          },
+          "chartRepo": {
+            "type": "string",
+            "description": "CompositionDefinition spec.chart.repo \u2014 classic helm repo NAME (only for non-OCI helm-repo charts; OCI components don't need it)."
+          },
+          "expose": {
+            "type": "boolean"
+          },
+          "exposePort": {
+            "type": "integer"
+          },
+          "svcMatch": {
+            "type": "string"
+          },
+          "serviceValuesPath": {
+            "type": "string",
+            "description": "Dotted path to the component chart's Service values block when it is NOT the chart top-level `service` (e.g. kagent's UI Service lives at `kagentapp.ui.service`). The exposure layer builds this nested path and sets `.type` = .Values.exposure.type, flipping the right Service to LoadBalancer/NodePort while the component chart keeps its default."
+          },
+          "consumer": {
+            "type": "boolean"
+          },
+          "configKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "frontendConfigEnv": {
+            "type": "string",
+            "description": "Opt-in: env var key to inject into this component's spec.env with the frontend config-vars ConfigMap name, COMPUTED from the consumer (frontend) component (see compositions.yaml). Used by snowplow's Phase-1 nav-prewarm walker."
+          },
+          "vertexAI": {
+            "type": "boolean",
+            "description": "Inject the umbrella's .vertexAI block into this component's Composition spec (krateo-autopilot)."
+          },
+          "modelOwner": {
+            "type": "boolean",
+            "description": "This agent OWNS the shared ModelConfigs the rest of the fleet references (krateo-autopilot). With localModel.enabled it gets .localModel injected to render them as Ollama; every other agent is pointed at localModel.refName (create:false)."
+          },
+          "requireApproval": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "GRANULAR kagent HITL override (compositions.yaml): the exact list of this agent's tool names that pause for human approval. When present it is threaded onto the agent's spec verbatim and the coarse global .hitlApproval boolean is NOT applied to this agent. Use [] for an agent whose only mutating-shaped tool is a NON-mutating validator (e.g. frontend-agent's k8s_apply_manifest server dry-run) so its authoring loop is not gated \u2014 the real write gate stays downstream (publishPage blast-radius). Omit the key entirely for agents that should inherit the coarse global gate on their own mutating tools."
+          },
+          "registerOnly": {
+            "type": "boolean",
+            "description": "Catalog blueprint: Pass A registers this component's CompositionDefinition (making the blueprint available in the portal) but Pass B never emits a Composition for it \u2014 the operator/end-user instantiates it on demand. Use for tenant workload blueprints (e.g. openstack) that ship in the catalog rather than being auto-installed. Typically paired with tier: catalog."
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "version",
+          "tier"
+        ]
+      }
+    },
+    "localModel": {
+      "type": "object",
+      "title": "Local LLM (Ollama)",
+      "description": "Opt-in (off by default). Run the whole agent fleet on one local Ollama model instead of Gemini/Vertex. The modelOwner agent renders its shared ModelConfigs as provider Ollama at host; every other agent references refName (create:false). Use a tool-calling-capable model (qwen3.6 recommended).",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "host": {
+          "type": "string",
+          "description": "Ollama endpoint, e.g. http://ollama.ollama.svc.cluster.local:11434."
+        },
+        "model": {
+          "type": "string",
+          "default": "qwen3.6",
+          "description": "Local model id pulled in Ollama; must support tool calling."
+        },
+        "refName": {
+          "type": "string",
+          "default": "gemini-flash",
+          "description": "The owner-created ModelConfig name the other agents reference."
+        }
+      }
+    },
+    "vertexAI": {
+      "type": "object",
+      "title": "Gemini Vertex AI",
+      "description": "Vertex AI for the autopilot agents via Application Default Credentials (no API key). Requires the GKE node SA to have aiplatform access and the cloud-platform OAuth scope.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "projectID": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string",
+          "default": "global"
+        }
+      }
+    },
+    "hitlApproval": {
+      "type": "boolean",
+      "title": "HITL approval",
+      "description": "Human-in-the-loop approval gate applied to every vertexAI agent (autopilot orchestrator + subagents): true pauses each mutating tool call for chat approval; false runs autonomously."
+    },
+    "componentValues": {
+      "type": "object",
+      "title": "Per-component spec overrides",
+      "description": "Per-component Composition spec overrides, STRICTLY TYPED against each pinned component's chart schema (regenerated per installer version by hack/gen-componentvalues-schema.py). Deep-merged into the rendered Composition spec; the installer-computed wiring (service.type/config/vertexAI/hitlApproval) stays authoritative and wins on any leaf conflict.",
+      "additionalProperties": false,
+      "properties": {
+        "authn": {
+          "type": "object",
+          "title": "Authn",
+          "description": "Krateo PlatformOps AuthN service. Full-coverage schema for the authn chart (pinned to installer 2.7.0 / chart 0.22.2). Every key of the chart's values.yaml is settable on the Composition spec; omitted keys use chart defaults.",
+          "additionalProperties": false,
+          "properties": {
+            "replicaCount": {
+              "type": "integer",
+              "title": "Replica count",
+              "minimum": 0
+            },
+            "image": {
+              "type": "object",
+              "title": "Image",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "title": "Repository"
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "title": "Pull policy",
+                  "enum": [
+                    "IfNotPresent",
+                    "Always",
+                    "Never"
+                  ]
+                },
+                "tag": {
+                  "type": "string",
+                  "title": "Tag",
+                  "description": "Overrides the image tag whose default is the chart appVersion."
+                }
+              }
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "title": "Image pull secrets",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            },
+            "nameOverride": {
+              "type": "string"
+            },
+            "fullnameOverride": {
+              "type": "string"
+            },
+            "serviceAccount": {
+              "type": "object",
+              "title": "Service account",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean"
+                },
+                "automount": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            },
+            "podAnnotations": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "podLabels": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "podSecurityContext": {
+              "type": "object"
+            },
+            "securityContext": {
+              "type": "object"
+            },
+            "service": {
+              "type": "object",
+              "title": "Service",
+              "additionalProperties": false,
+              "properties": {
+                "annotations": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "type": {
+                  "type": "string",
+                  "title": "Service type",
+                  "enum": [
+                    "ClusterIP",
+                    "NodePort",
+                    "LoadBalancer"
+                  ]
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            },
+            "ingress": {
+              "type": "object",
+              "title": "Ingress",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "className": {
+                  "type": "string"
+                },
+                "annotations": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "hosts": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "host": {
+                        "type": "string"
+                      },
+                      "paths": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "path": {
+                              "type": "string"
+                            },
+                            "pathType": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "tls": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "secretName": {
+                        "type": "string"
+                      },
+                      "hosts": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "title": "Resources"
+            },
+            "livenessProbe": {
+              "type": "object",
+              "title": "Liveness probe"
+            },
+            "readinessProbe": {
+              "type": "object",
+              "title": "Readiness probe"
+            },
+            "autoscaling": {
+              "type": "object",
+              "title": "Autoscaling",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "minReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "targetCPUUtilizationPercentage": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "targetMemoryUtilizationPercentage": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                }
+              }
+            },
+            "volumes": {
+              "type": "array",
+              "title": "Volumes",
+              "items": {
+                "type": "object"
+              }
+            },
+            "volumeMounts": {
+              "type": "array",
+              "title": "Volume mounts",
+              "items": {
+                "type": "object"
+              }
+            },
+            "nodeSelector": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "tolerations": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "affinity": {
+              "type": "object"
+            },
+            "env": {
+              "type": "object",
+              "title": "Environment",
+              "description": "AuthN service environment variables.",
+              "properties": {
+                "AUTHN_DEBUG": {
+                  "type": "string"
+                },
+                "AUTHN_KUBECONFIG_CLUSTER_NAME": {
+                  "type": "string"
+                },
+                "AUTHN_KUBECONFIG_CRT_EXPIRES_IN": {
+                  "type": "string"
+                },
+                "AUTHN_KUBECONFIG_SERVER_URL": {
+                  "type": "string"
+                },
+                "AUTHN_CORS": {
+                  "type": "string"
+                },
+                "AUTHN_DUMP_ENV": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "jwtSignKeySecretName": {
+              "type": "string",
+              "title": "JWT sign key secret name",
+              "description": "Name of the Secret holding the JWT signing key (created by the installer umbrella before authn)."
+            },
+            "global": {
+              "type": "object",
+              "title": "Global values",
+              "description": "Helm global values (injected when this chart is used as a subchart)."
+            }
+          }
+        },
+        "authn-agent": {
+          "title": "krateo-authn-agent values",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "namespace": {
+              "type": "string"
+            },
+            "modelConfig": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "ModelConfig the agent uses \u2014 referenced by name, or created here (create=true) so this agent's model/provider is configured independently.",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "create": {
+                  "type": "boolean"
+                },
+                "provider": {
+                  "type": "string",
+                  "enum": [
+                    "Anthropic",
+                    "OpenAI",
+                    "AzureOpenAI",
+                    "Ollama",
+                    "Gemini",
+                    "GeminiVertexAI",
+                    "AnthropicVertexAI",
+                    "Bedrock",
+                    "SAPAICore"
+                  ]
+                },
+                "model": {
+                  "type": "string"
+                },
+                "vertexAI": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "projectID": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "apiKeySecret": {
+                  "type": "string"
+                },
+                "apiKeySecretKey": {
+                  "type": "string"
+                }
+              }
+            },
+            "prompts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "language": {
+                  "type": "string"
+                }
+              }
+            },
+            "vertexAI": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "projectID": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                }
+              }
+            },
+            "github": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "github MCP server the agent uses to read its component's codebase + chart.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "global": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "fetch": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "github MCP server the agent uses to read its component's codebase + chart.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "authn-crd": {
+          "type": "object",
+          "title": "Authn CRDs",
+          "description": "Dedicated CRD chart for authn (golden rule: CRDs in a separate chart, separate lifecycle). No tunable values.",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values",
+              "description": "Helm global values (injected when this chart is used as a subchart)."
+            }
+          }
+        },
+        "clickhouse-mcp-server": {
+          "title": "clickhouse-mcp-server values",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "replicaCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string"
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "Always",
+                    "IfNotPresent",
+                    "Never"
+                  ]
+                }
+              }
+            },
+            "service": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "ClusterIP",
+                    "NodePort",
+                    "LoadBalancer"
+                  ]
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "sessionAffinity": {
+                  "type": "string",
+                  "enum": [
+                    "",
+                    "None",
+                    "ClientIP"
+                  ],
+                  "description": "Service sessionAffinity. ClientIP pins streamable-http sessions to one pod (needed if replicaCount > 1)."
+                },
+                "sessionAffinityTimeoutSeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "ClientIP affinity timeout."
+                }
+              }
+            },
+            "transport": {
+              "type": "string",
+              "enum": [
+                "http",
+                "sse",
+                "stdio"
+              ]
+            },
+            "clickhouse": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "secure": {
+                  "type": "boolean"
+                },
+                "verify": {
+                  "type": "boolean"
+                },
+                "database": {
+                  "type": "string"
+                }
+              }
+            },
+            "credentials": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "secretName": {
+                  "type": "string"
+                },
+                "username": {
+                  "type": "string"
+                },
+                "password": {
+                  "type": "string"
+                }
+              }
+            },
+            "endpointSecret": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "secretName": {
+                  "type": "string"
+                },
+                "serverUrl": {
+                  "type": "string"
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "clickhouse-operator": {
+          "title": "clickhouse-operator values",
+          "description": "Dependency-wrapper for the upstream clickhouse-operator-helm chart (aliased to `operator`). Values pass through under `operator`.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values",
+              "description": "Helm global values propagated to the upstream subchart."
+            },
+            "operator": {
+              "type": "object",
+              "additionalProperties": true,
+              "title": "Upstream clickhouse-operator-helm passthrough",
+              "description": "Values forwarded to the upstream clickhouse-operator-helm subchart (webhook, certManager, crd, manager, rbac, etc.).",
+              "properties": {
+                "webhook": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "enable": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "certManager": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "enable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "clickstack-agent": {
+          "title": "krateo-clickstack-agent values",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "namespace": {
+              "type": "string"
+            },
+            "modelConfig": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "ModelConfig the agent uses \u2014 referenced by name, or created here (create=true) so this agent's model/provider is configured independently.",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "create": {
+                  "type": "boolean"
+                },
+                "provider": {
+                  "type": "string",
+                  "enum": [
+                    "Anthropic",
+                    "OpenAI",
+                    "AzureOpenAI",
+                    "Ollama",
+                    "Gemini",
+                    "GeminiVertexAI",
+                    "AnthropicVertexAI",
+                    "Bedrock",
+                    "SAPAICore"
+                  ]
+                },
+                "model": {
+                  "type": "string"
+                },
+                "vertexAI": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "projectID": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "apiKeySecret": {
+                  "type": "string"
+                },
+                "apiKeySecretKey": {
+                  "type": "string"
+                }
+              }
+            },
+            "prompts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "language": {
+                  "type": "string"
+                }
+              }
+            },
+            "vertexAI": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "projectID": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                }
+              }
+            },
+            "github": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "global": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "fetch": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Tokenless fetch MCP server the agent uses to GET its version-pinned public raw docs/llms.txt URL (no auth/token).",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "core-provider-agent": {
+          "title": "krateo-core-provider-agent values",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "namespace": {
+              "type": "string"
+            },
+            "modelConfig": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "ModelConfig the agent uses \u2014 referenced by name, or created here (create=true) so this agent's model/provider is configured independently.",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "create": {
+                  "type": "boolean"
+                },
+                "provider": {
+                  "type": "string",
+                  "enum": [
+                    "Anthropic",
+                    "OpenAI",
+                    "AzureOpenAI",
+                    "Ollama",
+                    "Gemini",
+                    "GeminiVertexAI",
+                    "AnthropicVertexAI",
+                    "Bedrock",
+                    "SAPAICore"
+                  ]
+                },
+                "model": {
+                  "type": "string"
+                },
+                "vertexAI": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "projectID": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "apiKeySecret": {
+                  "type": "string"
+                },
+                "apiKeySecretKey": {
+                  "type": "string"
+                }
+              }
+            },
+            "prompts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "language": {
+                  "type": "string"
+                }
+              }
+            },
+            "vertexAI": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "projectID": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                }
+              }
+            },
+            "github": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                }
+              }
+            },
+            "fetch": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Tokenless fetch MCP server the agent uses to GET its version-pinned public raw docs URL.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "global": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "fetch-mcp-server": {
+          "title": "fetch-mcp-server values",
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "namespace": {
+              "type": "string"
+            },
+            "image": {
+              "type": "string"
+            },
+            "imagePullPolicy": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer"
+            },
+            "resources": {
+              "type": "object"
+            }
+          }
+        },
+        "frontend": {
+          "type": "object",
+          "title": "Frontend",
+          "description": "Krateo Frontend blueprint \u2014 full-coverage schema (chart 1.0.10).",
+          "additionalProperties": false,
+          "properties": {
+            "replicaCount": {
+              "type": "integer",
+              "title": "Replica count",
+              "default": 1
+            },
+            "image": {
+              "type": "object",
+              "title": "Image",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "title": "Image repository",
+                  "default": "ghcr.io/braghettos/krateo-frontend"
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "title": "Image pull policy",
+                  "enum": [
+                    "IfNotPresent",
+                    "Always",
+                    "Never"
+                  ],
+                  "default": "IfNotPresent"
+                },
+                "tag": {
+                  "type": "string",
+                  "title": "Image tag",
+                  "description": "Overrides the image tag whose default is the chart appVersion.",
+                  "default": ""
+                }
+              }
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "title": "Image pull secrets",
+              "items": {
+                "type": "object"
+              },
+              "default": []
+            },
+            "nameOverride": {
+              "type": "string",
+              "title": "Name override",
+              "default": ""
+            },
+            "fullnameOverride": {
+              "type": "string",
+              "title": "Fullname override",
+              "default": ""
+            },
+            "serviceAccount": {
+              "type": "object",
+              "title": "Service account",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean",
+                  "title": "Create service account",
+                  "default": true
+                },
+                "automount": {
+                  "type": "boolean",
+                  "title": "Automount service account token",
+                  "default": true
+                },
+                "annotations": {
+                  "type": "object",
+                  "title": "Service account annotations",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "default": {}
+                },
+                "name": {
+                  "type": "string",
+                  "title": "Service account name",
+                  "default": ""
+                }
+              }
+            },
+            "podAnnotations": {
+              "type": "object",
+              "title": "Pod annotations",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "default": {}
+            },
+            "podLabels": {
+              "type": "object",
+              "title": "Pod labels",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "default": {}
+            },
+            "podSecurityContext": {
+              "type": "object",
+              "title": "Pod security context",
+              "default": {}
+            },
+            "securityContext": {
+              "type": "object",
+              "title": "Container security context",
+              "default": {}
+            },
+            "service": {
+              "type": "object",
+              "title": "Service",
+              "additionalProperties": false,
+              "properties": {
+                "annotations": {
+                  "type": "object",
+                  "title": "Service annotations",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "default": {}
+                },
+                "type": {
+                  "type": "string",
+                  "title": "Service type",
+                  "enum": [
+                    "ClusterIP",
+                    "NodePort",
+                    "LoadBalancer"
+                  ],
+                  "default": "ClusterIP"
+                },
+                "port": {
+                  "type": "integer",
+                  "title": "Service port",
+                  "default": 8080
+                }
+              }
+            },
+            "ingress": {
+              "type": "object",
+              "title": "Ingress",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enable ingress",
+                  "default": false
+                },
+                "className": {
+                  "type": "string",
+                  "title": "Ingress class name",
+                  "default": ""
+                },
+                "annotations": {
+                  "type": "object",
+                  "title": "Ingress annotations",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "default": {}
+                },
+                "hosts": {
+                  "type": "array",
+                  "title": "Ingress hosts",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "host": {
+                        "type": "string",
+                        "title": "Host"
+                      },
+                      "paths": {
+                        "type": "array",
+                        "title": "Paths",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "path": {
+                              "type": "string",
+                              "title": "Path"
+                            },
+                            "pathType": {
+                              "type": "string",
+                              "title": "Path type"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "default": [
+                    {
+                      "host": "chart-example.local",
+                      "paths": [
+                        {
+                          "path": "/",
+                          "pathType": "ImplementationSpecific"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "tls": {
+                  "type": "array",
+                  "title": "TLS configuration",
+                  "items": {
+                    "type": "object"
+                  },
+                  "default": []
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "title": "Resources",
+              "default": {}
+            },
+            "livenessProbe": {
+              "type": "object",
+              "title": "Liveness probe",
+              "default": {
+                "httpGet": {
+                  "path": "/",
+                  "port": "http"
+                }
+              }
+            },
+            "readinessProbe": {
+              "type": "object",
+              "title": "Readiness probe",
+              "default": {
+                "httpGet": {
+                  "path": "/",
+                  "port": "http"
+                }
+              }
+            },
+            "autoscaling": {
+              "type": "object",
+              "title": "Autoscaling",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enable autoscaling",
+                  "default": false
+                },
+                "minReplicas": {
+                  "type": "integer",
+                  "title": "Minimum replicas",
+                  "default": 1
+                },
+                "maxReplicas": {
+                  "type": "integer",
+                  "title": "Maximum replicas",
+                  "default": 100
+                },
+                "targetCPUUtilizationPercentage": {
+                  "type": "integer",
+                  "title": "Target CPU utilization percentage",
+                  "default": 80
+                },
+                "targetMemoryUtilizationPercentage": {
+                  "type": "integer",
+                  "title": "Target memory utilization percentage"
+                }
+              }
+            },
+            "nodeSelector": {
+              "type": "object",
+              "title": "Node selector",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "default": {}
+            },
+            "tolerations": {
+              "type": "array",
+              "title": "Tolerations",
+              "items": {
+                "type": "object"
+              },
+              "default": []
+            },
+            "affinity": {
+              "type": "object",
+              "title": "Affinity",
+              "default": {}
+            },
+            "config": {
+              "type": "object",
+              "title": "Frontend runtime config",
+              "description": "Runtime configuration rendered into the frontend ConfigMap (API base URLs and loader routes).",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "properties": {
+                "SNOWPLOW_API_BASE_URL": {
+                  "type": "string",
+                  "title": "Snowplow API base URL",
+                  "default": "http://localhost:8081"
+                },
+                "AUTHN_API_BASE_URL": {
+                  "type": "string",
+                  "title": "Authn API base URL",
+                  "default": "http://localhost:8082"
+                },
+                "EVENTS_PUSH_API_BASE_URL": {
+                  "type": "string",
+                  "title": "Events push API base URL",
+                  "default": "http://localhost:8083"
+                },
+                "EVENTS_API_BASE_URL": {
+                  "type": "string",
+                  "title": "Events API base URL",
+                  "default": "http://localhost:8083"
+                }
+              },
+              "default": {
+                "SNOWPLOW_API_BASE_URL": "http://localhost:8081",
+                "AUTHN_API_BASE_URL": "http://localhost:8082",
+                "EVENTS_PUSH_API_BASE_URL": "http://localhost:8083",
+                "EVENTS_API_BASE_URL": "http://localhost:8083"
+              }
+            },
+            "env": {
+              "type": "object",
+              "title": "Environment variables",
+              "description": "Free-form extra environment variables for the frontend container.",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "default": {}
+            },
+            "previewSandbox": {
+              "type": "object",
+              "title": "Preview sandbox",
+              "description": "Wave-4 live-preview sandbox provisioning (krateo-preview namespace + author RBAC + ResourceQuota + TTL janitor). Passed through to the frontend chart; PREVIEW_SANDBOX_NAMESPACE is auto-forced from previewSandbox.namespace when enabled. The default {enabled:false} keeps the key in the schema-defaulted componentValues so a live-values override (enabled:true) durably merges through the self-bootstrap patch \u2014 matching how the config-object keys propagate. The frontend chart supplies namespace/ttl/quota defaults.",
+              "default": {
+                "enabled": false
+              },
+              "additionalProperties": true,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "namespace": {
+                  "type": "string"
+                },
+                "ttl": {
+                  "type": "string"
+                },
+                "quota": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "widgetPlurals": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "global": {
+              "type": "object",
+              "title": "Global values",
+              "description": "Helm global values (injected when used as a subchart)."
+            }
+          }
+        },
+        "frontend-agent": {
+          "title": "krateo-frontend-agent values",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "namespace": {
+              "type": "string"
+            },
+            "modelConfig": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "ModelConfig the agent uses \u2014 referenced by name, or created here (create=true) so this agent's model/provider is configured independently.",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "create": {
+                  "type": "boolean"
+                },
+                "provider": {
+                  "type": "string",
+                  "enum": [
+                    "Anthropic",
+                    "OpenAI",
+                    "AzureOpenAI",
+                    "Ollama",
+                    "Gemini",
+                    "GeminiVertexAI",
+                    "AnthropicVertexAI",
+                    "Bedrock",
+                    "SAPAICore"
+                  ]
+                },
+                "model": {
+                  "type": "string"
+                },
+                "vertexAI": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "projectID": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "apiKeySecret": {
+                  "type": "string"
+                },
+                "apiKeySecretKey": {
+                  "type": "string"
+                }
+              }
+            },
+            "prompts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "language": {
+                  "type": "string"
+                }
+              }
+            },
+            "vertexAI": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "projectID": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                }
+              }
+            },
+            "github": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                }
+              }
+            },
+            "fetch": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "global": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "frontend-crd": {
+          "type": "object",
+          "title": "Frontend CRDs",
+          "description": "Dedicated CRD chart for frontend (golden rule: CRDs in a separate chart, separate lifecycle). No tunable values.",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values"
+            }
+          }
+        },
+        "kagent": {
+          "title": "kagent values",
+          "description": "Dependency-wrapper for the upstream kagent chart (aliased to `kagentapp`). Values pass through under `kagentapp`.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values",
+              "description": "Helm global values propagated to the upstream subchart."
+            },
+            "kagentapp": {
+              "type": "object",
+              "additionalProperties": true,
+              "title": "Upstream kagent passthrough",
+              "description": "Values forwarded to the upstream kagent subchart (providers, per-agent enabled flags, tool server, etc.).",
+              "properties": {
+                "providers": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "default": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "kagent-crds": {
+          "title": "kagent-crds values",
+          "description": "Dependency-wrapper for the upstream kagent-crds chart (aliased to `crds`). Upstream defaults apply (kmcp.enabled: true).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values",
+              "description": "Helm global values propagated to the upstream subchart."
+            },
+            "crds": {
+              "type": "object",
+              "additionalProperties": true,
+              "title": "Upstream kagent-crds passthrough",
+              "description": "Values forwarded to the upstream kagent-crds subchart (e.g. kmcp.enabled).",
+              "properties": {
+                "kmcp": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "krateo-autopilot": {
+          "title": "krateo-autopilot values",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "namespace": {
+              "type": "string",
+              "description": "Namespace where the autopilot resources are installed."
+            },
+            "geminiApiKey": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "secretName": {
+                  "type": "string"
+                },
+                "secretKey": {
+                  "type": "string"
+                }
+              },
+              "description": "Reference to an existing secret holding the Gemini API key."
+            },
+            "models": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "Anthropic",
+                      "OpenAI",
+                      "AzureOpenAI",
+                      "Ollama",
+                      "Gemini",
+                      "GeminiVertexAI",
+                      "AnthropicVertexAI",
+                      "Bedrock",
+                      "SAPAICore"
+                    ]
+                  }
+                }
+              },
+              "description": "Model configurations, keyed by an arbitrary alias."
+            },
+            "vertexAI": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "projectID": {
+                  "type": "string",
+                  "description": "GCP project ID hosting Vertex AI."
+                },
+                "location": {
+                  "type": "string",
+                  "description": "Vertex AI location \u2014 defaults to `global` (recommended for Gemini 2.5); set a region (e.g. us-central1) for data residency."
+                },
+                "secretName": {
+                  "type": "string"
+                }
+              },
+              "description": "Gemini Vertex AI provider configuration. When enabled, ModelConfigs use provider GeminiVertexAI with Application Default Credentials (no API key) \u2014 the pod's GKE node SA must have aiplatform access. secretName is optional (only for explicit SA-key auth)."
+            },
+            "localModel": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Opt-in: render every model slot as a kagent ModelConfig with provider Ollama pointing at host. Takes precedence over vertexAI. Default false (vertexAI/Gemini stays the default)."
+                },
+                "host": {
+                  "type": "string",
+                  "description": "Ollama endpoint, e.g. http://ollama.ollama.svc.cluster.local:11434."
+                },
+                "model": {
+                  "type": "string",
+                  "description": "Local model id pulled in Ollama; overrides every slot's model id. Must support tool calling (e.g. qwen3.6)."
+                }
+              },
+              "description": "Local LLM (Ollama) provider \u2014 opt-in path to run the agents on a local, no-cloud model."
+            },
+            "mcpServers": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "protocol": {
+                    "type": "string"
+                  }
+                }
+              },
+              "description": "Remote MCP servers, keyed by an arbitrary alias."
+            },
+            "agents": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "modelConfig": {
+                    "type": "string"
+                  },
+                  "skillRef": {
+                    "type": "string"
+                  }
+                }
+              },
+              "description": "Agents to deploy, keyed by agent name."
+            },
+            "prompts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "language": {
+                  "type": "string"
+                }
+              },
+              "description": "Prompts configuration."
+            },
+            "hitlApproval": {
+              "type": "boolean",
+              "description": "HITL approval gate for mutating k8s tools. true=pause for approval (safe); false=autonomous remediation."
+            },
+            "global": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Helm global values (injected by the composition runtime)."
+            },
+            "extraAgents": {
+              "type": "array",
+              "description": "Extra A2A sub-agents to register on the orchestrator (component/blueprint-contributed specialists, e.g. the installer's krateo-installer-agent). The orchestrator stays the single mandatory entry point; these are reachable only via its routing.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "apiGroup": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "fetch": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "krateo-installer-agent": {
+          "title": "krateo-installer-agent values",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "namespace": {
+              "type": "string",
+              "description": "Namespace where the agent + its RBAC/ModelConfig are installed."
+            },
+            "modelConfig": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "ModelConfig the agent uses \u2014 referenced by name, or created here (create=true) so this agent's model/provider is configured independently.",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "create": {
+                  "type": "boolean"
+                },
+                "provider": {
+                  "type": "string",
+                  "enum": [
+                    "Anthropic",
+                    "OpenAI",
+                    "AzureOpenAI",
+                    "Ollama",
+                    "Gemini",
+                    "GeminiVertexAI",
+                    "AnthropicVertexAI",
+                    "Bedrock",
+                    "SAPAICore"
+                  ]
+                },
+                "model": {
+                  "type": "string"
+                },
+                "vertexAI": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "projectID": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "apiKeySecret": {
+                  "type": "string"
+                },
+                "apiKeySecretKey": {
+                  "type": "string"
+                }
+              }
+            },
+            "hitlApproval": {
+              "type": "boolean",
+              "description": "HITL approval gate on the mutating k8s tools the agent uses to edit the Installer CR."
+            },
+            "prompts": {
+              "type": "object",
+              "description": "Prompt language selecting files/prompts-<language>.yaml for the agent systemMessage.",
+              "additionalProperties": false,
+              "properties": {
+                "language": {
+                  "type": "string"
+                }
+              }
+            },
+            "rbac": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Narrow Role/RoleBinding granting patch on installers.composition.krateo.io.",
+              "properties": {
+                "create": {
+                  "type": "boolean"
+                },
+                "serviceAccountName": {
+                  "type": "string"
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Agent pod resource requests/limits."
+            },
+            "global": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Helm global values (injected by the composition runtime)."
+            },
+            "fetch": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "krateo-observability": {
+          "title": "krateo-observability values",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "storageClassName": {
+                  "type": "string"
+                }
+              },
+              "description": "Global values propagated to clickstack and its subcharts."
+            },
+            "otelCredentials": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "secretName": {
+                  "type": "string"
+                },
+                "username": {
+                  "type": "string"
+                },
+                "password": {
+                  "type": "string"
+                }
+              }
+            },
+            "hyperdxLoadBalancer": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            },
+            "clickstack": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "fullnameOverride": {
+                  "type": "string"
+                },
+                "clickhouse": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "image": {
+                      "type": "string"
+                    },
+                    "persistence": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "size": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "resources": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "limits": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "cpu": {
+                              "type": "string"
+                            },
+                            "memory": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "requests": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "cpu": {
+                              "type": "string"
+                            },
+                            "memory": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "otel": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "resources": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "limits": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "cpu": {
+                              "type": "string"
+                            },
+                            "memory": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "requests": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "cpu": {
+                              "type": "string"
+                            },
+                            "memory": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "hyperdx": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "ingress": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                },
+                "mongodb": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "persistence": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "size": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "description": "Upstream clickstack chart values, passed through opaquely."
+            }
+          }
+        },
+        "krateo-sse-proxy": {
+          "title": "krateo-sse-proxy values",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Global values shared across charts."
+            },
+            "replicaCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string"
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "Always",
+                    "IfNotPresent",
+                    "Never"
+                  ]
+                }
+              }
+            },
+            "imagePullSecrets": {
+              "type": "array"
+            },
+            "nameOverride": {
+              "type": "string"
+            },
+            "fullnameOverride": {
+              "type": "string"
+            },
+            "serviceAccount": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            },
+            "service": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "ClusterIP",
+                    "NodePort",
+                    "LoadBalancer"
+                  ]
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            },
+            "clickhouse": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "url": {
+                  "type": "string"
+                },
+                "user": {
+                  "type": "string"
+                },
+                "passwordSecret": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "optional": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "listenAddr": {
+              "type": "string"
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "podAnnotations": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "nodeSelector": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "tolerations": {
+              "type": "array"
+            },
+            "affinity": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "mongodb-operator": {
+          "title": "mongodb-operator values",
+          "description": "Dependency-wrapper for the upstream MongoDB community-operator chart (aliased to `operator`). Values pass through under `operator`.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values",
+              "description": "Helm global values propagated to the upstream subchart."
+            },
+            "operator": {
+              "type": "object",
+              "additionalProperties": true,
+              "title": "Upstream community-operator passthrough",
+              "description": "Values forwarded to the upstream MongoDB community-operator subchart (operator deployment, RBAC, community-operator-crds, createResource, etc.)."
+            }
+          }
+        },
+        "oasgen-provider": {
+          "type": "object",
+          "title": "OasgenProvider",
+          "description": "Full-coverage values schema for the oasgen-provider chart, pinned to installer 2.7.0 / chart 0.9.0.",
+          "additionalProperties": false,
+          "properties": {
+            "replicaCount": {
+              "type": "integer",
+              "title": "Replica count"
+            },
+            "image": {
+              "type": "object",
+              "title": "Controller image",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "title": "Image repository"
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "title": "Image pull policy",
+                  "enum": [
+                    "IfNotPresent",
+                    "Always",
+                    "Never"
+                  ]
+                },
+                "tag": {
+                  "type": "string",
+                  "title": "Image tag"
+                }
+              }
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "title": "Image pull secrets",
+              "items": {
+                "type": "object"
+              }
+            },
+            "nameOverride": {
+              "type": "string",
+              "title": "Name override"
+            },
+            "fullnameOverride": {
+              "type": "string",
+              "title": "Fullname override"
+            },
+            "serviceAccount": {
+              "type": "object",
+              "title": "Service account",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean",
+                  "title": "Create service account"
+                },
+                "automount": {
+                  "type": "boolean",
+                  "title": "Automount API credentials"
+                },
+                "annotations": {
+                  "type": "object",
+                  "title": "Service account annotations"
+                },
+                "name": {
+                  "type": "string",
+                  "title": "Service account name"
+                }
+              }
+            },
+            "podAnnotations": {
+              "type": "object",
+              "title": "Pod annotations"
+            },
+            "podLabels": {
+              "type": "object",
+              "title": "Pod labels"
+            },
+            "podSecurityContext": {
+              "type": "object",
+              "title": "Pod security context"
+            },
+            "securityContext": {
+              "type": "object",
+              "title": "Container security context"
+            },
+            "service": {
+              "type": "object",
+              "title": "Service",
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "title": "Service type",
+                  "enum": [
+                    "ClusterIP",
+                    "NodePort",
+                    "LoadBalancer"
+                  ]
+                },
+                "port": {
+                  "type": "integer",
+                  "title": "Service port"
+                }
+              }
+            },
+            "ingress": {
+              "type": "object",
+              "title": "Ingress",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Ingress enabled"
+                },
+                "className": {
+                  "type": "string",
+                  "title": "Ingress class name"
+                },
+                "annotations": {
+                  "type": "object",
+                  "title": "Ingress annotations"
+                },
+                "hosts": {
+                  "type": "array",
+                  "title": "Ingress hosts",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "host": {
+                        "type": "string"
+                      },
+                      "paths": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "path": {
+                              "type": "string"
+                            },
+                            "pathType": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "tls": {
+                  "type": "array",
+                  "title": "Ingress TLS",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "title": "Resources"
+            },
+            "autoscaling": {
+              "type": "object",
+              "title": "Autoscaling",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Autoscaling enabled"
+                },
+                "minReplicas": {
+                  "type": "integer",
+                  "title": "Minimum replicas"
+                },
+                "maxReplicas": {
+                  "type": "integer",
+                  "title": "Maximum replicas"
+                },
+                "targetCPUUtilizationPercentage": {
+                  "type": "integer",
+                  "title": "Target CPU utilization percentage"
+                },
+                "targetMemoryUtilizationPercentage": {
+                  "type": "integer",
+                  "title": "Target memory utilization percentage"
+                }
+              }
+            },
+            "volumes": {
+              "type": "array",
+              "title": "Additional volumes",
+              "items": {
+                "type": "object"
+              }
+            },
+            "volumeMounts": {
+              "type": "array",
+              "title": "Additional volume mounts",
+              "items": {
+                "type": "object"
+              }
+            },
+            "nodeSelector": {
+              "type": "object",
+              "title": "Node selector"
+            },
+            "tolerations": {
+              "type": "array",
+              "title": "Tolerations",
+              "items": {
+                "type": "object"
+              }
+            },
+            "affinity": {
+              "type": "object",
+              "title": "Affinity"
+            },
+            "rdc": {
+              "type": "object",
+              "title": "rest-dynamic-controller (rdc)",
+              "description": "Values for the rest-dynamic-controller sub-block deployed by oasgen-provider.",
+              "additionalProperties": false,
+              "properties": {
+                "image": {
+                  "type": "object",
+                  "title": "rdc image",
+                  "additionalProperties": false,
+                  "properties": {
+                    "repository": {
+                      "type": "string",
+                      "title": "Image repository"
+                    },
+                    "pullPolicy": {
+                      "type": "string",
+                      "title": "Image pull policy",
+                      "enum": [
+                        "IfNotPresent",
+                        "Always",
+                        "Never"
+                      ]
+                    },
+                    "tag": {
+                      "type": "string",
+                      "title": "Image tag"
+                    }
+                  }
+                },
+                "replicaCount": {
+                  "type": "integer",
+                  "title": "Replica count"
+                },
+                "imagePullSecrets": {
+                  "type": "array",
+                  "title": "Image pull secrets",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "nameOverride": {
+                  "type": "string",
+                  "title": "Name override"
+                },
+                "fullnameOverride": {
+                  "type": "string",
+                  "title": "Fullname override"
+                },
+                "serviceAccount": {
+                  "type": "object",
+                  "title": "Service account",
+                  "additionalProperties": false,
+                  "properties": {
+                    "create": {
+                      "type": "boolean",
+                      "title": "Create service account"
+                    },
+                    "automount": {
+                      "type": "boolean",
+                      "title": "Automount API credentials"
+                    },
+                    "annotations": {
+                      "type": "object",
+                      "title": "Service account annotations"
+                    },
+                    "name": {
+                      "type": "string",
+                      "title": "Service account name"
+                    }
+                  }
+                },
+                "podAnnotations": {
+                  "type": "object",
+                  "title": "Pod annotations"
+                },
+                "podLabels": {
+                  "type": "object",
+                  "title": "Pod labels"
+                },
+                "podSecurityContext": {
+                  "type": "object",
+                  "title": "Pod security context"
+                },
+                "securityContext": {
+                  "type": "object",
+                  "title": "Container security context"
+                },
+                "service": {
+                  "type": "object",
+                  "title": "Service",
+                  "additionalProperties": false,
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "title": "Service type",
+                      "enum": [
+                        "ClusterIP",
+                        "NodePort",
+                        "LoadBalancer"
+                      ]
+                    },
+                    "port": {
+                      "type": "integer",
+                      "title": "Service port"
+                    }
+                  }
+                },
+                "ingress": {
+                  "type": "object",
+                  "title": "Ingress",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Ingress enabled"
+                    },
+                    "className": {
+                      "type": "string",
+                      "title": "Ingress class name"
+                    },
+                    "annotations": {
+                      "type": "object",
+                      "title": "Ingress annotations"
+                    },
+                    "hosts": {
+                      "type": "array",
+                      "title": "Ingress hosts",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "host": {
+                            "type": "string"
+                          },
+                          "paths": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "pathType": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "tls": {
+                      "type": "array",
+                      "title": "Ingress TLS",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                "resources": {
+                  "type": "object",
+                  "title": "Resources"
+                },
+                "autoscaling": {
+                  "type": "object",
+                  "title": "Autoscaling",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Autoscaling enabled"
+                    },
+                    "minReplicas": {
+                      "type": "integer",
+                      "title": "Minimum replicas"
+                    },
+                    "maxReplicas": {
+                      "type": "integer",
+                      "title": "Maximum replicas"
+                    },
+                    "targetCPUUtilizationPercentage": {
+                      "type": "integer",
+                      "title": "Target CPU utilization percentage"
+                    },
+                    "targetMemoryUtilizationPercentage": {
+                      "type": "integer",
+                      "title": "Target memory utilization percentage"
+                    }
+                  }
+                },
+                "volumes": {
+                  "type": "array",
+                  "title": "Additional volumes",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "volumeMounts": {
+                  "type": "array",
+                  "title": "Additional volume mounts",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "nodeSelector": {
+                  "type": "object",
+                  "title": "Node selector"
+                },
+                "tolerations": {
+                  "type": "array",
+                  "title": "Tolerations",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "affinity": {
+                  "type": "object",
+                  "title": "Affinity"
+                },
+                "env": {
+                  "type": "object",
+                  "title": "Environment variables",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "env": {
+              "type": "object",
+              "title": "Environment variables",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "properties": {
+                "OASGEN_PROVIDER_DEBUG": {
+                  "type": "string",
+                  "title": "Debug logging"
+                },
+                "OASGEN_PROVIDER_MAX_RECONCILE_RATE": {
+                  "type": [
+                    "integer",
+                    "string"
+                  ],
+                  "title": "Max reconcile rate"
+                }
+              }
+            },
+            "global": {
+              "type": "object",
+              "title": "Global values",
+              "description": "Helm global values (injected when this chart is used as a subchart)."
+            },
+            "livenessProbe": {
+              "type": "object",
+              "description": "Kubernetes probe configuration (httpGet/tcpSocket/exec + timing). Empty/unset uses chart defaults.",
+              "additionalProperties": true
+            },
+            "readinessProbe": {
+              "type": "object",
+              "description": "Kubernetes probe configuration (httpGet/tcpSocket/exec + timing). Empty/unset uses chart defaults.",
+              "additionalProperties": true
+            }
+          }
+        },
+        "oasgen-provider-crd": {
+          "type": "object",
+          "title": "Oasgen Provider CRDs",
+          "description": "Dedicated CRD chart for oasgen-provider (golden rule: CRDs in a separate chart, separate lifecycle). No tunable values.",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values",
+              "description": "Helm global values (injected when this chart is used as a subchart)."
+            }
+          }
+        },
+        "otel-collector-daemonset": {
+          "title": "otel-collector-daemonset values",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Global values shared across charts."
+            },
+            "opentelemetry-collector": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "deployment",
+                    "daemonset",
+                    "statefulset"
+                  ]
+                },
+                "image": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "repository": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "command": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "clusterRole": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "create": {
+                      "type": "boolean"
+                    },
+                    "rules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "apiGroups": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "resources": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "verbs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "presets": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "logsCollection": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "includeCollectorLogs": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "hostMetrics": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "kubernetesAttributes": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "extractAllPodLabels": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "kubeletMetrics": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                },
+                "config": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "receivers": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "filelog": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "operators": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "max_log_size": {
+                                    "type": "integer"
+                                  },
+                                  "type": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "hostmetrics": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "collection_interval": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "kubeletstats": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "collection_interval": {
+                              "type": "string"
+                            },
+                            "auth_type": {
+                              "type": "string"
+                            },
+                            "endpoint": {
+                              "type": "string"
+                            },
+                            "insecure_skip_verify": {
+                              "type": "boolean"
+                            },
+                            "metrics": {
+                              "type": "object",
+                              "additionalProperties": true,
+                              "properties": {
+                                "k8s.pod.cpu_limit_utilization": {
+                                  "type": "object",
+                                  "additionalProperties": true,
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                },
+                                "k8s.pod.cpu_request_utilization": {
+                                  "type": "object",
+                                  "additionalProperties": true,
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                },
+                                "k8s.pod.memory_limit_utilization": {
+                                  "type": "object",
+                                  "additionalProperties": true,
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                },
+                                "k8s.pod.memory_request_utilization": {
+                                  "type": "object",
+                                  "additionalProperties": true,
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                },
+                                "k8s.pod.uptime": {
+                                  "type": "object",
+                                  "additionalProperties": true,
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                },
+                                "k8s.node.uptime": {
+                                  "type": "object",
+                                  "additionalProperties": true,
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                },
+                                "k8s.container.cpu_limit_utilization": {
+                                  "type": "object",
+                                  "additionalProperties": true,
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                },
+                                "k8s.container.cpu_request_utilization": {
+                                  "type": "object",
+                                  "additionalProperties": true,
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                },
+                                "k8s.container.memory_limit_utilization": {
+                                  "type": "object",
+                                  "additionalProperties": true,
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                },
+                                "k8s.container.memory_request_utilization": {
+                                  "type": "object",
+                                  "additionalProperties": true,
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                },
+                                "container.uptime": {
+                                  "type": "object",
+                                  "additionalProperties": true,
+                                  "properties": {
+                                    "enabled": {
+                                      "type": "boolean"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "processors": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "transform": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "log_statements": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "properties": {
+                                  "context": {
+                                    "type": "string"
+                                  },
+                                  "statements": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "batch": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "send_batch_size": {
+                              "type": "integer"
+                            },
+                            "timeout": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "memory_limiter": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "check_interval": {
+                              "type": "string"
+                            },
+                            "limit_percentage": {
+                              "type": "integer"
+                            },
+                            "spike_limit_percentage": {
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "exporters": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "clickhouse": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "endpoint": {
+                              "type": "string"
+                            },
+                            "username": {
+                              "type": "string"
+                            },
+                            "password": {
+                              "type": "string"
+                            },
+                            "database": {
+                              "type": "string"
+                            },
+                            "logs_table_name": {
+                              "type": "string"
+                            },
+                            "traces_table_name": {
+                              "type": "string"
+                            },
+                            "metrics_table_name": {
+                              "type": "string"
+                            },
+                            "create_schema": {
+                              "type": "boolean"
+                            },
+                            "timeout": {
+                              "type": "string"
+                            },
+                            "retry_on_failure": {
+                              "type": "object",
+                              "additionalProperties": true,
+                              "properties": {
+                                "enabled": {
+                                  "type": "boolean"
+                                },
+                                "initial_interval": {
+                                  "type": "string"
+                                },
+                                "max_interval": {
+                                  "type": "string"
+                                },
+                                "max_elapsed_time": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "service": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "pipelines": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "logs": {
+                              "type": "object",
+                              "additionalProperties": true,
+                              "properties": {
+                                "receivers": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "processors": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "exporters": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            },
+                            "metrics": {
+                              "type": "object",
+                              "additionalProperties": true,
+                              "properties": {
+                                "receivers": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "processors": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "exporters": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "extraEnvs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "secretKeyRef": {
+                            "type": "object",
+                            "additionalProperties": true,
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "key": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "resources": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "cpu": {
+                          "type": "string"
+                        },
+                        "memory": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "requests": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "cpu": {
+                          "type": "string"
+                        },
+                        "memory": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "description": "Values forwarded to the upstream opentelemetry-collector subchart."
+            }
+          }
+        },
+        "otel-collector-deployment": {
+          "title": "otel-collector-deployment values",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Global values shared across charts."
+            },
+            "opentelemetry-collector": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "deployment",
+                    "daemonset",
+                    "statefulset"
+                  ]
+                },
+                "replicaCount": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "image": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "repository": {
+                      "type": "string"
+                    },
+                    "tag": {
+                      "type": "string"
+                    },
+                    "pullPolicy": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "command": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "clusterRole": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "create": {
+                      "type": "boolean"
+                    },
+                    "rules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "apiGroups": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "resources": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "verbs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "presets": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "kubernetesAttributes": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "kubernetesEvents": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "clusterMetrics": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                },
+                "config": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "receivers": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "jaeger": {},
+                        "otlp": {},
+                        "prometheus": {},
+                        "zipkin": {},
+                        "k8sobjects": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "objects": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "mode": {
+                                    "type": "string"
+                                  },
+                                  "group": {
+                                    "type": "string"
+                                  },
+                                  "namespaces": {
+                                    "type": "array"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "k8s_cluster": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "collection_interval": {
+                              "type": "string"
+                            },
+                            "node_conditions_to_report": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "allocatable_types_to_report": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "processors": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "batch": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "send_batch_size": {
+                              "type": "integer"
+                            },
+                            "timeout": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "memory_limiter": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "check_interval": {
+                              "type": "string"
+                            },
+                            "limit_percentage": {
+                              "type": "integer"
+                            },
+                            "spike_limit_percentage": {
+                              "type": "integer"
+                            }
+                          }
+                        },
+                        "k8sattributes": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "extract": {
+                              "type": "object",
+                              "additionalProperties": true,
+                              "properties": {
+                                "metadata": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "labels": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "additionalProperties": true,
+                                    "properties": {
+                                      "tag_name": {
+                                        "type": "string"
+                                      },
+                                      "key_regex": {
+                                        "type": "string"
+                                      },
+                                      "from": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "passthrough": {
+                              "type": "boolean"
+                            },
+                            "pod_association": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "properties": {
+                                  "sources": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": true,
+                                      "properties": {
+                                        "from": {
+                                          "type": "string"
+                                        },
+                                        "name": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "resource": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "attributes": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "properties": {
+                                  "key": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  },
+                                  "action": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "compositionresolver": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "cache_ttl": {
+                              "type": "string"
+                            },
+                            "negative_cache_ttl": {
+                              "type": "string"
+                            },
+                            "label_key": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "exporters": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "clickhouse": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "endpoint": {
+                              "type": "string"
+                            },
+                            "username": {
+                              "type": "string"
+                            },
+                            "password": {
+                              "type": "string"
+                            },
+                            "database": {
+                              "type": "string"
+                            },
+                            "logs_table_name": {
+                              "type": "string"
+                            },
+                            "traces_table_name": {
+                              "type": "string"
+                            },
+                            "metrics_table_name": {
+                              "type": "string"
+                            },
+                            "create_schema": {
+                              "type": "boolean"
+                            },
+                            "timeout": {
+                              "type": "string"
+                            },
+                            "retry_on_failure": {
+                              "type": "object",
+                              "additionalProperties": true,
+                              "properties": {
+                                "enabled": {
+                                  "type": "boolean"
+                                },
+                                "initial_interval": {
+                                  "type": "string"
+                                },
+                                "max_interval": {
+                                  "type": "string"
+                                },
+                                "max_elapsed_time": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "service": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "pipelines": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "logs": {
+                              "type": "object",
+                              "additionalProperties": true,
+                              "properties": {
+                                "receivers": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "processors": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "exporters": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            },
+                            "metrics": {
+                              "type": "object",
+                              "additionalProperties": true,
+                              "properties": {
+                                "receivers": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "processors": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "exporters": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            },
+                            "traces": {}
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "extraEnvs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "secretKeyRef": {
+                            "type": "object",
+                            "additionalProperties": true,
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "key": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "resources": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "cpu": {
+                          "type": "string"
+                        },
+                        "memory": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "requests": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "cpu": {
+                          "type": "string"
+                        },
+                        "memory": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "description": "Values forwarded to the upstream opentelemetry-collector subchart."
+            }
+          }
+        },
+        "portal": {
+          "additionalProperties": true,
+          "properties": {
+            "enableAdminUser": {
+              "default": true,
+              "description": "Enable admin user (basic authentication) with cluster-admin permissions",
+              "title": "enableAdminUser",
+              "type": "boolean"
+            },
+            "enableCyberjokerUser": {
+              "default": true,
+              "description": "Enable cyberjoker user (basic authentication) with namespace-scoped permissions",
+              "title": "enableCyberjokerUser",
+              "type": "boolean"
+            },
+            "enableDemoSystemNamespace": {
+              "default": true,
+              "description": "enabling the demo creates the demo-system namespace, deploys two Route resources within it, and grants permissions to the cyberjoker user if that user is enabled",
+              "title": "enableDemoSystemNamespace",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "snowplow": {
+          "title": "chart values",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "replicaCount": {
+              "type": "integer",
+              "description": "Number of snowplow pod replicas.",
+              "title": "Replica Count"
+            },
+            "progressDeadlineSeconds": {
+              "type": "integer",
+              "description": "Deployment progressDeadlineSeconds; safety window for cold informer sync.",
+              "title": "Progress Deadline Seconds"
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "description": "Container image repository.",
+                  "title": "Repository"
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "Always",
+                    "IfNotPresent",
+                    "Never"
+                  ],
+                  "description": "Image pull policy.",
+                  "title": "Pull Policy"
+                },
+                "tag": {
+                  "type": "string",
+                  "description": "Pinned snowplow app image tag (decoupled from chart version).",
+                  "title": "Tag"
+                }
+              },
+              "description": "Container image settings.",
+              "title": "Image"
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "description": "References to secrets for pulling images from private registries.",
+              "title": "Image Pull Secrets"
+            },
+            "nameOverride": {
+              "type": "string",
+              "description": "Override the chart name used in resource names.",
+              "title": "Name Override"
+            },
+            "fullnameOverride": {
+              "type": "string",
+              "description": "Override the fully qualified resource name.",
+              "title": "Fullname Override"
+            },
+            "serviceAccount": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean",
+                  "description": "Whether to create a service account.",
+                  "title": "Create"
+                },
+                "automount": {
+                  "type": "boolean",
+                  "description": "Automatically mount the service account API token.",
+                  "title": "Automount"
+                },
+                "annotations": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Annotations to add to the service account.",
+                  "title": "Annotations"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Name of the service account to use; generated if empty and create is true.",
+                  "title": "Name"
+                }
+              },
+              "description": "Service account configuration.",
+              "title": "Service Account"
+            },
+            "podAnnotations": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Annotations to add to the pod.",
+              "title": "Pod Annotations"
+            },
+            "podLabels": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Labels to add to the pod.",
+              "title": "Pod Labels"
+            },
+            "podSecurityContext": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Pod-level security context.",
+              "title": "Pod Security Context"
+            },
+            "securityContext": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Container-level security context.",
+              "title": "Security Context"
+            },
+            "service": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "ClusterIP",
+                    "NodePort",
+                    "LoadBalancer",
+                    "ExternalName"
+                  ],
+                  "description": "Service type.",
+                  "title": "Type"
+                },
+                "port": {
+                  "type": "integer",
+                  "description": "Service port exposing the main http listener.",
+                  "title": "Port"
+                },
+                "nodePort": {
+                  "type": "integer"
+                }
+              },
+              "description": "Kubernetes Service configuration.",
+              "title": "Service"
+            },
+            "probePort": {
+              "type": "integer",
+              "description": "DEPRECATED / no-op on the 1.0.x ship line: the binary has no dedicated probe listener; probes target the main http port. Retained for values-compatibility only -- setting it has no effect.",
+              "title": "Probe Port"
+            },
+            "ingress": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable creation of an Ingress resource.",
+                  "title": "Enabled"
+                },
+                "className": {
+                  "type": "string",
+                  "description": "IngressClass name.",
+                  "title": "Class Name"
+                },
+                "annotations": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Annotations to add to the Ingress.",
+                  "title": "Annotations"
+                },
+                "hosts": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "host": {
+                        "type": "string",
+                        "description": "Hostname for the rule.",
+                        "title": "Host"
+                      },
+                      "paths": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "path": {
+                              "type": "string",
+                              "description": "URL path.",
+                              "title": "Path"
+                            },
+                            "pathType": {
+                              "type": "string",
+                              "description": "Kubernetes Ingress pathType.",
+                              "title": "Path Type"
+                            }
+                          }
+                        },
+                        "description": "Path rules for the host.",
+                        "title": "Paths"
+                      }
+                    }
+                  },
+                  "description": "Ingress host rules.",
+                  "title": "Hosts"
+                },
+                "tls": {
+                  "type": "array",
+                  "description": "TLS configuration for the Ingress.",
+                  "title": "TLS"
+                }
+              },
+              "description": "Ingress configuration.",
+              "title": "Ingress"
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "integer",
+                      "description": "CPU limit.",
+                      "title": "CPU"
+                    },
+                    "memory": {
+                      "type": "string",
+                      "description": "Memory limit.",
+                      "title": "Memory"
+                    }
+                  },
+                  "description": "Resource limits.",
+                  "title": "Limits"
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "integer",
+                      "description": "CPU request.",
+                      "title": "CPU"
+                    },
+                    "memory": {
+                      "type": "string",
+                      "description": "Memory request.",
+                      "title": "Memory"
+                    }
+                  },
+                  "description": "Resource requests.",
+                  "title": "Requests"
+                }
+              },
+              "description": "Compute resource requests and limits.",
+              "title": "Resources"
+            },
+            "startupProbe": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "httpGet": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "description": "Path to probe.",
+                      "title": "Path"
+                    },
+                    "port": {
+                      "type": "string",
+                      "description": "Port (name or number) to probe.",
+                      "title": "Port"
+                    }
+                  },
+                  "description": "HTTP GET action for the probe.",
+                  "title": "HTTP Get"
+                },
+                "failureThreshold": {
+                  "type": "integer",
+                  "description": "Consecutive failures before giving up.",
+                  "title": "Failure Threshold"
+                },
+                "periodSeconds": {
+                  "type": "integer",
+                  "description": "How often to perform the probe.",
+                  "title": "Period Seconds"
+                },
+                "timeoutSeconds": {
+                  "type": "integer",
+                  "description": "Probe timeout.",
+                  "title": "Timeout Seconds"
+                }
+              },
+              "description": "Startup probe configuration (targets the dedicated probe port).",
+              "title": "Startup Probe"
+            },
+            "livenessProbe": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "httpGet": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "description": "Path to probe.",
+                      "title": "Path"
+                    },
+                    "port": {
+                      "type": "string",
+                      "description": "Port (name or number) to probe.",
+                      "title": "Port"
+                    }
+                  },
+                  "description": "HTTP GET action for the probe.",
+                  "title": "HTTP Get"
+                },
+                "periodSeconds": {
+                  "type": "integer",
+                  "description": "How often to perform the probe.",
+                  "title": "Period Seconds"
+                },
+                "timeoutSeconds": {
+                  "type": "integer",
+                  "description": "Probe timeout.",
+                  "title": "Timeout Seconds"
+                },
+                "failureThreshold": {
+                  "type": "integer",
+                  "description": "Consecutive failures before restart.",
+                  "title": "Failure Threshold"
+                }
+              },
+              "description": "Liveness probe configuration (targets the dedicated probe port).",
+              "title": "Liveness Probe"
+            },
+            "readinessProbe": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "httpGet": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "description": "Path to probe.",
+                      "title": "Path"
+                    },
+                    "port": {
+                      "type": "string",
+                      "description": "Port (name or number) to probe.",
+                      "title": "Port"
+                    }
+                  },
+                  "description": "HTTP GET action for the probe.",
+                  "title": "HTTP Get"
+                },
+                "periodSeconds": {
+                  "type": "integer",
+                  "description": "How often to perform the probe.",
+                  "title": "Period Seconds"
+                },
+                "timeoutSeconds": {
+                  "type": "integer",
+                  "description": "Probe timeout.",
+                  "title": "Timeout Seconds"
+                },
+                "failureThreshold": {
+                  "type": "integer",
+                  "description": "Consecutive failures before marking not ready.",
+                  "title": "Failure Threshold"
+                }
+              },
+              "description": "Readiness probe configuration (targets the dedicated probe port).",
+              "title": "Readiness Probe"
+            },
+            "autoscaling": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable autoscaling via HPA.",
+                  "title": "Enabled"
+                },
+                "minReplicas": {
+                  "type": "integer",
+                  "description": "Minimum number of replicas.",
+                  "title": "Min Replicas"
+                },
+                "maxReplicas": {
+                  "type": "integer",
+                  "description": "Maximum number of replicas.",
+                  "title": "Max Replicas"
+                },
+                "targetCPUUtilizationPercentage": {
+                  "type": "integer",
+                  "description": "Target average CPU utilization to scale on.",
+                  "title": "Target CPU Utilization Percentage"
+                },
+                "targetMemoryUtilizationPercentage": {
+                  "type": "integer"
+                }
+              },
+              "description": "HorizontalPodAutoscaler configuration.",
+              "title": "Autoscaling"
+            },
+            "args": {
+              "type": "array",
+              "description": "Command-line args for the snowplow container.",
+              "title": "Args"
+            },
+            "volumes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Volume name.",
+                    "title": "Name"
+                  },
+                  "configMap": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "defaultMode": {
+                        "type": "integer"
+                      },
+                      "optional": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              },
+              "description": "Additional pod volumes beyond the chart-managed jq-modules ConfigMap.",
+              "title": "Volumes"
+            },
+            "volumeMounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Name of the volume to mount.",
+                    "title": "Name"
+                  },
+                  "mountPath": {
+                    "type": "string",
+                    "description": "Path at which to mount the volume.",
+                    "title": "Mount Path"
+                  },
+                  "readOnly": {
+                    "type": "boolean",
+                    "description": "Mount the volume read-only.",
+                    "title": "Read Only"
+                  }
+                }
+              },
+              "description": "Additional container volume mounts.",
+              "title": "Volume Mounts"
+            },
+            "extraEnvFrom": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "configMapRef": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "optional": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              },
+              "description": "Additional envFrom entries appended to the chart-managed ConfigMap and jwt-sign-key Secret.",
+              "title": "Extra Env From"
+            },
+            "initContainers": {
+              "type": "array",
+              "description": "Init containers for the pod.",
+              "title": "Init Containers"
+            },
+            "nodeSelector": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Node selector for pod scheduling.",
+              "title": "Node Selector"
+            },
+            "tolerations": {
+              "type": "array",
+              "description": "Pod tolerations for scheduling onto tainted nodes.",
+              "title": "Tolerations"
+            },
+            "affinity": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Pod affinity/anti-affinity rules.",
+              "title": "Affinity"
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "DEBUG": {
+                  "type": "string",
+                  "description": "Enable debug logging.",
+                  "title": "DEBUG"
+                },
+                "BLIZZARD": {
+                  "type": "string",
+                  "description": "Blizzard feature toggle.",
+                  "title": "BLIZZARD"
+                },
+                "SKIP": {
+                  "type": "string",
+                  "description": "Skip feature toggle.",
+                  "title": "SKIP"
+                },
+                "JQ_MODULES_PATH": {
+                  "type": "string",
+                  "description": "Path where jq custom modules are mounted.",
+                  "title": "JQ Modules Path"
+                },
+                "GOMEMLIMIT": {
+                  "type": "string",
+                  "description": "Go soft memory limit; must be below the container memory limit.",
+                  "title": "GOMEMLIMIT"
+                },
+                "GOGC": {
+                  "type": "string",
+                  "description": "Go garbage collector target percentage.",
+                  "title": "GOGC"
+                },
+                "CACHE_ENABLED": {
+                  "type": "string",
+                  "description": "Enable the in-process MemCache.",
+                  "title": "Cache Enabled"
+                },
+                "OTEL_ENABLED": {
+                  "type": "string",
+                  "description": "Enable OpenTelemetry instrumentation.",
+                  "title": "OTEL Enabled"
+                },
+                "OTEL_EXPORTER_OTLP_ENDPOINT": {
+                  "type": "string",
+                  "description": "OTLP collector endpoint.",
+                  "title": "OTEL Exporter OTLP Endpoint"
+                },
+                "OTEL_SERVICE_NAME": {
+                  "type": "string",
+                  "description": "Service name reported to OpenTelemetry.",
+                  "title": "OTEL Service Name"
+                },
+                "PREWARM_MODE": {
+                  "type": "string",
+                  "description": "L1 prewarm strategy: event-driven (default) or legacy.",
+                  "title": "Prewarm Mode"
+                },
+                "PREWARM_WORKERS": {
+                  "type": "string",
+                  "description": "Worker-pool parallelism for event-driven prewarm.",
+                  "title": "Prewarm Workers"
+                },
+                "PREWARM_QUEUE": {
+                  "type": "string",
+                  "description": "Bound on in-flight prewarm backlog.",
+                  "title": "Prewarm Queue"
+                }
+              },
+              "description": "Env vars rendered into the chart's snowplow ConfigMap and consumed via envFrom.",
+              "title": "Env"
+            },
+            "jwtSignKeySecretName": {
+              "type": "string",
+              "description": "Name of the Secret holding the JWT signing key.",
+              "title": "JWT Sign Key Secret Name"
+            },
+            "global": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Helm global values (injected by the composition runtime)."
+            }
+          },
+          "description": "Krateo PlatformOps Snowplow blueprint \u2014 full-coverage schema (chart 0.30.249)."
+        },
+        "snowplow-agent": {
+          "title": "krateo-snowplow-agent values",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "namespace": {
+              "type": "string"
+            },
+            "modelConfig": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "ModelConfig the agent uses \u2014 referenced by name, or created here (create=true) so this agent's model/provider is configured independently.",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "create": {
+                  "type": "boolean"
+                },
+                "provider": {
+                  "type": "string",
+                  "enum": [
+                    "Anthropic",
+                    "OpenAI",
+                    "AzureOpenAI",
+                    "Ollama",
+                    "Gemini",
+                    "GeminiVertexAI",
+                    "AnthropicVertexAI",
+                    "Bedrock",
+                    "SAPAICore"
+                  ]
+                },
+                "model": {
+                  "type": "string"
+                },
+                "vertexAI": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "projectID": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "apiKeySecret": {
+                  "type": "string"
+                },
+                "apiKeySecretKey": {
+                  "type": "string"
+                }
+              }
+            },
+            "prompts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "language": {
+                  "type": "string"
+                }
+              }
+            },
+            "vertexAI": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "projectID": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                }
+              }
+            },
+            "github": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "github MCP server the agent uses to read its component's codebase + chart.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "global": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "fetch": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "github MCP server the agent uses to read its component's codebase + chart.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "snowplow-crd": {
+          "type": "object",
+          "title": "Snowplow CRDs",
+          "description": "Dedicated CRD chart for snowplow (golden rule: CRDs in a separate chart, separate lifecycle). No tunable values.",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values",
+              "description": "Helm global values (injected when this chart is used as a subchart)."
+            }
+          }
+        },
+        "krateo-core-provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "title": "krateo-core-provider values",
+          "description": "Per-component overrides for the core-provider engine + cdc chart. Exposes the OTel export toggle (default-off in the chart); set by the installer/operator when observability is on to stream reconcile metrics + traces to the collector.",
+          "properties": {
+            "otel": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "OpenTelemetry export for the engine + every spawned cdc. Mirrors core-provider-chart values.otel.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "tracing": {
+                  "type": "boolean"
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "protocol": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "registryAuth": {
+      "type": "object",
+      "title": "Private registry credentials",
+      "description": "When enabled, every component CompositionDefinition (and the installer's own) gets spec.chart.credentials so core-provider can pull charts from a private/authenticated OCI registry in-cluster.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "username": {
+          "type": "string"
+        },
+        "passwordRef": {
+          "type": "object",
+          "description": "Reference to a Secret holding the registry password/token.",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "insecureSkipVerifyTLS": {
+          "type": "boolean",
+          "description": "Skip TLS verification on the in-cluster chart pull (maps to CompositionDefinition spec.chart.insecureSkipVerifyTLS)."
+        }
+      }
+    },
+    "core-provider": {
+      "type": "object"
+    },
+    "core-provider-crds": {
+      "type": "object"
+    }
+  }
+}

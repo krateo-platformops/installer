@@ -1,0 +1,98 @@
+{{- /*
+  HOOK 3 — post-delete sweep of runtime-created, NON-helm-owned resources.
+
+  Two resources survive `helm uninstall installer` because helm never created them, so it
+  can't delete them:
+    - the core-provider MutatingWebhookConfiguration (core-provider registers its own
+      conversion/mutation webhook at RUNTIME). Left behind, it dangles pointing at a gone
+      service and is the prime suspect for crashlooping a SUBSEQUENT reinstall.
+    - oasgen-generated CRDs in the hyperdx.krateo.io group (alertconfigurations,
+      webhookconfigurations) that oasgen-provider produced from the hyperdx RestDefinitions.
+
+  Unlike HOOK 1/2 (pre-delete, controllers still alive), this is a POST-DELETE hook: helm runs
+  it AFTER it has deleted every normal resource in the release — so core-provider and
+  oasgen-provider are already gone and cannot recreate what we remove. The bootstrap SAs are
+  gone by now too, so this hook ships its OWN RBAC as post-delete hooks at a lower weight
+  (created before the Job, cleaned by hook-succeeded). Best-effort (exit 0).
+*/}}
+{{- if .Values.bootstrap.coreProvider.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: installer-postdelete
+  namespace: {{ .Values.namespaces.krateo }}
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: installer-postdelete
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: installer-postdelete
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: installer-postdelete
+subjects:
+  - kind: ServiceAccount
+    name: installer-postdelete
+    namespace: {{ .Values.namespaces.krateo }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: installer-postdelete
+  namespace: {{ .Values.namespaces.krateo }}
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 120
+  template:
+    spec:
+      serviceAccountName: installer-postdelete
+      restartPolicy: Never
+      containers:
+        - name: sweep
+          image: alpine/k8s:1.31.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set +e
+              echo "post-delete: removing runtime-created, non-helm-owned resources core-provider/oasgen left behind"
+              # core-provider's runtime-registered webhook(s): scope to this release's core-provider.
+              for kind in mutatingwebhookconfigurations validatingwebhookconfigurations; do
+                kubectl get "$kind" -o name 2>/dev/null \
+                  | grep -E '{{ .Release.Name }}-core-provider|core-provider$' \
+                  | xargs -r kubectl delete 2>/dev/null
+              done
+              # oasgen-generated CRDs (hyperdx.krateo.io group) — oasgen-provider is gone, so GC them here.
+              kubectl get crd -o name 2>/dev/null \
+                | grep -E '\.hyperdx\.krateo\.io$' \
+                | xargs -r kubectl delete --wait=false 2>/dev/null
+              echo "post-delete sweep done"
+              exit 0
+{{- end }}

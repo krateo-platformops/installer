@@ -1,0 +1,297 @@
+{{- /*
+  D — self-reconcile. In BOOTSTRAP mode (a bare-cluster `helm install` with
+  bootstrap.coreProvider.enabled=true) the umbrella brings up the engine + operators
+  (subchart deps) and then registers ITSELF as an `Installer` composition:
+    - an Installer CompositionDefinition pointing at this same OCI chart, and
+    - a one-shot post-install hook Job that waits for the generated Installer CRD and
+      applies an Installer CR whose spec is this release's values with bootstrap OFF.
+  core-provider then reconciles that Installer CR on its loop, re-rendering the umbrella in
+  COMPOSITION mode (Pass A + Pass B) so the component layers roll out automatically — no
+  manual `helm upgrade`/up.sh. Pass A/B (definitions.yaml, compositions.yaml, secret.yaml)
+  render ONLY in composition mode, so the bootstrap release doesn't double-own them.
+*/}}
+{{- if .Values.bootstrap.coreProvider.enabled }}
+{{- /* The `installer` CompositionDefinition is NOT templated here: it is a CR of the
+       compositiondefinitions.core.krateo.io CRD that THIS release installs (the
+       krateo-core-provider-crd dependency), so helm could not REST-map it at build time. It is
+       carried in the installer-self-cr ConfigMap below and applied by the post-install hook AFTER
+       that hook confirms the CRD exists ("lookup the CRD, once present proceed with the bootstrap"). */}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: installer-self-bootstrap
+  namespace: {{ .Values.namespaces.krateo }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: installer-self-bootstrap
+rules:
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+  # installers: post-install hook applies the Installer CR; pre-delete HOOK 2 deletes it.
+  - apiGroups: ["composition.krateo.io"]
+    resources: ["installers"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  # compositiondefinitions: post-install hook CREATES/applies the top-level `installer` one; pre-delete
+  # HOOK 2 deletes it (core-provider cascades the rest) and polls these to detect full drain.
+  - apiGroups: ["core.krateo.io"]
+    resources: ["compositiondefinitions"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  # restdefinitions read: pre-delete HOOK 2 polls these so it doesn't return (and let helm kill
+  # core-provider) while an ogen RestDefinition is still terminating.
+  - apiGroups: ["ogen.krateo.io"]
+    resources: ["restdefinitions"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: installer-self-bootstrap
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: installer-self-bootstrap
+subjects:
+  - kind: ServiceAccount
+    name: installer-self-bootstrap
+    namespace: {{ .Values.namespaces.krateo }}
+---
+{{- /* RBAC for the Installer cdc's ServiceAccount (`installers-v<ver>`, created by
+       core-provider once the Installer CRD is generated). The compositions.yaml render
+       calls inst.lbip -> `lookup "v1" "Service"` to wire the frontend (consumer) config
+       from peer LoadBalancer IPs, which needs `services` list/get. chart-inspector does not
+       grant it, so the consumer render fails `services is forbidden`. We grant it here in
+       BOOTSTRAP mode (applied by helm with admin creds — the cdc itself can't, that would be
+       privilege escalation) so it's present before the cdc renders the consumer. The
+       RoleBinding may reference the SA before it exists; it binds once core-provider creates
+       it. SA name is derived from THIS chart's version (e.g. 0.2.31 -> installers-v0-2-31). */}}
+{{- $cdcSA := printf "installers-v%s" (.Chart.Version | toString | replace "." "-") }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: installers-lbip-services
+  namespace: {{ .Values.namespaces.krateo }}
+rules:
+  # services: for compositions.yaml inst.lbip (lookup "v1" "Service") wiring the frontend config.
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+  # jobs + composition.krateo.io/*: for the pre-delete ORDERED-TEARDOWN hook Job
+  # (ordered-teardown.yaml), which runs as this cdc SA and deletes the APP compositions before
+  # helm removes the *-crd CompositionDefinitions. chart-inspector doesn't scan hooks, so grant
+  # the Job-management + composition-delete verbs here (admin side).
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["composition.krateo.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "delete"]
+  # restdefinitions read: HOOK 1's per-kind drain waits for ogen RestDefinitions to clear before
+  # deleting oasgen-provider (so oasgen-provider outlives the RestDefinitions it finalizes).
+  - apiGroups: ["ogen.krateo.io"]
+    resources: ["restdefinitions"]
+    verbs: ["get", "list", "watch"]
+  # persistentvolumeclaims: HOOK 1's PVC reap (#93) deletes the orphaned clickhouse-storage-volume-*
+  # PVCs the clickhouse.com operator leaves behind (no ownerRef/retentionPolicy) after the
+  # KrateoObservability composition drains. Granted here (admin/bootstrap side) because chart-inspector
+  # doesn't scan hooks and the cdc SA can't grant itself PVC delete (privilege escalation).
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: installers-lbip-services
+  namespace: {{ .Values.namespaces.krateo }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: installers-lbip-services
+subjects:
+  - kind: ServiceAccount
+    name: {{ $cdcSA }}
+    namespace: {{ .Values.namespaces.krateo }}
+---
+{{- /* Cluster-scoped CRD read for the cdc SA. The pre-delete ORDERED-TEARDOWN hook (HOOK 1,
+       ordered-teardown.yaml) resolves each component Kind to its live CRD plural by listing
+       CRDs and matching spec.names.kind + group (so irregular plurals like KrateoSseProxy ->
+       krateosseproxies can't drift). customresourcedefinitions is cluster-scoped, so this
+       must be a ClusterRole; chart-inspector doesn't scan hooks, so grant it here (admin
+       side) like the lbip Role above. */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: installers-teardown-crd-read
+rules:
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: installers-teardown-crd-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: installers-teardown-crd-read
+subjects:
+  - kind: ServiceAccount
+    name: {{ $cdcSA }}
+    namespace: {{ .Values.namespaces.krateo }}
+---
+{{- /* The Installer CR spec: only the umbrella's own keys (NOT the bootstrap subchart
+       passthroughs like kagent, which carry huge default trees and are unused
+       in composition mode), with all bootstrap flags OFF so the composition render does
+       Pass A + Pass B only (no subcharts, no self-registration). */}}
+{{- /* INCLUDE "components": the Installer CR ships with the FULL component list (each
+       component's pinned chart version/repo/deps) so a version can be changed by editing
+       ONE entry of the live Installer composition — Helm replaces list overrides wholesale,
+       so a partial `components` would prune the omitted components; shipping the whole list
+       makes in-place single-version edits safe.
+       SOURCE OF TRUTH: the CR holds the live component set + versions (and runtime spec.features
+       the installer-agent toggles). A `helm upgrade` to a newer installer chart DOES now
+       auto-propagate component version/set/config changes: the post-upgrade hook merge-patches
+       ONLY `components` + `componentValues` from this chart onto the live CR (see
+       components-patch.json + the post-upgrade branch), so chart-side pins reach the cluster
+       while spec.features and other runtime edits are preserved (not clobbered by a full
+       re-apply). Single-entry in-place CR edits remain safe (whole list shipped). */}}
+{{- $spec := pick .Values "ociRepo" "installDefinitions" "namespaces" "exposure" "features" "vertexAI" "hitlApproval" "componentValues" "registryAuth" }}
+{{- /* components pins come from the chart FILE (files/component-pins.yaml), NOT .Values, so a
+       chart bump always propagates its pins on upgrade even under `helm upgrade --reuse-values`. */}}
+{{- $_ := set $spec "components" (include "inst.componentsYaml" $ | fromYaml).components }}
+{{- $_ := set $spec "bootstrap" (dict "coreProvider" (dict "enabled" false)) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: installer-self-cr
+  namespace: {{ .Values.namespaces.krateo }}
+data:
+  # The installer CompositionDefinition — applied by the post-install hook once the
+  # compositiondefinitions CRD exists (it can't be a build-time template; see header note).
+  compositiondefinition.yaml: |
+    apiVersion: core.krateo.io/v1alpha1
+    kind: CompositionDefinition
+    metadata:
+      name: installer
+      namespace: {{ .Values.namespaces.krateo }}
+      labels:
+        app.kubernetes.io/managed-by: krateo-installer
+    spec:
+      chart:
+        url: {{ .Values.ociRepo }}/installer
+        version: {{ .Chart.Version | quote }}
+{{- include "inst.chartExtras" (list .) | nindent 8 }}
+  installer.yaml: |
+    apiVersion: {{ include "inst.apiVersion" (list .Chart.Version) }}
+    kind: Installer
+    metadata:
+      name: installer
+      namespace: {{ .Values.namespaces.krateo }}
+      labels:
+        # Pin the umbrella's Helm RELEASE name to a stable fullname ("krateo") instead of the cdc
+        # default <name>-<hash(UID)>. Kept DISTINCT from the bootstrap base release ("installer")
+        # to avoid a name collision, and stable across any recreate of the Installer composition CR
+        # so the umbrella never churns to a new <name>-<newUID> release (mirrors the per-component
+        # krateo.io/release-name pins in compositions.yaml). safe-release-name stays true; the cdc
+        # honors this label verbatim (SetReleaseName only fills it when absent).
+        krateo.io/release-name: krateo
+    spec:
+{{ $spec | toYaml | indent 6 }}
+  # Surgical upgrade patch: ONLY the chart-managed component pins (versions/repos/deps) and
+  # componentValues, plus `exposure` (all values-managed — the runbook passes live values on every
+  # upgrade) — NOT spec.features or any other runtime/user-edited field. Applied as an
+  # RFC-7386 merge patch on `helm upgrade` (see the post-upgrade branch below) so chart-side
+  # component version/set/config bumps AND exposure changes (type/port) propagate WITHOUT clobbering
+  # what the installer-agent (or a user) changed at runtime. The `components` list is replaced
+  # wholesale; `componentValues` and `exposure` deep-merge, so chart-set keys win and any user-only
+  # keys are preserved.
+  components-patch.json: {{ dict "spec" (dict "components" (include "inst.componentsYaml" $ | fromYaml).components "componentValues" .Values.componentValues "exposure" .Values.exposure) | toJson | quote }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: installer-self-bootstrap
+  namespace: {{ .Values.namespaces.krateo }}
+  annotations:
+    # post-upgrade too: on a chart bump, re-apply ONLY the chart-managed component pins +
+    # componentValues (surgical merge patch) so component version/set/config changes propagate,
+    # while spec.features and other runtime edits are preserved. (Reverses the old "CR fully
+    # shadows the chart" freeze without reintroducing the clobber it was avoiding.)
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 30
+  template:
+    spec:
+      serviceAccountName: installer-self-bootstrap
+      restartPolicy: OnFailure
+      volumes:
+        - name: cr
+          configMap:
+            name: installer-self-cr
+      containers:
+        - name: apply
+          image: alpine/k8s:1.31.0
+          volumeMounts:
+            - name: cr
+              mountPath: /cr
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              NS={{ .Values.namespaces.krateo }}
+              # LOOKUP the engine CRD (installed by the krateo-core-provider-crd dependency), then
+              # register the installer CompositionDefinition. It can't be a build-time helm template
+              # (a CR of a CRD this same release installs is unmappable at build), so the hook applies
+              # it once the CRD is present. kubectl apply is idempotent — safe on post-upgrade too.
+              echo "waiting for the compositiondefinitions CRD (krateo-core-provider-crd dep)..."
+              until kubectl get crd compositiondefinitions.core.krateo.io >/dev/null 2>&1; do sleep 5; done
+              echo "registering the installer CompositionDefinition"
+              kubectl apply -f /cr/compositiondefinition.yaml
+              echo "waiting for the generated Installer CRD..."
+              until kubectl get crd installers.composition.krateo.io >/dev/null 2>&1; do sleep 5; done
+              # wait until the CRD actually serves this chart's version
+              until kubectl get installers.composition.krateo.io -n "$NS" >/dev/null 2>&1; do sleep 5; done
+              if kubectl get installers.composition.krateo.io installer -n "$NS" >/dev/null 2>&1; then
+                # UPGRADE: the CR already exists and is the source of truth for runtime state
+                # (spec.features the installer-agent toggles, user overrides). Re-applying the
+                # whole CR would clobber that, so patch ONLY the chart-managed component pins +
+                # componentValues. core-provider then re-renders the umbrella at the new versions.
+                echo "Installer CR exists — surgical upgrade: patching chart-managed components + componentValues"
+                kubectl patch installers.composition.krateo.io installer -n "$NS" \
+                  --type merge --patch-file /cr/components-patch.json
+              else
+                echo "applying Installer CR — core-provider's cdc self-reconciles the rollout"
+                kubectl apply -f /cr/installer.yaml
+              fi
+              # Auto-heal the Installer CR's FIRST reconcile: the cdc occasionally loses the
+              # race between setting the crossplane `external-create-pending` annotation and
+              # confirming the create (it reports `external-create-failed` then refuses to
+              # retry — "cannot determine creation result"). That is a hard stop that does NOT
+              # self-clear, so we remove the stale annotations until the CR goes Synced. Once
+              # Synced, Pass A + Pass B advance entirely on the cdc resync loop (its RESTMapper
+              # re-discovers new component CRDs on a cache miss) — no manual nudges needed.
+              echo "auto-heal: clearing any stuck external-create-pending on the Installer CR"
+              for i in $(seq 1 30); do
+                synced=$(kubectl get installers.composition.krateo.io installer \
+                  -n {{ .Values.namespaces.krateo }} \
+                  -o jsonpath='{.status.conditions[?(@.type=="Synced")].status}' 2>/dev/null || true)
+                if [ "$synced" = "True" ]; then echo "Installer CR Synced — self-bootstrap proceeding"; break; fi
+                if kubectl get installers.composition.krateo.io installer \
+                     -n {{ .Values.namespaces.krateo }} \
+                     -o jsonpath='{.metadata.annotations}' 2>/dev/null | grep -q 'external-create-pending'; then
+                  echo "  clearing stale external-create-{pending,failed} annotations"
+                  kubectl annotate installers.composition.krateo.io installer \
+                    -n {{ .Values.namespaces.krateo }} \
+                    krateo.io/external-create-pending- krateo.io/external-create-failed- \
+                    --overwrite 2>/dev/null || true
+                fi
+                sleep 10
+              done
+              echo "done — Pass A + Pass B advance on the cdc reconcile loop"
+{{- end }}

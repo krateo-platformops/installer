@@ -1,0 +1,239 @@
+{{/*
+  Pass B: emit each component's Composition, gated on:
+    - feature flag enabled
+    - the component's generated CRD existing (inst.crdExists)
+    - all deps Ready=True (inst.depsReady)
+  Re-evaluated every reconcile; the next layer unlocks as deps go Ready.
+
+  Exposure / config (the model documented in values.yaml `exposure`) is resolved here at
+  reconcile time — no post-install `kubectl patch` needed:
+    - components marked `expose: true` get spec.service.type = .Values.exposure.type
+      (LoadBalancer | NodePort); for Ingress the Service stays chart-default (ClusterIP).
+    - the `consumer: true` component (frontend) gets spec.config.<KEY> for each peer that
+      declares `configKeys`, with a BROWSER-reachable URL resolved from that peer's Service per
+      `exposure.type` via `inst.peerurl`: LoadBalancer -> http://<lb-ip>:<exposure.port>, NodePort
+      -> http://<node-ip>:<nodePort>. A caller may instead pin a STATIC external hostname in
+      componentValues.<consumer>.config.<KEY> (e.g. https://authn.<tenant>.krateo.dev behind a
+      Gateway) — a real (non-loopback) override wins and auto-compute is skipped for that key.
+      Until the external address exists the key is omitted, so the frontend keeps its chart
+      default; the next reconcile (core-provider re-renders the umbrella) fills it in as soon as
+      the peer's external IP/nodePort is ready. NB: the chart's localhost:808x dev-defaults are
+      seeded into componentValues by values.schema.json, so they are treated as UNSET (not as an
+      override) — else they would leak to the browser and break login (installer #203). The
+      frontend serves config.json to the browser as a static file, so the updated ConfigMap is
+      picked up on page reload — no pod restart required.
+*/}}
+{{- if not .Values.bootstrap.coreProvider.enabled }}
+{{- $top := . }}
+{{- $components := (include "inst.componentsYaml" $ | fromYaml).components }}
+{{/* LIST all CRDs ONCE and thread the slice into the gating helpers, instead of each inst.crdExists
+     re-LISTing all CRDs per component/dep — see inst.crdExists (D9). */}}
+{{- $allCRDs := (lookup "apiextensions.k8s.io/v1" "CustomResourceDefinition" "" "").items }}
+{{- $isLB := or (eq .Values.exposure.type "LoadBalancer") (eq .Values.exposure.type "NodePort") }}
+{{- range $c := $components }}
+{{/* registerOnly (catalog) blueprints are registered (definitions.yaml) but never auto-emitted —
+     the operator/end-user instantiates them from the portal on demand. */}}
+{{- if $c.registerOnly }}{{- continue }}{{- end }}
+{{- $featOn := eq (include "inst.featureEnabled" (list $top $c.feature)) "true" }}
+{{- $crd  := include "inst.crdExists" (list $c.kind $c.version $allCRDs) }}
+{{- $render := "" }}
+{{- if $featOn }}
+{{/* install / steady-state: emit once the CRD is served and all deps are Ready (forward dep order).
+     THEN keep emitting it as long as the instance still EXISTS -- even if a dep goes transiently
+     not-Ready during churn (e.g. an engine restart flips dep instances not-Ready for a moment).
+     Without the `$exists` clause a momentary depsReady=false drops the instance from the manifest and
+     the cdc/helm PRUNES the live workload on that blip (observed 2026-07-08: frontend + kagent
+     instances, Deployments and Services deleted during an engine restart though their deps were Ready
+     seconds later). depsReady still gates the FIRST creation, so forward dependency order on bring-up
+     is preserved; real teardown is handled by the feature-OFF drain branch below, not by a lookup miss. */}}
+{{- $deps := include "inst.depsReady" (list $top $c.deps $components $allCRDs) }}
+{{- $exists := include "inst.compositionExists" (list $top $c.kind $c.name $c.version $allCRDs) }}
+{{- if and (eq $crd "true") (or (eq $deps "true") (eq $exists "true")) }}{{- $render = "true" }}{{- end }}
+{{- else }}
+{{/* feature OFF -> reverse-dependency DRAIN: keep rendering (alive) until every component that
+     deps on this one is gone, so teardown is leaves-first and never deletes this component (or the
+     CRDs its release ships) out from under a still-present dependent. Dropped from the render — and
+     thus deleted by the cdc — only once inst.dependentsGone reports clear. */}}
+{{- if and (eq $crd "true") (ne (include "inst.dependentsGone" (list $top $c.name $components $allCRDs)) "true") }}{{- $render = "true" }}{{- end }}
+{{- end }}
+{{- if eq $render "true" }}
+{{- $spec := dict }}
+{{- if and $c.expose $isLB }}
+{{- if $c.serviceValuesPath }}
+{{- /* Component whose Service is NOT at the chart's top-level `service` (e.g. kagent's UI
+       lives at kagentapp.ui.service). Build the nested dict inside-out from the dotted
+       serviceValuesPath and merge it, so the exposure layer flips the right Service to
+       exposure.type while the component chart keeps its default (ClusterIP). */}}
+{{- $nested := dict "type" $top.Values.exposure.type }}
+{{- $parts := splitList "." $c.serviceValuesPath }}
+{{- range $i := until (len $parts) }}
+{{- $nested = dict (index $parts (sub (len $parts) (add $i 1))) $nested }}
+{{- end }}
+{{- $_ := mergeOverwrite $spec $nested }}
+{{- else }}
+{{/* Top-level `service`: flip type to exposure.type, and (when exposure.port is set) pin the
+     Service port so the LB/NodePort listens on the shared exposure port. targetPort is left to
+     the component chart (named `http` or a fixed containerPort), so the pod keeps its own port. */}}
+{{- $svc := dict "type" $top.Values.exposure.type }}
+{{- if $top.Values.exposure.port }}{{- $_ := set $svc "port" (int $top.Values.exposure.port) }}{{- end }}
+{{- $_ := set $spec "service" $svc }}
+{{- end }}
+{{- end }}
+{{- if $c.consumer }}
+{{- $cfg := dict }}
+{{- range $d := $components }}
+{{- if $d.configKeys }}
+{{/* Peer's browser URL port: the shared exposure.port when set, else the peer's own exposePort.
+     (Used for LoadBalancer; NodePort uses the Service's allocated nodePort instead.) */}}
+{{- $eport := $d.exposePort }}
+{{- if $top.Values.exposure.port }}{{- $eport = $top.Values.exposure.port }}{{- end }}
+{{/* Browser-reachable base URL for this peer, resolved from its Service per exposure.type:
+     LoadBalancer -> http://<lb-ip>:<exposure.port>; NodePort -> http://<node-ip>:<nodePort>.
+     "" until the external address exists (LB IP pending / no node IP), so the key is omitted and
+     the next reconcile fills it. A static override is handled below and wins over this. */}}
+{{- $url := include "inst.peerurl" (list $top $d.svcMatch $eport) }}
+{{- if $url }}
+{{- range $k := $d.configKeys }}
+{{/* STATIC OVERRIDE WINS — a REAL external hostname the operator pinned in
+     componentValues.<consumer>.config.<KEY> (e.g. https://authn.<tenant>.krateo.dev behind a
+     Gateway) survives the componentValues deep-merge. BUT values.schema.json seeds that same map
+     with the frontend chart's localhost:808x dev-defaults (the core-provider applies schema
+     defaults to the composition spec); gating on mere PRESENCE (#201) treated those seeded
+     loopbacks as overrides and SKIPPED the auto-compute, so the browser got unreachable
+     http://localhost:808x URLs and portal login broke (installer #203). Fix: treat a loopback
+     value as UNSET — auto-fill the exposed URL (LB or NodePort) unless the operator pinned a REAL
+     (non-loopback) override. */}}
+{{- $ov := dig $c.name "config" $k "" (default dict $top.Values.componentValues) | toString }}
+{{- if or (not $ov) (hasPrefix "http://localhost" $ov) (hasPrefix "http://127.0.0.1" $ov) }}
+{{- $_ := set $cfg $k $url }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if gt (len $cfg) 0 }}
+{{- $_ := set $spec "config" $cfg }}
+{{- end }}
+{{- end }}
+{{- /* Frontend config-vars ConfigMap wiring. snowplow's Phase-1 nav-prewarm walker reads the
+       frontend config-vars ConfigMap BY NAME via the k8s API (it is not mounted). A component
+       opts in with `frontendConfigEnv: <ENV_KEY>`; we inject that env key with the ConfigMap name
+       COMPUTED from the consumer (frontend) component — NOT hardcoded — so a rename of the
+       frontend component carries through. The name is `<component-name>-config-vars`: the frontend
+       chart names the ConfigMap `<fullname>-config-vars`, and its fullname COLLAPSES to the bare
+       component name (the composition's release == the component name, and the chart's nameOverride
+       == its Chart.Name, so helm's `<release>-<name>` fullname folds `frontend-frontend` -> `frontend`).
+       Using `<name>-<chart>-config-vars` here was wrong — it yielded `frontend-frontend-config-vars`
+       while the chart created `frontend-config-vars`, so the prewarm walker never found it and
+       silently fell back to per-request resolve. A runtime Helm `lookup` would also be wrong:
+       snowplow is a DEP of frontend, so it renders before that ConfigMap exists. */}}
+{{- if $c.frontendConfigEnv }}
+{{- range $d := $components }}
+{{- if $d.consumer }}
+{{- $feCm := printf "%s-config-vars" $d.name }}
+{{- $env := default (dict) $spec.env }}
+{{- $_ := set $env $c.frontendConfigEnv $feCm }}
+{{- $_ := set $spec "env" $env }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- /* Agent model wiring. localModel (opt-in) takes precedence over vertexAI:
+       - localModel.enabled: the model OWNER (krateo-autopilot, modelOwner:true) gets
+         .Values.localModel injected so it renders its gemini-flash/gemini-pro ModelConfigs
+         as provider Ollama at localModel.host; every OTHER agent (vertexAI:true) is pointed
+         at that owner-created ModelConfig (modelConfig.create=false, name=localModel.refName),
+         so the WHOLE fleet runs on the one local LLM with no per-agent-chart change.
+       - else (default): components flagged vertexAI:true get .Values.vertexAI injected so the
+         autopilot/agents use GeminiVertexAI via ADC. */}}
+{{- if $top.Values.localModel.enabled }}
+{{- if $c.modelOwner }}
+{{- $_ := set $spec "localModel" (dict "enabled" true "host" $top.Values.localModel.host "model" $top.Values.localModel.model) }}
+{{- else if $c.vertexAI }}
+{{- $_ := set $spec "modelConfig" (dict "create" false "name" $top.Values.localModel.refName) }}
+{{- end }}
+{{- else if and $c.vertexAI $top.Values.vertexAI.enabled }}
+{{- $_ := set $spec "vertexAI" (dict "enabled" true "projectID" $top.Values.vertexAI.projectID "location" $top.Values.vertexAI.location) }}
+{{- end }}
+{{- /* HITL approval gate. Applies to EVERY vertexAI agent — the user-facing orchestrator AND its
+       delegated subagents. kagent >=0.9.9 propagates a subagent's tool-approval interrupt up to the
+       orchestrator: when a subagent (e.g. installer-agent) hits a requireApproval tool it returns an
+       A2A input_required task, and the orchestrator's remote_a2a_tool surfaces it via
+       RequestConfirmation in the USER's chat, then forwards the decision back down (handleResume) —
+       so the delegated flow does NOT deadlock. (Older kagent did not bubble subagent interrupts,
+       which is why this gate used to be forced OFF for subagents; fixed upstream in
+       go/adk/pkg/tools/remote_a2a_tool.go, so subagents now inherit the real value.) */}}
+{{- /* GRANULAR HITL (kagent requireApproval). A component may declare its OWN `requireApproval` — the
+       exact list of tool names that pause for approval — in component-pins. When present it is threaded
+       verbatim onto the agent's spec (kagent-native per-tool gate) and the coarse boolean is NOT set
+       for that agent: e.g. the frontend-agent declares `requireApproval: []` because its only
+       mutating-shaped tool, k8s_apply_manifest, is a NON-mutating server dry-run validator, so nothing
+       is gated and the real write gate stays downstream (publishPage blast-radius). Every OTHER agent
+       omits the key and inherits the coarse global `hitlApproval` (its chart gates its own mutating
+       tools). This lets one agent opt a specific tool in/out without an all-or-nothing switch. */}}
+{{- if $c.vertexAI }}
+{{- if hasKey $c "requireApproval" }}
+{{- $_ := set $spec "requireApproval" $c.requireApproval }}
+{{- else }}
+{{- $_ := set $spec "hitlApproval" $top.Values.hitlApproval }}
+{{- end }}
+{{- end }}
+{{- /* componentValues: per-component spec overrides, deep-merged into the rendered spec. The
+       installer-computed wiring above (service/config/vertexAI/hitlApproval) stays AUTHORITATIVE
+       — `merge` gives the dest ($spec) precedence, so it wins on any leaf conflict — letting a
+       customer add/override anything else (including nested keys like service.annotations or
+       resources) on the LIVE Installer composition without breaking exposure or portal config.
+       These component CRs are installer-managed (Pass B re-renders every reconcile), so this is
+       the ONLY durable way to customize a component's spec; a direct kubectl edit reverts. */}}
+{{- $custom := default dict (index ($top.Values.componentValues | default dict) $c.name) }}
+{{- $spec = merge $spec (deepCopy $custom) }}
+{{- /* Auto-orchestration: the model-owner (autopilot) attaches EVERY deployed agent as an A2A
+       sub-agent. When extraAgents is NOT explicitly set, the installer AUTO-DERIVES it from the
+       feature-enabled `vertexAI` agent components (excluding the owner itself) — so the enterprise
+       profile wires the whole fleet (installer/authn/snowplow/frontend/clickstack/core-provider
+       agents) and agent-only wires just the installer-agent, with no manual list. An explicit
+       componentValues.<owner>.extraAgents (including `[]` for standalone) is honored instead. Either
+       way the set is gated to feature-enabled components — a reference to a feature-disabled Agent
+       makes kagent fail to compile the orchestrator ("Agent <name> not found"). */}}
+{{- if $c.modelOwner }}
+{{- $enabled := dict }}
+{{- range $comp := $components }}
+{{- if eq (include "inst.featureEnabled" (list $top $comp.feature)) "true" }}
+{{- $_ := set $enabled $comp.name true }}
+{{- end }}
+{{- end }}
+{{- $fleet := list }}
+{{- if hasKey $spec "extraAgents" }}
+{{- range $ea := $spec.extraAgents }}
+{{- if hasKey $enabled $ea.name }}{{- $fleet = append $fleet $ea }}{{- end }}
+{{- end }}
+{{- else }}
+{{- range $comp := $components }}
+{{- if and $comp.vertexAI (ne $comp.name $c.name) (hasKey $enabled $comp.name) }}
+{{- $fleet = append $fleet (dict "name" (default $comp.name $comp.chart)) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- $_ := set $spec "extraAgents" $fleet }}
+{{- end }}
+---
+apiVersion: {{ include "inst.apiVersion" (list $c.version) }}
+kind: {{ $c.kind }}
+metadata:
+  name: {{ $c.name }}
+  namespace: {{ $top.Values.namespaces.krateo }}
+  labels:
+    # NB: app.kubernetes.io/managed-by is intentionally NOT set — helm forces it to
+    # "Helm" on every release resource, so a chart-set value never converges and makes
+    # the cdc reconcile churn a revision every cycle. Let helm own it.
+    krateo.io/tier: {{ $c.tier }}
+    # Pin the cdc's Helm RELEASE name to the stable component name (instead of the default
+    # <name>-<hash(UID)>). The cdc honors a pre-set krateo.io/release-name label verbatim
+    # (SetReleaseName only fills it when absent). So when a component CR is deleted+recreated
+    # (e.g. a CRD-re-establishment flap on re-install), it keeps the SAME release name and helm
+    # ADOPTS the existing release instead of minting a new <name>-<newUID> that collides on the
+    # component's pinned (fullnameOverride) resources — no "cannot be imported / ownership" 500 churn.
+    krateo.io/release-name: {{ $c.name }}
+spec: {{- $spec | toYaml | nindent 2 }}
+{{- end }}
+{{- end }}
+{{- end }}
