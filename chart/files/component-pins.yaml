@@ -87,6 +87,56 @@ components:
   - oasgen-provider-crd
   tier: platform
   feature: oasgenProvider
+# ---- observability backend (portal-gated: installs WITH the portal feature) -----------
+# ClickStack (ClickHouse + OTel gateway + HyperDX + MongoDB) as compositions. The data-plane
+# operators install FIRST (krateo-observability deps them), then the data layer, collectors,
+# and sse-proxy (whose EVENTS_* config the frontend events bell consumes). All public
+# krateo-platformops/charts (no repo override).
+- name: clickhouse-operator
+  kind: ClickhouseOperator
+  version: 0.1.0
+  tier: observability
+  feature: portal
+- name: mongodb-operator
+  kind: MongodbOperator
+  version: 0.1.0
+  tier: observability
+  feature: portal
+- name: krateo-observability
+  kind: KrateoObservability
+  version: 0.1.11
+  deps:
+  - clickhouse-operator
+  - mongodb-operator
+  tier: observability
+  feature: portal
+- name: otel-collector-deployment
+  kind: OtelCollectorDeployment
+  version: 0.3.3
+  deps:
+  - krateo-observability
+  tier: observability
+  feature: portal
+- name: otel-collector-daemonset
+  kind: OtelCollectorDaemonset
+  version: 0.1.5
+  deps:
+  - otel-collector-deployment
+  tier: observability
+  feature: portal
+- name: krateo-sse-proxy
+  kind: KrateoSseProxy
+  version: 0.1.6
+  deps:
+  - krateo-observability
+  tier: observability
+  feature: portal
+  expose: true
+  exposePort: 8080
+  svcMatch: sse-proxy
+  configKeys:
+  - EVENTS_API_BASE_URL
+  - EVENTS_PUSH_API_BASE_URL
 # ---- agents (PRIVATE krateo-agentiko registry) ----------------------------------------
 # Every agent chart lives in the private krateo-agentiko/charts OCI registry (repo override
 # below), so pulling them needs registryAuth.enabled=true + a read:packages credential
@@ -133,7 +183,7 @@ components:
   version: 0.1.8
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
-  - kagent
+  - krateo-observability
   tier: observability
   feature: specialistAgents
 - name: authn-agent
