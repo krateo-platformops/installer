@@ -54,7 +54,7 @@ components:
 - name: frontend
   kind: Frontend
   chart: frontend
-  version: 1.4.1
+  version: 1.4.2
   deps:
   - frontend-crd
   - authn

@@ -111,6 +111,14 @@
 {{- end }}
 {{- end }}
 {{- end }}
+{{- /* Gray out the frontend Autopilot toggle when no agent tier is deployed. The toggle stays
+       VISIBLE (AUTOPILOT_API_BASE_URL is untouched) but the frontend renders it disabled/grayed when
+       config.AUTOPILOT_AVAILABLE == "false". Set it whenever coreAgents is off (no kagent/autopilot
+       in-cluster), so a core-only install shows the capability without a dead 502 click. When agents
+       are on, the flag is left unset and the frontend's runtime reachability probe governs the state. */}}
+{{- if not $top.Values.features.coreAgents }}
+{{- $_ := set $cfg "AUTOPILOT_AVAILABLE" "false" }}
+{{- end }}
 {{- if gt (len $cfg) 0 }}
 {{- $_ := set $spec "config" $cfg }}
 {{- end }}
