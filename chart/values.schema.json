@@ -36,16 +36,6 @@
         }
       }
     },
-    "krateo-core-provider": {
-      "type": "object",
-      "title": "core-provider subchart values",
-      "description": "Passthrough to the bootstrap core-provider subchart."
-    },
-    "krateo-core-provider-crd": {
-      "type": "object",
-      "title": "core-provider-crd subchart values",
-      "description": "Passthrough to the bootstrap core-provider-crd subchart (engine core.krateo.io CRDs)."
-    },
     "namespaces": {
       "type": "object",
       "title": "Namespaces",
@@ -833,7 +823,7 @@
                   "additionalProperties": false,
                   "properties": {
                     "cpu": {
-                      "type": "string"
+                      "x-kubernetes-int-or-string": true
                     },
                     "memory": {
                       "type": "string"
@@ -845,7 +835,7 @@
                   "additionalProperties": false,
                   "properties": {
                     "cpu": {
-                      "type": "string"
+                      "x-kubernetes-int-or-string": true
                     },
                     "memory": {
                       "type": "string"
@@ -1011,7 +1001,7 @@
           }
         },
         "core-provider-agent": {
-          "title": "krateo-core-provider-agent values",
+          "title": "core-provider-agent values",
           "type": "object",
           "additionalProperties": false,
           "properties": {
@@ -2002,6 +1992,11 @@
             }
           }
         },
+        "krateo-helm-render-service": {
+          "title": "krateo-helm-render-service values",
+          "type": "object",
+          "additionalProperties": true
+        },
         "krateo-observability": {
           "title": "krateo-observability values",
           "type": "object",
@@ -2090,7 +2085,7 @@
                           "additionalProperties": true,
                           "properties": {
                             "cpu": {
-                              "type": "string"
+                              "x-kubernetes-int-or-string": true
                             },
                             "memory": {
                               "type": "string"
@@ -2102,7 +2097,7 @@
                           "additionalProperties": true,
                           "properties": {
                             "cpu": {
-                              "type": "string"
+                              "x-kubernetes-int-or-string": true
                             },
                             "memory": {
                               "type": "string"
@@ -2129,7 +2124,7 @@
                           "additionalProperties": true,
                           "properties": {
                             "cpu": {
-                              "type": "string"
+                              "x-kubernetes-int-or-string": true
                             },
                             "memory": {
                               "type": "string"
@@ -2141,7 +2136,7 @@
                           "additionalProperties": true,
                           "properties": {
                             "cpu": {
-                              "type": "string"
+                              "x-kubernetes-int-or-string": true
                             },
                             "memory": {
                               "type": "string"
@@ -2306,7 +2301,7 @@
                   "additionalProperties": false,
                   "properties": {
                     "cpu": {
-                      "type": "string"
+                      "x-kubernetes-int-or-string": true
                     },
                     "memory": {
                       "type": "string"
@@ -2318,7 +2313,7 @@
                   "additionalProperties": false,
                   "properties": {
                     "cpu": {
-                      "type": "string"
+                      "x-kubernetes-int-or-string": true
                     },
                     "memory": {
                       "type": "string"
@@ -3367,7 +3362,7 @@
                       "additionalProperties": true,
                       "properties": {
                         "cpu": {
-                          "type": "string"
+                          "x-kubernetes-int-or-string": true
                         },
                         "memory": {
                           "type": "string"
@@ -3379,7 +3374,7 @@
                       "additionalProperties": true,
                       "properties": {
                         "cpu": {
-                          "type": "string"
+                          "x-kubernetes-int-or-string": true
                         },
                         "memory": {
                           "type": "string"
@@ -3868,7 +3863,7 @@
                       "additionalProperties": true,
                       "properties": {
                         "cpu": {
-                          "type": "string"
+                          "x-kubernetes-int-or-string": true
                         },
                         "memory": {
                           "type": "string"
@@ -3880,7 +3875,7 @@
                       "additionalProperties": true,
                       "properties": {
                         "cpu": {
-                          "type": "string"
+                          "x-kubernetes-int-or-string": true
                         },
                         "memory": {
                           "type": "string"
@@ -4136,7 +4131,7 @@
                   "additionalProperties": false,
                   "properties": {
                     "cpu": {
-                      "type": "integer",
+                      "x-kubernetes-int-or-string": true,
                       "description": "CPU limit.",
                       "title": "CPU"
                     },
@@ -4154,7 +4149,7 @@
                   "additionalProperties": false,
                   "properties": {
                     "cpu": {
-                      "type": "integer",
+                      "x-kubernetes-int-or-string": true,
                       "description": "CPU request.",
                       "title": "CPU"
                     },
@@ -4644,33 +4639,6 @@
               "type": "object",
               "title": "Global values",
               "description": "Helm global values (injected when this chart is used as a subchart)."
-            }
-          }
-        },
-        "krateo-core-provider": {
-          "type": "object",
-          "additionalProperties": false,
-          "title": "krateo-core-provider values",
-          "description": "Per-component overrides for the core-provider engine + cdc chart. Exposes the OTel export toggle (default-off in the chart); set by the installer/operator when observability is on to stream reconcile metrics + traces to the collector.",
-          "properties": {
-            "otel": {
-              "type": "object",
-              "additionalProperties": false,
-              "description": "OpenTelemetry export for the engine + every spawned cdc. Mirrors core-provider-chart values.otel.",
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "tracing": {
-                  "type": "boolean"
-                },
-                "endpoint": {
-                  "type": "string"
-                },
-                "protocol": {
-                  "type": "string"
-                }
-              }
             }
           }
         }
