@@ -32,7 +32,7 @@ installDefinitions: true
 # already exists; the subchart would be redundant).
 bootstrap:
   coreProvider:
-    # The engine subchart version is pinned in Chart.yaml (krateo-core-provider, app core-provider
+    # The engine subchart version is pinned in Chart.yaml (core-provider, app core-provider
     # 2.0.x — de-webhooked, needs k8s >= 1.36); this flag only toggles installing it.
     #
     # COMPOSITION-SAFE DEFAULT (false). This flag is the SOLE bootstrap-vs-composition mode switch
@@ -55,17 +55,17 @@ bootstrap:
 # kagent is likewise installed as two compositions — `kagent-crds` then `kagent` (see the
 # components list); the sample-agent disabling lives in the kagent wrapper chart's defaults.
 
-# Bootstrap engine (krateo-core-provider subchart) values. Engine OTLP export is OFF by default
+# Bootstrap engine (core-provider subchart) values. Engine OTLP export is OFF by default
 # (otel.enabled=false in the subchart) and EVERY OTEL_* env is gated on that flag, so this endpoint
 # is inert and byte-identical until export is turned on. It is committed here as the ONE correct
 # target so no per-operator deploy value can drift (#229): the OTel collector DAEMONSET that the
 # installer itself deploys is the only one with an OTLP :4318 listener — the gateway
 # (`...-deployment-...`) is a k8s_cluster/k8sobjects scraper and refuses :4318. To turn on engine
-# telemetry, set `krateo-core-provider.otel.enabled=true` at deploy time and DO NOT also pass
+# telemetry, set `core-provider.otel.enabled=true` at deploy time and DO NOT also pass
 # `otel.endpoint` — inherit this default so it stays correct across redeploys. (Endpoint namespace
 # is namespaces.krateo's default `krateo-system`; the subchart reads endpoint literally — a
 # non-default krateo namespace needs an explicit endpoint override.)
-krateo-core-provider:
+core-provider:
   otel:
     endpoint: http://otel-collector-daemonset-opentelemetry-collector.krateo-system.svc:4318
 
@@ -173,8 +173,9 @@ componentValues:
       #       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "http://<otel-collector>.<ns>.svc:4318"
   # OTel export for the engine + every cdc is OFF by default (byte-identical when omitted). To
   # stream reconcile metrics + traces (e.g. the reconciliation-throughput series) to the
-  # observability stack, add a krateo-core-provider componentValues entry:
-  #   krateo-core-provider:
+  # observability stack, set the top-level `core-provider:` bootstrap subchart values (NOT a
+  # componentValues entry — the engine is a subchart, not a component):
+  #   core-provider:
   #     otel:
   #       enabled: true
   #       tracing: true
