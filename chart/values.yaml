@@ -123,6 +123,11 @@ vertexAI:
   # for the agent fan-out. Override per-install with --set vertexAI.location=<region> if you need
   # regional data residency.
   location: global
+  # secretName + secretKey: portable explicit-key ADC. Set secretName to a k8s Secret (in the agent
+  # namespace) holding the GCP service-account key JSON so agents authenticate to Vertex on ANY
+  # cluster (kind/EKS/on-prem), not just GKE metadata/node-SA. Unset => metadata-server ADC.
+  secretName: ""
+  secretKey: key.json
 
 # Local LLM (Ollama) — OPT-IN, off by default (vertexAI above stays the default). When enabled,
 # the whole agent fleet runs on ONE local, no-cloud model instead of Gemini/Vertex:
