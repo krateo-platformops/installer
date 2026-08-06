@@ -160,7 +160,7 @@
 {{- $_ := set $spec "modelConfig" (dict "create" false "name" $top.Values.localModel.refName) }}
 {{- end }}
 {{- else if and $c.vertexAI $top.Values.vertexAI.enabled }}
-{{- $_ := set $spec "vertexAI" (dict "enabled" true "projectID" $top.Values.vertexAI.projectID "location" $top.Values.vertexAI.location) }}
+{{- $_ := set $spec "vertexAI" (dict "enabled" true "projectID" $top.Values.vertexAI.projectID "location" $top.Values.vertexAI.location "secretName" $top.Values.vertexAI.secretName "secretKey" $top.Values.vertexAI.secretKey) }}
 {{- end }}
 {{- /* HITL approval gate. Applies to EVERY vertexAI agent — the user-facing orchestrator AND its
        delegated subagents. kagent >=0.9.9 propagates a subagent's tool-approval interrupt up to the

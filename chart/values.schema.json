@@ -243,6 +243,16 @@
         "location": {
           "type": "string",
           "default": "global"
+        },
+        "secretName": {
+          "type": "string",
+          "title": "Vertex SA-key Secret name",
+          "description": "k8s Secret with the GCP service-account key JSON for portable explicit-key ADC (any cluster). Unset => metadata-server ADC (GKE node SA)."
+        },
+        "secretKey": {
+          "type": "string",
+          "title": "Key file inside the Secret",
+          "description": "File name inside secretName; GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/gcp/<secretKey>. Default key.json."
         }
       }
     },
