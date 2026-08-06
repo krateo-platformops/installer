@@ -68,6 +68,7 @@ subjects:
        RoleBinding may reference the SA before it exists; it binds once core-provider creates
        it. SA name is derived from THIS chart's version (e.g. 0.2.31 -> installers-v0-2-31). */}}
 {{- $cdcSA := printf "installers-v%s" (.Chart.Version | toString | replace "." "-") }}
+{{- $crVer := printf "v%s" (.Chart.Version | toString | replace "." "-") }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -138,6 +139,36 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: installers-teardown-crd-read
+subjects:
+  - kind: ServiceAccount
+    name: {{ $cdcSA }}
+    namespace: {{ .Values.namespaces.krateo }}
+---
+{{- /* Cluster-scoped Node read for the cdc SA. The compositions.yaml render calls
+       inst.nodeip -> `lookup "v1" "Node"` (via inst.peerurl) to resolve the browser-reachable
+       node IP for NodePort exposure. nodes is cluster-scoped and chart-inspector can't derive
+       lookup RBAC from the render scan, so without this every version migration's FRESH
+       `installers-v<ver>` SA fails the umbrella render with `nodes is forbidden` (Synced=False)
+       until an operator grants it by hand. Granted unconditionally (read-only, low-risk) rather
+       than gated on exposure.type=NodePort: exposure is runtime-editable on the live Installer
+       CR, so a later switch to NodePort must not depend on a bootstrap-time values gate. */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: installers-nodeip-nodes
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: installers-nodeip-nodes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: installers-nodeip-nodes
 subjects:
   - kind: ServiceAccount
     name: {{ $cdcSA }}
@@ -253,45 +284,40 @@ spec:
               until kubectl get crd compositiondefinitions.core.krateo.io >/dev/null 2>&1; do sleep 5; done
               echo "registering the installer CompositionDefinition"
               kubectl apply -f /cr/compositiondefinition.yaml
-              echo "waiting for the generated Installer CRD..."
-              until kubectl get crd installers.composition.krateo.io >/dev/null 2>&1; do sleep 5; done
-              # wait until the CRD actually serves this chart's version
-              until kubectl get installers.composition.krateo.io -n "$NS" >/dev/null 2>&1; do sleep 5; done
-              if kubectl get installers.composition.krateo.io installer -n "$NS" >/dev/null 2>&1; then
+              # Wait until the apiserver SERVES this chart's version of the Installer CRD — via a
+              # RAW discovery GET, deliberately NOT `kubectl get installers...`: the plain get
+              # (a) passes on ANY served version (e.g. the stale pre-upgrade one, defeating the
+              # wait's purpose), and (b) resolves through kubectl's on-disk discovery cache, which
+              # goes stale mid-migration when the engine prunes the old served version — the loop
+              # then spins on a phantom NotFound until the cache TTL (~10m) and the helm hook
+              # timeout kills the upgrade. `get --raw` asks the apiserver directly, cache-proof.
+              echo "waiting for the Installer CRD to serve {{ $crVer }}..."
+              until kubectl get --raw "/apis/composition.krateo.io/{{ $crVer }}" 2>/dev/null | grep -q '"installers"'; do sleep 5; done
+              # Address the CR through the fully-qualified resource.version.group so kubectl pins
+              # THIS chart's (now confirmed-served) version instead of a cached preferred version.
+              if kubectl get installers.{{ $crVer }}.composition.krateo.io installer -n "$NS" >/dev/null 2>&1; then
                 # UPGRADE: the CR already exists and is the source of truth for runtime state
                 # (spec.features the installer-agent toggles, user overrides). Re-applying the
                 # whole CR would clobber that, so patch ONLY the chart-managed component pins +
                 # componentValues. core-provider then re-renders the umbrella at the new versions.
                 echo "Installer CR exists — surgical upgrade: patching chart-managed components + componentValues"
-                kubectl patch installers.composition.krateo.io installer -n "$NS" \
+                kubectl patch installers.{{ $crVer }}.composition.krateo.io installer -n "$NS" \
                   --type merge --patch-file /cr/components-patch.json
               else
                 echo "applying Installer CR — core-provider's cdc self-reconciles the rollout"
                 kubectl apply -f /cr/installer.yaml
               fi
-              # Auto-heal the Installer CR's FIRST reconcile: the cdc occasionally loses the
-              # race between setting the crossplane `external-create-pending` annotation and
-              # confirming the create (it reports `external-create-failed` then refuses to
-              # retry — "cannot determine creation result"). That is a hard stop that does NOT
-              # self-clear, so we remove the stale annotations until the CR goes Synced. Once
-              # Synced, Pass A + Pass B advance entirely on the cdc resync loop (its RESTMapper
-              # re-discovers new component CRDs on a cache miss) — no manual nudges needed.
-              echo "auto-heal: clearing any stuck external-create-pending on the Installer CR"
-              for i in $(seq 1 30); do
-                synced=$(kubectl get installers.composition.krateo.io installer \
-                  -n {{ .Values.namespaces.krateo }} \
-                  -o jsonpath='{.status.conditions[?(@.type=="Synced")].status}' 2>/dev/null || true)
-                if [ "$synced" = "True" ]; then echo "Installer CR Synced — self-bootstrap proceeding"; break; fi
-                if kubectl get installers.composition.krateo.io installer \
-                     -n {{ .Values.namespaces.krateo }} \
-                     -o jsonpath='{.metadata.annotations}' 2>/dev/null | grep -q 'external-create-pending'; then
-                  echo "  clearing stale external-create-{pending,failed} annotations"
-                  kubectl annotate installers.composition.krateo.io installer \
-                    -n {{ .Values.namespaces.krateo }} \
-                    krateo.io/external-create-pending- krateo.io/external-create-failed- \
-                    --overwrite 2>/dev/null || true
-                fi
-                sleep 10
-              done
-              echo "done — Pass A + Pass B advance on the cdc reconcile loop"
+              # NO Synced-wait / auto-heal loop here. The old loop hand-cleared stale
+              # krateo.io/external-create-{pending,failed} annotations, papering over a cdc bug:
+              # the composition handler's Observe wrote the CR, a 409 on that write made Observe
+              # error out, and the runtime's incomplete-create recovery then conservatively
+              # refused to proceed ("cannot determine creation result"). cdc >= 2.12.4
+              # (core-provider #67) makes Observe side-effect-free, so the runtime's own recovery
+              # re-observes and self-completes — no annotation surgery, ever (a reconciler that
+              # needs its handshake annotations cleared by hand is broken, not helped).
+              # Not waiting for Synced also decouples the helm hook timeout from reconcile
+              # duration: a full umbrella upgrade render+apply legitimately takes many minutes
+              # on a loaded cluster, and the hook has nothing left to contribute once the CR is
+              # applied — Pass A + Pass B advance on the cdc resync loop.
+              echo "done — the cdc reconciles the rollout (self-healing, cdc >= 2.12.4)"
 {{- end }}
