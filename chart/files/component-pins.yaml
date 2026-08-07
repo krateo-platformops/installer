@@ -2,7 +2,7 @@ components:
 - name: authn-crd
   kind: AuthnCrds
   chart: authn-crds
-  version: 0.26.0
+  version: 0.26.1
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -14,19 +14,19 @@ components:
 - name: frontend-crd
   kind: FrontendCrds
   chart: frontend-crds
-  version: 1.4.0
+  version: 1.4.4
   tier: platform
   feature: portal
 - name: snowplow-crd
   kind: SnowplowCrds
   chart: snowplow-crds
-  version: 1.9.0
+  version: 1.9.1
   tier: platform
   feature: portal
 - name: authn
   kind: Authn
   chart: authn
-  version: 0.26.0
+  version: 0.26.1
   deps:
   - authn-crd
   tier: platform
@@ -39,7 +39,7 @@ components:
 - name: snowplow
   kind: Snowplow
   chart: snowplow
-  version: 1.9.0
+  version: 1.9.1
   deps:
   - snowplow-crd
   - authn
@@ -54,7 +54,7 @@ components:
 - name: frontend
   kind: Frontend
   chart: frontend
-  version: 1.4.3
+  version: 1.4.4
   deps:
   - frontend-crd
   - authn
@@ -75,7 +75,7 @@ components:
   chart: portal
 - name: krateo-helm-render-service
   kind: KrateoHelmRenderService
-  version: 0.3.0
+  version: 0.3.1
   tier: platform
   feature: portal
   chart: krateo-helm-render-service
@@ -112,21 +112,21 @@ components:
   feature: portal
 - name: otel-collector-deployment
   kind: OtelCollectorDeployment
-  version: 0.3.3
+  version: 0.3.4
   deps:
   - krateo-observability
   tier: observability
   feature: portal
 - name: otel-collector-daemonset
   kind: OtelCollectorDaemonset
-  version: 0.1.5
+  version: 0.1.6
   deps:
   - otel-collector-deployment
   tier: observability
   feature: portal
 - name: krateo-sse-proxy
   kind: KrateoSseProxy
-  version: 0.1.6
+  version: 0.1.7
   deps:
   - krateo-observability
   tier: observability
@@ -170,7 +170,7 @@ components:
   feature: coreAgents
 - name: krateo-autopilot
   kind: KrateoAutopilot
-  version: 0.1.54
+  version: 0.1.55
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
