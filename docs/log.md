@@ -13,6 +13,16 @@ Curated history, newest first. This repo starts at the 2026-08-04 migration of t
 umbrella chart into `krateo-platformops` (0.3.1); the pre-migration 0.2.x line lived
 in the predecessor personal-org repo and is not mirrored here.
 
+## 2026-08-07 — 0.3.17: wave-structured bootstrap
+
+Replaces the single monolithic self-bootstrap post-install hook Job with four ordered, bounded,
+idempotent hook waves (register w0 / await-crd w5 / instance w10 / opt-in finalize w20,
+`bootstrap.waitForSynced`). Every wave is `activeDeadlineSeconds`-bounded, so a stuck bootstrap fails
+VISIBLY at its exact stage instead of hanging in silent limbo. Same SA/RBAC + `installer-self-cr`
+ConfigMap + create-or-merge-patch as 0.3.16. Does NOT eliminate the client-interruption `pending-install`
+wedge (helm still blocks on hooks) — that needs a promote-on-Synced finalizer outside the hook (#13) or
+the prerequisite install path.
+
 ## 2026-08-07 — 0.3.16: node-IP RBAC no longer version-pinned
 
 Fixes a version-migration wedge in NodePort exposure. `inst.nodeip` used a cluster
