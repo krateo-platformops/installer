@@ -14,7 +14,7 @@ timestamp: 2026-08-07T00:00:00Z
 ```sh
 helm install installer \
   oci://ghcr.io/krateo-platformops/charts/installer \
-  --version 0.3.11 \
+  --version 0.3.13 \
   --namespace krateo-system --create-namespace \
   --set bootstrap.coreProvider.enabled=true
 ```
@@ -22,7 +22,7 @@ helm install installer \
 `bootstrap.coreProvider.enabled=true` is **required on a bare cluster** and is not the
 default — the composition-safe default is `false` (see
 [overview](./overview.md)). The flag renders the engine subcharts
-(`core-provider` 2.12.4 + `core-provider-crds` 0.36.16, pinned in
+(`core-provider` 2.12.5 + `core-provider-crds` 0.36.16, pinned in
 [`Chart.yaml`](../chart/Chart.yaml)) and the self-bootstrap hook that registers the
 umbrella as an `Installer` composition. Everything else — authn, snowplow, frontend,
 portal, the observability stack — rolls out on the engine's reconcile loop in
@@ -119,7 +119,7 @@ lets the autopilot install the rest of Krateo later by editing the Installer CR:
 ```sh
 helm install installer \
   oci://ghcr.io/krateo-platformops/charts/installer \
-  --version 0.3.11 \
+  --version 0.3.13 \
   --namespace krateo-system --create-namespace \
   --set bootstrap.coreProvider.enabled=true \
   -f chart/values-agent-only.yaml \
