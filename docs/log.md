@@ -13,6 +13,15 @@ Curated history, newest first. This repo starts at the 2026-08-04 migration of t
 umbrella chart into `krateo-platformops` (0.3.1); the pre-migration 0.2.x line lived
 in the predecessor personal-org repo and is not mirrored here.
 
+## 2026-08-08 — 0.3.20: NodePort pin — installer components schema
+
+Declares `nodePort` in the installer's OWN `values.schema.json` `components.items` (which is
+`additionalProperties:false`). Without it, crdgen generated an Installer CRD that STRICT-rejected
+`spec.components[].nodePort` (`unknown field`), so the bootstrap's Installer CR apply failed
+(`DeadlineExceeded` on the instance wave) the moment component-pins carried a nodePort. Completes
+the NodePort-pin chain: component-pins carries it (0.3.18), component composition CRDs accept
+spec.service.nodePort (0.3.19), and now the Installer CRD accepts spec.components[].nodePort.
+
 ## 2026-08-08 — 0.3.19: NodePort pin — component schema half
 
 Completes the 0.3.18 NodePort pinning. The pin was pruned by the apiserver (`unknown field

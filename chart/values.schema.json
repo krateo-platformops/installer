@@ -196,6 +196,12 @@
           "registerOnly": {
             "type": "boolean",
             "description": "Catalog blueprint: Pass A registers this component's CompositionDefinition (making the blueprint available in the portal) but Pass B never emits a Composition for it \u2014 the operator/end-user instantiates it on demand. Use for tenant workload blueprints (e.g. openstack) that ship in the catalog rather than being auto-installed. Typically paired with tier: catalog."
+          },
+          "nodePort": {
+            "type": "integer",
+            "minimum": 30000,
+            "maximum": 32767,
+            "description": "Pinned NodePort for a browser-facing (expose:true) component when exposure.type=NodePort \u2014 deterministic + host-mappable. Wired to spec.service.nodePort in composition mode."
           }
         },
         "required": [
