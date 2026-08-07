@@ -1,0 +1,14 @@
+# componentValues overrides — deep-merged into each component's rendered
+# Composition spec (Pass B). The installer-computed wiring (service.type, the
+# frontend config URLs, vertexAI/hitlApproval) wins on any leaf conflict; anything
+# else is fair game and strictly typed against the component chart's own schema.
+componentValues:
+  # Scale the content API.
+  snowplow:
+    replicaCount: 2
+  # Pin a REAL external hostname for the authn URL the browser uses (e.g. behind a
+  # Gateway). A non-loopback value here wins over the auto-computed LB/NodePort URL;
+  # a localhost value would be treated as unset (the schema-seeded dev-default).
+  frontend:
+    config:
+      AUTHN_API_BASE_URL: https://authn.example.com
