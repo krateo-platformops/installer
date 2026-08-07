@@ -159,14 +159,21 @@
 inst.nodeip — a browser-reachable Node IP for NodePort exposure. Prefers an ExternalIP
 (public), else falls back to the first InternalIP. "" if the cluster advertises neither (the
 caller then omits the key and the next reconcile retries). */}}
+{{- /* inst.nodeip — the browser-reachable node IP for NodePort exposure, read from the
+       `krateo-nodeip` ConfigMap that the bootstrap resolves once (see self-bootstrap.yaml). We read
+       a NAMESPACE ConfigMap here rather than a cluster `lookup "v1" "Node"` on purpose: the umbrella
+       is rendered by the per-version `installers-v<ver>` render SA, and a cluster Node list needs a
+       cluster grant that every version migration's FRESH SA lacks (wedging the render with
+       `nodes is forbidden`). A namespace ConfigMap is always readable by that SA, so the node IP
+       survives version migrations with no per-version cluster RBAC. Returns "" if the ConfigMap is
+       absent (older bootstrap / not yet resolved) — the caller then omits the key and the next
+       reconcile fills it, same graceful-degradation as the pending-LB path. */}}
 {{- define "inst.nodeip" -}}
-{{- $top := index . 0 -}}{{- $ext := "" -}}{{- $int := "" -}}
-{{- range (lookup "v1" "Node" "" "").items -}}
-{{- range (.status | default dict).addresses | default list -}}
-{{- if eq .type "ExternalIP" -}}{{- $ext = .address -}}{{- end -}}
-{{- if eq .type "InternalIP" -}}{{- $int = .address -}}{{- end -}}
-{{- end -}}
-{{- end -}}
+{{- $top := index . 0 -}}
+{{- $cm := lookup "v1" "ConfigMap" $top.Values.namespaces.krateo "krateo-nodeip" -}}
+{{- $data := (($cm | default dict).data | default dict) -}}
+{{- $ext := $data.externalIP | default "" -}}
+{{- $int := $data.internalIP | default "" -}}
 {{- if $ext -}}{{ $ext }}{{- else -}}{{ $int }}{{- end -}}
 {{- end -}}
 

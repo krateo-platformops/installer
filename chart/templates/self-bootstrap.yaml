@@ -144,35 +144,32 @@ subjects:
     name: {{ $cdcSA }}
     namespace: {{ .Values.namespaces.krateo }}
 ---
-{{- /* Cluster-scoped Node read for the cdc SA. The compositions.yaml render calls
-       inst.nodeip -> `lookup "v1" "Node"` (via inst.peerurl) to resolve the browser-reachable
-       node IP for NodePort exposure. nodes is cluster-scoped and chart-inspector can't derive
-       lookup RBAC from the render scan, so without this every version migration's FRESH
-       `installers-v<ver>` SA fails the umbrella render with `nodes is forbidden` (Synced=False)
-       until an operator grants it by hand. Granted unconditionally (read-only, low-risk) rather
-       than gated on exposure.type=NodePort: exposure is runtime-editable on the live Installer
-       CR, so a later switch to NodePort must not depend on a bootstrap-time values gate. */}}
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+{{- /* Node IP for NodePort exposure, resolved ONCE here and cached in a namespace ConfigMap.
+       The bootstrap renders with the installer operator's OWN credentials (which can list cluster
+       Nodes), so the lookup succeeds here; the umbrella's inst.nodeip then reads THIS ConfigMap
+       (namespace-scoped, always readable by every `installers-v<ver>` render SA) instead of a
+       cluster `lookup Node`. This removes the per-version cluster nodes grant whose version-pinned
+       ClusterRoleBinding used to wedge every migration's FRESH SA with `nodes is forbidden`
+       (Synced=False) until an operator granted it by hand. Read-only; refreshed on each helm
+       install/upgrade. Node IPs are stable enough that a cdc-only reconcile between upgrades reads
+       the last-resolved value; inst.nodeip returns "" if this ConfigMap is absent and the caller
+       omits the key, so nothing hard-fails while it converges. */}}
+{{- $ext := "" }}
+{{- $int := "" }}
+{{- range (lookup "v1" "Node" "" "").items }}
+{{- range (.status | default dict).addresses | default list }}
+{{- if eq .type "ExternalIP" }}{{- $ext = .address }}{{- end }}
+{{- if eq .type "InternalIP" }}{{- $int = .address }}{{- end }}
+{{- end }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
 metadata:
-  name: installers-nodeip-nodes
-rules:
-  - apiGroups: [""]
-    resources: ["nodes"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: installers-nodeip-nodes
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: installers-nodeip-nodes
-subjects:
-  - kind: ServiceAccount
-    name: {{ $cdcSA }}
-    namespace: {{ .Values.namespaces.krateo }}
+  name: krateo-nodeip
+  namespace: {{ .Values.namespaces.krateo }}
+data:
+  externalIP: {{ $ext | quote }}
+  internalIP: {{ $int | quote }}
 ---
 {{- /* The Installer CR spec: only the umbrella's own keys (NOT the bootstrap subchart
        passthroughs like kagent, which carry huge default trees and are unused
