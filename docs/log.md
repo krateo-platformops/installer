@@ -13,6 +13,18 @@ Curated history, newest first. This repo starts at the 2026-08-04 migration of t
 umbrella chart into `krateo-platformops` (0.3.1); the pre-migration 0.2.x line lived
 in the predecessor personal-org repo and is not mirrored here.
 
+## 2026-08-07 — 0.3.16: node-IP RBAC no longer version-pinned
+
+Fixes a version-migration wedge in NodePort exposure. `inst.nodeip` used a cluster
+`lookup "v1" "Node"`, which needs a cluster grant the FRESH `installers-v<ver>` render SA
+lacks on every version bump — the old `installers-nodeip-nodes` ClusterRoleBinding was
+pinned to the bootstrap-time SA, so a migration (or any cdc-driven CompositionDefinition
+version bump) failed the umbrella render with `nodes is forbidden` (Synced=False) until an
+operator granted it by hand. Now the bootstrap resolves the node IP ONCE (rendered with the
+operator's own credentials, which can list Nodes) into a namespace `krateo-nodeip` ConfigMap,
+and `inst.nodeip` reads that ConfigMap — namespace-scoped, always readable by every per-version
+SA, no cluster nodes grant. The `installers-nodeip-nodes` ClusterRole/Binding is removed.
+
 ## 2026-08-07 — 0.3.15: agent fleet on the Go ADK runtime
 
 Pin-bump release that moves the whole agent fleet from the Python ADK to the kagent
