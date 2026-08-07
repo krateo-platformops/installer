@@ -127,10 +127,10 @@ componentValues:
   # rejection). Ports match the NodePorts the services land on in the 31000-31100 range.
   frontend:
     config:
-      AUTHN_API_BASE_URL: http://krateo.localhost:31000
-      SNOWPLOW_API_BASE_URL: http://krateo.localhost:31001
-      EVENTS_API_BASE_URL: http://krateo.localhost:31002
-      EVENTS_PUSH_API_BASE_URL: http://krateo.localhost:31002
+      AUTHN_API_BASE_URL: http://krateo.localhost:31001
+      SNOWPLOW_API_BASE_URL: http://krateo.localhost:31002
+      EVENTS_API_BASE_URL: http://krateo.localhost:31003
+      EVENTS_PUSH_API_BASE_URL: http://krateo.localhost:31003
 ```
 
 ```sh
