@@ -13,6 +13,20 @@ Curated history, newest first. This repo starts at the 2026-08-04 migration of t
 umbrella chart into `krateo-platformops` (0.3.1); the pre-migration 0.2.x line lived
 in the predecessor personal-org repo and is not mirrored here.
 
+## 2026-08-07 — 0.3.17: wave-structured bootstrap
+
+Replaces the single monolithic self-bootstrap post-install hook Job with **four ordered, bounded,
+idempotent hook waves** (helm hook-weights): `register` (w0, apply the Installer CompositionDefinition),
+`await-crd` (w5, block until crdgen serves the Installer CRD), `instance` (w10, create the Installer CR
+or surgically merge-patch chart-managed pins on upgrade), and an OPT-IN `finalize` (w20,
+`bootstrap.waitForSynced=true` — block until the Installer CR is Synced so helm's `deployed` is honest).
+Every wave is `activeDeadlineSeconds`-bounded, so a genuinely stuck bootstrap fails VISIBLY at its exact
+stage instead of hanging in a silent multi-minute limbo. Behaviour is otherwise identical to 0.3.16
+(same SA/RBAC, same `installer-self-cr` ConfigMap, same create-or-merge-patch logic). Note: this does
+NOT eliminate the client-interruption `pending-install` wedge — helm still blocks on post-install hooks;
+fully decoupling that needs a promote-on-Synced finalizer outside the helm hook (tracked in #13) or the
+prerequisite install path.
+
 ## 2026-08-07 — 0.3.16: node-IP RBAC no longer version-pinned
 
 Fixes a version-migration wedge in NodePort exposure. `inst.nodeip` used a cluster

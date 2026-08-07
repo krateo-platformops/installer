@@ -45,6 +45,12 @@ bootstrap:
     # The REAL one-shot bootstrap `helm install` MUST opt in explicitly:
     #   helm install installer oci://ghcr.io/braghettos/krateo/installer --set bootstrap.coreProvider.enabled=true ...
     enabled: false
+  # Honest `deployed`: when true, the bootstrap adds a final wave that blocks until the Installer CR
+  # is Synced, so helm marks the release `deployed` only once the platform actually converged. OFF by
+  # default because it re-adds a long block (widening the client-interruption window) that the fast
+  # default deliberately avoids — the fully-decoupled promote-on-Synced belongs in a finalizer outside
+  # the helm hook, not a hook wave. See self-bootstrap.yaml wave header.
+  waitForSynced: false
 # Subchart value passthroughs (only used when the matching bootstrap flag is enabled).
 # core-provider takes no overrides by default (omit = chart defaults).
 # NOTE: the ClickHouse + MongoDB observability operators are no longer bootstrap subcharts —

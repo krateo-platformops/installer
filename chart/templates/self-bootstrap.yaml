@@ -3,8 +3,9 @@
   bootstrap.coreProvider.enabled=true) the umbrella brings up the engine + operators
   (subchart deps) and then registers ITSELF as an `Installer` composition:
     - an Installer CompositionDefinition pointing at this same OCI chart, and
-    - a one-shot post-install hook Job that waits for the generated Installer CRD and
-      applies an Installer CR whose spec is this release's values with bootstrap OFF.
+    - a set of ordered, bounded post-install hook WAVES (see the wave note above the Job blocks)
+      that register that CompositionDefinition, wait for the generated Installer CRD, and apply
+      an Installer CR whose spec is this release's values with bootstrap OFF.
   core-provider then reconciles that Installer CR on its loop, re-rendering the umbrella in
   COMPOSITION mode (Pass A + Pass B) so the component layers roll out automatically — no
   manual `helm upgrade`/up.sh. Pass A/B (definitions.yaml, compositions.yaml, secret.yaml)
@@ -239,21 +240,36 @@ data:
   # keys are preserved.
   components-patch.json: {{ dict "spec" (dict "components" (include "inst.componentsYaml" $ | fromYaml).components "componentValues" .Values.componentValues "exposure" .Values.exposure) | toJson | quote }}
 ---
+{{- /*
+  The bootstrap is FOUR ordered, bounded, idempotent hook WAVES (helm hook-weights) instead of one
+  monolithic Job. All reuse the installer-self-bootstrap SA + installer-self-cr ConfigMap above.
+  Every wave is post-install,post-upgrade (so a real `helm upgrade` re-drives them and keeps the
+  helm-declared chart version == the running Installer CR version — no split-brain), and every wave
+  is activeDeadlineSeconds-bounded so a genuinely stuck bootstrap FAILS VISIBLY at the exact stage
+  instead of hanging in a silent multi-minute limbo:
+    w0  register  — apply the Installer CompositionDefinition (idempotent)
+    w5  await     — block until crdgen SERVES this chart's Installer CRD (the one real wait, isolated)
+    w10 instance  — CREATE the Installer CR (install) or surgical merge-patch pins (upgrade)
+    w20 finalize  — wait until the Installer CR is Synced, so helm marks the release `deployed` only
+                    once the platform actually converged (honest `deployed`).
+  TRADEOFF (w20): waiting for Synced re-adds a long block that the previous design deliberately
+  avoided (to decouple the helm-hook timeout from reconcile duration) — so it WIDENS the
+  client-interruption window in exchange for an honest `deployed`. It is bounded; the fully
+  decoupled fix (promote-on-Synced without blocking the client) is a finalizer that lives OUTSIDE
+  the helm hook, not a hook wave. Gate w20 off if the fast-return default matters more than honesty.
+*/}}
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: installer-self-bootstrap
+  name: installer-self-register
   namespace: {{ .Values.namespaces.krateo }}
   annotations:
-    # post-upgrade too: on a chart bump, re-apply ONLY the chart-managed component pins +
-    # componentValues (surgical merge patch) so component version/set/config changes propagate,
-    # while spec.features and other runtime edits are preserved. (Reverses the old "CR fully
-    # shadows the chart" freeze without reintroducing the clobber it was avoiding.)
     "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-weight": "0"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
-  backoffLimit: 30
+  backoffLimit: 20
+  activeDeadlineSeconds: 300
   template:
     spec:
       serviceAccountName: installer-self-bootstrap
@@ -263,7 +279,76 @@ spec:
           configMap:
             name: installer-self-cr
       containers:
-        - name: apply
+        - name: register
+          image: alpine/k8s:1.31.0
+          volumeMounts:
+            - name: cr
+              mountPath: /cr
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              # Register the installer CompositionDefinition. It can't be a build-time helm template
+              # (a CR of a CRD this same release installs is unmappable at build), so apply it once the
+              # engine CRD is present. kubectl apply is idempotent — safe on post-upgrade too.
+              echo "waiting for the compositiondefinitions CRD (krateo-core-provider-crd dep)..."
+              until kubectl get crd compositiondefinitions.core.krateo.io >/dev/null 2>&1; do sleep 5; done
+              echo "registering the installer CompositionDefinition"
+              kubectl apply -f /cr/compositiondefinition.yaml
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: installer-self-await-crd
+  namespace: {{ .Values.namespaces.krateo }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      serviceAccountName: installer-self-bootstrap
+      restartPolicy: Never
+      containers:
+        - name: await
+          image: alpine/k8s:1.31.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              # Block until the apiserver SERVES this chart's version of the Installer CRD — via a
+              # RAW discovery GET, deliberately NOT `kubectl get installers...`: the plain get
+              # (a) passes on ANY served version (e.g. the stale pre-upgrade one, defeating the
+              # wait's purpose), and (b) resolves through kubectl's on-disk discovery cache, which
+              # goes stale mid-migration when the engine prunes the old served version. `get --raw`
+              # asks the apiserver directly, cache-proof. activeDeadlineSeconds bounds a stuck engine.
+              echo "waiting for the Installer CRD to serve {{ $crVer }}..."
+              until kubectl get --raw "/apis/composition.krateo.io/{{ $crVer }}" 2>/dev/null | grep -q '"installers"'; do sleep 5; done
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: installer-self-instance
+  namespace: {{ .Values.namespaces.krateo }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 20
+  activeDeadlineSeconds: 300
+  template:
+    spec:
+      serviceAccountName: installer-self-bootstrap
+      restartPolicy: OnFailure
+      volumes:
+        - name: cr
+          configMap:
+            name: installer-self-cr
+      containers:
+        - name: instance
           image: alpine/k8s:1.31.0
           volumeMounts:
             - name: cr
@@ -273,30 +358,12 @@ spec:
             - |
               set -e
               NS={{ .Values.namespaces.krateo }}
-              # LOOKUP the engine CRD (installed by the krateo-core-provider-crd dependency), then
-              # register the installer CompositionDefinition. It can't be a build-time helm template
-              # (a CR of a CRD this same release installs is unmappable at build), so the hook applies
-              # it once the CRD is present. kubectl apply is idempotent — safe on post-upgrade too.
-              echo "waiting for the compositiondefinitions CRD (krateo-core-provider-crd dep)..."
-              until kubectl get crd compositiondefinitions.core.krateo.io >/dev/null 2>&1; do sleep 5; done
-              echo "registering the installer CompositionDefinition"
-              kubectl apply -f /cr/compositiondefinition.yaml
-              # Wait until the apiserver SERVES this chart's version of the Installer CRD — via a
-              # RAW discovery GET, deliberately NOT `kubectl get installers...`: the plain get
-              # (a) passes on ANY served version (e.g. the stale pre-upgrade one, defeating the
-              # wait's purpose), and (b) resolves through kubectl's on-disk discovery cache, which
-              # goes stale mid-migration when the engine prunes the old served version — the loop
-              # then spins on a phantom NotFound until the cache TTL (~10m) and the helm hook
-              # timeout kills the upgrade. `get --raw` asks the apiserver directly, cache-proof.
-              echo "waiting for the Installer CRD to serve {{ $crVer }}..."
-              until kubectl get --raw "/apis/composition.krateo.io/{{ $crVer }}" 2>/dev/null | grep -q '"installers"'; do sleep 5; done
               # Address the CR through the fully-qualified resource.version.group so kubectl pins
-              # THIS chart's (now confirmed-served) version instead of a cached preferred version.
+              # THIS chart's (now confirmed-served, by w5) version, not a cached preferred version.
               if kubectl get installers.{{ $crVer }}.composition.krateo.io installer -n "$NS" >/dev/null 2>&1; then
-                # UPGRADE: the CR already exists and is the source of truth for runtime state
-                # (spec.features the installer-agent toggles, user overrides). Re-applying the
-                # whole CR would clobber that, so patch ONLY the chart-managed component pins +
-                # componentValues. core-provider then re-renders the umbrella at the new versions.
+                # UPGRADE: the CR is the source of truth for runtime state (spec.features the
+                # installer-agent toggles, user overrides). Re-applying the whole CR would clobber
+                # that, so merge-patch ONLY the chart-managed components + componentValues (+ exposure).
                 echo "Installer CR exists — surgical upgrade: patching chart-managed components + componentValues"
                 kubectl patch installers.{{ $crVer }}.composition.krateo.io installer -n "$NS" \
                   --type merge --patch-file /cr/components-patch.json
@@ -304,17 +371,39 @@ spec:
                 echo "applying Installer CR — core-provider's cdc self-reconciles the rollout"
                 kubectl apply -f /cr/installer.yaml
               fi
-              # NO Synced-wait / auto-heal loop here. The old loop hand-cleared stale
-              # krateo.io/external-create-{pending,failed} annotations, papering over a cdc bug:
-              # the composition handler's Observe wrote the CR, a 409 on that write made Observe
-              # error out, and the runtime's incomplete-create recovery then conservatively
-              # refused to proceed ("cannot determine creation result"). cdc >= 2.12.4
-              # (core-provider #67) makes Observe side-effect-free, so the runtime's own recovery
-              # re-observes and self-completes — no annotation surgery, ever (a reconciler that
-              # needs its handshake annotations cleared by hand is broken, not helped).
-              # Not waiting for Synced also decouples the helm hook timeout from reconcile
-              # duration: a full umbrella upgrade render+apply legitimately takes many minutes
-              # on a loaded cluster, and the hook has nothing left to contribute once the CR is
-              # applied — Pass A + Pass B advance on the cdc resync loop.
-              echo "done — the cdc reconciles the rollout (self-healing, cdc >= 2.12.4)"
+              # NO Synced-wait here (that is w20's job, and it is optional): the cdc owns convergence
+              # on its resync loop; cdc >= 2.12.4 (#67) makes Observe side-effect-free so the runtime
+              # self-completes without any external-create annotation surgery.
+{{- if .Values.bootstrap.waitForSynced }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: installer-self-finalize
+  namespace: {{ .Values.namespaces.krateo }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "20"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  template:
+    spec:
+      serviceAccountName: installer-self-bootstrap
+      restartPolicy: Never
+      containers:
+        - name: finalize
+          image: alpine/k8s:1.31.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              # Honest `deployed`: block until the Installer CR is Synced, so helm completes the
+              # release (pending-install -> deployed) only once Pass A/B actually converged — NOT
+              # just once the CR was applied. Bounded, and OPT-IN (bootstrap.waitForSynced) because
+              # it re-adds the long block the default avoids. See the wave header note.
+              echo "waiting for the Installer CR to reach Synced ({{ $crVer }})..."
+              kubectl wait --for=condition=Synced --timeout=880s \
+                installers.{{ $crVer }}.composition.krateo.io/installer -n {{ .Values.namespaces.krateo }}
+{{- end }}
 {{- end }}
