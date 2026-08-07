@@ -14,7 +14,7 @@ timestamp: 2026-08-07T00:00:00Z
 ```sh
 helm install installer \
   oci://ghcr.io/krateo-platformops/charts/installer \
-  --version 0.3.13 \
+  --version 0.3.15 \
   --namespace krateo-system --create-namespace \
   --set bootstrap.coreProvider.enabled=true
 ```
@@ -119,7 +119,7 @@ lets the autopilot install the rest of Krateo later by editing the Installer CR:
 ```sh
 helm install installer \
   oci://ghcr.io/krateo-platformops/charts/installer \
-  --version 0.3.13 \
+  --version 0.3.15 \
   --namespace krateo-system --create-namespace \
   --set bootstrap.coreProvider.enabled=true \
   -f chart/values-agent-only.yaml \

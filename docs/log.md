@@ -13,6 +13,20 @@ Curated history, newest first. This repo starts at the 2026-08-04 migration of t
 umbrella chart into `krateo-platformops` (0.3.1); the pre-migration 0.2.x line lived
 in the predecessor personal-org repo and is not mirrored here.
 
+## 2026-08-07 — 0.3.15: agent fleet on the Go ADK runtime
+
+Pin-bump release that moves the whole agent fleet from the Python ADK to the kagent
+**Go ADK** runtime — measured **~30x less memory** per agent (~6 MiB vs ~185 MiB RSS).
+Each agent chart now sets `spec.declarative.runtime: go` and pins the runtime image
+registry to `ghcr.io` via `spec.declarative.deployment.imageRegistry` (the `golang-adk`
+image is published to ghcr.io but not mirrored to `cr.kagent.dev`, where the kagent
+controller defaults). The agent-chart change also folded a latent duplicate
+`declarative.deployment` key that had been dropping the Vertex SA-key mount, so
+`vertexAI.secretName` (already injected by the installer) now actually reaches non-
+Workload-Identity clusters like kind. Pins: authn-agent 0.22.26, snowplow-agent 1.0.91,
+frontend-agent 1.3.98, clickstack-agent 3.0.36, core-provider-agent 0.53.18,
+krateo-autopilot 0.1.57 (autopilot + k8s-agent + helm-agent).
+
 ## 2026-08-06 — 0.3.11: version-migration hardening (#5)
 
 Four fixes that make a live `helm upgrade` across chart versions self-contained:

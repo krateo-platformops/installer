@@ -136,7 +136,7 @@ componentValues:
 ```sh
 helm install installer \
   oci://ghcr.io/krateo-platformops/charts/installer \
-  --version 0.3.13 \
+  --version 0.3.15 \
   --namespace krateo-system --create-namespace \
   --set bootstrap.coreProvider.enabled=true \
   -f values-full.yaml
