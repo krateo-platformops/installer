@@ -26,3 +26,6 @@ chart/templates/ordered-teardown.yaml: HOOK 1 — reverse-dependency drain of th
 chart/templates/bootstrap-teardown.yaml: HOOK 2 — full-footprint drain before engine removal
 chart/templates/post-delete-cleanup.yaml: HOOK 3 — post-delete sweep of non-helm-owned leftovers
 chart/values-agent-only.yaml: the agent-only install profile
+docs/runbooks/kind-full-profile.md: full-profile install (portal + observability + agent fleet) on a local kind cluster — kind config, registryAuth, vertexAI, exposure
+examples/kind-full-profile/README.md: full-profile kind values — precondition + helm install -f
+examples/kind-full-profile/values-full.yaml: the full-profile values file (all feature tiers on)
