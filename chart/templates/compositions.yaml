@@ -76,6 +76,12 @@
      the component chart (named `http` or a fixed containerPort), so the pod keeps its own port. */}}
 {{- $svc := dict "type" $top.Values.exposure.type }}
 {{- if $top.Values.exposure.port }}{{- $_ := set $svc "port" (int $top.Values.exposure.port) }}{{- end }}
+{{/* NodePort: PIN a deterministic, host-mappable nodePort (component-pins `nodePort`) instead of
+     letting k8s allocate a random one — otherwise the browser-facing services land on unpredictable
+     ports (e.g. 31063) that no kind extraPortMapping / firewall rule can target, and inst.peerurl
+     wires the frontend config to a port nothing outside the cluster can reach. The pinned value flows
+     straight through inst.peerurl (which reads .spec.ports[].nodePort). */}}
+{{- if and (eq $top.Values.exposure.type "NodePort") $c.nodePort }}{{- $_ := set $svc "nodePort" (int $c.nodePort) }}{{- end }}
 {{- $_ := set $spec "service" $svc }}
 {{- end }}
 {{- end }}

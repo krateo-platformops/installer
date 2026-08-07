@@ -13,6 +13,15 @@ Curated history, newest first. This repo starts at the 2026-08-04 migration of t
 umbrella chart into `krateo-platformops` (0.3.1); the pre-migration 0.2.x line lived
 in the predecessor personal-org repo and is not mirrored here.
 
+## 2026-08-07 — 0.3.18: pin deterministic NodePorts
+
+`exposure.type=NodePort` now PINS a deterministic, host-mappable nodePort per browser-facing
+component (frontend 31000, authn 31001, snowplow 31002, krateo-sse-proxy 31003 — in
+`files/component-pins.yaml`, wired in compositions.yaml) instead of letting k8s allocate random
+ports (e.g. 31063) that no kind extraPortMapping / firewall rule can target and that leave the
+portal unreachable. inst.peerurl reads the pinned `.spec.ports[].nodePort` unchanged, so the
+frontend config wires to a known, reachable port. LoadBalancer exposure is unaffected.
+
 ## 2026-08-07 — 0.3.17: wave-structured bootstrap
 
 Replaces the single monolithic self-bootstrap post-install hook Job with four ordered, bounded,

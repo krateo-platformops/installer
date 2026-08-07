@@ -33,6 +33,7 @@ components:
   feature: portal
   expose: true
   exposePort: 8082
+  nodePort: 31001   # pinned deterministic NodePort (host-mappable) for exposure.type=NodePort
   svcMatch: authn
   configKeys:
   - AUTHN_API_BASE_URL
@@ -47,6 +48,7 @@ components:
   feature: portal
   expose: true
   exposePort: 8081
+  nodePort: 31002   # pinned deterministic NodePort (host-mappable) for exposure.type=NodePort
   svcMatch: snowplow
   configKeys:
   - SNOWPLOW_API_BASE_URL
@@ -63,6 +65,7 @@ components:
   feature: portal
   expose: true
   exposePort: 8080
+  nodePort: 31000   # pinned deterministic NodePort (host-mappable) for exposure.type=NodePort
   svcMatch: frontend
   consumer: true
 - name: portal
@@ -133,6 +136,7 @@ components:
   feature: portal
   expose: true
   exposePort: 8080
+  nodePort: 31003   # pinned deterministic NodePort (host-mappable) for exposure.type=NodePort
   svcMatch: sse-proxy
   configKeys:
   - EVENTS_API_BASE_URL
