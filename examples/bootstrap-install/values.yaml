@@ -1,0 +1,12 @@
+# Minimal bootstrap install — the default portal platform, exposed via NodePort
+# (kind / bare-metal; the LoadBalancer default suits GKE/EKS/AKS).
+# The agent tiers stay off (their defaults), so no private registry credentials
+# and no Vertex AI project are needed.
+exposure:
+  type: NodePort
+features:
+  coreProvider: true
+  portal: true
+  oasgenProvider: true
+  coreAgents: false
+  specialistAgents: false

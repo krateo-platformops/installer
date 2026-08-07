@@ -1,0 +1,28 @@
+# installer — LLM doc index (pinned: 0.3.11)
+# One line per file; regenerate the pin on release. Read files at the tag that matches
+# the deployed chart (chart version == the repo tag, plain semver, no v prefix; the
+# chart version is also the Installer CRD's served version, v0-3-11).
+docs/index.md: the map — what the umbrella installer is + links to the whole bundle
+docs/overview.md: how it works — bootstrap vs composition mode, Pass A/Pass B gating, the self-reconcile loop, the three teardown hooks
+docs/usage.md: the ONE canonical install, surgical upgrade semantics, day-2 CR editing, uninstall, the agent-only profile
+docs/configuration.md: the whole values surface — features, exposure, componentValues, registryAuth, vertexAI, localModel, hitlApproval, bootstrap
+docs/api.md: the generated Installer CRD (crdgen from values.schema.json), emitted CompositionDefinitions/Compositions, component-pins as version source of truth
+docs/examples.md: index of the runnable examples
+docs/release.md: how a release ships — plain-semver tag → canonical release-oci → GHCR; what a version bump means downstream (GVK migration)
+docs/log.md: curated history since the krateo-platformops migration (0.3.x)
+examples/bootstrap-install/README.md: the canonical bare-cluster install, NodePort exposure, agent tiers off
+examples/bootstrap-install/values.yaml: the values file — helm install -f
+examples/component-overrides/README.md: componentValues deep-merge overrides at install time or on the live Installer CR
+examples/component-overrides/values.yaml: the values file — helm install -f / kubectl patch
+# Chart source (authoritative for every claim above):
+chart/values.yaml: defaults + inline design notes for the whole values surface
+chart/values.schema.json: the strict typed contract — and the source the Installer CRD is generated from
+chart/files/component-pins.yaml: the tested-together component set — versions, deps, tiers, feature gates, wiring flags
+chart/templates/definitions.yaml: Pass A — CompositionDefinition registration
+chart/templates/compositions.yaml: Pass B — gated Composition emission + all render-time wiring
+chart/templates/self-bootstrap.yaml: self-registration, the Installer CR, lookup RBAC, the post-install/post-upgrade hook
+chart/templates/_helpers.tpl: the gating/exposure helpers (crdExists, depsReady, dependentsGone, lbip, nodeip, peerurl, componentsYaml)
+chart/templates/ordered-teardown.yaml: HOOK 1 — reverse-dependency drain of the component tree
+chart/templates/bootstrap-teardown.yaml: HOOK 2 — full-footprint drain before engine removal
+chart/templates/post-delete-cleanup.yaml: HOOK 3 — post-delete sweep of non-helm-owned leftovers
+chart/values-agent-only.yaml: the agent-only install profile

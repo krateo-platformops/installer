@@ -1,54 +1,72 @@
-# Krateo Installer
+# installer
 
-Umbrella orchestrator blueprint for **Krateo PlatformOps**. It does not bundle the component
-charts — it *sequences* the per-component blueprints into one ordered, readiness-gated install:
+The umbrella orchestrator blueprint of Krateo PlatformOps: one `helm install` that
+self-bootstraps the composition engine and sequences every component blueprint into an
+ordered, readiness-gated platform rollout.
 
-1. registers every component `CompositionDefinition` (`installDefinitions=true`), then
-2. emits each component `Composition` only once its prerequisites' Compositions report
-   `Ready=True` and the component's generated CRD exists.
+[![release-oci](https://github.com/krateo-platformops/installer/actions/workflows/release-oci.yaml/badge.svg)](https://github.com/krateo-platformops/installer/actions/workflows/release-oci.yaml)
+[![lint](https://github.com/krateo-platformops/installer/actions/workflows/lint.yaml/badge.svg)](https://github.com/krateo-platformops/installer/actions/workflows/lint.yaml)
 
-The `CompositionDefinition` controller re-reconciles, so each pass sees more components become
-Ready and emits the next layer until the platform is up.
+## What is this
+
+A chart that bundles no components — it *sequences* them: Pass A registers a
+`CompositionDefinition` per component, Pass B emits each component `Composition` only
+once its dependencies are `Ready=True` and its generated CRD is served. The chart also
+registers **itself** as an `Installer` composition, so the whole platform converges —
+and heals, and upgrades, and tears down in order — on the engine's reconcile loop.
+Full picture: [docs/index.md](docs/index.md).
 
 ## Install
-
-A single `helm install` self-bootstraps the composition engine (`core-provider` +
-`chart-inspector`, pulled as bootstrap subchart dependencies) and then applies the `Installer` CR,
-which the engine reconciles into the full platform:
 
 ```sh
 helm install installer \
   oci://ghcr.io/krateo-platformops/charts/installer \
-  --version <version> \
+  --version 0.3.11 \
   --namespace krateo-system --create-namespace \
   --set bootstrap.coreProvider.enabled=true
 ```
 
-`bootstrap.coreProvider.enabled=true` is required on a bare cluster — it renders the engine
-subcharts. During the engine's own composition-mode render of the live `Installer`, bootstrap is
-off, so the engine is never re-rendered by itself.
+`bootstrap.coreProvider.enabled=true` is required on a bare cluster (Kubernetes
+≥ 1.36); there is no step 2. Upgrades, uninstall and the agent-only profile:
+[docs/usage.md](docs/usage.md).
 
-## Exposure
+## Configure
 
-Browser-facing components (frontend, authn, snowplow) are exposed per `exposure.type`:
+See [docs/configuration.md](docs/configuration.md). Most used:
 
-- **`LoadBalancer`** (default) — each gets its own cloud L4 LoadBalancer + external IP. Correct for
-  GKE/EKS/AKS, where the NodePort range is firewall-blocked by default.
-- **`NodePort`** — for bare-metal / kind or environments without a LoadBalancer controller. The
-  installer resolves a node IP for the browser-facing URLs (needs node `list` RBAC).
+| Setting | Default | Effect |
+|---|---|---|
+| `features.*` | portal on, agents off | Feature gates over the component DAG (`portal`, `oasgenProvider`, `coreAgents`, `specialistAgents`). |
+| `exposure.type` / `exposure.port` | `LoadBalancer` / unset | How browser-facing components are exposed; `NodePort` for kind/bare-metal; `port` = one shared port. |
+| `componentValues.<name>` | curated defaults | Per-component Composition-spec overrides, deep-merged — the only durable customization channel. |
 
-Optionally set `exposure.port` to expose all browser-facing components on one shared port.
+## Examples
 
-## Components
+In [`examples/`](examples/), each with preconditions and the one command
+([docs/examples.md](docs/examples.md)):
 
-The tested-together component version set lives in [`chart/files/component-pins.yaml`](chart/files/component-pins.yaml)
-(chart content, sourced via `.Files.Get` — immune to `helm upgrade --reuse-values`). Each entry
-pins a chart, its version and its generated `kind`; feature/tier gates and dependency ordering
-drive the readiness-gated install.
+- [bootstrap-install](examples/bootstrap-install/README.md) — the canonical
+  bare-cluster install, NodePort exposure.
+- [component-overrides](examples/component-overrides/README.md) — `componentValues`
+  overrides at install time or on the live Installer CR.
 
-## CI
+## Docs
 
-- `release-oci` — on a semver tag (`X.Y.Z`, no `v` prefix), packages the `chart/` and publishes it
-  to `oci://ghcr.io/krateo-platformops/charts/installer`. `CHART_VERSION` is substituted from the tag.
-- `lint` — helm lint + `values.schema.json` validation + a render smoke test on every PR.
-- `security` — the org's shared security workflow.
+- [docs/index.md](docs/index.md) — the map of the bundle.
+- [docs/overview.md](docs/overview.md) — bootstrap vs composition mode, Pass A/B, the
+  self-reconcile loop, the teardown hooks.
+- [docs/usage.md](docs/usage.md) — install / upgrade / day-2 / uninstall.
+- [docs/configuration.md](docs/configuration.md) — the whole values surface.
+- [docs/api.md](docs/api.md) — the generated Installer CRD + emitted objects;
+  `component-pins.yaml` as version source of truth.
+- [docs/examples.md](docs/examples.md) — the runnable examples.
+- [docs/release.md](docs/release.md) — how a release ships; the GVK migration.
+- [docs/log.md](docs/log.md) — curated history.
+- [docs/llms.txt](docs/llms.txt) — the version-pinned agent index.
+
+## Develop & release
+
+Validate locally with `helm dependency build chart/ && helm lint chart/` (CI runs the
+same plus a render smoke test and this doc bundle's conformance check). Releases ship
+from a plain-semver tag (no `v` prefix) via the canonical `release-oci` workflow:
+[docs/release.md](docs/release.md).

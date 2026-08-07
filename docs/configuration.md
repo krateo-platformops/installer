@@ -1,0 +1,188 @@
+---
+type: Configuration
+title: installer — configuration
+description: The whole values surface — feature gates, the exposure model (LoadBalancer/NodePort lookups), componentValues deep-merge, registryAuth, vertexAI, localModel, hitlApproval and the bootstrap switch — with the render-time mechanics behind each.
+resource: oci://ghcr.io/krateo-platformops/charts/installer
+tags: [configuration, values, exposure, features]
+timestamp: 2026-08-07T00:00:00Z
+---
+
+# Configuration
+
+Ground truth: [`chart/values.yaml`](../chart/values.yaml) (defaults + design notes) and
+[`chart/values.schema.json`](../chart/values.schema.json) (the typed contract —
+`additionalProperties: false` at every level, and the source the `Installer` CRD is
+generated from, see [api](./api.md)). Everything here is also the **spec of the live
+Installer CR**: after bootstrap, you set these keys by patching the CR, not by
+`helm upgrade` ([usage](./usage.md#day-2-edit-the-installer-cr-not-the-components)).
+
+## Top-level surface
+
+| Key | Default | What it does |
+|---|---|---|
+| `ociRepo` | `oci://ghcr.io/krateo-platformops/charts` | Registry base for every component chart URL (per-component `repo` in the pins overrides it). |
+| `installDefinitions` | `true` | Whether Pass A (CompositionDefinition registration) runs at all. |
+| `bootstrap.coreProvider.enabled` | `false` | THE mode switch: `true` = bootstrap render (engine subcharts + self-registration), `false` = composition render (Pass A + Pass B). See [overview](./overview.md). |
+| `namespaces.krateo` | `krateo-system` | The one namespace the umbrella manages (the old clickhouse-system split is gone). |
+| `exposure.type` / `exposure.port` | `LoadBalancer` / unset | How browser-facing components are exposed — below. |
+| `features.*` | see below | Feature gates over the component DAG. |
+| `hitlApproval` | `true` | Human-in-the-loop gate on the agents' mutating tools — below. |
+| `vertexAI.*` | `enabled: true`, `location: global` | Gemini via Vertex AI ADC for the agent fleet — below. |
+| `localModel.*` | `enabled: false` | Opt-in: run the whole fleet on one local Ollama model — below. |
+| `componentValues.<name>` | curated defaults | Per-component Composition-spec overrides, deep-merged — below. |
+| `registryAuth.*` | `enabled: false` | Credentials for in-cluster chart pulls from private registries — below. |
+| `components` | unset (pins file) | Advanced: per-component `version` override / `registerOnly` catalog append — see [api](./api.md#component-pinsyaml--the-version-source-of-truth). |
+| `core-provider.*` | `otel.endpoint` preset | Bootstrap-subchart passthrough (only used while `bootstrap.coreProvider.enabled=true`); engine OTel export stays off until `core-provider.otel.enabled=true`. |
+
+## `features` — the gates over the DAG
+
+Every component in [`component-pins.yaml`](../chart/files/component-pins.yaml) carries
+a `feature`; Pass A/B gate on it via `inst.featureEnabled`. No feature is
+force-enabled, so a minimal install can disable everything and let an agent enable it
+later on the CR.
+
+| Flag | Default | Gates |
+|---|---|---|
+| `coreProvider` | `true` | Nothing — an engine-present *marker* (the engine is always-on via bootstrap). |
+| `portal` | `true` | The non-agent platform: `authn` → `snowplow` → `frontend` → `portal` + `krateo-helm-render-service`, their `*-crd` charts, **and the observability tier** (clickhouse/mongodb operators, `krateo-observability`, both OTel collectors, `krateo-sse-proxy`). |
+| `oasgenProvider` | `true` | `oasgen-provider` + its CRD chart. |
+| `coreAgents` | `false` | The base agent layer: `kagent-crds` → `kagent` → `fetch-mcp-server` + `krateo-autopilot`. |
+| `specialistAgents` | `false` | The 5 component specialist agents (`authn/snowplow/frontend/clickstack/core-provider-agent`) + `clickhouse-mcp-server`. Needs `coreAgents` (they all dep on `kagent`). |
+
+Turning a feature **off** on the live CR triggers the reverse-dependency drain
+(`inst.dependentsGone`): components disappear leaves-first, never out from under a
+dependent ([overview](./overview.md#composition-mode--pass-a--pass-b-every-reconcile)).
+
+## `exposure` — one model for browser-facing components
+
+Components marked `expose: true` in the pins (authn, snowplow, frontend,
+krateo-sse-proxy) get `spec.service.type = exposure.type` injected by Pass B;
+everything is resolved from live Services at reconcile time via Helm `lookup` — no
+post-install `kubectl patch`.
+
+- **`type: LoadBalancer`** (default) — each exposed component gets its own cloud L4 LB.
+  The frontend (the `consumer: true` component) gets `spec.config.<KEY>` for every peer
+  that declares `configKeys` (`AUTHN_API_BASE_URL`, `SNOWPLOW_API_BASE_URL`,
+  `EVENTS_API_BASE_URL`, `EVENTS_PUSH_API_BASE_URL`), each a browser-reachable
+  `http://<lb-ip>:<port>` resolved by `inst.peerurl`/`inst.lbip`. Until an LB IP is
+  assigned the key is *omitted* — the next reconcile fills it in, and the frontend
+  serves `config.json` statically so a page reload picks it up.
+- **`type: NodePort`** — for kind/bare-metal. `inst.peerurl` reads the Service's
+  allocated `nodePort` and `inst.nodeip` resolves a browser-reachable node IP
+  (ExternalIP preferred, first InternalIP as fallback) by listing Nodes. That `lookup`
+  needs cluster-scoped `nodes` read on the cdc SA, which the chart itself ships:
+  the `installers-nodeip-nodes` ClusterRole+Binding in
+  [`self-bootstrap.yaml`](../chart/templates/self-bootstrap.yaml) — granted
+  unconditionally because `exposure` is runtime-editable and a later switch to
+  NodePort must not depend on a bootstrap-time gate (before 0.3.11 every fresh
+  `installers-v<ver>` SA failed the render with `nodes is forbidden`).
+- **`port`** (optional) — one shared port for everything browser-facing: it pins the
+  Service `port` of every exposed top-level-`service` component *and* is used as the
+  port in the frontend's peer URLs. Unset, each component keeps its own `exposePort`
+  from the pins (authn 8082, snowplow 8081, frontend/sse-proxy 8080). Components with
+  a nested Service (kagent) or their own LB (hyperdx) are set via `componentValues`.
+
+A **static override wins**: a real external hostname pinned in
+`componentValues.frontend.config.<KEY>` (e.g. behind a Gateway) suppresses the
+auto-compute for that key — but a *loopback* value (`http://localhost…`,
+`http://127.0.0.1…`) is treated as unset, because `values.schema.json` seeds those
+dev-defaults into the spec and they must not leak to the browser
+([`compositions.yaml`](../chart/templates/compositions.yaml), installer #203).
+
+## `componentValues` — the durable per-component override channel
+
+`componentValues.<component-name>` is deep-merged into that component's rendered
+Composition **spec** in Pass B. Two rules
+([`compositions.yaml`](../chart/templates/compositions.yaml)):
+
+1. **Installer-computed wiring wins.** The merge gives the installer-rendered spec
+   precedence on leaf conflicts, so `service.type`, the frontend `config` URLs,
+   `vertexAI`/`hitlApproval` injection and the autopilot `extraAgents` stay
+   authoritative; you can safely add anything else (`resources`, `replicaCount`,
+   `service.annotations`, nested keys).
+2. **It is the only durable channel.** Pass B re-renders the component CRs every
+   reconcile, so a direct `kubectl edit` of a component CR reverts; edits to
+   `componentValues` on the live Installer CR stick.
+
+The schema types this map **strictly** against each pinned component chart's own
+schema (`additionalProperties: false` — a typo'd key fails validation instead of
+silently doing nothing). Shipped defaults worth knowing
+([`values.yaml`](../chart/values.yaml)): `kagent.kagentapp.fullnameOverride: kagent`
+(the fleet references the `kagent-tool-server` RemoteMCPServer by its default-install
+name) and `krateo-autopilot.agents.{k8s,helm}.enabled: true` (generic Kubernetes +
+Helm sub-agents on in every profile).
+
+For the autopilot, `componentValues.krateo-autopilot.extraAgents` pins an explicit
+orchestration fleet; when absent the installer **auto-derives** it from every
+feature-enabled `vertexAI` agent component (excluding the autopilot itself), and
+either way the list is filtered to deployed agents — a reference to an absent Agent
+would fail kagent's compile.
+
+## `registryAuth`
+
+core-provider pulls every component chart **in-cluster** (and the umbrella's
+self-reconcile pulls this installer chart), so a private/authenticated OCI registry
+needs credentials beyond your local `helm registry login`:
+
+```yaml
+registryAuth:
+  enabled: true
+  username: <registry-user>
+  passwordRef:
+    name: <secret-name>
+    namespace: ""          # empty = namespaces.krateo
+    key: <secret-key>
+  insecureSkipVerifyTLS: false
+```
+
+When enabled, every component CompositionDefinition **and** the installer's own get
+`spec.chart.credentials` (rendered by `inst.chartExtras` in
+[`_helpers.tpl`](../chart/templates/_helpers.tpl));
+`insecureSkipVerifyTLS` maps to `spec.chart.insecureSkipVerifyTLS` independently of
+auth. Required for the private `oci://ghcr.io/krateo-agentiko/charts` agent pins;
+`krateo-platformops/*` is public.
+
+## `vertexAI`
+
+Injected as `spec.vertexAI` into every component flagged `vertexAI: true` in the pins
+(the autopilot + the specialist agents). Provider is GeminiVertexAI with Application
+Default Credentials — **no API key**:
+
+- `projectID` — **required when enabled**, no default: your GCP project hosting Vertex.
+- `location` — `global` by default (Google's recommended cross-region routing for
+  Gemini; override for regional data residency).
+- `secretName` / `secretKey` — optional *portable* ADC: a k8s Secret holding a GCP
+  service-account key JSON so agents authenticate on any cluster (kind/EKS/on-prem).
+  Unset ⇒ metadata-server ADC, which requires GKE nodes with the `cloud-platform`
+  OAuth scope and an `aiplatform.*` IAM role on the node SA.
+
+## `localModel`
+
+Opt-in (default off); when enabled it **takes precedence over `vertexAI`** in Pass B:
+the model owner (`krateo-autopilot`, `modelOwner: true` in the pins) renders its shared
+`gemini-flash`/`gemini-pro` ModelConfigs as provider Ollama pointing at `host` with
+model id `model`; every other agent is pointed at the owner-created ModelConfig
+(`modelConfig.create: false`, `name: refName`) — the whole fleet on one local LLM with
+no per-agent-chart change. Use a tool-calling-capable model (`qwen3.6` is the default;
+`gemma ≤ 3` cannot tool-call).
+
+## `hitlApproval`
+
+The coarse human-in-the-loop gate, injected as `spec.hitlApproval` into every
+`vertexAI` agent — orchestrator and subagents alike (kagent ≥ 0.9.9 bubbles a
+subagent's tool-approval interrupt up to the user's chat, so delegation does not
+deadlock). `true` (default) pauses for approval before any mutating cluster tool;
+`false` is autonomous remediation. A component may instead declare its own granular
+`requireApproval: [tool, …]` list in the pins — then that exact list is threaded onto
+the agent spec and the coarse boolean is skipped (the frontend-agent ships
+`requireApproval: []` because its only mutating-shaped tool is a server dry-run).
+
+## `bootstrap.*` and the engine subchart passthrough
+
+`bootstrap.coreProvider.enabled` is fully specified in
+[overview](./overview.md#overview); the subchart passthroughs (top-level
+`core-provider:` values) apply **only** while it is `true` — the engine is a subchart,
+not a component, so its knobs are *not* `componentValues` entries. The chart presets
+`core-provider.otel.endpoint` to the collector daemonset Service (the only one with an
+OTLP :4318 listener) so that flipping `core-provider.otel.enabled=true` at deploy time
+is the whole story of turning on engine telemetry — don't also pass an endpoint.
