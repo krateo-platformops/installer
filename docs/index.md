@@ -35,6 +35,7 @@ pulled as a bootstrap subchart dependency.
   the emitted CompositionDefinitions/Compositions, and `component-pins.yaml` as the
   version source of truth.
 - [examples](./examples.md) — the runnable examples under `examples/`.
+- [runbooks/kind-full-profile](./runbooks/kind-full-profile.md) — install the full platform (portal + observability + agent fleet) on a local kind cluster.
 - [release](./release.md) — how a release ships (plain-semver tag → OCI chart) and what
   a version bump means downstream (the `v0-3-x` GVK migration).
 - [log](./log.md) — curated history.

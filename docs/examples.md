@@ -20,3 +20,4 @@ validate offline with `helm template` (after `helm dependency build chart/` and 
   `componentValues` deep-merge overrides (snowplow `replicaCount`, a static frontend
   `AUTHN_API_BASE_URL`), applied at install time or as a merge patch on the live
   Installer CR.
+- [kind-full-profile](../examples/kind-full-profile/README.md) — full-profile (portal + agents) values for a kind install; see [runbook](./runbooks/kind-full-profile.md).

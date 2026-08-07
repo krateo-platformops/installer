@@ -1,0 +1,24 @@
+# Full-profile install on kind — portal + observability + the agent fleet.
+# See docs/runbooks/kind-full-profile.md for the full sequence (kind config,
+# registryAuth Secret, Vertex Secret, exposure). Fill the <...> placeholders.
+bootstrap:
+  coreProvider:
+    enabled: true
+features:
+  portal: true
+  oasgenProvider: true
+  coreAgents: true
+  specialistAgents: true
+exposure:
+  type: NodePort
+registryAuth:
+  enabled: true
+  username: <your-github-username>
+  passwordRef:
+    name: krateo-agentiko-chart-pull
+    key: token
+vertexAI:
+  enabled: true
+  projectID: <your-gcp-project>
+  secretName: vertex-sa-key
+  secretKey: key.json
