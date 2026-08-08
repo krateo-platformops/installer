@@ -153,17 +153,16 @@ components:
 # watching. Pair with exposure.type=Gateway (installer#27), which emits the per-component
 # HTTPRoutes onto agentgateway's Gateway (default name krateo-gateway == exposure.gatewayRef.name).
 # Preconditions: external-dns needs its provider-credential Secret placed out-of-band.
-# NOTE: gateway-api-crds/agentgateway versions are PENDING the ingress-blueprint release
-# (krateo-blueprints/ingress-blueprint #1, installer#29) — set to the tag that publishes them.
+# All four are public krateo-blueprints charts at 0.2.0 (ingress-blueprint tag 0.2.0, #1).
 - name: gateway-api-crds
   kind: GatewayApiCrds
-  version: 0.1.3
+  version: 0.2.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: ingress
 - name: agentgateway
   kind: Agentgateway
-  version: 0.1.3
+  version: 0.2.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   deps:
   - gateway-api-crds
@@ -171,7 +170,7 @@ components:
   feature: ingress
 - name: cert-manager-issuers
   kind: CertManagerIssuers
-  version: 0.1.2
+  version: 0.2.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   deps:
   - agentgateway
@@ -179,7 +178,7 @@ components:
   feature: ingress
 - name: external-dns
   kind: ExternalDns
-  version: 0.1.2
+  version: 0.2.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   deps:
   - agentgateway
