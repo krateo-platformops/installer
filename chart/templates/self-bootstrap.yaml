@@ -221,13 +221,19 @@ data:
       name: installer
       namespace: {{ .Values.namespaces.krateo }}
       labels:
-        # Pin the umbrella's Helm RELEASE name to a stable fullname ("krateo") instead of the cdc
-        # default <name>-<hash(UID)>. Kept DISTINCT from the bootstrap base release ("installer")
-        # to avoid a name collision, and stable across any recreate of the Installer composition CR
-        # so the umbrella never churns to a new <name>-<newUID> release (mirrors the per-component
+        # Pin the umbrella's Helm RELEASE name to a stable fullname instead of the cdc default
+        # <name>-<hash(UID)>. DERIVED from the bootstrap release name ("{release}-platform") so it is
+        # ALWAYS distinct from the bootstrap base release itself — whatever the user named their
+        # `helm install`. A hardcoded literal ("krateo") collided catastrophically when the user
+        # happened to install under that same name: the umbrella composition then re-rendered the
+        # bootstrap release in composition mode (bootstrap.coreProvider.enabled=false), pruning the
+        # engine that drives the reconcile (installer#21). The derived name cannot collide because a
+        # release name and that same name + "-platform" are never equal. Stable across any recreate of
+        # the Installer composition CR (.Release.Name is fixed for the life of the install), so the
+        # umbrella never churns to a new <name>-<newUID> release (mirrors the per-component
         # krateo.io/release-name pins in compositions.yaml). safe-release-name stays true; the cdc
         # honors this label verbatim (SetReleaseName only fills it when absent).
-        krateo.io/release-name: krateo
+        krateo.io/release-name: {{ .Release.Name }}-platform
     spec:
 {{ $spec | toYaml | indent 6 }}
   # Surgical upgrade patch: ONLY the chart-managed component pins (versions/repos/deps) and
