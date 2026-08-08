@@ -109,6 +109,11 @@
      A static override is handled below and wins over this. */}}
 {{- $url := "" }}
 {{- if eq $top.Values.exposure.type "Gateway" }}
+{{/* Gateway: the peer URL is https://<host> from the pins (no Service lookup), so it is written even
+     before the HTTPRoute CRD / route exists — unlike httproutes.yaml which gates on the CRD. Same
+     eventual-consistency posture as the LB branch (frontend serves config.json statically, picked up
+     on reload); the URL is correct once the route/DNS/cert are up. If no host resolves (neither
+     baseDomain nor hosts set), $url stays "" and the key is omitted — Gateway needs a host source. */}}
 {{- $h := include "inst.hostname" (list $top $d) }}
 {{- if $h }}{{- $url = printf "https://%s" $h }}{{- end }}
 {{- else }}

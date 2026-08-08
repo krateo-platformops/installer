@@ -123,6 +123,9 @@ exposure:
   # PRECONDITION: the Gateway API CRDs + a Gateway (agentgateway / BYO) must already exist;
   # the installer creates neither. Emitted HTTPRoutes are gated on the HTTPRoute CRD being
   # served, so setting Gateway without the CRDs is inert (no wedge), not a hard failure.
+  # REQUIRED when type=Gateway: gatewayRef.name AND a host source (baseDomain or a per-component
+  # hosts override). With neither, no routes are emitted and the frontend keeps its localhost
+  # dev-defaults — a silent misconfiguration, so set both.
   # gatewayRef:
   #   name: krateo-gateway
   #   namespace: krateo-system    # empty defaults to namespaces.krateo

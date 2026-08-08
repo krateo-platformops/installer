@@ -10,6 +10,13 @@
   (no "resource mapping not found" wedge) and fills in on a later reconcile once they are installed.
   The backend Service name is resolved live (inst.svcname); a route is skipped until its Service
   exists, then appears next reconcile — same posture as inst.peerurl omitting a not-yet-ready LB URL.
+
+  REQUIRES gatewayRef.name AND a host source (baseDomain or a hosts.<name> override) — with neither,
+  emission is inert (no routes) and the frontend keeps its localhost dev-defaults; see configuration.md.
+  A route provides no session stickiness. sse-proxy is safe only because it is single-replica by
+  chart design (a stateful in-memory hub); do not scale it under Gateway without sessionPersistence.
+  gatewayRef.namespace defaults to namespaces.krateo (same-namespace attach, no allowedRoutes needed);
+  a cross-namespace Gateway must permit these routes via its listener allowedRoutes.namespaces.
 */}}
 {{- if not .Values.bootstrap.coreProvider.enabled }}
 {{- if eq .Values.exposure.type "Gateway" }}
@@ -24,7 +31,9 @@
 {{- if and $c.expose (not $c.registerOnly) (eq (include "inst.featureEnabled" (list $top $c.feature)) "true") }}
 {{- $host := include "inst.hostname" (list $top $c) }}
 {{- $svc := include "inst.svcname" (list $top $c.svcMatch) }}
-{{- if and $host $svc }}
+{{/* $c.exposePort is the Service port for the backendRef; skip (don't guess :80) if a future
+     expose:true pin ever omits it. */}}
+{{- if and $host $svc $c.exposePort }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -44,7 +53,7 @@ spec:
   rules:
     - backendRefs:
         - name: {{ $svc }}
-          port: {{ $c.exposePort | default 80 }}
+          port: {{ $c.exposePort }}
 {{- end }}
 {{- end }}
 {{- end }}

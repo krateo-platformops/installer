@@ -135,6 +135,18 @@ post-install `kubectl patch`.
   (see installer#27). `componentValues.<c>.ingress` remains the *classic* `Ingress`
   alternative for an Ingress-controller deployment.
 
+  **Required inputs / caveats when `type: Gateway`:**
+  - `gatewayRef.name` **and** a host source (`baseDomain` or a `hosts.<name>` override) are
+    both required. With neither, no routes are emitted **and** the frontend keeps its
+    `localhost` dev-defaults — a *silent* misconfiguration (the same failure #203 guards
+    against, reached via a different path), so always set both.
+  - `sse-proxy` is routed like the others, but it is a **single-replica** stateful in-memory
+    hub (its own chart pins `replicaCount: 1`) — a plain `HTTPRoute` gives no session
+    stickiness, so do **not** scale it under `Gateway` without `sessionPersistence` (same
+    constraint the LB path already carries).
+  - A `gatewayRef.namespace` other than `namespaces.krateo` is a cross-namespace attach — the
+    Gateway's listener must permit these routes via `allowedRoutes.namespaces`.
+
 A **static override wins**: a real external hostname pinned in
 `componentValues.frontend.config.<KEY>` (e.g. behind a Gateway) suppresses the
 auto-compute for that key — but a *loopback* value (`http://localhost…`,
