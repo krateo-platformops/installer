@@ -48,15 +48,21 @@ later on the CR.
 | `oasgenProvider` | `true` | `oasgen-provider` + its CRD chart. |
 | `coreAgents` | `false` | The base agent layer: `kagent-crds` → `kagent` → `fetch-mcp-server` + `krateo-autopilot`. |
 | `specialistAgents` | `false` | The 5 component specialist agents (`authn/snowplow/frontend/clickstack/core-provider-agent`) + `clickhouse-mcp-server`. Needs `coreAgents` (they all dep on `kagent`). |
-| `ingress` | `false` | Opt-in edge layer: `external-dns` (DNS record publication) + `cert-manager-issuers` (ACME certificate issuance), pulled from the **public** `oci://ghcr.io/krateo-blueprints/charts`. Off by default — the base install pulls nothing from `krateo-blueprints` unless enabled. Leave off if you run behind your own ingress controller / cloud LB / mesh or manage DNS+certs yourself. |
+| `ingress` | `false` | Opt-in **edge layer**, dep-chained: `gateway-api-crds` (the Gateway API CRDs) → `agentgateway` (the Gateway API controller + the platform `GatewayClass`/`Gateway`) → `cert-manager-issuers` (ACME certs) + `external-dns` (DNS records) — all **public** `oci://ghcr.io/krateo-blueprints/charts`. Off by default; the base install pulls nothing from `krateo-blueprints` unless enabled. Leave off if you front Krateo another way (an existing ingress controller / cloud LB / mesh, or your own Gateway). |
 
-**`ingress` preconditions (when enabled).** These are public charts (no `registryAuth`
-needed), but each has an out-of-band prerequisite the installer does not provision:
-`external-dns` reads its DNS-provider credential from a Secret you place yourself
-(referenced by `credentialsSecretRef`), and `cert-manager-issuers`' ACME HTTP-01
-solver assumes the **Gateway API edge** is present. Enabling `ingress` without these is
-like enabling the agent tier without `vertexAI`/`registryAuth` — the components register
-but can't do their job until the prerequisite exists.
+**`ingress` is the whole edge, no BYO Gateway.** Everything-is-a-blueprint: the Gateway
+itself (`agentgateway`) and its CRDs (`gateway-api-crds`) are installer components too, so
+`exposure.type: Gateway` ([exposure](#exposure--one-model-for-browser-facing-components))
+has a Gateway to attach its per-component `HTTPRoute`s to without a manual step. The
+components are dep-ordered so the CRDs are served before the Gateway, and the Gateway exists
+before cert-manager's `acme.gatewayRef` and external-dns' `HTTPRoute` watching.
+`componentValues.agentgateway.gateway.name` defaults to `krateo-gateway`, matching
+`exposure.gatewayRef.name` and `acme.gatewayRef.name` — override all three together to rename.
+
+**`ingress` preconditions (when enabled).** Public charts (no `registryAuth` needed), but
+`external-dns` reads its DNS-provider credential from a Secret you place yourself (referenced
+by `credentialsSecretRef`) — enabling `ingress` without it is like enabling the agent tier
+without `vertexAI`: the component registers but can't do its job until the Secret exists.
 
 **Configuring each edge component.** The installer ships no default spec for these, and
 their charts have **required** fields — so `ingress` is only useful once you set each

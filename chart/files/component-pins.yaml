@@ -142,22 +142,47 @@ components:
   - EVENTS_API_BASE_URL
   - EVENTS_PUSH_API_BASE_URL
 # ---- ingress / edge (OPT-IN, feature: ingress — default OFF) ---------------------------
-# Public krateo-blueprints charts (repo override; no credentials). Gated on features.ingress
-# so the base install pulls nothing from krateo-blueprints unless an operator opts in. Kinds
-# are crdgen PascalCase(chart name): external-dns -> ExternalDns, cert-manager-issuers ->
-# CertManagerIssuers. Preconditions when enabled: external-dns needs its provider-credential
-# Secret placed out-of-band; the cert-manager-issuers ACME HTTP-01 solver assumes the Gateway
-# API edge is present. No deps — they are independent cluster edge infrastructure.
-- name: external-dns
-  kind: ExternalDns
-  version: 0.1.2
+# The FULL edge as blueprints (everything-is-a-blueprint): the Gateway itself + its CRDs, DNS,
+# and certs — so exposure.type=Gateway needs no BYO Gateway. Public krateo-blueprints charts
+# (repo override; no credentials), gated on features.ingress so the base install pulls nothing
+# from krateo-blueprints unless enabled. Kinds are crdgen PascalCase(chart): gateway-api-crds ->
+# GatewayApiCrds, agentgateway -> Agentgateway, external-dns -> ExternalDns, cert-manager-issuers
+# -> CertManagerIssuers.
+# DEP-CHAINED so the edge converges in order: the Gateway API CRDs must be served before the
+# Gateway; the Gateway must exist before cert-manager's ACME gatewayRef and external-dns' HTTPRoute
+# watching. Pair with exposure.type=Gateway (installer#27), which emits the per-component
+# HTTPRoutes onto agentgateway's Gateway (default name krateo-gateway == exposure.gatewayRef.name).
+# Preconditions: external-dns needs its provider-credential Secret placed out-of-band.
+# All four are public krateo-blueprints charts at 0.2.0 (ingress-blueprint tag 0.2.0, #1).
+- name: gateway-api-crds
+  kind: GatewayApiCrds
+  version: 0.2.0
   repo: oci://ghcr.io/krateo-blueprints/charts
+  tier: platform
+  feature: ingress
+- name: agentgateway
+  kind: Agentgateway
+  version: 0.2.0
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  deps:
+  - gateway-api-crds
   tier: platform
   feature: ingress
 - name: cert-manager-issuers
   kind: CertManagerIssuers
-  version: 0.1.2
+  version: 0.2.0
   repo: oci://ghcr.io/krateo-blueprints/charts
+  deps:
+  - agentgateway
+  tier: platform
+  feature: ingress
+- name: external-dns
+  kind: ExternalDns
+  version: 0.2.0
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  deps:
+  - agentgateway
+  - cert-manager-issuers
   tier: platform
   feature: ingress
 # ---- agents (PRIVATE krateo-agentiko registry) ----------------------------------------
