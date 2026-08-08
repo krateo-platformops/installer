@@ -125,6 +125,10 @@ features:
   portal: true                    # the non-agent platform: authn -> snowplow -> frontend -> portal + portal-starter
                                   #   + the observability stack (clickhouse/mongo operators, krateo-observability,
                                   #   otel collectors, sse-proxy) — the portal's events bell consumes sse-proxy.
+  ingress: false                   # OPT-IN edge layer: external-dns + cert-manager-issuers (from krateo-blueprints).
+                                  #   default off — the base install pulls nothing from krateo-blueprints unless enabled.
+                                  #   Preconditions when on: external-dns needs its provider Secret out-of-band; the
+                                  #   cert-manager-issuers ACME HTTP-01 solver assumes the Gateway API edge is present.
 
 # HITL approval gate for the autopilot's mutating Kubernetes tools. true (default)=
 # pause for human approval before any cluster change; false=autonomous remediation.

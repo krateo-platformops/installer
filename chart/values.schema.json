@@ -103,6 +103,11 @@
         "specialistAgents": {
           "type": "boolean",
           "description": "Deploy the 5 component specialist agents (authn/snowplow/frontend/clickstack/core-provider) + clickhouse-mcp (needs coreAgents)."
+        },
+        "ingress": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in edge layer: ExternalDNS (DNS record publication) + cert-manager-issuers (ACME certificate issuance) from oci://ghcr.io/krateo-blueprints/charts. Default false — the base install is unchanged and pulls nothing from krateo-blueprints unless enabled. Turn off if you run behind your own ingress controller / cloud LB / mesh, or manage DNS+certs yourself. Preconditions when enabled: ExternalDNS needs its provider-credential Secret placed out-of-band (referenced by the component's secretRef); cert-manager-issuers' ACME HTTP-01 solver assumes the Gateway API edge is present."
         }
       }
     },

@@ -48,6 +48,15 @@ later on the CR.
 | `oasgenProvider` | `true` | `oasgen-provider` + its CRD chart. |
 | `coreAgents` | `false` | The base agent layer: `kagent-crds` → `kagent` → `fetch-mcp-server` + `krateo-autopilot`. |
 | `specialistAgents` | `false` | The 5 component specialist agents (`authn/snowplow/frontend/clickstack/core-provider-agent`) + `clickhouse-mcp-server`. Needs `coreAgents` (they all dep on `kagent`). |
+| `ingress` | `false` | Opt-in edge layer: `external-dns` (DNS record publication) + `cert-manager-issuers` (ACME certificate issuance), pulled from the **public** `oci://ghcr.io/krateo-blueprints/charts`. Off by default — the base install pulls nothing from `krateo-blueprints` unless enabled. Leave off if you run behind your own ingress controller / cloud LB / mesh or manage DNS+certs yourself. |
+
+**`ingress` preconditions (when enabled).** These are public charts (no `registryAuth`
+needed), but each has an out-of-band prerequisite the installer does not provision:
+`external-dns` reads its DNS-provider credential from a Secret you place yourself
+(referenced by the component's `secretRef`), and `cert-manager-issuers`' ACME HTTP-01
+solver assumes the **Gateway API edge** is present. Enabling `ingress` without these is
+like enabling the agent tier without `vertexAI`/`registryAuth` — the components register
+but can't do their job until the prerequisite exists.
 
 Turning a feature **off** on the live CR triggers the reverse-dependency drain
 (`inst.dependentsGone`): components disappear leaves-first, never out from under a
