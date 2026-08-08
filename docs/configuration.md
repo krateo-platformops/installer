@@ -186,6 +186,42 @@ When enabled, every component CompositionDefinition **and** the installer's own 
 auth. Required for the private `oci://ghcr.io/krateo-agentiko/charts` agent pins;
 `krateo-platformops/*` is public.
 
+### Multiple registries — `registryAuth.registries`
+
+The global `username`/`passwordRef` above are applied to **every** component, so they
+authenticate at most one registry, and the token is attached to every component's pull —
+including a component pointing (via `repo`) at a different registry. For installs that pull
+from **more than one authenticated registry**, use `registries` instead — credentials keyed
+by registry base:
+
+```yaml
+registryAuth:
+  registries:
+    - repo: oci://ghcr.io/krateo-platformops/charts   # the platform tier (ociRepo)
+      username: <user>
+      passwordRef:
+        name: platform-registry-pull
+        key: token
+    - repo: oci://ghcr.io/krateo-agentiko/charts       # the agent tier
+      username: <user>
+      passwordRef:
+        name: agentiko-registry-pull
+        key: token
+```
+
+Each component's credentials are selected by matching its **effective registry base** (its
+`repo` override, else `ociRepo`) against `registries[].repo`. Two consequences:
+
+- **Multiple authenticated registries** are now expressible (one entry each).
+- **No over-sharing.** A component whose registry has **no** entry gets **no** credentials —
+  so a token is never presented to a registry it does not belong to. (A component pulling
+  from a public registry needs no entry.)
+
+When `registries` is set, the global `username`/`passwordRef` are **ignored** (registry-keyed
+mode). When it is empty (the default), the legacy global behaviour is unchanged, so existing
+installs are unaffected. `insecureSkipVerifyTLS` stays a global toggle; a `registries[]` entry
+may raise it for its own registry.
+
 ## `vertexAI`
 
 Injected as `spec.vertexAI` into every component flagged `vertexAI: true` in the pins

@@ -33,7 +33,7 @@ spec:
     {{- if $c.chartRepo }}
     repo: {{ $c.chartRepo | quote }}
     {{- end }}
-    {{- include "inst.chartExtras" (list $) | nindent 4 }}
+    {{- include "inst.chartExtras" (list $ (default $.Values.ociRepo $c.repo)) | nindent 4 }}
 {{- end }}
 {{- end }}
 {{- end }}

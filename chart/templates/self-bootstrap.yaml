@@ -213,7 +213,7 @@ data:
       chart:
         url: {{ .Values.ociRepo }}/installer
         version: {{ .Chart.Version | quote }}
-{{- include "inst.chartExtras" (list .) | nindent 8 }}
+{{- include "inst.chartExtras" (list . .Values.ociRepo) | nindent 8 }}
   installer.yaml: |
     apiVersion: {{ include "inst.apiVersion" (list .Chart.Version) }}
     kind: Installer
