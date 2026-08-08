@@ -4765,6 +4765,35 @@
               "additionalProperties": true
             }
           }
+        },
+        "agentgateway": {
+          "type": "object",
+          "title": "agentgateway (edge / ingress)",
+          "description": "Spec for the agentgateway edge component (feature: ingress), deep-merged into its Composition. Mirrors oci://ghcr.io/krateo-blueprints/charts/agentgateway; renders the platform GatewayClass + Gateway over the bundled upstream controller. gateway.name defaults to krateo-gateway and MUST equal exposure.gatewayRef.name and cert-manager-issuers' acme.gatewayRef.name; leave unset to accept the aligned defaults.",
+          "additionalProperties": true,
+          "properties": {
+            "gatewayClassName": {
+              "type": "string"
+            },
+            "controllerName": {
+              "type": "string"
+            },
+            "gateway": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "listeners": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
