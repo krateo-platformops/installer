@@ -1,7 +1,7 @@
-# installer — LLM doc index (pinned: 0.3.11)
+# installer — LLM doc index (pinned: 0.3.20)
 # One line per file; regenerate the pin on release. Read files at the tag that matches
 # the deployed chart (chart version == the repo tag, plain semver, no v prefix; the
-# chart version is also the Installer CRD's served version, v0-3-11).
+# chart version is also the Installer CRD's served version, v0-3-20).
 docs/index.md: the map — what the umbrella installer is + links to the whole bundle
 docs/overview.md: how it works — bootstrap vs composition mode, Pass A/Pass B gating, the self-reconcile loop, the three teardown hooks
 docs/usage.md: the ONE canonical install, surgical upgrade semantics, day-2 CR editing, uninstall, the agent-only profile
@@ -26,6 +26,8 @@ chart/templates/ordered-teardown.yaml: HOOK 1 — reverse-dependency drain of th
 chart/templates/bootstrap-teardown.yaml: HOOK 2 — full-footprint drain before engine removal
 chart/templates/post-delete-cleanup.yaml: HOOK 3 — post-delete sweep of non-helm-owned leftovers
 chart/values-agent-only.yaml: the agent-only install profile
-docs/runbooks/kind-full-profile.md: full-profile install (portal + observability + agent fleet) on a local kind cluster — kind config, registryAuth, vertexAI, exposure
+docs/runbooks/kind-default-profile.md: default/portal install (portal + observability, agents off) on a local kind cluster — public charts, no credentials, pinned NodePorts
+docs/runbooks/kind-agent-only-profile.md: agent-only install (kagent + autopilot, portal off) on a local kind cluster — registryAuth, vertexAI/localModel, autopilot turns the rest on
+docs/runbooks/kind-full-profile.md: full-profile install (portal + observability + agent fleet) on a local kind cluster — kind config, registryAuth, vertexAI, exposure, pinned NodePorts
 examples/kind-full-profile/README.md: full-profile kind values — precondition + helm install -f
 examples/kind-full-profile/values-full.yaml: the full-profile values file (all feature tiers on)
