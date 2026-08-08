@@ -4695,7 +4695,47 @@
         },
         "insecureSkipVerifyTLS": {
           "type": "boolean",
-          "description": "Skip TLS verification on the in-cluster chart pull (maps to CompositionDefinition spec.chart.insecureSkipVerifyTLS)."
+          "description": "Skip TLS verification on the in-cluster chart pull (maps to CompositionDefinition spec.chart.insecureSkipVerifyTLS). Applies to every component (a coarse dev toggle), independent of auth; a registries[] entry may raise it for its own registry."
+        },
+        "registries": {
+          "type": "array",
+          "description": "Registry-keyed credentials for multi-registry installs. When NON-EMPTY, each component's chart-pull credentials are selected by matching its effective registry base (its `repo` override, else `ociRepo`) against these entries: a matched component gets that entry's credentials; a component whose registry has no entry gets NO credentials, so a token is never presented to a registry it does not belong to. In this mode the global username/passwordRef above are ignored. When EMPTY (default), the legacy global credentials apply to every component unchanged.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "repo"
+            ],
+            "properties": {
+              "repo": {
+                "type": "string",
+                "description": "The OCI registry base this credential authenticates, matched verbatim against a component's effective repo (its `repo` override, else `ociRepo`). e.g. oci://ghcr.io/krateo-agentiko/charts"
+              },
+              "username": {
+                "type": "string"
+              },
+              "passwordRef": {
+                "type": "object",
+                "description": "Reference to a Secret holding this registry's password/token.",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "namespace": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  }
+                }
+              },
+              "insecureSkipVerifyTLS": {
+                "type": "boolean",
+                "description": "Skip TLS verification for pulls from this registry (overrides the global toggle upward for this repo only)."
+              }
+            }
+          }
         }
       }
     },

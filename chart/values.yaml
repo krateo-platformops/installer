@@ -19,6 +19,25 @@ registryAuth:
   # Skip TLS verification on the in-cluster chart pull (e.g. a self-signed registry).
   # Maps to CompositionDefinition spec.chart.insecureSkipVerifyTLS; independent of auth.
   insecureSkipVerifyTLS: false
+  # Registry-keyed credentials for MULTI-registry installs (components can point at
+  # different registries via `repo`). When `registries` is non-empty, each component's
+  # chart-pull credentials are selected by matching its effective registry base (its
+  # `repo`, else `ociRepo`) against an entry here; a component whose registry has NO entry
+  # gets no credentials, so a token is never presented to a registry it does not belong to.
+  # In this mode the global `username`/`passwordRef` above are ignored. When empty
+  # (default), the legacy global credentials apply to every component unchanged.
+  registries: []
+  #   - repo: oci://ghcr.io/krateo-platformops/charts
+  #     username: <user>
+  #     passwordRef:
+  #       name: platform-registry-pull
+  #       namespace: ""          # empty defaults to namespaces.krateo
+  #       key: token
+  #   - repo: oci://ghcr.io/krateo-agentiko/charts
+  #     username: <user>
+  #     passwordRef:
+  #       name: agentiko-registry-pull
+  #       key: token
 
 # Whether pass A (register component CompositionDefinitions) runs.
 installDefinitions: true

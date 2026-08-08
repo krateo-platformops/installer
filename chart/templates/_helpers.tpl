@@ -15,15 +15,44 @@
      and credentials, rendered ONLY when set so the chart spec stays minimal on public
      registries. arg: (list $). passwordRef.namespace defaults to the krateo namespace.
      Used by Pass A (definitions.yaml) and the self-bootstrap installer CD. */}}
+{{/* Emit spec.chart extras (credentials + insecureSkipVerifyTLS) for a chart pull.
+     args: (list $top $effectiveRepo) — $effectiveRepo is the OCI registry base the pull uses
+     (a component's `default ociRepo $c.repo`, or ociRepo for the umbrella's own chart).
+
+     Two modes, keyed on registryAuth.registries (see values.yaml / #23):
+     - registries[] NON-EMPTY: registry-keyed. Emit ONLY the entry whose `repo` matches
+       $effectiveRepo; a pull whose registry has no entry gets NO credentials, so a token is
+       never presented to a registry it does not belong to. The global username/passwordRef are
+       ignored in this mode.
+     - registries[] EMPTY (default): legacy — the global registryAuth credentials apply to every
+       pull when enabled (backward-compatible, unchanged).
+     insecureSkipVerifyTLS: the global toggle applies to every pull; a matched registries[] entry
+     may raise it for its own registry. */}}
 {{- define "inst.chartExtras" -}}
 {{- $top := index . 0 -}}
+{{- $repo := index . 1 -}}
+{{- $ra := $top.Values.registryAuth -}}
+{{- $registries := $ra.registries | default list -}}
 {{- $lines := list -}}
-{{- if $top.Values.registryAuth.insecureSkipVerifyTLS -}}
+{{- $cred := dict -}}
+{{- $hasCred := false -}}
+{{- $insecure := $ra.insecureSkipVerifyTLS -}}
+{{- if $registries -}}
+{{- range $r := $registries -}}
+{{- if eq ($r.repo | toString) ($repo | toString) -}}
+{{- if $r.passwordRef -}}{{- $cred = $r -}}{{- $hasCred = true -}}{{- end -}}
+{{- if $r.insecureSkipVerifyTLS -}}{{- $insecure = true -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- else if $ra.enabled -}}
+{{- $cred = $ra -}}{{- $hasCred = true -}}
+{{- end -}}
+{{- if $insecure -}}
 {{- $lines = append $lines "insecureSkipVerifyTLS: true" -}}
 {{- end -}}
-{{- if $top.Values.registryAuth.enabled -}}
-{{- $ns := $top.Values.registryAuth.passwordRef.namespace | default $top.Values.namespaces.krateo -}}
-{{- $lines = append $lines (printf "credentials:\n  username: %s\n  passwordRef:\n    name: %s\n    namespace: %s\n    key: %s" ($top.Values.registryAuth.username | quote) ($top.Values.registryAuth.passwordRef.name | quote) ($ns | quote) ($top.Values.registryAuth.passwordRef.key | quote)) -}}
+{{- if $hasCred -}}
+{{- $ns := $cred.passwordRef.namespace | default $top.Values.namespaces.krateo -}}
+{{- $lines = append $lines (printf "credentials:\n  username: %s\n  passwordRef:\n    name: %s\n    namespace: %s\n    key: %s" ($cred.username | quote) ($cred.passwordRef.name | quote) ($ns | quote) ($cred.passwordRef.key | quote)) -}}
 {{- end -}}
 {{- join "\n" $lines -}}
 {{- end -}}
