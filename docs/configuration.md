@@ -118,6 +118,50 @@ feature-enabled `vertexAI` agent component (excluding the autopilot itself), and
 either way the list is filtered to deployed agents — a reference to an absent Agent
 would fail kagent's compile.
 
+## Portal users, demo content, and a custom portal
+
+This is the `componentValues.portal` surface.
+The **login credentials are provisioned by the `portal` component** (chart `portal`, kind
+`Portal`, pinned in [`component-pins.yaml`](../chart/files/component-pins.yaml)) — **not**
+by the installer or authn. When `features.portal` is on, the Portal composition seeds the
+User CRs and their `kubernetes.io/basic-auth` Secrets, controlled by
+`componentValues.portal`:
+
+| Key | Default | What it creates |
+|---|---|---|
+| `enableAdminUser` | `true` | the `admin` User + the **`admin-password`** Secret (key `password`), **cluster-admin** |
+| `enableCyberjokerUser` | `true` | the `cyberjoker` demo User + `cyberjoker-password` Secret, namespace-scoped |
+| `enableDemoSystemNamespace` | `true` | the `demo-system` namespace + demo `Route`s (and grants to `cyberjoker` if enabled) |
+
+Retrieve the admin password from the Secret the portal created:
+
+```sh
+kubectl -n krateo-system get secret admin-password -o jsonpath='{.data.password}' | base64 -d
+```
+
+For a **custom portal**, override `componentValues.portal` on the Installer CR — e.g. keep
+your admin, drop the demo user and demo content:
+
+```yaml
+componentValues:
+  portal:
+    enableAdminUser: true
+    enableCyberjokerUser: false
+    enableDemoSystemNamespace: false
+    # additionalProperties: true on this key — any other `portal` chart value passes through.
+```
+
+Because it is `componentValues`, this is the durable channel: set it at install time or as
+a merge patch on the live Installer CR (a direct edit of the Portal CR reverts on the next
+reconcile — see the two rules above).
+
+> **Deeper portal content is a blueprint-layer topic, not an installer value.** The portal
+> *UI content* — columns/rows/cards/widgets and the compositions surfaced in it — is
+> authored as portal blueprints and marketplace CompositionDefinitions at the composition
+> layer, outside this chart. `componentValues.portal` only governs the users, the demo
+> content, and the `portal` chart's own values; for custom UI content see the `portal`
+> component and the Krateo marketplace/blueprint documentation.
+
 ## `registryAuth`
 
 core-provider pulls every component chart **in-cluster** (and the umbrella's
