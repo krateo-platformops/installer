@@ -31,17 +31,17 @@ At install time, add the file to the canonical install:
 ```sh
 helm install installer \
   oci://ghcr.io/krateo-platformops/charts/installer \
-  --version 0.3.11 \
+  --version 0.3.20 \
   --namespace krateo-system --create-namespace \
   --set bootstrap.coreProvider.enabled=true \
   -f values.yaml
 ```
 
 Or on a **running** platform, patch the live Installer CR (spec key
-`componentValues`; the CR's apiVersion is versioned — `v0-3-11` for chart 0.3.11):
+`componentValues`; the CR's apiVersion is versioned — `v0-3-20` for chart 0.3.20):
 
 ```sh
-kubectl patch installers.v0-3-11.composition.krateo.io installer \
+kubectl patch installers.v0-3-20.composition.krateo.io installer \
   -n krateo-system --type merge --patch-file patch.yaml
 ```
 

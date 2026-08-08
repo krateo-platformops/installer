@@ -21,3 +21,8 @@ validate offline with `helm template` (after `helm dependency build chart/` and 
   `AUTHN_API_BASE_URL`), applied at install time or as a merge patch on the live
   Installer CR.
 - [kind-full-profile](../examples/kind-full-profile/README.md) — full-profile (portal + agents) values for a kind install; see [runbook](./runbooks/kind-full-profile.md).
+
+For a step-by-step local install per profile, see the kind runbooks:
+[default (portal)](./runbooks/kind-default-profile.md),
+[agent-only](./runbooks/kind-agent-only-profile.md), and
+[full](./runbooks/kind-full-profile.md).

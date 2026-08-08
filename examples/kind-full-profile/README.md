@@ -25,7 +25,7 @@ the runbook, in namespace `krateo-system`.
 ```sh
 helm install installer \
   oci://ghcr.io/krateo-platformops/charts/installer \
-  --version 0.3.13 \
+  --version 0.3.20 \
   --namespace krateo-system --create-namespace \
   --set bootstrap.coreProvider.enabled=true \
   -f values-full.yaml

@@ -4,25 +4,27 @@ title: installer — full-profile install on kind
 description: End-to-end install of the complete platform (portal + observability + the agent fleet) on a local kind cluster, including the private-registry auth and Vertex AI wiring the agent tiers need.
 resource: oci://ghcr.io/krateo-platformops/charts/installer
 tags: [kind, install, agents, registryAuth, vertexAI, runbook]
-timestamp: 2026-08-07T00:00:00Z
+timestamp: 2026-08-08T00:00:00Z
 ---
 
 # Full-profile install on kind
 
-[usage](../usage.md) documents the **default** profile (portal, agents off — public
-charts, no credentials) and the **agent-only** profile. This runbook is the third
-combination: the **full** platform — portal + observability **and** the agent fleet —
-on a local [kind](https://kind.sigs.k8s.io) cluster. It composes the pieces from
-[configuration](../configuration.md) (`features`, `registryAuth`, `vertexAI`,
+The companion runbooks cover the [default (portal)](./kind-default-profile.md) profile
+(portal + observability, agents off — public charts, no credentials) and the
+[agent-only](./kind-agent-only-profile.md) profile (the agent layer, no portal). This
+runbook is the third combination: the **full** platform — portal + observability **and**
+the agent fleet — on a local [kind](https://kind.sigs.k8s.io) cluster. It composes the
+pieces from [configuration](../configuration.md) (`features`, `registryAuth`, `vertexAI`,
 `exposure`) into one verified sequence.
 
 > **Resource reality (read this first).** The full fleet — kagent + PostgreSQL, the base
-> agents (autopilot, installer-agent, fetch-mcp), the five specialist agents +
+> agents (autopilot, installer-agent) + the fetch-mcp server, the five specialist agents +
 > clickhouse-mcp, plus the whole observability stack (ClickHouse, Keeper, MongoDB, the
 > OTel collectors) — wants roughly **9–10 CPU** at rest. On an 8-core laptop it will
 > **oversubscribe** and pods flap (authn especially, which fronts login). For a laptop,
-> prefer the default (portal) profile; run the full profile on a machine with ≥ 12 cores
-> or on GKE. Everything below still *installs* under contention — it just won't be snappy.
+> prefer the [default (portal)](./kind-default-profile.md) profile; run the full profile
+> on a machine with ≥ 12 cores or on GKE. Everything below still *installs* under
+> contention — it just won't be snappy.
 
 ## 0. Preconditions
 
@@ -38,8 +40,9 @@ on a local [kind](https://kind.sigs.k8s.io) cluster. It composes the pieces from
 ## 1. The kind cluster (k8s 1.36 + NodePort mappings)
 
 Browser-facing components are exposed as `NodePort` on kind (LoadBalancer has no cloud
-controller). Pin the node-port range and map that range to the host so the ports are
-reachable, and steer clear of any host port already in use:
+controller). The installer **pins** the four browser-facing NodePorts by default —
+frontend `31000`, authn `31001`, snowplow `31002`, krateo-sse-proxy `31003` — so open the
+node-port range and map exactly those four ports to the host:
 
 ```yaml
 # kind-full-profile.yaml
@@ -54,15 +57,17 @@ kubeadmConfigPatches:
 nodes:
   - role: control-plane
     extraPortMappings:
-      - { containerPort: 31000, hostPort: 31000, protocol: TCP }
-      - { containerPort: 31001, hostPort: 31001, protocol: TCP }
-      - { containerPort: 31002, hostPort: 31002, protocol: TCP }
-      - { containerPort: 31003, hostPort: 31003, protocol: TCP }
-      - { containerPort: 31004, hostPort: 31004, protocol: TCP }
-      - { containerPort: 31005, hostPort: 31005, protocol: TCP }
+      - { containerPort: 31000, hostPort: 31000, protocol: TCP }   # frontend / portal
+      - { containerPort: 31001, hostPort: 31001, protocol: TCP }   # authn
+      - { containerPort: 31002, hostPort: 31002, protocol: TCP }   # snowplow
+      - { containerPort: 31003, hostPort: 31003, protocol: TCP }   # sse-proxy (events)
   - role: worker
   - role: worker
 ```
+
+> The observability UIs (HyperDX, the kagent UI) have their own Services and are not part
+> of the pinned four; expose them via `componentValues` and add their own port mappings if
+> you need them in the browser.
 
 ```sh
 kind create cluster --name krateo --image kindest/node:v1.36.1 --config kind-full-profile.yaml
@@ -123,8 +128,10 @@ vertexAI:
   secretKey: key.json
 componentValues:
   # kind is not browser-reachable by the node IP; point the SPA at *.localhost, which
-  # every OS/browser resolves to 127.0.0.1 (survives the installer's localhost dev-default
-  # rejection). Ports match the NodePorts the services land on in the 31000-31100 range.
+  # browsers resolve to 127.0.0.1 (RFC 6761; survives the installer's localhost dev-default
+  # rejection). Ports are the pinned NodePorts of each peer. If your OS resolver doesn't map
+  # *.localhost (e.g. plain glibc without systemd-resolved), add `127.0.0.1 krateo.localhost`
+  # to /etc/hosts.
   frontend:
     config:
       AUTHN_API_BASE_URL: http://krateo.localhost:31001
@@ -136,17 +143,17 @@ componentValues:
 ```sh
 helm install installer \
   oci://ghcr.io/krateo-platformops/charts/installer \
-  --version 0.3.16 \
+  --version 0.3.20 \
   --namespace krateo-system --create-namespace \
   --set bootstrap.coreProvider.enabled=true \
   -f values-full.yaml
 ```
 
-> The `frontend.config` URLs are illustrative: confirm the actual NodePorts the frontend,
-> authn, snowplow and sse-proxy Services receive (`kubectl -n krateo-system get svc`) and
-> match them. If you prefer one shared port for everything, set `exposure.port` instead
-> (see the `exposure` note in [configuration](../configuration.md)) and map that single
-> host port in the kind config.
+> The `frontend.config` URLs match the **pinned** NodePorts, so they are correct as
+> written; confirm with `kubectl -n krateo-system get svc` if you changed the pins. If you
+> prefer one shared port for everything, set `exposure.port` instead (see the `exposure`
+> note in [configuration](../configuration.md)) and map that single host port in the kind
+> config.
 
 ## 5. Watch it converge
 
@@ -154,7 +161,7 @@ helm install installer \
 kubectl get installers -n krateo-system                 # umbrella: want Synced=True Ready=True
 kubectl get compositiondefinitions -n krateo-system     # Pass A registrations
 kubectl get pods -n krateo-system                        # portal + observability + agents
-kubectl -n krateo-system get pods -l app.kubernetes.io/part-of=kagent  # the agent fleet
+kubectl -n krateo-system get agents.kagent.dev           # the agent fleet (all Agent CRs): want Ready=True
 ```
 
 The umbrella reaches `Ready` within a couple of minutes (Pass A); the component
@@ -169,8 +176,7 @@ package; an agent up but failing LLM calls means the Vertex credential/project i
 kubectl -n krateo-system get secret admin-password -o jsonpath='{.data.password}' | base64 -d
 ```
 
-Open `http://krateo.localhost:<frontend-nodeport>/` (the frontend Service's NodePort,
-e.g. `31003`) and log in as `admin`.
+Open `http://localhost:31000/` (the pinned frontend NodePort) and log in as `admin`.
 
 ## 7. Turn agents off/on later (day-2)
 
@@ -179,7 +185,7 @@ Toggle them at runtime on the live Installer CR (never on the component CRs — 
 re-render) as in [usage](../usage.md#day-2-edit-the-installer-cr-not-the-components):
 
 ```sh
-kubectl patch installers.v0-3-13.composition.krateo.io installer -n krateo-system \
+kubectl patch installers.v0-3-20.composition.krateo.io installer -n krateo-system \
   --type merge -p '{"spec":{"features":{"specialistAgents":false}}}'
 ```
 
@@ -191,4 +197,6 @@ kind delete cluster --name krateo
 ```
 
 See also: [usage](../usage.md), [configuration](../configuration.md),
+[kind-default-profile](./kind-default-profile.md),
+[kind-agent-only](./kind-agent-only-profile.md),
 [examples/kind-full-profile](../../examples/kind-full-profile/README.md).

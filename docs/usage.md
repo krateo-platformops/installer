@@ -14,10 +14,15 @@ timestamp: 2026-08-07T00:00:00Z
 ```sh
 helm install installer \
   oci://ghcr.io/krateo-platformops/charts/installer \
-  --version 0.3.16 \
+  --version 0.3.20 \
   --namespace krateo-system --create-namespace \
   --set bootstrap.coreProvider.enabled=true
 ```
+
+For a step-by-step local walkthrough per profile, see the kind runbooks:
+[default (portal)](./runbooks/kind-default-profile.md),
+[agent-only](./runbooks/kind-agent-only-profile.md),
+[full](./runbooks/kind-full-profile.md).
 
 `bootstrap.coreProvider.enabled=true` is **required on a bare cluster** and is not the
 default — the composition-safe default is `false` (see
@@ -119,7 +124,7 @@ lets the autopilot install the rest of Krateo later by editing the Installer CR:
 ```sh
 helm install installer \
   oci://ghcr.io/krateo-platformops/charts/installer \
-  --version 0.3.16 \
+  --version 0.3.20 \
   --namespace krateo-system --create-namespace \
   --set bootstrap.coreProvider.enabled=true \
   -f chart/values-agent-only.yaml \
@@ -128,7 +133,9 @@ helm install installer \
 
 The agent charts are private (`registryAuth` required — see
 [configuration](./configuration.md#registryauth)); Vertex AI needs a GCP project and
-either GKE node-SA ADC or an explicit key Secret (`vertexAI.secretName`).
+either GKE node-SA ADC or an explicit key Secret (`vertexAI.secretName`). For a
+step-by-step kind walkthrough, see the
+[kind-agent-only runbook](./runbooks/kind-agent-only-profile.md).
 
 ## Local render (no cluster)
 
