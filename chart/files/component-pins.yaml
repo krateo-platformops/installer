@@ -141,6 +141,25 @@ components:
   configKeys:
   - EVENTS_API_BASE_URL
   - EVENTS_PUSH_API_BASE_URL
+# ---- ingress / edge (OPT-IN, feature: ingress — default OFF) ---------------------------
+# Public krateo-blueprints charts (repo override; no credentials). Gated on features.ingress
+# so the base install pulls nothing from krateo-blueprints unless an operator opts in. Kinds
+# are crdgen PascalCase(chart name): external-dns -> ExternalDns, cert-manager-issuers ->
+# CertManagerIssuers. Preconditions when enabled: external-dns needs its provider-credential
+# Secret placed out-of-band; the cert-manager-issuers ACME HTTP-01 solver assumes the Gateway
+# API edge is present. No deps — they are independent cluster edge infrastructure.
+- name: external-dns
+  kind: ExternalDns
+  version: 0.1.2
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  tier: platform
+  feature: ingress
+- name: cert-manager-issuers
+  kind: CertManagerIssuers
+  version: 0.1.2
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  tier: platform
+  feature: ingress
 # ---- agents (PRIVATE krateo-agentiko registry) ----------------------------------------
 # Every agent chart lives in the private krateo-agentiko/charts OCI registry (repo override
 # below), so pulling them needs registryAuth.enabled=true + a read:packages credential
