@@ -103,8 +103,10 @@ namespaces:
 # Exposure model for browser-facing components (authn, snowplow, frontend, hyperdx,
 # sse-proxy). Replaces the installer's `var` Service-IP/port extraction.
 #   NodePort | LoadBalancer -> resolved via Helm `lookup` at reconcile time
+#   Gateway -> Services stay ClusterIP; the installer emits one Gateway API HTTPRoute per
+#              exposed component, attached to a BYO Gateway (gatewayRef); hostnames from baseDomain.
 exposure:
-  type: LoadBalancer      # NodePort | LoadBalancer
+  type: LoadBalancer      # NodePort | LoadBalancer | Gateway
   # port: 80
   # Optional. Overrides the single port that browser-facing components are exposed on.
   # When set it drives BOTH:
@@ -115,6 +117,18 @@ exposure:
   # Unset (default) => each component keeps its per-component `exposePort` (authn 8082,
   # snowplow 8081, frontend/sse-proxy 8080). Components with a nested Service (kagent) or
   # their own LoadBalancer (hyperdx) are not covered here — set those via componentValues.
+  # Ignored when type=Gateway (routing is by hostname).
+  #
+  # --- type: Gateway only (Gateway API HTTPRoute per exposed component) ---
+  # PRECONDITION: the Gateway API CRDs + a Gateway (agentgateway / BYO) must already exist;
+  # the installer creates neither. Emitted HTTPRoutes are gated on the HTTPRoute CRD being
+  # served, so setting Gateway without the CRDs is inert (no wedge), not a hard failure.
+  # gatewayRef:
+  #   name: krateo-gateway
+  #   namespace: krateo-system    # empty defaults to namespaces.krateo
+  # baseDomain: example.com       # -> authn.example.com, snowplow.example.com, sse-proxy.example.com
+  # hosts:                        # per-component hostname overrides (keys are component names)
+  #   frontend: portal.example.com
 
 # Feature flags (carried over from the installer chart).
 features:

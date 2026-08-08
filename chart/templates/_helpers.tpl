@@ -239,6 +239,30 @@ covers the two auto-exposed modes. */}}
 {{- $url -}}
 {{- end -}}
 
+{{/* inst.hostname — the external hostname for an exposed component under exposure.type=Gateway.
+     args: (list $top $component). Returns exposure.hosts[<component-name>] if set, else the
+     derived <svcMatch>.<baseDomain> when baseDomain is set, else "" (route/URL omitted). */}}
+{{- define "inst.hostname" -}}
+{{- $top := index . 0 -}}{{- $c := index . 1 -}}
+{{- $override := index ($top.Values.exposure.hosts | default dict) $c.name -}}
+{{- if $override -}}{{- $override -}}
+{{- else if $top.Values.exposure.baseDomain -}}{{- printf "%s.%s" ($c.svcMatch | default $c.name) $top.Values.exposure.baseDomain -}}
+{{- end -}}
+{{- end -}}
+
+{{/* inst.svcname — the EXACT name of the live Service backing a peer, for an HTTPRoute backendRef.
+     args: (list $top $svcMatch). Prefers an exact name match, else the first contains-match
+     (mirrors inst.peerurl). "" until the Service exists (route emitted next reconcile). Needs the
+     services read the chart already grants the cdc SA (installers-lbip-services, self-bootstrap.yaml). */}}
+{{- define "inst.svcname" -}}
+{{- $top := index . 0 -}}{{- $sub := index . 1 -}}{{- $exact := "" -}}{{- $contains := "" -}}
+{{- range (lookup "v1" "Service" $top.Values.namespaces.krateo "").items -}}
+{{- if eq .metadata.name $sub -}}{{- $exact = .metadata.name -}}
+{{- else if and (not $contains) (contains $sub .metadata.name) -}}{{- $contains = .metadata.name -}}{{- end -}}
+{{- end -}}
+{{- $exact | default $contains -}}
+{{- end -}}
+
 {{/*
 inst.componentsYaml — the chart-managed component pin list, sourced from
 files/component-pins.yaml (NOT .Values), so it is CHART CONTENT immune to

@@ -1,0 +1,54 @@
+{{- /*
+  httproutes.yaml — one Gateway API HTTPRoute per browser-exposed component, for
+  exposure.type=Gateway (installer#27). Composition-mode only, so the engine renders these into the
+  umbrella release. Each `expose: true` component whose feature is on gets one HTTPRoute routing its
+  hostname (exposure.hosts[name] or <svcMatch>.<baseDomain>) to its ClusterIP Service; external-dns
+  publishes the record from the route and cert-manager-issuers issues the cert via the same gatewayRef.
+
+  The installer creates NEITHER the Gateway nor the Gateway API CRDs (BYO / agentgateway). Emission
+  is GATED on the HTTPRoute CRD being served, so setting type=Gateway before the CRDs exist is INERT
+  (no "resource mapping not found" wedge) and fills in on a later reconcile once they are installed.
+  The backend Service name is resolved live (inst.svcname); a route is skipped until its Service
+  exists, then appears next reconcile — same posture as inst.peerurl omitting a not-yet-ready LB URL.
+*/}}
+{{- if not .Values.bootstrap.coreProvider.enabled }}
+{{- if eq .Values.exposure.type "Gateway" }}
+{{- $top := . }}
+{{- $ns := .Values.namespaces.krateo }}
+{{- if lookup "apiextensions.k8s.io/v1" "CustomResourceDefinition" "" "httproutes.gateway.networking.k8s.io" }}
+{{- $gwName := (.Values.exposure.gatewayRef | default dict).name }}
+{{- $gwNs := (.Values.exposure.gatewayRef | default dict).namespace | default $ns }}
+{{- if $gwName }}
+{{- $components := (include "inst.componentsYaml" $ | fromYaml).components }}
+{{- range $c := $components }}
+{{- if and $c.expose (not $c.registerOnly) (eq (include "inst.featureEnabled" (list $top $c.feature)) "true") }}
+{{- $host := include "inst.hostname" (list $top $c) }}
+{{- $svc := include "inst.svcname" (list $top $c.svcMatch) }}
+{{- if and $host $svc }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $c.name }}
+  namespace: {{ $ns }}
+  labels:
+    # NB: app.kubernetes.io/managed-by is intentionally NOT set — helm forces it to "Helm"
+    # on every release resource, so a chart-set value would churn a revision each reconcile.
+    krateo.io/exposed-component: {{ $c.name }}
+spec:
+  parentRefs:
+    - name: {{ $gwName }}
+      namespace: {{ $gwNs }}
+  hostnames:
+    - {{ $host | quote }}
+  rules:
+    - backendRefs:
+        - name: {{ $svc }}
+          port: {{ $c.exposePort | default 80 }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
