@@ -124,6 +124,13 @@ Open `http://localhost:31000/` (the pinned frontend NodePort) and log in as `adm
 that password. The events bell in the portal header is served by sse-proxy over
 `31003`; authn and snowplow are reached by the SPA over `31001`/`31002`.
 
+> **Where the credentials come from.** The `admin` user and its `admin-password` Secret
+> are seeded by the **`portal`** component (not the installer or authn), together with a
+> `cyberjoker` demo user and a `demo-system` namespace. Toggle any of them — or install a
+> **custom portal** — via `componentValues.portal`
+> (`enableAdminUser` / `enableCyberjokerUser` / `enableDemoSystemNamespace`, all default
+> `true`); see [configuration](../configuration.md#portal-users-demo-content-and-a-custom-portal).
+
 ## 5. Turn agents on later (day-2)
 
 The default profile is one flag short of the agent tiers. Enabling them at runtime is a

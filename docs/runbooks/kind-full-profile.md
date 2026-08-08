@@ -178,6 +178,12 @@ kubectl -n krateo-system get secret admin-password -o jsonpath='{.data.password}
 
 Open `http://localhost:31000/` (the pinned frontend NodePort) and log in as `admin`.
 
+> **Where the credentials come from.** The `admin` user and its `admin-password` Secret
+> are seeded by the **`portal`** component (not the installer or authn), alongside a
+> `cyberjoker` demo user and a `demo-system` namespace. Toggle them — or install a
+> **custom portal** — via `componentValues.portal`; see
+> [configuration](../configuration.md#portal-users-demo-content-and-a-custom-portal).
+
 ## 7. Turn agents off/on later (day-2)
 
 The full profile is just `features.coreAgents` + `features.specialistAgents` flipped on.
