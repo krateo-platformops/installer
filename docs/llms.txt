@@ -20,8 +20,9 @@ chart/values.schema.json: the strict typed contract — and the source the Insta
 chart/files/component-pins.yaml: the tested-together component set — versions, deps, tiers, feature gates, wiring flags
 chart/templates/definitions.yaml: Pass A — CompositionDefinition registration
 chart/templates/compositions.yaml: Pass B — gated Composition emission + all render-time wiring
+chart/templates/httproutes.yaml: Gateway API HTTPRoute per exposed component (exposure.type=Gateway); CRD-gated, inert without Gateway API CRDs
 chart/templates/self-bootstrap.yaml: self-registration, the Installer CR, lookup RBAC, the post-install/post-upgrade hook
-chart/templates/_helpers.tpl: the gating/exposure helpers (crdExists, depsReady, dependentsGone, lbip, nodeip, peerurl, componentsYaml)
+chart/templates/_helpers.tpl: the gating/exposure helpers (crdExists, depsReady, dependentsGone, lbip, nodeip, peerurl, hostname, svcname, componentsYaml)
 chart/templates/ordered-teardown.yaml: HOOK 1 — reverse-dependency drain of the component tree
 chart/templates/bootstrap-teardown.yaml: HOOK 2 — full-footprint drain before engine removal
 chart/templates/post-delete-cleanup.yaml: HOOK 3 — post-delete sweep of non-helm-owned leftovers

@@ -115,11 +115,37 @@ post-install `kubectl patch`.
   unconditionally because `exposure` is runtime-editable and a later switch to
   NodePort must not depend on a bootstrap-time gate (before 0.3.11 every fresh
   `installers-v<ver>` SA failed the render with `nodes is forbidden`).
-- **`port`** (optional) — one shared port for everything browser-facing: it pins the
-  Service `port` of every exposed top-level-`service` component *and* is used as the
-  port in the frontend's peer URLs. Unset, each component keeps its own `exposePort`
-  from the pins (authn 8082, snowplow 8081, frontend/sse-proxy 8080). Components with
-  a nested Service (kagent) or their own LB (hyperdx) are set via `componentValues`.
+- **`type: Gateway`** — for a Gateway API edge (agentgateway / any Gateway controller).
+  Exposed components' Services stay **`ClusterIP`** (snowplow's `LoadBalancer` chart default
+  is forced down too), and the installer emits **one `HTTPRoute` per exposed component**
+  ([`httproutes.yaml`](../chart/templates/httproutes.yaml)) routing its hostname to that
+  Service. The frontend's peer URLs become `https://<host>`. Config:
+  - **`gatewayRef: {name, namespace}`** — the BYO `Gateway` the routes attach to (`parentRef`).
+    Required for `Gateway`; `namespace` defaults to `namespaces.krateo`.
+  - **`baseDomain`** — per-component hostnames derived as `<svcMatch>.<baseDomain>`
+    (`authn.<domain>`, `snowplow.<domain>`, `sse-proxy.<domain>`).
+  - **`hosts.<component-name>`** — override a single component's host (e.g.
+    `hosts.frontend: portal.<domain>` or the apex).
+
+  The installer creates **neither** the `Gateway` nor the Gateway API CRDs — emission is
+  gated on the `HTTPRoute` CRD being served, so setting `Gateway` before the CRDs exist is
+  **inert** (no wedge) and fills in once they're installed. Pair with
+  [`features.ingress`](#features--the-gates-over-the-dag) so external-dns publishes the
+  records from the routes and `cert-manager-issuers` issues certs via the same `gatewayRef`
+  (see installer#27). `componentValues.<c>.ingress` remains the *classic* `Ingress`
+  alternative for an Ingress-controller deployment.
+
+  **Required inputs / caveats when `type: Gateway`:**
+  - `gatewayRef.name` **and** a host source (`baseDomain` or a `hosts.<name>` override) are
+    both required. With neither, no routes are emitted **and** the frontend keeps its
+    `localhost` dev-defaults — a *silent* misconfiguration (the same failure #203 guards
+    against, reached via a different path), so always set both.
+  - `sse-proxy` is routed like the others, but it is a **single-replica** stateful in-memory
+    hub (its own chart pins `replicaCount: 1`) — a plain `HTTPRoute` gives no session
+    stickiness, so do **not** scale it under `Gateway` without `sessionPersistence` (same
+    constraint the LB path already carries).
+  - A `gatewayRef.namespace` other than `namespaces.krateo` is a cross-namespace attach — the
+    Gateway's listener must permit these routes via `allowedRoutes.namespaces`.
 
 A **static override wins**: a real external hostname pinned in
 `componentValues.frontend.config.<KEY>` (e.g. behind a Gateway) suppresses the

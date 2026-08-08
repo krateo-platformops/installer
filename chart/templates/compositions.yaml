@@ -58,7 +58,8 @@
 {{- end }}
 {{- if eq $render "true" }}
 {{- $spec := dict }}
-{{- if and $c.expose $isLB }}
+{{- if $c.expose }}
+{{- if $isLB }}
 {{- if $c.serviceValuesPath }}
 {{- /* Component whose Service is NOT at the chart's top-level `service` (e.g. kagent's UI
        lives at kagentapp.ui.service). Build the nested dict inside-out from the dotted
@@ -84,6 +85,14 @@
 {{- if and (eq $top.Values.exposure.type "NodePort") $c.nodePort }}{{- $_ := set $svc "nodePort" (int $c.nodePort) }}{{- end }}
 {{- $_ := set $spec "service" $svc }}
 {{- end }}
+{{- else if eq $top.Values.exposure.type "Gateway" }}
+{{- if not $c.serviceValuesPath }}
+{{/* Gateway: keep the Service ClusterIP — the emitted HTTPRoute (httproutes.yaml) routes the
+     hostname to it. Also forces snowplow (LoadBalancer by chart default) down to ClusterIP so the
+     BYO Gateway is the single external entry point. */}}
+{{- $_ := set $spec "service" (dict "type" "ClusterIP") }}
+{{- end }}
+{{- end }}
 {{- end }}
 {{- if $c.consumer }}
 {{- $cfg := dict }}
@@ -93,11 +102,23 @@
      (Used for LoadBalancer; NodePort uses the Service's allocated nodePort instead.) */}}
 {{- $eport := $d.exposePort }}
 {{- if $top.Values.exposure.port }}{{- $eport = $top.Values.exposure.port }}{{- end }}
-{{/* Browser-reachable base URL for this peer, resolved from its Service per exposure.type:
-     LoadBalancer -> http://<lb-ip>:<exposure.port>; NodePort -> http://<node-ip>:<nodePort>.
-     "" until the external address exists (LB IP pending / no node IP), so the key is omitted and
-     the next reconcile fills it. A static override is handled below and wins over this. */}}
-{{- $url := include "inst.peerurl" (list $top $d.svcMatch $eport) }}
+{{/* Browser-reachable base URL for this peer, resolved per exposure.type:
+     LoadBalancer -> http://<lb-ip>:<exposure.port>; NodePort -> http://<node-ip>:<nodePort>;
+     Gateway -> https://<hostname> (exposure.hosts[name] or <svcMatch>.<baseDomain>).
+     "" until the address/hostname is known, so the key is omitted and the next reconcile fills it.
+     A static override is handled below and wins over this. */}}
+{{- $url := "" }}
+{{- if eq $top.Values.exposure.type "Gateway" }}
+{{/* Gateway: the peer URL is https://<host> from the pins (no Service lookup), so it is written even
+     before the HTTPRoute CRD / route exists — unlike httproutes.yaml which gates on the CRD. Same
+     eventual-consistency posture as the LB branch (frontend serves config.json statically, picked up
+     on reload); the URL is correct once the route/DNS/cert are up. If no host resolves (neither
+     baseDomain nor hosts set), $url stays "" and the key is omitted — Gateway needs a host source. */}}
+{{- $h := include "inst.hostname" (list $top $d) }}
+{{- if $h }}{{- $url = printf "https://%s" $h }}{{- end }}
+{{- else }}
+{{- $url = include "inst.peerurl" (list $top $d.svcMatch $eport) }}
+{{- end }}
 {{- if $url }}
 {{- range $k := $d.configKeys }}
 {{/* STATIC OVERRIDE WINS — a REAL external hostname the operator pinned in

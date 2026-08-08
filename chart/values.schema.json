@@ -55,23 +55,52 @@
     "exposure": {
       "type": "object",
       "title": "Exposure",
-      "description": "Exposure model for browser-facing components. NodePort/LoadBalancer are resolved via Helm lookup at reconcile time and set spec.service.type via exposure.type.",
+      "description": "Exposure model for browser-facing components. LoadBalancer/NodePort set spec.service.type and are resolved via Helm lookup at reconcile time; Gateway keeps Services ClusterIP and emits one Gateway API HTTPRoute per exposed component, attached to a BYO Gateway.",
       "additionalProperties": false,
       "properties": {
         "type": {
           "type": "string",
           "enum": [
             "NodePort",
-            "LoadBalancer"
+            "LoadBalancer",
+            "Gateway"
           ],
           "default": "LoadBalancer"
         },
         "port": {
           "type": "integer",
           "title": "Exposure port",
-          "description": "Optional. Overrides the single port browser-facing (expose:true, top-level Service) components are exposed on \u2014 sets both their Service port and the frontend config.json peer URLs (http://<lb-ip>:<port>). Unset => each component keeps its per-component exposePort default. Nested-Service (kagent) and own-LB (hyperdx) components are set via componentValues.",
+          "description": "Optional. Overrides the single port browser-facing (expose:true, top-level Service) components are exposed on \u2014 sets both their Service port and the frontend config.json peer URLs (http://<lb-ip>:<port>). Unset => each component keeps its per-component exposePort default. Nested-Service (kagent) and own-LB (hyperdx) components are set via componentValues. Ignored when type=Gateway (routing is by hostname).",
           "minimum": 1,
           "maximum": 65535
+        },
+        "gatewayRef": {
+          "type": "object",
+          "title": "Gateway reference (type=Gateway)",
+          "description": "The Gateway API Gateway the emitted HTTPRoutes attach to (parentRef). BYO / agentgateway \u2014 the installer does NOT create the Gateway or its CRDs. Required when type=Gateway.",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "namespace": {
+              "type": "string",
+              "description": "Defaults to namespaces.krateo when unset."
+            }
+          }
+        },
+        "baseDomain": {
+          "type": "string",
+          "title": "Base domain (type=Gateway)",
+          "description": "Per-component hostnames are derived as <svcMatch>.<baseDomain> (authn.<baseDomain>, snowplow.<baseDomain>, ...). Override any single host via exposure.hosts.<component-name>. Used only when type=Gateway; the frontend config peer URLs become https://<host>."
+        },
+        "hosts": {
+          "type": "object",
+          "title": "Per-component hostname overrides (type=Gateway)",
+          "description": "Explicit hostname per component name (keys are component names, e.g. frontend), overriding the <svcMatch>.<baseDomain> derivation. Use for the frontend (e.g. portal.<domain> or the apex) or any component that shouldn't follow the derived pattern.",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
