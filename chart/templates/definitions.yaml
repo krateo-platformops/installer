@@ -28,7 +28,11 @@ metadata:
     krateo.io/tier: {{ $c.tier }}
 spec:
   chart:
-    url: {{ default $.Values.ociRepo $c.repo }}/{{ default $c.name $c.chart }}
+    {{/* OCI: url = registry base + chart path (oci://…/charts/<chart>). Classic helm repo
+         (chartRepo set): url is the repo ROOT — index.yaml lives at <root>/index.yaml and the chart
+         name goes in spec.chart.repo below, so do NOT append it, else the fetch hits
+         <root>/<chart>/index.yaml and 404s (installer#36). */}}
+    url: {{ if $c.chartRepo }}{{ default $.Values.ociRepo $c.repo }}{{ else }}{{ default $.Values.ociRepo $c.repo }}/{{ default $c.name $c.chart }}{{ end }}
     version: {{ $c.version | quote }}
     {{- if $c.chartRepo }}
     repo: {{ $c.chartRepo | quote }}
