@@ -4700,53 +4700,60 @@
         "external-dns": {
           "type": "object",
           "title": "external-dns (edge / ingress)",
-          "description": "Spec for the external-dns edge component (feature: ingress), deep-merged into its Composition. Mirrors oci://ghcr.io/krateo-blueprints/charts/external-dns; REQUIRED by that chart when ingress is enabled: provider, domainFilters, credentialsSecretRef, txtOwnerId.",
+          "description": "Spec for the external-dns edge component (feature: ingress), deep-merged into its Composition. Mirrors oci://ghcr.io/krateo-blueprints/charts/external-dns 0.3.x: config lives under the `external-dns` subchart-passthrough key (0.2.0 exposed these at the top level where they never reached the workload — a breaking-shape fix). The provider API token is referenced via `env[]` from an out-of-band Secret, never part of the blueprint.",
           "additionalProperties": true,
           "properties": {
-            "provider": {
-              "type": "string",
-              "enum": [
-                "cloudflare",
-                "google",
-                "aws",
-                "azure"
-              ]
-            },
-            "domainFilters": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "txtOwnerId": {
-              "type": "string"
-            },
-            "credentialsSecretRef": {
+            "external-dns": {
               "type": "object",
-              "description": "Reference to an out-of-band Secret holding the provider API token (you place the Secret yourself; it is never part of the blueprint).",
-              "additionalProperties": false,
+              "title": "upstream external-dns passthrough",
+              "description": "Passthrough to the upstream external-dns chart. Required for DNS publication: provider.name, domainFilters, txtOwnerId, and env with the provider token.",
+              "additionalProperties": true,
               "properties": {
-                "name": {
+                "provider": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "enum": [
+                        "cloudflare",
+                        "google",
+                        "aws",
+                        "azure"
+                      ]
+                    }
+                  }
+                },
+                "policy": {
+                  "type": "string",
+                  "enum": [
+                    "sync",
+                    "upsert-only",
+                    "create-only"
+                  ]
+                },
+                "domainFilters": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "sources": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "txtOwnerId": {
                   "type": "string"
                 },
-                "key": {
-                  "type": "string"
+                "env": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
                 }
               }
-            },
-            "sources": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "policy": {
-              "type": "string",
-              "enum": [
-                "sync",
-                "upsert-only",
-                "create-only"
-              ]
             }
           }
         },

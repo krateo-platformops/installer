@@ -61,35 +61,42 @@ before cert-manager's `acme.gatewayRef` and external-dns' `HTTPRoute` watching.
 
 **`ingress` preconditions (when enabled).** Public charts (no `registryAuth` needed), but
 `external-dns` reads its DNS-provider credential from a Secret you place yourself (referenced
-by `credentialsSecretRef`) — enabling `ingress` without it is like enabling the agent tier
-without `vertexAI`: the component registers but can't do its job until the Secret exists.
+via `env`) — enabling `ingress` without it is like enabling the agent tier without `vertexAI`:
+the component registers but can't do its job until the Secret exists.
 
 **Configuring each edge component.** The installer ships no default spec for these, and
 their charts have **required** fields — so `ingress` is only useful once you set each
 component's spec through [`componentValues`](#componentvalues--the-durable-per-component-override-channel)
 (the same durable per-component channel as everything else; deep-merged into the
-Composition at reconcile, editable later on the live CR):
+Composition at reconcile, editable later on the live CR). **external-dns config lives under
+its `external-dns` subchart-passthrough key** (0.3.x; a top-level curated field is accepted
+by the CRD but never reaches the workload):
 
 ```yaml
 features:
   ingress: true
 componentValues:
-  external-dns:               # required: provider, domainFilters, txtOwnerId, credentialsSecretRef
-    provider: cloudflare      # cloudflare | google | aws | azure
-    domainFilters:
-      - example.com
-    txtOwnerId: krateo
-    credentialsSecretRef:     # the out-of-band Secret holding the provider API token
-      name: external-dns-cloudflare
-      key: api-token
-    policy: sync              # optional: sync | upsert-only | create-only
-  cert-manager-issuers:       # required: internalCA, acme
+  external-dns:
+    external-dns:              # the upstream-chart passthrough (required: provider, domainFilters, txtOwnerId, env)
+      provider:
+        name: cloudflare       # cloudflare | google | aws | azure
+      domainFilters:
+        - example.com
+      txtOwnerId: krateo
+      policy: upsert-only      # optional: sync | upsert-only | create-only
+      env:                     # the out-of-band Secret holding the provider token (never in the blueprint)
+        - name: CF_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: external-dns-cloudflare
+              key: api-token
+  cert-manager-issuers:        # required: internalCA, acme
     internalCA:
       enabled: false
     acme:
       enabled: true
       email: platform@example.com
-      gatewayRef:             # points the ACME HTTP-01 solver at the Gateway API edge
+      gatewayRef:              # points the ACME HTTP-01 solver at the Gateway API edge
         name: krateo-gateway
         namespace: krateo-system
 ```
