@@ -143,7 +143,7 @@
     "components": {
       "type": "array",
       "title": "Component DAG (advanced override)",
-      "description": "Advanced: override the built-in component list/versions/dependencies.",
+      "description": "Advanced. Each entry, matched by `name`, either OVERRIDES a pinned component (whitelisted fields: version / registerOnly / tier — e.g. registerOnly:true to demote a pinned component to registered-but-not-installed, installer#38) or APPENDS a new registerOnly catalog blueprint. Only `name` is required — an override needs just the field it changes; an append needs kind+version (enforced at render).",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -239,10 +239,7 @@
           }
         },
         "required": [
-          "name",
-          "kind",
-          "version",
-          "tier"
+          "name"
         ]
       }
     },
