@@ -1,0 +1,31 @@
+name: check-pins
+
+# Installer-specific guard (not the canonical shared lint.yaml): the hand-maintained `kind:` in
+# chart/files/component-pins.yaml must match the Kind core-provider's crdgen derives from the chart
+# name (flect.Pascalize ∘ ToGolangName — initialism-aware: api->API, dns->DNS). Pass B matches
+# spec.names.kind by exact string, so a mispin silently blocks Pass B on a live cluster (installer#31).
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "chart/files/component-pins.yaml"
+      - ".github/scripts/check-pin-kinds.py"
+      - ".github/workflows/check-pins.yaml"
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  pin-kinds:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Assert pin kinds == crdgen derivation
+        run: python3 .github/scripts/check-pin-kinds.py
