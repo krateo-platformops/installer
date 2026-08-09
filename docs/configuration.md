@@ -31,7 +31,7 @@ Installer CR**: after bootstrap, you set these keys by patching the CR, not by
 | `localModel.*` | `enabled: false` | Opt-in: run the whole fleet on one local Ollama model — below. |
 | `componentValues.<name>` | curated defaults | Per-component Composition-spec overrides, deep-merged — below. |
 | `registryAuth.*` | `enabled: false` | Credentials for in-cluster chart pulls from private registries — below. |
-| `components` | unset (pins file) | Advanced: per-component `version` override / `registerOnly` catalog append — see [api](./api.md#component-pinsyaml--the-version-source-of-truth). |
+| `components` | unset (pins file) | Advanced. Per-entry (matched by `name`): **override** a pinned component's `version` / `registerOnly` / `tier` (e.g. `registerOnly: true` demotes it to registered-but-not-installed — how a nested/multi-tenant child opts out of a pinned component like `otel-collector-daemonset`), or **append** a new `registerOnly` catalog blueprint. Only `name` is required for an override; an append needs `kind`+`version`. See [api](./api.md#component-pinsyaml--the-version-source-of-truth). |
 | `core-provider.*` | `otel.endpoint` preset | Bootstrap-subchart passthrough (only used while `bootstrap.coreProvider.enabled=true`); engine OTel export stays off until `core-provider.otel.enabled=true`. |
 
 ## `features` — the gates over the DAG

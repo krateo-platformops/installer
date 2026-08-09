@@ -288,7 +288,14 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- $known := dict -}}
 {{- range $c := $components -}}{{- $_ := set $known (toString $c.name) true -}}{{- end -}}
 {{/* .Values.components entries do one of two things, matched by name:
-       - name IS a pinned component  -> version override (bump a live component's chart version)
+       - name IS a pinned component  -> override the whitelisted fields version / registerOnly / tier
+         on that live component. `version` bumps its chart; `registerOnly: true` demotes it to
+         registered-but-not-installed (Pass A registers the CD, Pass B suppresses the Composition) —
+         the way a nested/multi-tenant child opts OUT of a pinned component it should not run (e.g.
+         otel-collector-daemonset, whose node-level telemetry + hostPorts don't belong in a child on
+         shared nodes; installer#38). `tier` re-groups it (e.g. -> catalog). kind/chart/deps/repo are
+         NOT overridable (they'd break resolution). Footgun: do NOT registerOnly a component that
+         others `deps` on — its dependents then never see it Ready and stall.
        - name is NOT pinned          -> APPEND it as a new component. This is how a CMP (tier-b)
          adds catalog blueprints (registerOnly + tier: catalog, e.g. openstack) via values while
          the base installer stays use-case-agnostic — it ships no such blueprint by default. */}}
@@ -297,20 +304,30 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- range $o := (.Values.components | default list) -}}
 {{- if and (kindIs "map" $o) (hasKey $o "name") -}}
 {{- if hasKey $known (toString $o.name) -}}
-{{- if hasKey $o "version" -}}{{- $_ := set $ov (toString $o.name) $o.version -}}{{- end -}}
+{{- $fields := dict -}}
+{{- range $k := (list "version" "registerOnly" "tier") -}}
+{{- if hasKey $o $k -}}{{- $_ := set $fields $k (index $o $k) -}}{{- end -}}
+{{- end -}}
+{{- $_ := set $ov (toString $o.name) $fields -}}
 {{- else -}}
 {{/* Unknown name = a CMP-appended catalog blueprint. Guard the footgun: a typo'd known-component
      name (e.g. `snowplowe`) would otherwise silently register a dead CompositionDefinition whose
      chart URL resolves to nothing. Only allow the append when the entry explicitly opts in as a
      registerOnly catalog blueprint — anything else is a mistake, so fail loudly at render time. */}}
 {{- if not $o.registerOnly -}}{{- fail (printf "components[%s]: unknown name not in files/component-pins.yaml — only registerOnly catalog blueprints may be appended via .Values.components (typo?)" (toString $o.name)) -}}{{- end -}}
+{{/* An APPEND registers a brand-new CD, so it needs kind + version (the schema now requires only
+     `name`, to let overrides of PINNED components omit them — installer#38). Guard here so an
+     append missing them fails loudly instead of registering a broken CompositionDefinition. */}}
+{{- if or (not (hasKey $o "kind")) (not (hasKey $o "version")) -}}{{- fail (printf "components[%s]: an appended catalog blueprint needs `kind` and `version` (only overrides of PINNED components may omit them)" (toString $o.name)) -}}{{- end -}}
 {{- $extra = append $extra $o -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
 {{- range $c := $components -}}
 {{- if hasKey $ov (toString $c.name) -}}
-{{- $_ := set $c "version" (index $ov (toString $c.name)) -}}
+{{- range $k, $v := (index $ov (toString $c.name)) -}}
+{{- $_ := set $c $k $v -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 {{ dict "components" (concat $components $extra) | toYaml }}
