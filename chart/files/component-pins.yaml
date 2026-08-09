@@ -148,39 +148,51 @@ components:
 # from krateo-blueprints unless enabled. Kinds are crdgen PascalCase(chart) — crdgen is
 # INITIALISM-AWARE (Go common-initialisms: api->API, dns->DNS; but crds->Crds, NOT CRDS), so:
 # gateway-api-crds -> GatewayAPICrds, external-dns -> ExternalDNS, agentgateway -> Agentgateway,
-# cert-manager-issuers -> CertManagerIssuers. Pass B's inst.crdExists matches spec.names.kind by
-# EXACT string, so a naive PascalCase mispin silently blocks Pass B (installer#31, shipped 0.3.21).
-# DEP-CHAINED so the edge converges in order: the Gateway API CRDs must be served before the
-# Gateway; the Gateway must exist before cert-manager's ACME gatewayRef and external-dns' HTTPRoute
-# watching. Pair with exposure.type=Gateway (installer#27), which emits the per-component
-# HTTPRoutes onto agentgateway's Gateway (default name krateo-gateway == exposure.gatewayRef.name).
-# Preconditions: external-dns needs its provider-credential Secret placed out-of-band.
-# All four are public krateo-blueprints charts at 0.3.1 (ingress-blueprint tag 0.3.1).
+# cert-manager -> CertManager, cert-manager-issuers -> CertManagerIssuers. Pass B's inst.crdExists
+# matches spec.names.kind by EXACT string, so a naive PascalCase mispin silently blocks Pass B
+# (installer#31; the check-pins CI guard enforces this at PR time).
+# DEP-CHAINED so the edge converges in order:
+#   gateway-api-crds -> agentgateway -> cert-manager -> cert-manager-issuers -> external-dns
+# The Gateway API CRDs must be served before the Gateway; the Gateway (agentgateway 0.4.0 bundles
+# its own agentgateway-crds subchart, else the controller never programs it) before the routes;
+# cert-manager (operator + CRDs) before cert-manager-issuers (Issuers only) — 0.3.x bundled both in
+# ONE release and the cert-manager.io CRDs were not established when the Issuers applied (installer#34,
+# blueprint 0.4.0 split them). Pair with exposure.type=Gateway (installer#27). Preconditions:
+# external-dns needs its provider-credential Secret placed out-of-band.
+# All are public krateo-blueprints charts at 0.4.0 (ingress-blueprint tag 0.4.0).
 - name: gateway-api-crds
   kind: GatewayAPICrds
-  version: 0.3.1
+  version: 0.4.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: ingress
 - name: agentgateway
   kind: Agentgateway
-  version: 0.3.1
+  version: 0.4.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   deps:
   - gateway-api-crds
   tier: platform
   feature: ingress
-- name: cert-manager-issuers
-  kind: CertManagerIssuers
-  version: 0.3.1
+- name: cert-manager
+  kind: CertManager
+  version: 0.4.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   deps:
   - agentgateway
   tier: platform
   feature: ingress
+- name: cert-manager-issuers
+  kind: CertManagerIssuers
+  version: 0.4.0
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  deps:
+  - cert-manager
+  tier: platform
+  feature: ingress
 - name: external-dns
   kind: ExternalDNS
-  version: 0.3.1
+  version: 0.4.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   deps:
   - agentgateway

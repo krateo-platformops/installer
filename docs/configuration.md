@@ -48,7 +48,7 @@ later on the CR.
 | `oasgenProvider` | `true` | `oasgen-provider` + its CRD chart. |
 | `coreAgents` | `false` | The base agent layer: `kagent-crds` → `kagent` → `fetch-mcp-server` + `krateo-autopilot`. |
 | `specialistAgents` | `false` | The 5 component specialist agents (`authn/snowplow/frontend/clickstack/core-provider-agent`) + `clickhouse-mcp-server`. Needs `coreAgents` (they all dep on `kagent`). |
-| `ingress` | `false` | Opt-in **edge layer**, dep-chained: `gateway-api-crds` (the Gateway API CRDs) → `agentgateway` (the Gateway API controller + the platform `GatewayClass`/`Gateway`) → `cert-manager-issuers` (ACME certs) + `external-dns` (DNS records) — all **public** `oci://ghcr.io/krateo-blueprints/charts`. Off by default; the base install pulls nothing from `krateo-blueprints` unless enabled. Leave off if you front Krateo another way (an existing ingress controller / cloud LB / mesh, or your own Gateway). |
+| `ingress` | `false` | Opt-in **edge layer**, dep-chained: `gateway-api-crds` (the Gateway API CRDs) → `agentgateway` (the Gateway API controller + CRDs + the platform `GatewayClass`/`Gateway`) → `cert-manager` (operator + CRDs) → `cert-manager-issuers` (ACME/CA Issuers) → `external-dns` (DNS records) — all **public** `oci://ghcr.io/krateo-blueprints/charts`. Off by default; the base install pulls nothing from `krateo-blueprints` unless enabled. Leave off if you front Krateo another way (an existing ingress controller / cloud LB / mesh, or your own Gateway). |
 
 **`ingress` is the whole edge, no BYO Gateway.** Everything-is-a-blueprint: the Gateway
 itself (`agentgateway`) and its CRDs (`gateway-api-crds`) are installer components too, so
