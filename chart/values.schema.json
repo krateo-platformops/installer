@@ -4757,10 +4757,22 @@
             }
           }
         },
+        "cert-manager": {
+          "type": "object",
+          "title": "cert-manager operator (edge / ingress)",
+          "description": "Optional spec for the cert-manager edge component (feature: ingress) — the upstream cert-manager operator + CRDs, split out from cert-manager-issuers in blueprint 0.4.0 (installer#34) so its CRDs are established before the Issuers apply. No required fields (installs with upstream defaults); override the operator via the `cert-manager` subchart passthrough.",
+          "additionalProperties": true,
+          "properties": {
+            "cert-manager": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
         "cert-manager-issuers": {
           "type": "object",
           "title": "cert-manager-issuers (edge / ingress)",
-          "description": "Spec for the cert-manager-issuers edge component (feature: ingress), deep-merged into its Composition. Mirrors oci://ghcr.io/krateo-blueprints/charts/cert-manager-issuers; REQUIRED by that chart when ingress is enabled: internalCA, acme (acme.gatewayRef points the ACME HTTP-01 solver at the Gateway API edge).",
+          "description": "Spec for the cert-manager-issuers edge component (feature: ingress), deep-merged into its Composition. Mirrors oci://ghcr.io/krateo-blueprints/charts/cert-manager-issuers (0.4.0: Issuers only, the operator is now the cert-manager component); REQUIRED: internalCA, acme (acme.gatewayRef points the ACME HTTP-01 solver at the Gateway API edge).",
           "additionalProperties": true,
           "properties": {
             "internalCA": {
