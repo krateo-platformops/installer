@@ -5,7 +5,7 @@
 #     -n krateo-system --create-namespace -f values-agent-only.yaml \
 #     --set vertexAI.enabled=false          # on kind: use a Gemini API key Secret instead of ADC
 #
-# Then talk to krateo-autopilot ("install Krateo") -> it routes to krateo-installer-agent, which
+# Then talk to krateo-autopilot ("install Krateo") -> it routes to installer-agent, which
 # patches the Installer CR (e.g. features.portal=true, specialistAgents=true, ...) and
 # core-provider provisions the full platform in dependency order.
 # The observability operators (ClickHouse / MongoDB) are no longer bootstrap subcharts — they

@@ -230,6 +230,15 @@ components:
   - kagent
   tier: observability
   feature: coreAgents
+- name: installer-agent
+  kind: InstallerAgent
+  version: 0.1.0
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: coreAgents
+  vertexAI: true
 - name: krateo-autopilot
   kind: KrateoAutopilot
   version: 0.2.0
