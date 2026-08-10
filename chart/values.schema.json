@@ -136,14 +136,18 @@
         "ingress": {
           "type": "boolean",
           "default": false,
-          "description": "Opt-in edge layer: ExternalDNS (DNS record publication) + cert-manager-issuers (ACME certificate issuance) from oci://ghcr.io/krateo-blueprints/charts. Default false — the base install is unchanged and pulls nothing from krateo-blueprints unless enabled. Turn off if you run behind your own ingress controller / cloud LB / mesh, or manage DNS+certs yourself. Preconditions when enabled: ExternalDNS needs its provider-credential Secret placed out-of-band (referenced by the component's secretRef); cert-manager-issuers' ACME HTTP-01 solver assumes the Gateway API edge is present."
+          "description": "Opt-in edge layer: ExternalDNS (DNS record publication) + cert-manager-issuers (ACME certificate issuance) from oci://ghcr.io/krateo-blueprints/charts. Default false \u2014 the base install is unchanged and pulls nothing from krateo-blueprints unless enabled. Turn off if you run behind your own ingress controller / cloud LB / mesh, or manage DNS+certs yourself. Preconditions when enabled: ExternalDNS needs its provider-credential Secret placed out-of-band (referenced by the component's secretRef); cert-manager-issuers' ACME HTTP-01 solver assumes the Gateway API edge is present."
+        },
+        "codegenAgents": {
+          "type": "boolean",
+          "description": "Opt-in codegen/conversion specialist agents (code-analysis, ansible-to-operator, tf-provider-to-operator, tf-to-helm) from krateo-agentiko/codegen-agents. Needs coreAgents. Default false."
         }
       }
     },
     "components": {
       "type": "array",
       "title": "Component DAG (advanced override)",
-      "description": "Advanced. Each entry, matched by `name`, either OVERRIDES a pinned component (whitelisted fields: version / registerOnly / tier — e.g. registerOnly:true to demote a pinned component to registered-but-not-installed, installer#38) or APPENDS a new registerOnly catalog blueprint. Only `name` is required — an override needs just the field it changes; an append needs kind+version (enforced at render).",
+      "description": "Advanced. Each entry, matched by `name`, either OVERRIDES a pinned component (whitelisted fields: version / registerOnly / tier \u2014 e.g. registerOnly:true to demote a pinned component to registered-but-not-installed, installer#38) or APPENDS a new registerOnly catalog blueprint. Only `name` is required \u2014 an override needs just the field it changes; an append needs kind+version (enforced at render).",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -4697,7 +4701,7 @@
         "external-dns": {
           "type": "object",
           "title": "external-dns (edge / ingress)",
-          "description": "Spec for the external-dns edge component (feature: ingress), deep-merged into its Composition. Mirrors oci://ghcr.io/krateo-blueprints/charts/external-dns 0.3.x: config lives under the `external-dns` subchart-passthrough key (0.2.0 exposed these at the top level where they never reached the workload — a breaking-shape fix). The provider API token is referenced via `env[]` from an out-of-band Secret, never part of the blueprint.",
+          "description": "Spec for the external-dns edge component (feature: ingress), deep-merged into its Composition. Mirrors oci://ghcr.io/krateo-blueprints/charts/external-dns 0.3.x: config lives under the `external-dns` subchart-passthrough key (0.2.0 exposed these at the top level where they never reached the workload \u2014 a breaking-shape fix). The provider API token is referenced via `env[]` from an out-of-band Secret, never part of the blueprint.",
           "additionalProperties": true,
           "properties": {
             "external-dns": {
@@ -4757,7 +4761,7 @@
         "cert-manager": {
           "type": "object",
           "title": "cert-manager operator (edge / ingress)",
-          "description": "Optional spec for the cert-manager edge component (feature: ingress) — the upstream cert-manager operator + CRDs, split out from cert-manager-issuers in blueprint 0.4.0 (installer#34) so its CRDs are established before the Issuers apply. No required fields (installs with upstream defaults); override the operator via the `cert-manager` subchart passthrough.",
+          "description": "Optional spec for the cert-manager edge component (feature: ingress) \u2014 the upstream cert-manager operator + CRDs, split out from cert-manager-issuers in blueprint 0.4.0 (installer#34) so its CRDs are established before the Issuers apply. No required fields (installs with upstream defaults); override the operator via the `cert-manager` subchart passthrough.",
           "additionalProperties": true,
           "properties": {
             "cert-manager": {

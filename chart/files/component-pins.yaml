@@ -241,7 +241,7 @@ components:
   vertexAI: true
 - name: krateo-autopilot
   kind: KrateoAutopilot
-  version: 0.2.1
+  version: 0.2.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -302,4 +302,46 @@ components:
   - kagent
   tier: observability
   feature: specialistAgents
+  vertexAI: true
+# ---- codegen agents (OPT-IN, feature: codegenAgents — default OFF) ---------------------
+# Cross-cutting codegen/conversion specialists from krateo-agentiko/codegen-agents (migrated
+# from braghettos/krateo-codegen-agents, krateo- prefix dropped). A distinct opt-in group
+# (like ingress) so the default specialist fleet stays lean. Needs coreAgents (kagent + the
+# autopilot-owned ModelConfigs); vertexAI:true wires Vertex + joins the autopilot fleet when
+# enabled. Kinds are crdgen PascalCase(chart) — tf is NOT an initialism (-> Tf).
+- name: code-analysis-agent
+  kind: CodeAnalysisAgent
+  version: 0.1.4
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: codegenAgents
+  vertexAI: true
+- name: ansible-to-operator-agent
+  kind: AnsibleToOperatorAgent
+  version: 0.1.4
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: codegenAgents
+  vertexAI: true
+- name: tf-provider-to-operator-agent
+  kind: TfProviderToOperatorAgent
+  version: 0.1.4
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: codegenAgents
+  vertexAI: true
+- name: tf-to-helm-agent
+  kind: TfToHelmAgent
+  version: 0.1.4
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: codegenAgents
   vertexAI: true
