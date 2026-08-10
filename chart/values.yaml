@@ -138,6 +138,7 @@ features:
   coreProvider: true              # engine-present MARKER: core-provider is always-on via bootstrap (gates no component here)
   coreAgents: false                # base agent layer: kagent + fetch-mcp + installer-agent + krateo-autopilot
   specialistAgents: false          # the 5 component specialist agents + clickhouse-mcp (needs coreAgents)
+  codegenAgents: false             # OPT-IN codegen/conversion specialists (code-analysis, ansible-to-operator, tf-provider-to-operator, tf-to-helm); needs coreAgents
   oasgenProvider: true            # oasgen-provider
   portal: true                    # the non-agent platform: authn -> snowplow -> frontend -> portal + portal-starter
                                   #   + the observability stack (clickhouse/mongo operators, krateo-observability,
