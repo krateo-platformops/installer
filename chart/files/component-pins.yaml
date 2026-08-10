@@ -241,7 +241,7 @@ components:
   vertexAI: true
 - name: krateo-autopilot
   kind: KrateoAutopilot
-  version: 0.2.0
+  version: 0.2.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
