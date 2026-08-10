@@ -345,3 +345,12 @@ components:
   tier: observability
   feature: codegenAgents
   vertexAI: true
+- name: krateo-blueprint-agent
+  kind: KrateoBlueprintAgent
+  version: 0.2.0
+  repo: oci://ghcr.io/krateo-agentiko/krateo   # NOTE: old /krateo path (not /charts) — its release pipeline predates the canonical one; canonicalize later
+  deps:
+  - kagent
+  tier: observability
+  feature: codegenAgents
+  vertexAI: true
