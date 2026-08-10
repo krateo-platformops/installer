@@ -127,11 +127,11 @@ vertexAI:
   secretName: vertex-sa-key
   secretKey: key.json
 componentValues:
-  # kind is not browser-reachable by the node IP; point the SPA at *.localhost, which
-  # browsers resolve to 127.0.0.1 (RFC 6761; survives the installer's localhost dev-default
-  # rejection). Ports are the pinned NodePorts of each peer. If your OS resolver doesn't map
-  # *.localhost (e.g. plain glibc without systemd-resolved), add `127.0.0.1 krateo.localhost`
-  # to /etc/hosts.
+  # Point the SPA's peer URLs at *.localhost on the pinned NodePorts. Browsers resolve any
+  # *.localhost name to 127.0.0.1 themselves, so these land on the kind host-port mappings
+  # (see "Reach the portal" below — no /etc/hosts needed). A bare loopback literal
+  # (http://localhost… / http://127.0.0.1…) can't be used here — the installer drops it as a
+  # dev-default — so use the krateo.localhost hostname.
   frontend:
     config:
       AUTHN_API_BASE_URL: http://krateo.localhost:31001
@@ -177,6 +177,17 @@ kubectl -n krateo-system get secret admin-password -o jsonpath='{.data.password}
 ```
 
 Open `http://localhost:31000/` (the pinned frontend NodePort) and log in as `admin`.
+
+**Pointing the browser at localhost (no `/etc/hosts`).** The portal is at
+`http://localhost:31000/` — the pinned frontend NodePort is mapped to host port `31000` by
+the kind config. The SPA's peer calls go to `http://krateo.localhost:31001`–`31003`, and you
+do **not** need `/etc/hosts`: browsers (Chrome/Firefox/Safari) resolve any `*.localhost` name
+to `127.0.0.1` themselves (RFC 6761), so `krateo.localhost` lands on your mapped host ports —
+it's all loopback. Bare `localhost` can't be used for the peer URLs (the installer drops
+`http://localhost…` config values as dev-defaults, #203); `krateo.localhost` is
+browser-resolvable loopback that survives. `/etc/hosts` is only needed to resolve
+`krateo.localhost` *outside* a browser (`curl` on macOS, or plain-glibc Linux without
+systemd-resolved) — not for the portal.
 
 > **Where the credentials come from.** The `admin` user and its `admin-password` Secret
 > are seeded by the **`portal`** component (not the installer or authn), alongside a

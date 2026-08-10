@@ -79,11 +79,11 @@ features:
 exposure:
   type: NodePort           # kind has no LoadBalancer controller
 componentValues:
-  # kind is not browser-reachable by the node IP; point the SPA at *.localhost, which
-  # browsers resolve to 127.0.0.1 (RFC 6761). A loopback literal (localhost/127.0.0.1) is
-  # rejected as a dev-default and treated as unset, so use a *.localhost hostname. Ports
-  # are the pinned NodePorts of each peer. If your OS resolver doesn't map *.localhost
-  # (e.g. plain glibc without systemd-resolved), add `127.0.0.1 krateo.localhost` to /etc/hosts.
+  # Point the SPA's peer URLs at *.localhost on the pinned NodePorts. Browsers resolve any
+  # *.localhost name to 127.0.0.1 themselves, so these land on the kind host-port mappings
+  # (see "Reach the portal" below — no /etc/hosts needed). A bare loopback literal
+  # (http://localhost… / http://127.0.0.1…) can't be used here: the installer treats it as a
+  # dev-default and drops it, so use the krateo.localhost hostname.
   frontend:
     config:
       AUTHN_API_BASE_URL: http://krateo.localhost:31001
@@ -123,6 +123,26 @@ kubectl -n krateo-system get secret admin-password -o jsonpath='{.data.password}
 Open `http://localhost:31000/` (the pinned frontend NodePort) and log in as `admin` with
 that password. The events bell in the portal header is served by sse-proxy over
 `31003`; authn and snowplow are reached by the SPA over `31001`/`31002`.
+
+### Pointing the browser at localhost (no `/etc/hosts`)
+
+- **The portal is at `http://localhost:31000/`.** The pinned frontend NodePort `31000` is
+  mapped to host port `31000` by the kind config (`extraPortMappings`), so the browser
+  reaches it straight on loopback.
+- **The SPA's peer calls go to `http://krateo.localhost:31001`–`31003`** — and you do **not**
+  need to touch `/etc/hosts`. Chrome, Firefox and Safari resolve any `*.localhost` name to
+  `127.0.0.1` themselves (RFC 6761), *before* the OS resolver, so `krateo.localhost` lands on
+  your mapped host ports. `localhost` and `krateo.localhost` are both `127.0.0.1` — from the
+  browser it's all loopback.
+- **Why not bare `localhost` for the peer URLs?** The installer drops any `http://localhost…`
+  / `http://127.0.0.1…` config value as a dev-default (installer #203 — so the frontend
+  chart's seeded `localhost:808x` *pod* ports never leak to the browser); it can't tell an
+  explicit `localhost:31001` from the seeded `localhost:8082`. `krateo.localhost` is
+  browser-resolvable loopback that isn't the bare-loopback literal, so it's kept.
+- **When `/etc/hosts` *is* needed:** only if you resolve `krateo.localhost` **outside a
+  browser** — `curl`/`wget` on macOS (they use the OS resolver, which doesn't special-case
+  `*.localhost`), or plain-glibc Linux without systemd-resolved. Add `127.0.0.1
+  krateo.localhost` there. For the portal in a browser, nothing is needed.
 
 > **Where the credentials come from.** The `admin` user and its `admin-password` Secret
 > are seeded by the **`portal`** component (not the installer or authn), together with a
