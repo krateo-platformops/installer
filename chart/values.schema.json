@@ -117,7 +117,7 @@
         "coreAgents": {
           "type": "boolean",
           "default": true,
-          "description": "Base agent layer: kagent + fetch-mcp + krateo-autopilot + krateo-installer-agent."
+          "description": "Base agent layer: kagent + fetch-mcp + krateo-autopilot + installer-agent."
         },
         "portal": {
           "type": "boolean",
@@ -1902,7 +1902,7 @@
             },
             "extraAgents": {
               "type": "array",
-              "description": "Extra A2A sub-agents to register on the orchestrator (component/blueprint-contributed specialists, e.g. the installer's krateo-installer-agent). The orchestrator stays the single mandatory entry point; these are reachable only via its routing.",
+              "description": "Extra A2A sub-agents to register on the orchestrator (component/blueprint-contributed specialists, e.g. the installer's installer-agent). The orchestrator stays the single mandatory entry point; these are reachable only via its routing.",
               "items": {
                 "type": "object",
                 "additionalProperties": false,
@@ -1936,8 +1936,8 @@
             }
           }
         },
-        "krateo-installer-agent": {
-          "title": "krateo-installer-agent values",
+        "installer-agent": {
+          "title": "installer-agent values",
           "type": "object",
           "additionalProperties": false,
           "properties": {

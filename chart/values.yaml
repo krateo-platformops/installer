@@ -136,7 +136,7 @@ exposure:
 # Feature flags (carried over from the installer chart).
 features:
   coreProvider: true              # engine-present MARKER: core-provider is always-on via bootstrap (gates no component here)
-  coreAgents: false                # base agent layer: kagent + fetch-mcp + krateo-installer-agent + krateo-autopilot
+  coreAgents: false                # base agent layer: kagent + fetch-mcp + installer-agent + krateo-autopilot
   specialistAgents: false          # the 5 component specialist agents + clickhouse-mcp (needs coreAgents)
   oasgenProvider: true            # oasgen-provider
   portal: true                    # the non-agent platform: authn -> snowplow -> frontend -> portal + portal-starter
@@ -241,7 +241,7 @@ componentValues:
     # To pin an EXPLICIT set instead, list them here (still gated to deployed agents); an explicit
     # `extraAgents: []` means standalone (no orchestration).
     #   extraAgents:
-    #     - name: krateo-installer-agent
+    #     - name: installer-agent
     #     - name: krateo-core-provider-agent
     # Generic Kubernetes + Helm sub-agents (built into the autopilot chart, gemini-flash) — ON for
     # every profile so the orchestrator can delegate raw cluster/Helm work alongside the krateo
