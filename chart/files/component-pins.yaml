@@ -232,7 +232,7 @@ components:
   feature: coreAgents
 - name: krateo-autopilot
   kind: KrateoAutopilot
-  version: 0.1.57
+  version: 0.2.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
