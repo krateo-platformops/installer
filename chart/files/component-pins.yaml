@@ -8,7 +8,7 @@ components:
 - name: oasgen-provider-crd
   kind: OasgenProviderCrds
   chart: oasgen-provider-crds
-  version: 0.20.0
+  version: 0.21.0
   tier: platform
   feature: oasgenProvider
 - name: frontend-crd
@@ -85,7 +85,7 @@ components:
 - name: oasgen-provider
   kind: OasgenProvider
   chart: oasgen-provider
-  version: 0.20.0
+  version: 0.21.0
   deps:
   - oasgen-provider-crd
   tier: platform
@@ -162,13 +162,13 @@ components:
 # All are public krateo-blueprints charts at 0.4.0 (ingress-blueprint tag 0.4.0).
 - name: gateway-api-crds
   kind: GatewayAPICrds
-  version: 0.4.0
+  version: 0.7.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: ingress
 - name: agentgateway
   kind: Agentgateway
-  version: 0.4.0
+  version: 0.7.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   deps:
   - gateway-api-crds
@@ -176,7 +176,7 @@ components:
   feature: ingress
 - name: cert-manager
   kind: CertManager
-  version: 0.4.0
+  version: 0.7.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   deps:
   - agentgateway
@@ -184,7 +184,7 @@ components:
   feature: ingress
 - name: cert-manager-issuers
   kind: CertManagerIssuers
-  version: 0.4.0
+  version: 0.7.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   deps:
   - cert-manager
@@ -192,7 +192,7 @@ components:
   feature: ingress
 - name: external-dns
   kind: ExternalDNS
-  version: 0.4.0
+  version: 0.7.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   deps:
   - agentgateway
@@ -216,7 +216,7 @@ components:
   feature: coreAgents
 - name: kagent
   kind: Kagent
-  version: 0.1.7
+  version: 0.1.8
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent-crds
