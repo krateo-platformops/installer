@@ -18,7 +18,7 @@ pieces from [configuration](../configuration.md) (`features`, `registryAuth`, `v
 `exposure`) into one verified sequence.
 
 > **Resource reality (read this first).** The full fleet — kagent + PostgreSQL, the base
-> agents (autopilot, installer-agent) + the fetch-mcp server, the five specialist agents +
+> agents (autopilot — which ships repo-mcp-server — and installer-agent), the five specialist agents +
 > clickhouse-mcp, plus the whole observability stack (ClickHouse, Keeper, MongoDB, the
 > OTel collectors) — wants roughly **9–10 CPU** at rest. On an 8-core laptop it will
 > **oversubscribe** and pods flap (authn especially, which fronts login). For a laptop,
@@ -111,7 +111,7 @@ bootstrap:
 features:
   portal: true             # authn -> snowplow -> frontend -> portal + observability
   oasgenProvider: true
-  coreAgents: true         # kagent + fetch-mcp + installer-agent + autopilot
+  coreAgents: true         # kagent + installer-agent + autopilot (ships repo-mcp-server)
   specialistAgents: true   # the 5 component agents + clickhouse-mcp (needs coreAgents)
 exposure:
   type: NodePort           # kind has no LoadBalancer controller

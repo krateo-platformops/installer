@@ -117,7 +117,7 @@
         "coreAgents": {
           "type": "boolean",
           "default": true,
-          "description": "Base agent layer: kagent + fetch-mcp + krateo-autopilot + installer-agent."
+          "description": "Base agent layer: kagent + krateo-autopilot (which ships repo-mcp-server, the fleet grounding server) + installer-agent."
         },
         "portal": {
           "type": "boolean",
@@ -1139,6 +1139,7 @@
             "github": {
               "type": "object",
               "additionalProperties": false,
+              "description": "Opt-in github MCP server: deeper source reading, and publishing a validated chart by committing its files.",
               "properties": {
                 "enabled": {
                   "type": "boolean"
@@ -1148,10 +1149,100 @@
                 }
               }
             },
-            "fetch": {
+            "chartGate": {
               "type": "object",
               "additionalProperties": false,
-              "description": "Tokenless fetch MCP server the agent uses to GET its version-pinned public raw docs URL.",
+              "description": "The render-and-validate gate the agent chart deploys (Deployment + Service + RemoteMCPServer): helm lint --strict, flux schema validate with CEL, kube-linter. A blueprint is finished only when it returns ok=true.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                },
+                "protocol": {
+                  "type": "string",
+                  "enum": [
+                    "SSE",
+                    "STREAMABLE_HTTP"
+                  ]
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Empty means the agent chart's own Service. Set it to use a gate deployed elsewhere."
+                },
+                "replicaCount": {
+                  "type": "integer",
+                  "description": "Keep at 1: Streamable-HTTP MCP sessions are stateful, so a second replica breaks follow-up calls with \"400 No valid session ID provided\".",
+                  "minimum": 1,
+                  "maximum": 1
+                },
+                "image": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "repository": {
+                      "type": "string"
+                    },
+                    "tag": {
+                      "type": "string",
+                      "description": "Empty means the agent chart version, so chart X.Y.Z asks for image X.Y.Z."
+                    },
+                    "pullPolicy": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "iterationCap": {
+                  "type": "integer",
+                  "description": "How many times the agent may re-run the gate on one chart before it stops and reports what still fails. Stamped into the prompt.",
+                  "minimum": 1,
+                  "maximum": 20
+                },
+                "timeout": {
+                  "type": "string"
+                },
+                "gateTimeoutSeconds": {
+                  "type": "integer",
+                  "description": "The gate's own per-call limit. Keep it below `timeout` so an overrun reaches the agent as a JSON envelope rather than a transport error.",
+                  "minimum": 10
+                },
+                "cacheSizeLimit": {
+                  "type": "string"
+                },
+                "resources": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            },
+            "schemaCatalog": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Public flux-operator schema catalog MCP server (schemas.fluxoperator.dev): the agent looks up any non-core apiVersion here before writing its template. Stateless, nothing to deploy; needs cluster egress to the url.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "protocol": {
+                  "type": "string",
+                  "enum": [
+                    "SSE",
+                    "STREAMABLE_HTTP"
+                  ]
+                }
+              }
+            },
+            "repoSearch": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Repo-search MCP server (repo-mcp-server, deployed by the krateo-autopilot chart): the agent's only Krateo grounding path.",
               "properties": {
                 "enabled": {
                   "type": "boolean"
@@ -1168,28 +1259,6 @@
             "global": {
               "type": "object",
               "additionalProperties": true
-            }
-          }
-        },
-        "fetch-mcp-server": {
-          "title": "fetch-mcp-server values",
-          "type": "object",
-          "additionalProperties": true,
-          "properties": {
-            "namespace": {
-              "type": "string"
-            },
-            "image": {
-              "type": "string"
-            },
-            "imagePullPolicy": {
-              "type": "string"
-            },
-            "port": {
-              "type": "integer"
-            },
-            "resources": {
-              "type": "object"
             }
           }
         },
