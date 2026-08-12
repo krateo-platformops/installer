@@ -10,7 +10,7 @@ timestamp: 2026-08-08T00:00:00Z
 # Agent-only-profile install on kind
 
 This is the **agent-only** profile — bring up **only** the agent layer (kagent + the base
-agents autopilot and installer-agent, plus the fetch-mcp server; `features.portal=false`,
+agents autopilot (which ships repo-mcp-server, the grounding server) and installer-agent; `features.portal=false`,
 `oasgenProvider=false`) on a local [kind](https://kind.sigs.k8s.io) cluster, then let the
 autopilot install the rest of Krateo later by editing the Installer CR. It composes the
 agent-tier pieces from [configuration](../configuration.md) (`features`, `registryAuth`,
@@ -96,7 +96,7 @@ bootstrap:
     enabled: true          # required on a bare cluster
 features:
   coreProvider: true       # engine-present marker
-  coreAgents: true          # kagent + fetch-mcp + installer-agent + autopilot
+  coreAgents: true          # kagent + installer-agent + autopilot (ships repo-mcp-server)
   portal: false             # the agent turns the platform on later
   oasgenProvider: false
   specialistAgents: false   # not the component specialist agents yet
