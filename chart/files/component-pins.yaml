@@ -76,6 +76,19 @@ components:
   tier: platform
   feature: portal
   chart: portal
+  # Portal is an outlier: it renders hundreds of managed children (RBAC across krateo-system +
+  # demo-system, widgets, templates, CRDs), so its per-Kind CDC controller peaks well above the
+  # shared 256Mi cdc.resources default and gets OOMKilled on the cold reconcile — an incomplete
+  # create then loops on the external-create handshake and the composition never goes Ready.
+  # Override just this controller's memory via the CompositionDefinition spec.resources (requests
+  # unchanged, so no scheduling impact); other controllers keep the small default.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 - name: krateo-helm-render-service
   kind: KrateoHelmRenderService
   version: 0.3.1
