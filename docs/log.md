@@ -13,6 +13,12 @@ Curated history, newest first. This repo starts at the 2026-08-04 migration of t
 umbrella chart into `krateo-platformops` (0.3.1); the pre-migration 0.2.x line lived
 in the predecessor personal-org repo and is not mirrored here.
 
+## 2026-08-13 — actually removed the fetch-mcp-server pin
+
+The 2026-08-12 entry below removed `fetch-mcp-server`'s schema and docs but missed the
+`component-pins.yaml` entry itself, so the chart kept installing. Removed it now;
+36 components confirmed by `check-pin-kinds.py`.
+
 ## 2026-08-12 — dropped fetch-mcp-server: repo-mcp-server is the fleet's only grounding path
 
 `fetch-mcp-server` is no longer an installer component. The whole agent fleet moved to
