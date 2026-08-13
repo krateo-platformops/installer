@@ -2,7 +2,7 @@ components:
 - name: authn-crd
   kind: AuthnCrds
   chart: authn-crds
-  version: 0.27.0
+  version: 0.27.1
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -26,7 +26,7 @@ components:
 - name: authn
   kind: Authn
   chart: authn
-  version: 0.27.0
+  version: 0.27.1
   deps:
   - authn-crd
   tier: platform
