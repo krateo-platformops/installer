@@ -89,9 +89,14 @@ Pass B also computes the platform wiring at render time (no post-install patchin
 exposure `service.type`/`port` flips, browser-reachable peer URLs for the frontend
 config (`inst.peerurl` / `inst.lbip` / `inst.nodeip`), Vertex/local-model injection,
 the HITL gate and the autopilot's auto-derived `extraAgents` fleet — the whole surface
-is described in [configuration](./configuration.md). `secret.yaml` generates the
-`jwt-sign-key` Secret once and reuses it via `lookup` on every later render (reconciles
-never rotate it).
+is described in [configuration](./configuration.md). `secret.yaml` generates an RSA
+private key once and reuses it via `lookup` on every later render (reconciles never
+rotate it); it lands in the `authn-jwt-signing-key` Secret (`private.pem`) for authn to
+sign RS256 JWTs with. Only the private key is created: verifiers such as snowplow read
+the **public** key from authn's JWKS endpoint (`/.well-known/jwks.json`), which authn
+derives from this private key at startup. A second Secret holding the public key would
+be one more object to keep in sync, and would pin verifiers to a keypair only a
+redeploy of all of them could rotate.
 
 The **self-reconcile loop**: the `installer` CompositionDefinition points at this
 chart, so the Installer CR *is* a composition like any other. The cdc re-renders it on

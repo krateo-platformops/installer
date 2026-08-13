@@ -2,7 +2,7 @@ components:
 - name: authn-crd
   kind: AuthnCrds
   chart: authn-crds
-  version: 0.26.2
+  version: 0.27.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -20,13 +20,13 @@ components:
 - name: snowplow-crd
   kind: SnowplowCrds
   chart: snowplow-crds
-  version: 1.9.3
+  version: 1.10.0
   tier: platform
   feature: portal
 - name: authn
   kind: Authn
   chart: authn
-  version: 0.26.2
+  version: 0.27.0
   deps:
   - authn-crd
   tier: platform
@@ -40,7 +40,7 @@ components:
 - name: snowplow
   kind: Snowplow
   chart: snowplow
-  version: 1.9.3
+  version: 1.10.0
   deps:
   - snowplow-crd
   - authn

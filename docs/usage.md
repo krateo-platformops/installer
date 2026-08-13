@@ -146,8 +146,9 @@ helm template installer chart/ --namespace krateo-system \
 ```
 
 Client-side `helm template` has no live cluster to `lookup`, so composition-mode
-renders emit Pass A (and the `jwt-sign-key` Secret) but no Pass B Compositions — every
-Pass B gate reads "CRD not served yet". That is the gating working as designed, not a
+renders emit Pass A (and the `authn-jwt-signing-key` Secret)
+but no Pass B Compositions — every Pass B gate reads "CRD not served yet". That is the
+gating working as designed, not a
 failure. In-repo `Chart.yaml` carries the
 `CHART_VERSION` placeholder ([release](./release.md)); substitute any semver before
 templating a working copy.
