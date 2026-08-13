@@ -13,6 +13,25 @@ Curated history, newest first. This repo starts at the 2026-08-04 migration of t
 umbrella chart into `krateo-platformops` (0.3.1); the pre-migration 0.2.x line lived
 in the predecessor personal-org repo and is not mirrored here.
 
+## 2026-08-13 — actually removed the fetch-mcp-server pin
+
+The 2026-08-12 entry below removed `fetch-mcp-server`'s schema and docs but missed the
+`component-pins.yaml` entry itself, so the chart kept installing. Removed it now;
+36 components confirmed by `check-pin-kinds.py`.
+
+## 2026-08-12 — dropped fetch-mcp-server: repo-mcp-server is the fleet's only grounding path
+
+`fetch-mcp-server` is no longer an installer component. The whole agent fleet moved to
+`repo-mcp-server` as its single grounding source, and that server ships *inside* the
+`krateo-autopilot` chart (Deployment + Service + `RemoteMCPServer`), so it needs no pin of
+its own. Removed the `fetch-mcp-server` entry (kind `FetchMcpServer`) from
+`component-pins.yaml` and its `componentValues` block from `values.schema.json`; nothing
+declared it as a `deps` entry, so the `coreAgents` DAG shortens to
+`kagent-crds` → `kagent` → `installer-agent` + `krateo-autopilot` with no other change.
+Component count 37 → 36. `github-mcp-server` was never an installer component — it stays a
+`RemoteMCPServer` CR registered by the autopilot chart, needed only by the opt-in
+`codegenAgents`.
+
 ## 2026-08-08 — 0.3.20: NodePort pin — installer components schema
 
 Declares `nodePort` in the installer's OWN `values.schema.json` `components.items` (which is

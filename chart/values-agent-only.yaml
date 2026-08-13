@@ -14,7 +14,7 @@
 
 features:
   coreProvider: true               # engine marker (core-provider is always-on via bootstrap)
-  coreAgents: true                 # the base agent layer: kagent + fetch-mcp + installer-agent + autopilot
+  coreAgents: true                 # the base agent layer: kagent + installer-agent + autopilot (ships repo-mcp-server)
   portal: false                    # the agent turns the platform on (authn->...->portal + observability)
   oasgenProvider: false
   specialistAgents: false          # not the component specialist agents yet

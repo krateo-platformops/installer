@@ -179,15 +179,23 @@
          at that owner-created ModelConfig (modelConfig.create=false, name=localModel.refName),
          so the WHOLE fleet runs on the one local LLM with no per-agent-chart change.
        - else (default): components flagged vertexAI:true get .Values.vertexAI injected so the
-         autopilot/agents use GeminiVertexAI via ADC. */}}
+         autopilot/agents use GeminiVertexAI via ADC.
+
+       The `enabled` value is injected VERBATIM, including false. Skipping the injection when
+       .Values.vertexAI.enabled is false would leave each agent chart on its OWN default — which is
+       `vertexAI.enabled: true` in every one of them — so the pods would still get
+       GOOGLE_GENAI_USE_VERTEXAI=1 and the google-genai SDK would call the Vertex endpoint, where an
+       API key is rejected with `401 API keys are not supported by this API`. vertexAI.enabled:false
+       is what selects the API-key path (a ModelConfig with provider Gemini), so it has to reach the
+       agent as an explicit false. */}}
 {{- if $top.Values.localModel.enabled }}
 {{- if $c.modelOwner }}
 {{- $_ := set $spec "localModel" (dict "enabled" true "host" $top.Values.localModel.host "model" $top.Values.localModel.model) }}
 {{- else if $c.vertexAI }}
 {{- $_ := set $spec "modelConfig" (dict "create" false "name" $top.Values.localModel.refName) }}
 {{- end }}
-{{- else if and $c.vertexAI $top.Values.vertexAI.enabled }}
-{{- $_ := set $spec "vertexAI" (dict "enabled" true "projectID" $top.Values.vertexAI.projectID "location" $top.Values.vertexAI.location "secretName" $top.Values.vertexAI.secretName "secretKey" $top.Values.vertexAI.secretKey) }}
+{{- else if $c.vertexAI }}
+{{- $_ := set $spec "vertexAI" (dict "enabled" $top.Values.vertexAI.enabled "projectID" $top.Values.vertexAI.projectID "location" $top.Values.vertexAI.location "secretName" $top.Values.vertexAI.secretName "secretKey" $top.Values.vertexAI.secretKey) }}
 {{- end }}
 {{- /* HITL approval gate. Applies to EVERY vertexAI agent — the user-facing orchestrator AND its
        delegated subagents. kagent >=0.9.9 propagates a subagent's tool-approval interrupt up to the

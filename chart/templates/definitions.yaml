@@ -38,6 +38,14 @@ spec:
     repo: {{ $c.chartRepo | quote }}
     {{- end }}
     {{- include "inst.chartExtras" (list $ (default $.Values.ociRepo $c.repo)) | nindent 4 }}
+  {{- with $c.resources }}
+  {{/* Per-Kind CDC controller resources. The core-provider chart's shared cdc.resources default
+       (small, ~256Mi) suits most components; a component that renders many children (e.g. portal)
+       sets its own here so its controller does not OOMKill on the cold reconcile. Absent -> the
+       shared default applies and the CD renders byte-identically to before. */}}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 {{- end }}
 {{- end }}
 {{- end }}
