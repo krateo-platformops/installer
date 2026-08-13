@@ -222,14 +222,6 @@ components:
   - kagent-crds
   tier: observability
   feature: coreAgents
-- name: fetch-mcp-server
-  kind: FetchMcpServer
-  version: 0.1.1
-  repo: oci://ghcr.io/krateo-agentiko/charts
-  deps:
-  - kagent
-  tier: observability
-  feature: coreAgents
 - name: installer-agent
   kind: InstallerAgent
   version: 0.1.1
