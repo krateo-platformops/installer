@@ -296,7 +296,7 @@ components:
   vertexAI: true
 - name: core-provider-agent
   kind: CoreProviderAgent
-  version: 0.54.1
+  version: 0.54.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
