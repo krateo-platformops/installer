@@ -1149,73 +1149,6 @@
                 }
               }
             },
-            "chartGate": {
-              "type": "object",
-              "additionalProperties": false,
-              "description": "The render-and-validate gate the agent chart deploys (Deployment + Service + RemoteMCPServer): helm lint --strict, flux schema validate with CEL, kube-linter. A blueprint is finished only when it returns ok=true.",
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "mcpServer": {
-                  "type": "string"
-                },
-                "protocol": {
-                  "type": "string",
-                  "enum": [
-                    "SSE",
-                    "STREAMABLE_HTTP"
-                  ]
-                },
-                "url": {
-                  "type": "string",
-                  "description": "Empty means the agent chart's own Service. Set it to use a gate deployed elsewhere."
-                },
-                "replicaCount": {
-                  "type": "integer",
-                  "description": "Keep at 1: Streamable-HTTP MCP sessions are stateful, so a second replica breaks follow-up calls with \"400 No valid session ID provided\".",
-                  "minimum": 1,
-                  "maximum": 1
-                },
-                "image": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "repository": {
-                      "type": "string"
-                    },
-                    "tag": {
-                      "type": "string",
-                      "description": "Empty means the agent chart version, so chart X.Y.Z asks for image X.Y.Z."
-                    },
-                    "pullPolicy": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "iterationCap": {
-                  "type": "integer",
-                  "description": "How many times the agent may re-run the gate on one chart before it stops and reports what still fails. Stamped into the prompt.",
-                  "minimum": 1,
-                  "maximum": 20
-                },
-                "timeout": {
-                  "type": "string"
-                },
-                "gateTimeoutSeconds": {
-                  "type": "integer",
-                  "description": "The gate's own per-call limit. Keep it below `timeout` so an overrun reaches the agent as a JSON envelope rather than a transport error.",
-                  "minimum": 10
-                },
-                "cacheSizeLimit": {
-                  "type": "string"
-                },
-                "resources": {
-                  "type": "object",
-                  "additionalProperties": true
-                }
-              }
-            },
             "schemaCatalog": {
               "type": "object",
               "additionalProperties": false,
@@ -1259,6 +1192,93 @@
             "global": {
               "type": "object",
               "additionalProperties": true
+            },
+            "mcpServers": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Overrides for MCP servers this component deploys itself (same path shape as componentValues.krateo-autopilot.mcpServers.<name>).",
+              "properties": {
+                "chartGate": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "The render-and-validate gate the agent chart deploys (Deployment + Service + RemoteMCPServer): helm lint --strict, flux schema validate with CEL, kube-linter. A blueprint is finished only when it returns ok=true.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "mcpServer": {
+                      "type": "string"
+                    },
+                    "protocol": {
+                      "type": "string",
+                      "enum": [
+                        "SSE",
+                        "STREAMABLE_HTTP"
+                      ]
+                    },
+                    "url": {
+                      "type": "string",
+                      "description": "Empty means the agent chart's own Service. Set it to use a gate deployed elsewhere."
+                    },
+                    "replicaCount": {
+                      "type": "integer",
+                      "description": "Keep at 1: Streamable-HTTP MCP sessions are stateful, so a second replica breaks follow-up calls with \"400 No valid session ID provided\".",
+                      "minimum": 1,
+                      "maximum": 1
+                    },
+                    "image": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "repository": {
+                          "type": "string"
+                        },
+                        "tag": {
+                          "type": "string",
+                          "description": "Empty means the agent chart version, so chart X.Y.Z asks for image X.Y.Z."
+                        },
+                        "pullPolicy": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "iterationCap": {
+                      "type": "integer",
+                      "description": "How many times the agent may re-run the gate on one chart before it stops and reports what still fails. Stamped into the prompt.",
+                      "minimum": 1,
+                      "maximum": 20
+                    },
+                    "timeout": {
+                      "type": "string"
+                    },
+                    "gateTimeoutSeconds": {
+                      "type": "integer",
+                      "description": "The gate's own per-call limit. Keep it below `timeout` so an overrun reaches the agent as a JSON envelope rather than a transport error.",
+                      "minimum": 10
+                    },
+                    "cacheSizeLimit": {
+                      "type": "string"
+                    },
+                    "resources": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "imagePullSecrets": {
+                      "type": "array",
+                      "description": "Required for the private chart-gate image (ghcr.io/krateo-agentiko/krateo-core-provider-chart-gate-mcp-server), e.g. [{name: agentiko-image-pull}].",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         },
