@@ -711,19 +711,6 @@
             "global": {
               "type": "object",
               "additionalProperties": true
-            },
-            "fetch": {
-              "type": "object",
-              "additionalProperties": false,
-              "description": "github MCP server the agent uses to read its component's codebase + chart.",
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "mcpServer": {
-                  "type": "string"
-                }
-              }
             }
           }
         },
@@ -1040,19 +1027,6 @@
             "global": {
               "type": "object",
               "additionalProperties": true
-            },
-            "fetch": {
-              "type": "object",
-              "additionalProperties": false,
-              "description": "Tokenless fetch MCP server the agent uses to GET its version-pinned public raw docs/llms.txt URL (no auth/token).",
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "mcpServer": {
-                  "type": "string"
-                }
-              }
             }
           }
         },
@@ -1750,18 +1724,6 @@
                 }
               }
             },
-            "fetch": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "mcpServer": {
-                  "type": "string"
-                }
-              }
-            },
             "resources": {
               "type": "object",
               "additionalProperties": true
@@ -2014,18 +1976,6 @@
                   }
                 }
               }
-            },
-            "fetch": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "mcpServer": {
-                  "type": "string"
-                }
-              }
             }
           }
         },
@@ -2122,18 +2072,6 @@
               "type": "object",
               "additionalProperties": true,
               "description": "Helm global values (injected by the composition runtime)."
-            },
-            "fetch": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "mcpServer": {
-                  "type": "string"
-                }
-              }
             }
           }
         },
@@ -4758,19 +4696,6 @@
             "global": {
               "type": "object",
               "additionalProperties": true
-            },
-            "fetch": {
-              "type": "object",
-              "additionalProperties": false,
-              "description": "github MCP server the agent uses to read its component's codebase + chart.",
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "mcpServer": {
-                  "type": "string"
-                }
-              }
             }
           }
         },
