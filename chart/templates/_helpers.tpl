@@ -11,6 +11,17 @@
 {{- printf "composition.krateo.io/v%s" ($ver | toString | replace "." "-") -}}
 {{- end -}}
 
+{{/* Image for the installer's own lifecycle hook Jobs (self-bootstrap waves + the pre/post-delete
+     teardown/cleanup reapers). These hooks only ever run `kubectl` inside `/bin/sh` poll loops
+     (no helm/jq/yq/kustomize), so they use the minimal official-family alpine/kubectl (~21MB
+     compressed, busybox shell) instead of alpine/k8s (~250MB compressed / 822MB unpacked). The
+     smaller pull keeps every hook Job inside its activeDeadlineSeconds on fresh multi-node clusters
+     where the fat image previously blew the 300s self-register/self-instance budget (#66). Pinned to
+     kubectl 1.36.x to match the installer's k8s>=1.36 floor (was 1.31, already skewed). Single source
+     of truth: a pure template constant, NOT a values key, so it never has to be threaded through
+     values.schema.json / the crdgen'd Installer CRD / the composition-mode CR (cf. #68). */}}
+{{- define "inst.hookImage" -}}alpine/kubectl:1.36.3{{- end -}}
+
 {{/* Optional CompositionDefinition spec.chart extras (registry-level): insecureSkipVerifyTLS
      and credentials, rendered ONLY when set so the chart spec stays minimal on public
      registries. arg: (list $). passwordRef.namespace defaults to the krateo namespace.

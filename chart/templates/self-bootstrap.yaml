@@ -286,7 +286,7 @@ spec:
             name: installer-self-cr
       containers:
         - name: register
-          image: alpine/k8s:1.31.0
+          image: {{ include "inst.hookImage" . }}
           volumeMounts:
             - name: cr
               mountPath: /cr
@@ -320,7 +320,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: await
-          image: alpine/k8s:1.31.0
+          image: {{ include "inst.hookImage" . }}
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -355,7 +355,7 @@ spec:
             name: installer-self-cr
       containers:
         - name: instance
-          image: alpine/k8s:1.31.0
+          image: {{ include "inst.hookImage" . }}
           volumeMounts:
             - name: cr
               mountPath: /cr
@@ -400,7 +400,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: finalize
-          image: alpine/k8s:1.31.0
+          image: {{ include "inst.hookImage" . }}
           command: ["/bin/sh", "-c"]
           args:
             - |
