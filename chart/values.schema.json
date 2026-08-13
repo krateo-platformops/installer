@@ -240,6 +240,25 @@
             "minimum": 30000,
             "maximum": 32767,
             "description": "Pinned NodePort for a browser-facing (expose:true) component when exposure.type=NodePort \u2014 deterministic + host-mappable. Wired to spec.service.nodePort in composition mode."
+          },
+          "resources": {
+            "type": "object",
+            "description": "Per-Kind CDC controller compute resources (corev1.ResourceRequirements), threaded onto the component CompositionDefinition spec.resources. Absent -> the core-provider chart cdc.resources default applies.",
+            "additionalProperties": false,
+            "properties": {
+              "limits": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "requests": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "required": [
