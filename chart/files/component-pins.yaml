@@ -2,31 +2,31 @@ components:
 - name: authn-crd
   kind: AuthnCrds
   chart: authn-crds
-  version: 0.27.1
+  version: 0.27.2
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
   kind: OasgenProviderCrds
   chart: oasgen-provider-crds
-  version: 0.21.0
+  version: 0.21.1
   tier: platform
   feature: oasgenProvider
 - name: frontend-crd
   kind: FrontendCrds
   chart: frontend-crds
-  version: 1.4.6
+  version: 1.4.8
   tier: platform
   feature: portal
 - name: snowplow-crd
   kind: SnowplowCrds
   chart: snowplow-crds
-  version: 1.10.0
+  version: 1.10.1
   tier: platform
   feature: portal
 - name: authn
   kind: Authn
   chart: authn
-  version: 0.27.1
+  version: 0.27.2
   deps:
   - authn-crd
   tier: platform
@@ -40,7 +40,7 @@ components:
 - name: snowplow
   kind: Snowplow
   chart: snowplow
-  version: 1.10.0
+  version: 1.10.1
   deps:
   - snowplow-crd
   - authn
@@ -56,7 +56,7 @@ components:
 - name: frontend
   kind: Frontend
   chart: frontend
-  version: 1.4.6
+  version: 1.4.8
   deps:
   - frontend-crd
   - authn
@@ -91,14 +91,14 @@ components:
       memory: 512Mi
 - name: krateo-helm-render-service
   kind: KrateoHelmRenderService
-  version: 0.3.1
+  version: 0.3.2
   tier: platform
   feature: portal
   chart: krateo-helm-render-service
 - name: oasgen-provider
   kind: OasgenProvider
   chart: oasgen-provider
-  version: 0.21.0
+  version: 0.21.1
   deps:
   - oasgen-provider-crd
   tier: platform
@@ -142,7 +142,7 @@ components:
   feature: portal
 - name: krateo-sse-proxy
   kind: KrateoSseProxy
-  version: 0.1.10
+  version: 0.1.11
   deps:
   - krateo-observability
   tier: observability
