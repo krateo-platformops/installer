@@ -237,7 +237,7 @@ components:
   feature: coreAgents
 - name: installer-agent
   kind: InstallerAgent
-  version: 0.1.1
+  version: 0.1.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -246,7 +246,7 @@ components:
   vertexAI: true
 - name: krateo-autopilot
   kind: KrateoAutopilot
-  version: 0.2.4
+  version: 0.2.5
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -264,7 +264,7 @@ components:
   feature: specialistAgents
 - name: authn-agent
   kind: AuthnAgent
-  version: 0.22.27
+  version: 0.22.28
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -273,7 +273,7 @@ components:
   vertexAI: true
 - name: snowplow-agent
   kind: SnowplowAgent
-  version: 1.0.92
+  version: 1.0.93
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -282,7 +282,7 @@ components:
   vertexAI: true
 - name: frontend-agent
   kind: FrontendAgent
-  version: 1.3.99
+  version: 1.3.100
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -292,7 +292,7 @@ components:
   requireApproval: []
 - name: clickstack-agent
   kind: ClickstackAgent
-  version: 3.0.37
+  version: 3.0.38
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -301,7 +301,7 @@ components:
   vertexAI: true
 - name: core-provider-agent
   kind: CoreProviderAgent
-  version: 0.54.2
+  version: 0.54.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
