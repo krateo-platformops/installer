@@ -142,7 +142,7 @@ components:
   feature: portal
 - name: krateo-sse-proxy
   kind: KrateoSseProxy
-  version: 0.1.9
+  version: 0.1.10
   deps:
   - krateo-observability
   tier: observability
