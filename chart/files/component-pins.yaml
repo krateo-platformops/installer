@@ -237,7 +237,7 @@ components:
   feature: coreAgents
 - name: installer-agent
   kind: InstallerAgent
-  version: 0.1.2
+  version: 0.1.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -246,7 +246,7 @@ components:
   vertexAI: true
 - name: krateo-autopilot
   kind: KrateoAutopilot
-  version: 0.2.5
+  version: 0.2.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -264,7 +264,7 @@ components:
   feature: specialistAgents
 - name: authn-agent
   kind: AuthnAgent
-  version: 0.22.28
+  version: 0.22.29
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -273,7 +273,7 @@ components:
   vertexAI: true
 - name: snowplow-agent
   kind: SnowplowAgent
-  version: 1.0.93
+  version: 1.0.95
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -282,7 +282,7 @@ components:
   vertexAI: true
 - name: frontend-agent
   kind: FrontendAgent
-  version: 1.3.100
+  version: 1.3.101
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -292,7 +292,7 @@ components:
   requireApproval: []
 - name: clickstack-agent
   kind: ClickstackAgent
-  version: 3.0.38
+  version: 3.0.39
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -301,7 +301,7 @@ components:
   vertexAI: true
 - name: core-provider-agent
   kind: CoreProviderAgent
-  version: 0.54.3
+  version: 0.54.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -316,7 +316,7 @@ components:
 # enabled. Kinds are crdgen PascalCase(chart) — tf is NOT an initialism (-> Tf).
 - name: code-analysis-agent
   kind: CodeAnalysisAgent
-  version: 0.1.4
+  version: 0.1.5
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -325,7 +325,7 @@ components:
   vertexAI: true
 - name: ansible-to-operator-agent
   kind: AnsibleToOperatorAgent
-  version: 0.1.4
+  version: 0.1.5
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -334,7 +334,7 @@ components:
   vertexAI: true
 - name: tf-provider-to-operator-agent
   kind: TfProviderToOperatorAgent
-  version: 0.1.4
+  version: 0.1.5
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -343,7 +343,7 @@ components:
   vertexAI: true
 - name: tf-to-helm-agent
   kind: TfToHelmAgent
-  version: 0.1.4
+  version: 0.1.5
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -352,7 +352,7 @@ components:
   vertexAI: true
 - name: krateo-blueprint-agent
   kind: KrateoBlueprintAgent
-  version: 0.2.1
+  version: 0.2.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
