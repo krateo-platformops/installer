@@ -70,7 +70,7 @@ components:
   consumer: true
 - name: portal
   kind: Portal
-  version: 1.6.0
+  version: 1.6.3
   deps:
   - frontend
   tier: platform
