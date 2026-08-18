@@ -76,17 +76,79 @@
 {{- .Values.registryAuth.imagePullSecretName | default "krateo-registry-image-pull" -}}
 {{- end -}}
 
+{{/* SINGLE source of truth for the components that ship PRIVATE krateo-agentiko IMAGES and expose an
+     imagePullSecrets knob their chart documents as "wired from registryAuth". `path` is the (dot-free,
+     2-segment) location of that knob inside the component spec. Shared by compositions.yaml (the injection
+     target) and inst.imagePullAuths (which registries to derive image-pull creds for) so the two lists can
+     never drift. Add a component here to wire its image pull. arg: $top */}}
+{{- define "inst.privateImageComponents" -}}
+components:
+- name: krateo-autopilot
+  path:
+  - mcpServers
+  - repoSearch
+- name: core-provider-agent
+  path:
+  - mcpServers
+  - chartGate
+{{- end -}}
+
+{{/* inst.imagePullAuths — the image-pull credential REFERENCES for the private-image components, as a JSON
+     array of {host, username, secretName, secretNamespace, secretKey}, deduped to ONE entry per distinct
+     image-registry host (a dockerconfigjson auths map is host-keyed). The current pins put both private-image
+     components on the same agentiko repo, so they collapse to a single host entry; if two private-image
+     components were ever on different credentials at the SAME host, the last one iterated would win — add a
+     per-component secret then. Selects each credential the SAME way inst.chartExtras selects the CHART-pull cred,
+     so the token that pulls a private IMAGE is exactly the one that authorizes that component's registry:
+       - registries[] NON-EMPTY: the entry whose `repo` matches the component's effective repo
+         (default ociRepo $c.repo). A component whose registry has no entry contributes nothing, so a token
+         is never presented to a registry it does not belong to — and a same-host collision is impossible
+         because we key off each private-image component's OWN repo, not the raw registries[] list.
+       - registries[] EMPTY: the global registryAuth credential (only when enabled), host taken from the
+         component's own repo (correct even if the images ever move off ociRepo's host).
+     Lookup-FREE (returns refs, not tokens) so it is cheap enough to double as the inst.imagePullOn predicate;
+     imagepull-secret.yaml resolves the token Secret and assembles the dockerconfigjson. Empty output means
+     nothing is derivable. arg: (list $top) */}}
+{{- define "inst.imagePullAuths" -}}
+{{- $top := index . 0 -}}
+{{- $ra := $top.Values.registryAuth -}}
+{{- $registries := $ra.registries | default list -}}
+{{- $names := list -}}
+{{- range (include "inst.privateImageComponents" $top | fromYaml).components -}}{{- $names = append $names .name -}}{{- end -}}
+{{- $byHost := dict -}}
+{{- range $c := (include "inst.componentsYaml" $top | fromYaml).components -}}
+{{- if has $c.name $names -}}
+{{- $repo := default $top.Values.ociRepo $c.repo -}}
+{{- $host := regexReplaceAll "^oci://" ($repo | toString) "" | splitList "/" | first -}}
+{{- $cred := dict -}}{{- $has := false -}}
+{{- if $registries -}}
+{{- range $r := $registries -}}
+{{- if and (eq ($r.repo | toString) ($repo | toString)) $r.passwordRef -}}{{- $cred = $r -}}{{- $has = true -}}{{- end -}}
+{{- end -}}
+{{- else if and $ra.enabled $ra.passwordRef.name -}}
+{{- $cred = $ra -}}{{- $has = true -}}
+{{- end -}}
+{{- if $has -}}
+{{- $ns := $cred.passwordRef.namespace | default $top.Values.namespaces.krateo -}}
+{{- $_ := set $byHost $host (dict "host" $host "username" $cred.username "secretName" $cred.passwordRef.name "secretNamespace" $ns "secretKey" $cred.passwordRef.key) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if $byHost -}}{{- values $byHost | toJson -}}{{- end -}}
+{{- end -}}
+
 {{/* Is registryAuth image-pull wiring active? The SINGLE predicate shared by the derived-Secret render
      (imagepull-secret.yaml) and the componentValues injection (compositions.yaml) so the two can never
-     drift into a dangling reference. True when registryAuth is enabled AND either the caller supplied a
-     pre-existing imagePullSecretName (BYO — valid in any mode) OR we can auto-derive: global mode
-     (registries[] empty) with a passwordRef to derive the dockerconfigjson from. In registries[]-mode with
-     no BYO name we return empty, so neither the Secret nor the injection fires (multi-registry derivation
-     is a follow-up). arg: $top */}}
+     drift into a dangling reference. True when registryAuth is active (enabled, or registries[] set — which
+     is self-contained like inst.chartExtras) AND either the caller supplied a pre-existing imagePullSecretName
+     (BYO) OR inst.imagePullAuths resolves at least one derivable credential (global-mode passwordRef, or a
+     registries[] entry matching a private-image component's registry). arg: $top */}}
 {{- define "inst.imagePullOn" -}}
 {{- $ra := .Values.registryAuth -}}
-{{- $global := not ($ra.registries | default list) -}}
-{{- if and $ra.enabled (or $ra.imagePullSecretName (and $global $ra.passwordRef.name)) -}}true{{- end -}}
+{{- $active := or $ra.enabled (gt (len ($ra.registries | default list)) 0) -}}
+{{- if and $active $ra.imagePullSecretName -}}true
+{{- else if ne (include "inst.imagePullAuths" (list .)) "" -}}true
+{{- end -}}
 {{- end -}}
 
 {{/* Is a feature flag enabled? args: (list $ "featureName"); empty featureName => true.

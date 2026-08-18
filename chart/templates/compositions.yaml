@@ -26,6 +26,12 @@
 {{- if not .Values.bootstrap.coreProvider.enabled }}
 {{- $top := . }}
 {{- $components := (include "inst.componentsYaml" $ | fromYaml).components }}
+{{/* registryAuth image-pull wiring, resolved ONCE (not per-component): whether it is on, the derived/BYO
+     Secret name, and the single-source list of private-image components + their injection paths. See the
+     injection block below and inst.imagePullAuths. */}}
+{{- $imagePullOn := eq (include "inst.imagePullOn" $) "true" }}
+{{- $ipsName := include "inst.imagePullSecretName" $ }}
+{{- $ipComps := (include "inst.privateImageComponents" $ | fromYaml).components }}
 {{/* LIST all CRDs ONCE and thread the slice into the gating helpers, instead of each inst.crdExists
      re-LISTing all CRDs per component/dep — see inst.crdExists (D9). */}}
 {{- $allCRDs := (lookup "apiextensions.k8s.io/v1" "CustomResourceDefinition" "" "").items }}
@@ -229,25 +235,27 @@
        the ONLY durable way to customize a component's spec; a direct kubectl edit reverts. */}}
 {{- $custom := default dict (index ($top.Values.componentValues | default dict) $c.name) }}
 {{- $spec = merge $spec (deepCopy $custom) }}
-{{- /* registryAuth image-pull wiring: the two components that ship PRIVATE krateo-agentiko IMAGES
+{{- /* registryAuth image-pull wiring: the components that ship PRIVATE krateo-agentiko IMAGES
        (autopilot's repo-mcp-server, core-provider-agent's chart-gate-mcp-server) expose an imagePullSecrets
        knob their charts document as "wired from registryAuth". Point them at the derived (or BYO)
        dockerconfigjson (templates/imagepull-secret.yaml) so the private IMAGE pulls with NO manual
-       ServiceAccount patch — one credential drives chart-pull AND image-pull. Gated on the SAME
-       inst.imagePullOn predicate the Secret uses, so this never references a Secret that was not created
-       (in registries[]-mode it fires for neither). Runs AFTER the componentValues merge and skips when the
-       key is already present (hasKey), so an explicit componentValues override — including `[]` to opt out
-       — still wins. */}}
-{{- if eq (include "inst.imagePullOn" $top) "true" }}
-{{- $ips := list (dict "name" (include "inst.imagePullSecretName" $top)) }}
-{{- if eq $c.name "krateo-autopilot" }}
-{{- $_ := set $spec "mcpServers" (default dict $spec.mcpServers) }}
-{{- $_ := set $spec.mcpServers "repoSearch" (default dict $spec.mcpServers.repoSearch) }}
-{{- if not (hasKey $spec.mcpServers.repoSearch "imagePullSecrets") }}{{- $_ := set $spec.mcpServers.repoSearch "imagePullSecrets" $ips }}{{- end }}
-{{- else if eq $c.name "core-provider-agent" }}
-{{- $_ := set $spec "mcpServers" (default dict $spec.mcpServers) }}
-{{- $_ := set $spec.mcpServers "chartGate" (default dict $spec.mcpServers.chartGate) }}
-{{- if not (hasKey $spec.mcpServers.chartGate "imagePullSecrets") }}{{- $_ := set $spec.mcpServers.chartGate "imagePullSecrets" $ips }}{{- end }}
+       ServiceAccount patch — one credential drives chart-pull AND image-pull, in global AND registries[]
+       mode. The target set + injection paths come from inst.privateImageComponents (single source of truth,
+       shared with inst.imagePullAuths), and it is gated on the SAME inst.imagePullOn predicate the Secret
+       uses, so this never references a Secret that was not created. Runs AFTER the componentValues merge and
+       skips when the key is already present (hasKey), so an explicit componentValues override — including
+       `[]` to opt out — still wins. */}}
+{{- if $imagePullOn }}
+{{- range $ip := $ipComps }}
+{{- if eq $c.name $ip.name }}
+{{- $seg0 := index $ip.path 0 }}
+{{- $seg1 := index $ip.path 1 }}
+{{- $m0 := index $spec $seg0 | default dict }}
+{{- $_ := set $spec $seg0 $m0 }}
+{{- $m1 := index $m0 $seg1 | default dict }}
+{{- $_ := set $m0 $seg1 $m1 }}
+{{- if not (hasKey $m1 "imagePullSecrets") }}{{- $_ := set $m1 "imagePullSecrets" (list (dict "name" $ipsName)) }}{{- end }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- /* Auto-orchestration: the model-owner (autopilot) attaches EVERY deployed agent as an A2A
