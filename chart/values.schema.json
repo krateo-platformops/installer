@@ -4924,6 +4924,10 @@
             }
           }
         },
+        "imagePullSecretName": {
+          "type": "string",
+          "description": "IMAGE-pull, not just chart-pull. When registryAuth is enabled (global mode), the installer derives a dockerconfigjson Secret from the same token and injects it into the two components shipping private krateo-agentiko images (autopilot's repo-mcp-server, core-provider-agent's chart-gate-mcp-server), so a full-fleet install needs no manual ServiceAccount patch. Empty auto-derives (Secret name krateo-registry-image-pull); set to the name of a pre-existing dockerconfigjson Secret in namespaces.krateo to supply your own."
+        },
         "insecureSkipVerifyTLS": {
           "type": "boolean",
           "description": "Skip TLS verification on the in-cluster chart pull (maps to CompositionDefinition spec.chart.insecureSkipVerifyTLS). Applies to every component (a coarse dev toggle), independent of auth; a registries[] entry may raise it for its own registry."

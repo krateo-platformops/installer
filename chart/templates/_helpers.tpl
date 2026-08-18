@@ -68,6 +68,27 @@
 {{- join "\n" $lines -}}
 {{- end -}}
 
+{{/* The name of the image-pull dockerconfigjson Secret the installer derives from registryAuth (see
+     templates/imagepull-secret.yaml) and injects into the components that ship PRIVATE krateo-agentiko
+     IMAGES (autopilot's repo-mcp-server, core-provider-agent's chart-gate). registryAuth.imagePullSecretName
+     overrides the default so a caller can point at a pre-existing dockerconfigjson Secret instead. arg: $top */}}
+{{- define "inst.imagePullSecretName" -}}
+{{- .Values.registryAuth.imagePullSecretName | default "krateo-registry-image-pull" -}}
+{{- end -}}
+
+{{/* Is registryAuth image-pull wiring active? The SINGLE predicate shared by the derived-Secret render
+     (imagepull-secret.yaml) and the componentValues injection (compositions.yaml) so the two can never
+     drift into a dangling reference. True when registryAuth is enabled AND either the caller supplied a
+     pre-existing imagePullSecretName (BYO — valid in any mode) OR we can auto-derive: global mode
+     (registries[] empty) with a passwordRef to derive the dockerconfigjson from. In registries[]-mode with
+     no BYO name we return empty, so neither the Secret nor the injection fires (multi-registry derivation
+     is a follow-up). arg: $top */}}
+{{- define "inst.imagePullOn" -}}
+{{- $ra := .Values.registryAuth -}}
+{{- $global := not ($ra.registries | default list) -}}
+{{- if and $ra.enabled (or $ra.imagePullSecretName (and $global $ra.passwordRef.name)) -}}true{{- end -}}
+{{- end -}}
+
 {{/* Is a feature flag enabled? args: (list $ "featureName"); empty featureName => true.
      Final feature set: coreProvider (engine marker, gates nothing), coreAgents (base agent layer),
      portal (the non-agent platform: authn/snowplow/frontend/portal + portal-starter + the

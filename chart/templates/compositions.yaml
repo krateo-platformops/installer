@@ -229,6 +229,27 @@
        the ONLY durable way to customize a component's spec; a direct kubectl edit reverts. */}}
 {{- $custom := default dict (index ($top.Values.componentValues | default dict) $c.name) }}
 {{- $spec = merge $spec (deepCopy $custom) }}
+{{- /* registryAuth image-pull wiring: the two components that ship PRIVATE krateo-agentiko IMAGES
+       (autopilot's repo-mcp-server, core-provider-agent's chart-gate-mcp-server) expose an imagePullSecrets
+       knob their charts document as "wired from registryAuth". Point them at the derived (or BYO)
+       dockerconfigjson (templates/imagepull-secret.yaml) so the private IMAGE pulls with NO manual
+       ServiceAccount patch — one credential drives chart-pull AND image-pull. Gated on the SAME
+       inst.imagePullOn predicate the Secret uses, so this never references a Secret that was not created
+       (in registries[]-mode it fires for neither). Runs AFTER the componentValues merge and skips when the
+       key is already present (hasKey), so an explicit componentValues override — including `[]` to opt out
+       — still wins. */}}
+{{- if eq (include "inst.imagePullOn" $top) "true" }}
+{{- $ips := list (dict "name" (include "inst.imagePullSecretName" $top)) }}
+{{- if eq $c.name "krateo-autopilot" }}
+{{- $_ := set $spec "mcpServers" (default dict $spec.mcpServers) }}
+{{- $_ := set $spec.mcpServers "repoSearch" (default dict $spec.mcpServers.repoSearch) }}
+{{- if not (hasKey $spec.mcpServers.repoSearch "imagePullSecrets") }}{{- $_ := set $spec.mcpServers.repoSearch "imagePullSecrets" $ips }}{{- end }}
+{{- else if eq $c.name "core-provider-agent" }}
+{{- $_ := set $spec "mcpServers" (default dict $spec.mcpServers) }}
+{{- $_ := set $spec.mcpServers "chartGate" (default dict $spec.mcpServers.chartGate) }}
+{{- if not (hasKey $spec.mcpServers.chartGate "imagePullSecrets") }}{{- $_ := set $spec.mcpServers.chartGate "imagePullSecrets" $ips }}{{- end }}
+{{- end }}
+{{- end }}
 {{- /* Auto-orchestration: the model-owner (autopilot) attaches EVERY deployed agent as an A2A
        sub-agent. When extraAgents is NOT explicitly set, the installer AUTO-DERIVES it from the
        feature-enabled `vertexAI` agent components (excluding the owner itself) — so the enterprise
