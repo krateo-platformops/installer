@@ -1,0 +1,34 @@
+{{/*
+  krateo-installed-versions — the versions of the components THIS installer actually deployed, published
+  for the autopilot's repo-mcp-server to read at runtime (discussion #88, Option B). The repo-mcp-server
+  pins a source corpus at build-time-static versions; left alone those drift behind the running platform
+  (the version-skew the fact-audit had to correct by hand — a pin predating a security feature). Reading
+  this map lets its corpus track what is installed instead.
+
+  Keys are installer component NAMES; values are their pinned CHART versions, plus `installer` = this
+  umbrella's own version. The repo-mcp-server owns the component->corpus-repo mapping (it knows its repo
+  naming) and IGNORES entries whose component version is not the source ref it reads — e.g. core-provider,
+  whose component version is the chart (0.36.x), not the engine source (2.x). So publishing every
+  component here is safe: the consumer takes only what it can use and falls back to its static pin
+  otherwise (fail-open).
+
+  Pure-data (no lookup) and rendered in composition mode only (owned by the Installer composition/cdc,
+  like secret.yaml / imagepull-secret.yaml — avoids the bootstrap helm-vs-composition ownership clash),
+  gated on coreAgents since the repo-mcp-server is its only consumer. No app.kubernetes.io/managed-by
+  (helm forces it to "Helm", which a chart-set value can never converge — cdc would see drift each cycle).
+*/}}
+{{- if and ((include "inst.featureEnabled" (list $ "coreAgents")) | trim) (not .Values.bootstrap.coreProvider.enabled) }}
+{{- $components := (include "inst.componentsYaml" $ | fromYaml).components }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: krateo-installed-versions
+  namespace: {{ .Values.namespaces.krateo }}
+data:
+  installer: {{ .Chart.Version | quote }}
+{{- range $c := $components }}
+{{- if and $c.version (ne $c.name "installer") }}
+  {{ $c.name }}: {{ $c.version | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
