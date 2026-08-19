@@ -2,13 +2,13 @@
   "$schema": "http://json-schema.org/draft-07/schema",
   "type": "object",
   "title": "Krateo PlatformOps Installer",
-  "description": "Umbrella orchestrator. Create one Installer Composition per Krateo platform installation. It registers and emits the component blueprints (forked into the braghettos org) in dependency order. Pinned to installer 2.7.0.",
+  "description": "Umbrella orchestrator. Create one Installer Composition per Krateo platform installation. It registers and emits the component blueprints in dependency order. Pinned to installer 2.7.0.",
   "additionalProperties": false,
   "properties": {
     "ociRepo": {
       "type": "string",
       "title": "OCI chart repository",
-      "default": "oci://ghcr.io/braghettos/krateo"
+      "default": "oci://ghcr.io/krateo-platformops/charts"
     },
     "installDefinitions": {
       "type": "boolean",
@@ -1317,7 +1317,7 @@
                 "repository": {
                   "type": "string",
                   "title": "Image repository",
-                  "default": "ghcr.io/braghettos/krateo-frontend"
+                  "default": "krateo-platformops/frontend"
                 },
                 "pullPolicy": {
                   "type": "string",
