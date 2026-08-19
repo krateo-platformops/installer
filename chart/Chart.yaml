@@ -17,7 +17,7 @@ dependencies:
 description: Umbrella orchestrator blueprint that sequences the per-component Krateo
   PlatformOps blueprints into one ordered, readiness-gated install.
 home: https://krateo.io
-icon: https://raw.githubusercontent.com/krateoplatformops/krateo/main/docs/media/logo.svg
+icon: https://raw.githubusercontent.com/krateo-platformops/.github/main/brand/logo.svg
 keywords:
 - krateo
 - platformops
