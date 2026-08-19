@@ -1,7 +1,7 @@
 # Agent-only install profile — bring up ONLY the autopilot + the installer-agent (+ kagent), then
 # let the agent install the rest of Krateo by editing the Installer CR.
 #
-#   helm install installer oci://ghcr.io/braghettos/krateo/installer \
+#   helm install installer oci://ghcr.io/krateo-platformops/charts/installer \
 #     -n krateo-system --create-namespace -f values-agent-only.yaml \
 #     --set vertexAI.enabled=false          # on kind: use a Gemini API key Secret instead of ADC
 #

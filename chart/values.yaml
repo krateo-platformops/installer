@@ -72,7 +72,7 @@ bootstrap:
     # spec), a `true` default would silently fall back to BOOTSTRAP mode and wedge the install on
     # chart-inspector RBAC ownership conflicts. Defaulting to FALSE makes a missing key safe.
     # The REAL one-shot bootstrap `helm install` MUST opt in explicitly:
-    #   helm install installer oci://ghcr.io/braghettos/krateo/installer --set bootstrap.coreProvider.enabled=true ...
+    #   helm install installer oci://ghcr.io/krateo-platformops/charts/installer --set bootstrap.coreProvider.enabled=true ...
     enabled: false
   # Honest `deployed`: when true, the bootstrap adds a final wave that blocks until the Installer CR
   # is Synced, so helm marks the release `deployed` only once the platform actually converged. OFF by
@@ -84,7 +84,7 @@ bootstrap:
 # core-provider takes no overrides by default (omit = chart defaults).
 # NOTE: the ClickHouse + MongoDB observability operators are no longer bootstrap subcharts —
 # they are installed as `observability`-gated compositions (clickhouse-operator,
-# mongodb-operator in `components`, wrapped from braghettos/krateo-clickstack-operators-chart),
+# mongodb-operator in `components`, wrapped from krateo-platformops/clickstack-operators-chart),
 # so enabling observability at runtime brings them up first. Their admission webhooks are
 # disabled in the wrapper charts' own defaults (so no cert-issuer dependency).
 # kagent is likewise installed as two compositions — `kagent-crds` then `kagent` (see the
