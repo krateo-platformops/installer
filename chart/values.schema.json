@@ -147,7 +147,7 @@
     "components": {
       "type": "array",
       "title": "Component DAG (advanced override)",
-      "description": "Advanced. Each entry, matched by `name`, either OVERRIDES a pinned component (whitelisted fields: version / registerOnly / tier \u2014 e.g. registerOnly:true to demote a pinned component to registered-but-not-installed, installer#38) or APPENDS a new registerOnly catalog blueprint. Only `name` is required \u2014 an override needs just the field it changes; an append needs kind+version (enforced at render).",
+      "description": "Advanced. Each entry, matched by `name`, either OVERRIDES a pinned component (whitelisted fields: version / repo / chart / registerOnly / tier \u2014 e.g. registerOnly:true to demote a pinned component to registered-but-not-installed, installer#38; or `repo` (+ `chart` for a differing artifact name) to pull that component's chart from a DIFFERENT registry so the source need not be equal for all components, installer#84 \u2014 for a re-source to a different registry use registryAuth.registries[] mode so the override gets its OWN pull credential, not the global one) or APPENDS a new registerOnly catalog blueprint. Only `name` is required \u2014 an override needs just the field it changes; an append needs kind+version (enforced at render).",
       "items": {
         "type": "object",
         "additionalProperties": false,
