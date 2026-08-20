@@ -4928,6 +4928,63 @@
               }
             }
           }
+        },
+        "alert-troubleshooter": {
+          "type": "object",
+          "title": "Alert Troubleshooter",
+          "description": "Bridges a HyperDX observability alert to a krateo-autopilot root-cause analysis, written back as a TroubleshootingReport CR the portal renders. Full-coverage schema for the alert-troubleshooter chart (pinned 0.2.23). Every key of the chart's values.yaml is settable on the Composition spec; omitted keys use chart defaults.",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "x-kubernetes-preserve-unknown-fields": true,
+              "description": "Global values shared across charts."
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "title": "Image repository"
+                },
+                "tag": {
+                  "type": "string",
+                  "title": "Image tag"
+                }
+              }
+            },
+            "config": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "autopilotA2aUrl": {
+                  "type": "string",
+                  "title": "Autopilot A2A URL"
+                },
+                "hyperdxApiUrl": {
+                  "type": "string",
+                  "title": "HyperDX API URL"
+                },
+                "reportCooldown": {
+                  "type": "integer",
+                  "title": "Report cooldown (s)"
+                },
+                "reconcileInterval": {
+                  "type": "integer",
+                  "title": "Reconcile interval (s)"
+                },
+                "defaultAlerts": {
+                  "type": "array",
+                  "title": "Default alerts",
+                  "items": {
+                    "type": "object",
+                    "x-kubernetes-preserve-unknown-fields": true
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
