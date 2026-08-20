@@ -17,7 +17,13 @@
 {{- if and $existing $existing.data (hasKey $existing.data "password") }}
 {{- $pw = index $existing.data "password" | b64dec }}
 {{- else }}
-{{- $pw = randAlphaNum 32 }}
+{{/* 27 random alphanumerics for entropy + a fixed suffix that GUARANTEES the character classes
+     HyperDX's registration policy requires — at least one special character (it 400s a ZodError
+     "Password must include at least one special character" otherwise), plus upper/lower/digit to
+     satisfy common policies. Found live: randAlphaNum alone made the alert-troubleshooter bootstrap
+     Job fail to register the HyperDX admin, so its hyperdx-api-token was never minted and the pod
+     stayed in CreateContainerConfigError. */}}
+{{- $pw = printf "%s-Aa1!" (randAlphaNum 27) }}
 {{- end }}
 apiVersion: v1
 kind: Secret
