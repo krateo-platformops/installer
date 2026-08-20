@@ -1,0 +1,33 @@
+{{/*
+  hyperdx-admin-creds — the HyperDX admin login the alert-troubleshooter component's bootstrap Job uses
+  to register/log in headlessly and mint the `hyperdx-api-token` Secret its handler reads. The
+  alert-troubleshooter chart deliberately does NOT ship this (never commit a password) — its bootstrap-job
+  documents that the INSTALLER generates it. So we do, whenever alert-troubleshooter can be deployed
+  (the specialistAgents feature). The bootstrap Job REGISTERS this admin on first-boot HyperDX and logs in
+  with it thereafter, so any stable email/password works — email is fixed, password is generated.
+
+  `lookup` reuses an existing password on re-render so reconciles never rotate it (which would lock the
+  bootstrap out of the HyperDX admin it already registered); a fresh one is generated only on first create.
+  Composition mode only (owned by the Installer composition/cdc, like secret.yaml/imagepull-secret.yaml).
+*/}}
+{{- if and ((include "inst.featureEnabled" (list $ "specialistAgents")) | trim) (not .Values.bootstrap.coreProvider.enabled) }}
+{{- $ns := .Values.namespaces.krateo }}
+{{- $existing := lookup "v1" "Secret" $ns "hyperdx-admin-creds" }}
+{{- $pw := "" }}
+{{- if and $existing $existing.data (hasKey $existing.data "password") }}
+{{- $pw = index $existing.data "password" | b64dec }}
+{{- else }}
+{{- $pw = randAlphaNum 32 }}
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hyperdx-admin-creds
+  namespace: {{ $ns }}
+  # NB: do NOT set app.kubernetes.io/managed-by (see secret.yaml) — helm forces it to "Helm",
+  # so a chart-set value never converges and the cdc reconcile detects drift every cycle.
+type: Opaque
+stringData:
+  email: admin@krateo.local
+  password: {{ $pw | quote }}
+{{- end }}

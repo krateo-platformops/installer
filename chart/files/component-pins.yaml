@@ -308,6 +308,20 @@ components:
   tier: observability
   feature: specialistAgents
   vertexAI: true
+# alert-troubleshooter (krateo-platformops): the "auto-troubleshoot on fire" bridge — a HyperDX alert
+# fires a webhook -> krateo-autopilot A2A root-cause analysis -> TroubleshootingReport CR the portal
+# renders. NOT a kagent Agent (a plain webhook service that CALLS autopilot), so no vertexAI. Needs BOTH
+# the observability stack (HyperDX API + the hyperdx-api-token secret, from krateo-observability) AND
+# autopilot, so it deps both and rides the specialistAgents feature — the same portal cross-dep pattern
+# clickhouse-mcp-server uses. Public krateo-platformops chart, so no repo override.
+- name: alert-troubleshooter
+  kind: AlertTroubleshooter
+  version: 0.2.20
+  deps:
+  - krateo-autopilot
+  - krateo-observability
+  tier: observability
+  feature: specialistAgents
 # ---- codegen agents (OPT-IN, feature: codegenAgents — default OFF) ---------------------
 # Cross-cutting codegen/conversion specialists from krateo-agentiko/codegen-agents (migrated
 # from krateo-agentiko (formerly krateo-codegen-agents), krateo- prefix dropped). A distinct opt-in group
