@@ -1272,6 +1272,41 @@
                       "description": "The gate's own per-call limit. Keep it below `timeout` so an overrun reaches the agent as a JSON envelope rather than a transport error.",
                       "minimum": 10
                     },
+                    "liveDryRun": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "The gate's last validating step: submit every rendered document to this cluster's API server with `kubectl create --dry-run=server`, so the operators' validating webhooks judge it. Nothing is persisted. A kind whose operator is not installed is reported as `operatorMissing` and does NOT fail the chart.",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "rbac": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "create": {
+                              "type": "boolean",
+                              "description": "Render the ClusterRole (`create` on `*`) + binding the dry-run needs. A blueprint can render any kind, so the grant cannot be enumerated, and RBAC has no dry-run-only verb. `false` to bind your own narrower role: a Forbidden is reported as not-checked, never as a chart defect."
+                            }
+                          }
+                        },
+                        "perDocumentTimeoutSeconds": {
+                          "type": "integer",
+                          "description": "Per-document kubectl timeout, so one slow admission webhook cannot consume the whole step.",
+                          "minimum": 1
+                        },
+                        "budgetSeconds": {
+                          "type": "integer",
+                          "description": "Wall-clock budget for the whole step. Keep it below `gateTimeoutSeconds` with room for the earlier steps: spending it yields a readable partial report naming the documents never reached, where overrunning the server's per-call limit would throw the whole envelope away.",
+                          "minimum": 1
+                        },
+                        "maxDocuments": {
+                          "type": "integer",
+                          "description": "Ceiling on documents submitted per call, so a large chart cannot exhaust `gateTimeoutSeconds`. Whatever is dropped is named in the report.",
+                          "minimum": 1
+                        }
+                      }
+                    },
                     "cacheSizeLimit": {
                       "type": "string"
                     },
