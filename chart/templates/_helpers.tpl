@@ -387,9 +387,23 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
          registered-but-not-installed (Pass A registers the CD, Pass B suppresses the Composition) —
          the way a nested/multi-tenant child opts OUT of a pinned component it should not run (e.g.
          otel-collector-daemonset, whose node-level telemetry + hostPorts don't belong in a child on
-         shared nodes; installer#38). `tier` re-groups it (e.g. -> catalog). kind/chart/deps/repo are
-         NOT overridable (they'd break resolution). Footgun: do NOT registerOnly a component that
+         shared nodes; installer#38). `tier` re-groups it (e.g. -> catalog). `repo`/`chart` re-source it
+         (see below). kind/deps stay NOT overridable (they'd break resolution). Footgun: do NOT registerOnly a component that
          others `deps` on — its dependents then never see it Ready and stall.
+       `repo` (and `chart`, the artifact name in the URL) re-SOURCE the component (installer#84: let a
+       user pull a component from a different registry — e.g. Docker Hub vs ghcr — so the source need not
+       be equal for all). Safe to override because they change only WHERE/WHAT-PATH the chart is pulled
+       from, not the component's identity (kind/deps stay; the CompositionDefinition/Composition name stays
+       the component name), and `repo` threads through everywhere the effective repo is read: the CD chart
+       URL (definitions.yaml), the chart-pull credentials (inst.chartExtras matches registries[] by repo),
+       and the derived image-pull secret (inst.imagePullAuths). A PRIVATE override source needs a matching
+       registryAuth.registries[] entry (repo == the override) for its pull credential; a public one needs
+       nothing. IMPORTANT: use registries[] mode for a re-source to a DIFFERENT registry — in GLOBAL mode
+       (registries[] empty, enabled) the single credential is presented to EVERY pull, so it would hand
+       your ociRepo token to the override registry (fine when both are the same host with a cross-org
+       token, e.g. ghcr; wrong for a genuinely different registry). `kind`/`deps` stay NOT overridable
+       (those WOULD break resolution/identity — the CRD kind is crdgen'd from the chart at build time, so
+       the override target must host the SAME chart+version the pin names, or Pass B never sees it Ready).
        - name is NOT pinned          -> APPEND it as a new component. This is how a CMP (tier-b)
          adds catalog blueprints (registerOnly + tier: catalog, e.g. openstack) via values while
          the base installer stays use-case-agnostic — it ships no such blueprint by default. */}}
@@ -399,7 +413,7 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- if and (kindIs "map" $o) (hasKey $o "name") -}}
 {{- if hasKey $known (toString $o.name) -}}
 {{- $fields := dict -}}
-{{- range $k := (list "version" "registerOnly" "tier") -}}
+{{- range $k := (list "version" "registerOnly" "tier" "repo" "chart") -}}
 {{- if hasKey $o $k -}}{{- $_ := set $fields $k (index $o $k) -}}{{- end -}}
 {{- end -}}
 {{- $_ := set $ov (toString $o.name) $fields -}}
