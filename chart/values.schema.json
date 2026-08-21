@@ -748,11 +748,60 @@
             },
             "resources": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": false,
+              "properties": {
+                "cpu": {
+                  "type": "string"
+                },
+                "memory": {
+                  "type": "string"
+                }
+              }
             },
             "global": {
               "type": "object",
-              "additionalProperties": true
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues) + the helm-standard imageRegistry.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -776,7 +825,48 @@
           "properties": {
             "global": {
               "type": "object",
-              "additionalProperties": true
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues) + the helm-standard imageRegistry.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "replicaCount": {
               "type": "integer",
@@ -1064,11 +1154,60 @@
             },
             "resources": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": false,
+              "properties": {
+                "cpu": {
+                  "type": "string"
+                },
+                "memory": {
+                  "type": "string"
+                }
+              }
             },
             "global": {
               "type": "object",
-              "additionalProperties": true
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues) + the helm-standard imageRegistry.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -1203,11 +1342,60 @@
             },
             "resources": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": false,
+              "properties": {
+                "cpu": {
+                  "type": "string"
+                },
+                "memory": {
+                  "type": "string"
+                }
+              }
             },
             "global": {
               "type": "object",
-              "additionalProperties": true
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues) + the helm-standard imageRegistry.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "mcpServers": {
               "type": "object",
@@ -1312,7 +1500,15 @@
                     },
                     "resources": {
                       "type": "object",
-                      "additionalProperties": true
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "type": "string"
+                        },
+                        "memory": {
+                          "type": "string"
+                        }
+                      }
                     },
                     "imagePullSecrets": {
                       "type": "array",
@@ -1803,11 +1999,60 @@
             },
             "resources": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": false,
+              "properties": {
+                "cpu": {
+                  "type": "string"
+                },
+                "memory": {
+                  "type": "string"
+                }
+              }
             },
             "global": {
               "type": "object",
-              "additionalProperties": true
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues) + the helm-standard imageRegistry.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -2029,8 +2274,48 @@
             },
             "global": {
               "type": "object",
-              "additionalProperties": true,
-              "description": "Helm global values (injected by the composition runtime)."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues) + the helm-standard imageRegistry.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "extraAgents": {
               "type": "array",
@@ -2142,13 +2427,61 @@
             },
             "resources": {
               "type": "object",
-              "additionalProperties": true,
-              "description": "Agent pod resource requests/limits."
+              "additionalProperties": false,
+              "description": "Agent pod resource requests/limits.",
+              "properties": {
+                "cpu": {
+                  "type": "string"
+                },
+                "memory": {
+                  "type": "string"
+                }
+              }
             },
             "global": {
               "type": "object",
-              "additionalProperties": true,
-              "description": "Helm global values (injected by the composition runtime)."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues) + the helm-standard imageRegistry.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -2164,13 +2497,48 @@
           "properties": {
             "global": {
               "type": "object",
-              "additionalProperties": true,
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues) + the helm-standard imageRegistry.",
+              "additionalProperties": false,
               "properties": {
-                "storageClassName": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
                   "type": "string"
                 }
-              },
-              "description": "Global values propagated to clickstack and its subcharts."
+              }
             },
             "otelCredentials": {
               "type": "object",
@@ -2238,11 +2606,11 @@
                     },
                     "resources": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "limits": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "cpu": {
                               "x-kubernetes-int-or-string": true
@@ -2254,7 +2622,7 @@
                         },
                         "requests": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "cpu": {
                               "x-kubernetes-int-or-string": true
@@ -2263,6 +2631,12 @@
                               "type": "string"
                             }
                           }
+                        },
+                        "cpu": {
+                          "type": "string"
+                        },
+                        "memory": {
+                          "type": "string"
                         }
                       }
                     }
@@ -2277,11 +2651,11 @@
                     },
                     "resources": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "limits": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "cpu": {
                               "x-kubernetes-int-or-string": true
@@ -2293,7 +2667,7 @@
                         },
                         "requests": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "cpu": {
                               "x-kubernetes-int-or-string": true
@@ -2302,6 +2676,12 @@
                               "type": "string"
                             }
                           }
+                        },
+                        "cpu": {
+                          "type": "string"
+                        },
+                        "memory": {
+                          "type": "string"
                         }
                       }
                     }
@@ -2355,8 +2735,48 @@
           "properties": {
             "global": {
               "type": "object",
-              "additionalProperties": true,
-              "description": "Global values shared across charts."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues) + the helm-standard imageRegistry.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "replicaCount": {
               "type": "integer",
@@ -2484,11 +2904,15 @@
             },
             "podAnnotations": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": {
+                "type": "string"
+              }
             },
             "nodeSelector": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": {
+                "type": "string"
+              }
             },
             "tolerations": {
               "type": "array"
@@ -3024,8 +3448,48 @@
           "properties": {
             "global": {
               "type": "object",
-              "additionalProperties": true,
-              "description": "Global values shared across charts."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues) + the helm-standard imageRegistry.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "opentelemetry-collector": {
               "type": "object",
@@ -3515,11 +3979,11 @@
                 },
                 "resources": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "limits": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "cpu": {
                           "x-kubernetes-int-or-string": true
@@ -3531,7 +3995,7 @@
                     },
                     "requests": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "cpu": {
                           "x-kubernetes-int-or-string": true
@@ -3540,6 +4004,12 @@
                           "type": "string"
                         }
                       }
+                    },
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
                     }
                   }
                 }
@@ -3555,8 +4025,48 @@
           "properties": {
             "global": {
               "type": "object",
-              "additionalProperties": true,
-              "description": "Global values shared across charts."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues) + the helm-standard imageRegistry.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "opentelemetry-collector": {
               "type": "object",
@@ -4016,11 +4526,11 @@
                 },
                 "resources": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "limits": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "cpu": {
                           "x-kubernetes-int-or-string": true
@@ -4032,7 +4542,7 @@
                     },
                     "requests": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "cpu": {
                           "x-kubernetes-int-or-string": true
@@ -4041,6 +4551,12 @@
                           "type": "string"
                         }
                       }
+                    },
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
                     }
                   }
                 }
@@ -4147,7 +4663,9 @@
                 },
                 "annotations": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "type": "string"
+                  },
                   "description": "Annotations to add to the service account.",
                   "title": "Annotations"
                 },
@@ -4162,13 +4680,17 @@
             },
             "podAnnotations": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": {
+                "type": "string"
+              },
               "description": "Annotations to add to the pod.",
               "title": "Pod Annotations"
             },
             "podLabels": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": {
+                "type": "string"
+              },
               "description": "Labels to add to the pod.",
               "title": "Pod Labels"
             },
@@ -4232,7 +4754,9 @@
                 },
                 "annotations": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "type": "string"
+                  },
                   "description": "Annotations to add to the Ingress.",
                   "title": "Annotations"
                 },
@@ -4572,7 +5096,9 @@
             },
             "nodeSelector": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": {
+                "type": "string"
+              },
               "description": "Node selector for pod scheduling.",
               "title": "Node Selector"
             },
@@ -4690,8 +5216,48 @@
             },
             "global": {
               "type": "object",
-              "additionalProperties": true,
-              "description": "Helm global values (injected by the composition runtime)."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues) + the helm-standard imageRegistry.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           },
           "description": "Krateo PlatformOps Snowplow blueprint \u2014 full-coverage schema (chart 0.30.249)."
@@ -4791,11 +5357,60 @@
             },
             "resources": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": false,
+              "properties": {
+                "cpu": {
+                  "type": "string"
+                },
+                "memory": {
+                  "type": "string"
+                }
+              }
             },
             "global": {
               "type": "object",
-              "additionalProperties": true
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues) + the helm-standard imageRegistry.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
