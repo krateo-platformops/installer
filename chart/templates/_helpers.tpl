@@ -187,6 +187,28 @@ components:
 {{- if not (hasKey $m $leaf) -}}{{- $_ := set $m $leaf $value -}}{{- end -}}
 {{- end -}}
 
+{{/* inst.forcePath — like inst.fillPath but ALWAYS overwrites the leaf, even if already present.
+     args: same as inst.fillPath. Use only where a componentValues override cannot be trusted to
+     mean what it says: a boolean whose own schema declares a default reads identically whether a
+     user deliberately set it or a sibling override (e.g. cors.allowOrigins) merely dragged the
+     rest of that object's schema defaults — including this leaf — into existence. Fill-if-absent
+     silently loses that race, so the flag never leaves its schema default. */}}
+{{- define "inst.forcePath" -}}
+{{- $m := .target -}}
+{{- $path := .path -}}
+{{- $value := .value -}}
+{{- $leaf := last $path -}}
+{{- range $seg := (initial $path) -}}
+{{- $next := index $m $seg -}}
+{{- if not (kindIs "map" $next) -}}
+{{- $next = dict -}}
+{{- $_ := set $m $seg $next -}}
+{{- end -}}
+{{- $m = $next -}}
+{{- end -}}
+{{- $_ := set $m $leaf $value -}}
+{{- end -}}
+
 {{/* Does the component's generated CRD exist AND serve this component's version yet?
      args: (list "Kind" "version")
      Version-aware: core-provider derives the served apiVersion from the chart version

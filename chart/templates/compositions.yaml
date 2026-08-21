@@ -291,9 +291,14 @@
 {{- end -}}
 {{- /* And CORS on the gateway, because that portal call is a cross-origin BROWSER call: the
      preflight it sends first carries no token, so the authorization policy would 403 it and the
-     rail could never start. Only the preflight is short-circuited. */ -}}
+     rail could never start. Only the preflight is short-circuited.
+     FORCED, not fill-if-absent: cors's own schema declares defaults for allowOrigins/allowMethods/
+     allowHeaders/etc alongside `enabled: false`, so pinning allowOrigins to the real portal origin
+     (which every real install needs to do) drags `enabled: false` into explicit presence too —
+     fill-if-absent then finds the leaf already there and never flips it. Safe to force: nothing
+     else has a reason to want CORS off here while the portal is calling the gateway directly. */ -}}
 {{- if eq $c.name "agentgateway-policies" -}}
-{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "cors" "enabled") "value" true) -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "cors" "enabled") "value" true) -}}
 {{- end -}}
 {{- /* features.ingress already installs the Gateway API CRDs, an agentgateway controller and a
      GatewayClass of the same name — all cluster-scoped, so a second owner collides. Stand down. */ -}}
