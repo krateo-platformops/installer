@@ -1,0 +1,125 @@
+# Full agent fleet behind the agent gateway, with a two-tier RBAC split over the two identities a
+# stock Krateo install already seeds (the portal provisions `admin` in group `admins` and
+# `cyberjoker` in group `devs`).
+#
+# helm upgrade -i installer oci://ghcr.io/krateo-platformops/charts/installer \
+#   -n krateo-system -f values.yaml
+# (or apply the same keys as a merge patch on the live Installer CR)
+
+features:
+  portal: true            # brings up authn — the issuer whose JWKS the gateway validates against
+  coreAgents: true
+  specialistAgents: true
+  # NOT required: agentGateway installs its own Gateway API CRDs and agentgateway controller,
+  # so the edge layer stays off.
+  ingress: false
+  agentGateway: true
+
+# The agent charts are in the private krateo-agentiko registry.
+registryAuth:
+  enabled: true
+  username: <github-user>
+  passwordRef:
+    name: agentiko-registry-pull
+    key: token
+
+vertexAI:
+  enabled: true
+  projectID: <your-gcp-project>
+
+componentValues:
+  # ------------------------------------------------------------------------------------
+  # Everything about the gateway is the policies chart's own values. Its defaults describe authn as
+  # it ships (RS256, iss krateo.io, claims sub + groups, no aud), so only the rules are set here.
+  # ------------------------------------------------------------------------------------
+  agentgateway-policies:
+    # Keep "no token -> 401" on the user-facing routes. The chart then scopes the one unavoidable
+    # exemption (kagent fetches a sub-agent's agent-card with no Authorization header) to the
+    # sub-agent routes only, instead of relaxing the whole gateway.
+    jwt:
+      mode: Strict
+
+    # Layer 1 — who may reach which agent directly. An agent named in no rule is unreachable,
+    # which is the fail-closed half of this: adding an agent to the fleet does not expose it.
+    endpointRules:
+      - agents:
+          - installer-agent          # drives the Installer CR itself
+          - core-provider-agent      # authors CompositionDefinitions
+          - authn-agent              # edits auth config
+        subjects:
+          groups: [admins]
+      - agents:
+          - autopilot
+          - clickstack-agent
+          - frontend-agent
+          - snowplow-agent
+        subjects:
+          groups: [admins, devs]
+
+    # Layer 2 — which tools any agent may run for whom. Replaces the chart's list, so it must
+    # still name EVERY in-cluster MCP server: one that is missing has no route, and its agents
+    # lose every tool. Cross-check with `kubectl -n krateo-system get remotemcpserver`.
+    mcpServers:
+      - name: kagent-tools
+        port: 8084
+        toolRules:
+          # Everything that mutates the cluster or a release. A dev's agent keeps the whole read
+          # surface; these are filtered out of its tools/list, so it reports it has no write tool
+          # rather than failing a call.
+          - tools:
+              - k8s_apply_manifest
+              - k8s_create_resource
+              - k8s_create_resource_from_url
+              - k8s_patch_resource
+              - k8s_delete_resource
+              - k8s_label_resource
+              - k8s_remove_label
+              - k8s_annotate_resource
+              - k8s_remove_annotation
+              - k8s_execute_command
+              - k8s_rollout
+              - k8s_scale
+              - helm_upgrade
+              - helm_uninstall
+              - helm_repo_add
+              - helm_repo_update
+            subjects:
+              groups: [admins]
+      - name: repo-mcp-server
+        port: 8080
+      - name: clickhouse-mcp-server
+        port: 8000
+      - name: core-provider-chart-gate-mcp-server
+        port: 8080
+
+    # Layer 3 — who may delegate to which agent. Replaces the chart's list, so every deployed
+    # delegation target needs a line: a missing entry denies delegation to it for everyone,
+    # admins included (the delegated hop arrives at path `/` and matches no Layer 1 rule).
+    subAgents:
+      - name: installer-agent
+        subjects:
+          groups: [admins]
+      - name: core-provider-agent
+        subjects:
+          groups: [admins]
+      - name: authn-agent
+        subjects:
+          groups: [admins]
+      - name: autopilot
+        subjects:
+          groups: [admins, devs]
+      - name: k8s-agent
+        subjects:
+          groups: [admins, devs]
+      - name: helm-agent
+        subjects:
+          groups: [admins, devs]
+      - name: clickstack-agent
+        subjects:
+          groups: [admins, devs]
+      - name: frontend-agent
+        subjects:
+          groups: [admins, devs]
+      - name: snowplow-agent
+        subjects:
+          groups: [admins, devs]

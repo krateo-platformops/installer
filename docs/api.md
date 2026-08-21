@@ -4,7 +4,7 @@ title: installer — API
 description: The contract the chart creates — the generated Installer CRD (crdgen from values.schema.json), the CompositionDefinitions and Compositions it emits, and component-pins.yaml as the version source of truth.
 resource: installers.composition.krateo.io
 tags: [crd, compositiondefinition, composition, pins]
-timestamp: 2026-08-07T00:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # API

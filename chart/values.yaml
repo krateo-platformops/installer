@@ -157,6 +157,11 @@ features:
                                   #   default off — the base install pulls nothing from krateo-blueprints unless enabled.
                                   #   Preconditions when on: external-dns needs its provider Secret out-of-band; the
                                   #   cert-manager-issuers ACME HTTP-01 solver assumes the Gateway API edge is present.
+  agentGateway: false              # OPT-IN: agentgateway in front of the kagent fleet — JWT auth + per-user RBAC over
+                                  #   agents, MCP tools and A2A delegation. A valid token becomes MANDATORY on every
+                                  #   agent endpoint, so it never turns on through an upgrade. Needs coreAgents, and
+                                  #   an issuer whose JWKS the gateway trusts (authn, via features.portal, by default).
+                                  #   Every setting is the agentgateway-policies chart's own: componentValues.agentgateway-policies.
 
 # HITL approval gate for the autopilot's mutating Kubernetes tools. true (default)=
 # pause for human approval before any cluster change; false=autonomous remediation.

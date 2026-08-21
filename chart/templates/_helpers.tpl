@@ -154,7 +154,8 @@ components:
 {{/* Is a feature flag enabled? args: (list $ "featureName"); empty featureName => true.
      Final feature set: coreProvider (engine marker, gates nothing), coreAgents (base agent layer),
      portal (the non-agent platform: authn/snowplow/frontend/portal + portal-starter + the
-     observability stack), oasgenProvider, specialistAgents. Every component gates on its flag. */}}
+     observability stack), oasgenProvider, specialistAgents, agentGateway. Every component gates
+     on its flag. */}}
 {{/* No feature is force-enabled: every component gates on its feature flag, so a minimal
      "agent-only" install (just the autopilot + installer-agent) can disable the platform and let
      the agent provision it later by editing the Installer CR. Defaults in values.yaml are all true,
@@ -165,6 +166,25 @@ components:
 {{- if not $feat -}}true
 {{- else if has $feat (splitList " " (include "inst.coreFeatures" .)) -}}true
 {{- else if index $top.Values.features $feat -}}true{{- end -}}
+{{- end -}}
+
+{{/* inst.fillPath — set a nested key on a spec dict only if absent, creating intermediate maps.
+     args: (dict "target" $spec "path" (list "a" "b") "value" X). Mutates `target`, renders
+     nothing, so a componentValues override always wins over the injection. */}}
+{{- define "inst.fillPath" -}}
+{{- $m := .target -}}
+{{- $path := .path -}}
+{{- $value := .value -}}
+{{- $leaf := last $path -}}
+{{- range $seg := (initial $path) -}}
+{{- $next := index $m $seg -}}
+{{- if not (kindIs "map" $next) -}}
+{{- $next = dict -}}
+{{- $_ := set $m $seg $next -}}
+{{- end -}}
+{{- $m = $next -}}
+{{- end -}}
+{{- if not (hasKey $m $leaf) -}}{{- $_ := set $m $leaf $value -}}{{- end -}}
 {{- end -}}
 
 {{/* Does the component's generated CRD exist AND serve this component's version yet?
