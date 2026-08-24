@@ -1,0 +1,30 @@
+name: check-no-unknowns
+
+# Installer-specific guard (not the canonical shared lint.yaml): chart/values.schema.json feeds
+# core-provider's crdgen verbatim, becoming the Installer CRD's structural schema. componentValues is a
+# hand-curated, fully-typed override surface — this guard fails any PR that reintroduces an open
+# `additionalProperties: true` or an `x-kubernetes-preserve-unknown-fields` escape (either would silently
+# reopen the surface to arbitrary untyped values on the live CRD).
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "chart/values.schema.json"
+      - ".github/scripts/check-no-unknowns.py"
+      - ".github/workflows/check-no-unknowns.yaml"
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  no-unknowns:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Assert values.schema.json stays fully typed
+        run: python3 .github/scripts/check-no-unknowns.py
