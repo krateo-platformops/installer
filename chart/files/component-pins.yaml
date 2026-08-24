@@ -110,17 +110,17 @@ components:
 # krateo-platformops/charts (no repo override).
 - name: clickhouse-operator
   kind: ClickhouseOperator
-  version: 0.1.0
+  version: 0.1.1
   tier: observability
   feature: portal
 - name: mongodb-operator
   kind: MongodbOperator
-  version: 0.1.0
+  version: 0.2.0
   tier: observability
   feature: portal
 - name: krateo-observability
   kind: KrateoObservability
-  version: 0.1.11
+  version: 0.1.12
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -128,14 +128,14 @@ components:
   feature: portal
 - name: otel-collector-deployment
   kind: OtelCollectorDeployment
-  version: 0.3.4
+  version: 0.3.5
   deps:
   - krateo-observability
   tier: observability
   feature: portal
 - name: otel-collector-daemonset
   kind: OtelCollectorDaemonset
-  version: 0.1.6
+  version: 0.1.7
   deps:
   - otel-collector-deployment
   tier: observability
@@ -223,13 +223,13 @@ components:
 # extraAgents fleet from every feature-enabled vertexAI agent.
 - name: kagent-crds
   kind: KagentCrds
-  version: 0.1.3
+  version: 0.1.5
   repo: oci://ghcr.io/krateo-agentiko/charts
   tier: observability
   feature: coreAgents
 - name: kagent
   kind: Kagent
-  version: 0.1.10
+  version: 0.1.12
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent-crds
@@ -246,7 +246,7 @@ components:
   vertexAI: true
 - name: krateo-autopilot
   kind: KrateoAutopilot
-  version: 0.3.0
+  version: 0.3.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -254,6 +254,15 @@ components:
   feature: coreAgents
   vertexAI: true
   modelOwner: true
+- name: incident-agent
+  kind: IncidentAgent
+  version: 0.1.1
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - krateo-autopilot
+  tier: observability
+  feature: coreAgents
+  vertexAI: true
 - name: clickhouse-mcp-server
   kind: ClickhouseMcpServer
   version: 0.1.8
@@ -301,7 +310,7 @@ components:
   vertexAI: true
 - name: core-provider-agent
   kind: CoreProviderAgent
-  version: 0.55.0
+  version: 0.55.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -309,16 +318,16 @@ components:
   feature: specialistAgents
   vertexAI: true
 # alert-troubleshooter (krateo-platformops): the "auto-troubleshoot on fire" bridge — a HyperDX alert
-# fires a webhook -> krateo-autopilot A2A root-cause analysis -> TroubleshootingReport CR the portal
-# renders. NOT a kagent Agent (a plain webhook service that CALLS autopilot), so no vertexAI. Needs BOTH
-# the observability stack (HyperDX API + the hyperdx-api-token secret, from krateo-observability) AND
-# autopilot, so it deps both and rides the specialistAgents feature — the same portal cross-dep pattern
-# clickhouse-mcp-server uses. Public krateo-platformops chart, so no repo override.
+# fires a webhook -> incident-agent A2A root-cause analysis -> TroubleshootingReport CR the portal
+# renders. NOT a kagent Agent (a plain webhook service that CALLS incident-agent), so no vertexAI. Needs
+# BOTH the observability stack (HyperDX API + the hyperdx-api-token secret, from krateo-observability) AND
+# incident-agent, so it deps both and rides the specialistAgents feature — the same portal cross-dep
+# pattern clickhouse-mcp-server uses. Public krateo-platformops chart, so no repo override.
 - name: alert-troubleshooter
   kind: AlertTroubleshooter
-  version: 0.2.22
+  version: 0.2.26
   deps:
-  - krateo-autopilot
+  - incident-agent
   - krateo-observability
   tier: observability
   feature: specialistAgents
@@ -407,7 +416,7 @@ components:
   vertexAI: true
 - name: krateo-blueprint-agent
   kind: KrateoBlueprintAgent
-  version: 0.2.2
+  version: 0.2.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent

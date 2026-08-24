@@ -103,12 +103,12 @@ optional `repo` override and the wiring flags (`expose`/`exposePort`/`svcMatch`,
 (`inst.componentsYaml`) — not values — so it is immune to
 `helm upgrade --reuse-values` and a chart bump always propagates its pins.
 
-The DAG at a glance (36 components): the `platform` tier
+The DAG at a glance (38 components): the `platform` tier
 (`authn`/`snowplow`/`frontend` chain + `portal`, `krateo-helm-render-service`,
 `oasgen-provider`, the four `*-crd` charts), the `observability` tier gated on
 `portal` (clickhouse/mongodb operators → `krateo-observability` → OTel collectors,
 `krateo-sse-proxy`) and the agent tiers gated on `coreAgents`/`specialistAgents`
-(`kagent-crds` → `kagent` → `installer-agent` + `krateo-autopilot`, the five
+(`kagent-crds` → `kagent` → `installer-agent` + `krateo-autopilot` + `incident-agent`, the five
 specialists + `clickhouse-mcp-server`, all pinned to the private
 `oci://ghcr.io/krateo-agentiko/charts`). The autopilot chart also deploys
 `repo-mcp-server`, the fleet's single grounding server — it is not a pinned component.
