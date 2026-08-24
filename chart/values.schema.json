@@ -117,7 +117,7 @@
         "coreAgents": {
           "type": "boolean",
           "default": true,
-          "description": "Base agent layer: kagent + krateo-autopilot (which ships repo-mcp-server, the fleet grounding server) + installer-agent."
+          "description": "Base agent layer: kagent + krateo-autopilot (which ships repo-mcp-server, the fleet grounding server) + installer-agent + incident-agent (alert root-cause analysis)."
         },
         "portal": {
           "type": "boolean",
@@ -2847,6 +2847,269 @@
                 },
                 "serviceAccountName": {
                   "type": "string"
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "incident-agent": {
+          "title": "incident-agent values",
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Root-causes a fired observability Alert (or a failing component) via kagent-tool-server (k8s/Helm reads) + clickhouse-mcp-server (telemetry) + repo-mcp-server (chart/source grounding), returning an evidence-backed remediation plan.",
+          "properties": {
+            "namespace": {
+              "type": "string"
+            },
+            "runtime": {
+              "type": "string",
+              "enum": [
+                "go",
+                "python"
+              ]
+            },
+            "runtimeImageRegistry": {
+              "type": "string"
+            },
+            "modelConfig": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "ModelConfig the agent uses — referenced by name (default: the autopilot-owned gemini-pro), or created here (create=true) so this agent's model/provider is independent of the fleet.",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "create": {
+                  "type": "boolean"
+                },
+                "provider": {
+                  "type": "string",
+                  "enum": [
+                    "Anthropic",
+                    "OpenAI",
+                    "AzureOpenAI",
+                    "Ollama",
+                    "Gemini",
+                    "GeminiVertexAI",
+                    "AnthropicVertexAI",
+                    "Bedrock",
+                    "SAPAICore"
+                  ]
+                },
+                "model": {
+                  "type": "string"
+                },
+                "vertexAI": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "projectID": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "apiKeySecret": {
+                  "type": "string"
+                },
+                "apiKeySecretKey": {
+                  "type": "string"
+                }
+              }
+            },
+            "prompts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "language": {
+                  "type": "string"
+                }
+              }
+            },
+            "vertexAI": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "projectID": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                }
+              }
+            },
+            "tools": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "kagent-tool-server tools attached to the agent, split read/write.",
+              "properties": {
+                "read": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "toolNames": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "mutating": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Opt-in write set. Off by default: a TroubleshootingReport records a PLAN and the portal owns the gated apply.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "requireApproval": {
+                      "type": "boolean"
+                    },
+                    "toolNames": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "telemetry": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "ClickStack telemetry (clickhouse-mcp-server, CR owned by the autopilot chart; needs specialistAgents).",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                }
+              }
+            },
+            "repoSearch": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Grounding path — repo-mcp-server (CR owned by the autopilot chart).",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                },
+                "graph": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "context": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Thread compaction, so a long or re-run investigation cannot overflow the model's input window.",
+              "properties": {
+                "compactionInterval": {
+                  "type": "integer"
+                },
+                "overlapSize": {
+                  "type": "integer"
+                }
+              }
+            },
+            "agentgateway": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
                 }
               }
             },
@@ -6198,7 +6461,7 @@
         "alert-troubleshooter": {
           "type": "object",
           "title": "Alert Troubleshooter",
-          "description": "Bridges a HyperDX observability alert to a krateo-autopilot root-cause analysis, written back as a TroubleshootingReport CR the portal renders. Full-coverage schema for the alert-troubleshooter chart (pinned 0.2.23). Every key of the chart's values.yaml is settable on the Composition spec; omitted keys use chart defaults.",
+          "description": "Bridges a HyperDX observability alert to an incident-agent root-cause analysis, written back as a TroubleshootingReport CR the portal renders. Full-coverage schema for the alert-troubleshooter chart (pinned 0.2.25). Every key of the chart's values.yaml is settable on the Composition spec; omitted keys use chart defaults.",
           "additionalProperties": false,
           "properties": {
             "global": {
@@ -6266,7 +6529,7 @@
               "properties": {
                 "autopilotA2aUrl": {
                   "type": "string",
-                  "title": "Autopilot A2A URL"
+                  "title": "RCA agent A2A URL"
                 },
                 "hyperdxApiUrl": {
                   "type": "string",

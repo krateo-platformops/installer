@@ -254,6 +254,15 @@ components:
   feature: coreAgents
   vertexAI: true
   modelOwner: true
+- name: incident-agent
+  kind: IncidentAgent
+  version: 0.1.0
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - krateo-autopilot
+  tier: observability
+  feature: coreAgents
+  vertexAI: true
 - name: clickhouse-mcp-server
   kind: ClickhouseMcpServer
   version: 0.1.8
@@ -309,16 +318,16 @@ components:
   feature: specialistAgents
   vertexAI: true
 # alert-troubleshooter (krateo-platformops): the "auto-troubleshoot on fire" bridge — a HyperDX alert
-# fires a webhook -> krateo-autopilot A2A root-cause analysis -> TroubleshootingReport CR the portal
-# renders. NOT a kagent Agent (a plain webhook service that CALLS autopilot), so no vertexAI. Needs BOTH
-# the observability stack (HyperDX API + the hyperdx-api-token secret, from krateo-observability) AND
-# autopilot, so it deps both and rides the specialistAgents feature — the same portal cross-dep pattern
-# clickhouse-mcp-server uses. Public krateo-platformops chart, so no repo override.
+# fires a webhook -> incident-agent A2A root-cause analysis -> TroubleshootingReport CR the portal
+# renders. NOT a kagent Agent (a plain webhook service that CALLS incident-agent), so no vertexAI. Needs
+# BOTH the observability stack (HyperDX API + the hyperdx-api-token secret, from krateo-observability) AND
+# incident-agent, so it deps both and rides the specialistAgents feature — the same portal cross-dep
+# pattern clickhouse-mcp-server uses. Public krateo-platformops chart, so no repo override.
 - name: alert-troubleshooter
   kind: AlertTroubleshooter
-  version: 0.2.24
+  version: 0.2.25
   deps:
-  - krateo-autopilot
+  - incident-agent
   - krateo-observability
   tier: observability
   feature: specialistAgents
