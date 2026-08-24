@@ -1,10 +1,10 @@
 ---
 type: ExampleIndex
 title: installer — examples
-description: Runnable examples under examples/ — a minimal NodePort bootstrap install and a componentValues override set — each paired with a README stating preconditions and the one command.
+description: Runnable examples under examples/ — a minimal NodePort bootstrap install, a componentValues override set, a full kind profile and the agent-gateway RBAC profile — each paired with a README stating preconditions and the one command.
 resource: oci://ghcr.io/krateo-platformops/charts/installer
 tags: [examples, install, componentvalues]
-timestamp: 2026-08-07T00:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # Examples
@@ -20,6 +20,9 @@ validate offline with `helm template` (after `helm dependency build chart/` and 
   `componentValues` deep-merge overrides (snowplow `replicaCount`, a static frontend
   `AUTHN_API_BASE_URL`), applied at install time or as a merge patch on the live
   Installer CR.
+- [agent-gateway](../examples/agent-gateway/README.md) — `features.agentGateway` with a
+  two-tier RBAC split (`admins` vs `devs`) over the whole fleet: what the installer installs and
+  wires, and where the endpoint/tool/delegation rules live.
 - [kind-full-profile](../examples/kind-full-profile/README.md) — full-profile (portal + agents) values for a kind install; see [runbook](./runbooks/kind-full-profile.md).
 
 For a step-by-step local install per profile, see the kind runbooks:

@@ -237,7 +237,7 @@ components:
   feature: coreAgents
 - name: installer-agent
   kind: InstallerAgent
-  version: 0.1.4
+  version: 0.2.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -273,7 +273,7 @@ components:
   feature: specialistAgents
 - name: authn-agent
   kind: AuthnAgent
-  version: 0.22.29
+  version: 0.23.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -282,7 +282,7 @@ components:
   vertexAI: true
 - name: snowplow-agent
   kind: SnowplowAgent
-  version: 1.0.95
+  version: 1.1.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -291,7 +291,7 @@ components:
   vertexAI: true
 - name: frontend-agent
   kind: FrontendAgent
-  version: 1.3.101
+  version: 1.4.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -301,7 +301,7 @@ components:
   requireApproval: []
 - name: clickstack-agent
   kind: ClickstackAgent
-  version: 3.0.39
+  version: 3.1.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -331,6 +331,47 @@ components:
   - krateo-observability
   tier: observability
   feature: specialistAgents
+# ---- agent gateway (OPT-IN, feature: agentGateway — default OFF) -----------------------
+# JWT authentication + per-user RBAC over the agents, their MCP tools and A2A delegation.
+# Two components because helm maps every kind in a manifest before applying any of it, so the
+# release shipping the Gateway API CRDs can carry no Gateway API resource: the control plane
+# (CRDs + agentgateway controller) installs first, the Gateway/routes/policies dep-chain behind
+# it. Both are krateo-agentiko charts (private registry, like the agent charts).
+# The policies chart deps stop at the substrate — depending on the agents themselves would stall
+# it on any profile where one of them is absent. Every rule and every default is the chart's own:
+# componentValues.agentgateway-policies.
+- name: agentgateway-controller
+  kind: AgentgatewayController
+  version: 0.1.0
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  tier: platform
+  feature: agentGateway
+- name: agentgateway-policies
+  kind: AgentgatewayPolicies
+  version: 0.1.0
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - agentgateway-controller
+  tier: platform
+  feature: agentGateway
+  # The portal's Autopilot rail calls an agent's A2A endpoint straight from the browser, so the
+  # gateway needs a BROWSER-reachable address like authn/snowplow/sse-proxy do. svcMatch is the
+  # proxy Service the agentgateway controller provisions for the Gateway (named after it, so this
+  # tracks componentValues.agentgateway-policies.gateway.name if that is overridden).
+  expose: true
+  # The agentgateway controller — not this chart — creates the proxy Service, so there is no values
+  # key to flip to exposure.type (and the chart's schema would reject one); compositions.yaml skips
+  # the service-flip for this component by name instead of a pin field, so it never needs its own
+  # entry in values.schema.json's components[] schema (and the generated Installer CRD). Exposure
+  # still READS the live Service. It is a LoadBalancer by default, so it resolves on any cluster
+  # that has an LB controller; elsewhere pin componentValues.frontend.config.AUTOPILOT_API_BASE_URL
+  # to a reachable origin.
+  exposePort: 8080
+  svcMatch: krateo-agent-gateway
+  # The frontend gets this as the gateway's ORIGIN; its own chart appends the A2A path for the
+  # namespace the agents live in (agentgateway.enabled).
+  configKeys:
+  - AUTOPILOT_API_BASE_URL
 # ---- codegen agents (OPT-IN, feature: codegenAgents — default OFF) ---------------------
 # Cross-cutting codegen/conversion specialists from krateo-agentiko/codegen-agents (migrated
 # from krateo-agentiko (formerly krateo-codegen-agents), krateo- prefix dropped). A distinct opt-in group
@@ -339,7 +380,7 @@ components:
 # enabled. Kinds are crdgen PascalCase(chart) — tf is NOT an initialism (-> Tf).
 - name: code-analysis-agent
   kind: CodeAnalysisAgent
-  version: 0.1.5
+  version: 0.2.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -348,7 +389,7 @@ components:
   vertexAI: true
 - name: ansible-to-operator-agent
   kind: AnsibleToOperatorAgent
-  version: 0.1.5
+  version: 0.2.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -357,7 +398,7 @@ components:
   vertexAI: true
 - name: tf-provider-to-operator-agent
   kind: TfProviderToOperatorAgent
-  version: 0.1.5
+  version: 0.2.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -366,7 +407,7 @@ components:
   vertexAI: true
 - name: tf-to-helm-agent
   kind: TfToHelmAgent
-  version: 0.1.5
+  version: 0.2.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent

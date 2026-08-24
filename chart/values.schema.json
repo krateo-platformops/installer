@@ -16,7 +16,49 @@
       "default": true
     },
     "global": {
-      "type": "object"
+      "type": "object",
+      "title": "Global values (injected by the Krateo composition engine)",
+      "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+      "additionalProperties": false,
+      "properties": {
+        "compositionName": {
+          "type": "string"
+        },
+        "compositionNamespace": {
+          "type": "string"
+        },
+        "compositionId": {
+          "type": "string"
+        },
+        "compositionApiVersion": {
+          "type": "string"
+        },
+        "compositionGroup": {
+          "type": "string"
+        },
+        "compositionKind": {
+          "type": "string"
+        },
+        "compositionResource": {
+          "type": "string"
+        },
+        "compositionInstalledVersion": {
+          "type": "string"
+        },
+        "gracefullyPaused": {
+          "type": "string",
+          "enum": [
+            "true",
+            "false"
+          ]
+        },
+        "krateoNamespace": {
+          "type": "string"
+        },
+        "imageRegistry": {
+          "type": "string"
+        }
+      }
     },
     "bootstrap": {
       "type": "object",
@@ -141,6 +183,11 @@
         "codegenAgents": {
           "type": "boolean",
           "description": "Opt-in codegen/conversion specialist agents (code-analysis, ansible-to-operator, tf-provider-to-operator, tf-to-helm) from krateo-agentiko/codegen-agents. Needs coreAgents. Default false."
+        },
+        "agentGateway": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in agent gateway: an agentgateway data plane in front of the kagent fleet (components agentgateway-controller + agentgateway-policies, from oci://ghcr.io/krateo-agentiko/charts), giving JWT authentication and per-user RBAC over which agent a caller may reach, which MCP tools it may run and which sub-agents it may delegate to. A valid token becomes mandatory on every agent endpoint, so it never turns on through an upgrade. Needs coreAgents and an issuer whose JWKS the gateway trusts (authn, via portal, by default). Every setting is the policies chart's own: componentValues.agentgateway-policies."
         }
       }
     },
@@ -886,6 +933,18 @@
                   "type": "string"
                 }
               }
+            },
+            "agentgateway": {
+              "type": "object",
+              "title": "Agent gateway",
+              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) \u2014 what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enabled"
+                }
+              }
             }
           }
         },
@@ -1390,6 +1449,18 @@
                   "type": "string"
                 }
               }
+            },
+            "agentgateway": {
+              "type": "object",
+              "title": "Agent gateway",
+              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) \u2014 what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enabled"
+                }
+              }
             }
           }
         },
@@ -1755,6 +1826,18 @@
                       }
                     }
                   }
+                }
+              }
+            },
+            "agentgateway": {
+              "type": "object",
+              "title": "Agent gateway",
+              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) \u2014 what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enabled"
                 }
               }
             }
@@ -2198,6 +2281,18 @@
                   "type": "string"
                 }
               }
+            },
+            "agentgateway": {
+              "type": "object",
+              "title": "Agent gateway",
+              "additionalProperties": false,
+              "description": "Route the portal's Autopilot A2A calls through the agentgateway data plane instead of straight to kagent-ui, so the user Bearer they carry is validated and per-user RBAC applies. Injected fill-if-absent from features.agentGateway.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                }
+              }
             }
           }
         },
@@ -2365,6 +2460,18 @@
                 },
                 "imageRegistry": {
                   "type": "string"
+                }
+              }
+            },
+            "agentgateway": {
+              "type": "object",
+              "title": "Agent gateway",
+              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) \u2014 what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enabled"
                 }
               }
             }
@@ -2763,7 +2870,7 @@
                   "graph": {
                     "type": "object",
                     "additionalProperties": false,
-                    "description": "repo-mcp-server's own Graphify DOMAIN graph tools — a different flag from mcpServers.structureGraph, which is a separate server.",
+                    "description": "repo-mcp-server's own Graphify DOMAIN graph tools \u2014 a different flag from mcpServers.structureGraph, which is a separate server.",
                     "properties": {
                       "enabled": {
                         "type": "boolean"
@@ -2913,11 +3020,13 @@
             },
             "agentgateway": {
               "type": "object",
+              "title": "Agent gateway",
+              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) \u2014 what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
               "additionalProperties": false,
-              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN), so the gateway can enforce per-user RBAC. Needs the kagent controller in trusted-proxy mode; the Krateo installer wires this from its own agentgateway.enabled.",
               "properties": {
                 "enabled": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "title": "Enabled"
                 }
               }
             }
@@ -3081,6 +3190,18 @@
                   "type": "string"
                 }
               }
+            },
+            "agentgateway": {
+              "type": "object",
+              "title": "Agent gateway",
+              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) \u2014 what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enabled"
+                }
+              }
             }
           }
         },
@@ -3106,7 +3227,7 @@
             "modelConfig": {
               "type": "object",
               "additionalProperties": false,
-              "description": "ModelConfig the agent uses — referenced by name (default: the autopilot-owned gemini-pro), or created here (create=true) so this agent's model/provider is independent of the fleet.",
+              "description": "ModelConfig the agent uses \u2014 referenced by name (default: the autopilot-owned gemini-pro), or created here (create=true) so this agent's model/provider is independent of the fleet.",
               "properties": {
                 "name": {
                   "type": "string"
@@ -3229,7 +3350,7 @@
             "repoSearch": {
               "type": "object",
               "additionalProperties": false,
-              "description": "Grounding path — repo-mcp-server (CR owned by the autopilot chart).",
+              "description": "Grounding path \u2014 repo-mcp-server (CR owned by the autopilot chart).",
               "properties": {
                 "enabled": {
                   "type": "boolean"
@@ -6442,6 +6563,18 @@
                   "type": "string"
                 }
               }
+            },
+            "agentgateway": {
+              "type": "object",
+              "title": "Agent gateway",
+              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) \u2014 what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enabled"
+                }
+              }
             }
           }
         },
@@ -6731,6 +6864,608 @@
                     "additionalProperties": false
                   }
                 }
+              }
+            }
+          }
+        },
+        "agentgateway-controller": {
+          "type": "object",
+          "title": "Agentgateway Controller",
+          "description": "The agentgateway control plane: the Gateway API CRDs, the agentgateway CRDs and the agentgateway controller. Values double as the Composition spec (a partial override merged over the chart defaults), so no property is schema-required.",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            },
+            "controlPlane": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Both parts are cluster-scoped, so only one release may own them. Turn either off when something else already installs it.",
+              "properties": {
+                "gatewayApiCrds": {
+                  "type": "boolean",
+                  "description": "Install the Kubernetes Gateway API standard CRDs."
+                },
+                "controller": {
+                  "type": "boolean",
+                  "description": "Install the agentgateway controller and its CRDs."
+                }
+              }
+            },
+            "gatewayApiCrds": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Passthrough to the gateway-api-crds subchart."
+            },
+            "agentgatewayCrds": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Passthrough to the upstream agentgateway-crds subchart."
+            },
+            "agentgateway": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Passthrough to the upstream agentgateway subchart. Keep controllerName and gatewayClassName in step with the agentgateway-policies chart.",
+              "properties": {
+                "controllerName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Written to the controller's AGW_CONTROLLER_NAME; must equal the GatewayClass's spec.controllerName."
+                },
+                "gatewayClassName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The GatewayClass this controller reconciles."
+                }
+              }
+            }
+          }
+        },
+        "agentgateway-policies": {
+          "type": "object",
+          "title": "Agentgateway Policies",
+          "description": "JWT authentication and three-layer RBAC for the Krateo kagent fleet, rendered as agentgateway Gateway/HTTPRoute/AgentgatewayPolicy/AgentgatewayBackend objects. Values double as the Composition spec (a partial override merged over the chart defaults), so no property is schema-required; array items still require their own keys.",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            },
+            "gatewayClass": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The GatewayClass the Gateway below names. The controller that reconciles it is a separate release (chart agentgateway-controller).",
+              "properties": {
+                "create": {
+                  "type": "boolean",
+                  "description": "Render the GatewayClass. false = one of this name already exists; it is cluster-scoped, so only one release may own it."
+                },
+                "controllerName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Must equal the agentgateway controller's own name, or the class is never reconciled."
+                }
+              }
+            },
+            "nameOverride": {
+              "type": "string",
+              "description": "Override the chart-derived object name prefix."
+            },
+            "fullnameOverride": {
+              "type": "string",
+              "description": "Override the full object name prefix."
+            },
+            "gateway": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean",
+                  "description": "Render the Gateway. false = attach to a Gateway someone else owns."
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Gateway name; also the name of the proxy Service the controller provisions, i.e. the host in the kagent controller's proxy.url."
+                },
+                "gatewayClassName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "GatewayClass the agentgateway controller reconciles."
+                },
+                "listenerName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Listener name; every route attaches to it by sectionName."
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "allowedRoutesFrom": {
+                  "type": "string",
+                  "enum": [
+                    "Same",
+                    "All",
+                    "Selector"
+                  ],
+                  "description": "Which namespaces may attach routes to this Gateway."
+                }
+              }
+            },
+            "kagent": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "agentNamespace": {
+                  "type": "string",
+                  "description": "Namespace of the Agent CRs \u2014 the <namespace> segment of /api/a2a/<namespace>/<agent>/. Empty = release namespace."
+                },
+                "controller": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "kagent controller Service; it serves every agent's A2A endpoint."
+                    },
+                    "port": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535
+                    }
+                  }
+                }
+              }
+            },
+            "jwt": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Render the JWT authentication policy and the token-passthrough policy."
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "Strict",
+                    "Optional",
+                    "Permissive"
+                  ],
+                  "description": "Strict = no token is a 401, and each sub-agent route gets its own route-scoped Optional policy so the tokenless agent-card fetch still lands. Optional = one Gateway-wide policy; anonymous traffic is denied by authorization with a 403. Permissive never rejects and should not be used."
+                },
+                "issuer": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Must equal the token's iss claim (authn: krateo.io)."
+                },
+                "audiences": {
+                  "type": "array",
+                  "description": "Allowed aud values. MUST stay empty for authn, which emits no aud claim.",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "userClaim": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Claim carrying the user identity (authn: sub)."
+                },
+                "groupsClaim": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Claim carrying the group list (authn: groups)."
+                },
+                "jwks": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Service publishing the JWKS (authn)."
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "description": "Its namespace. Empty = release namespace; anything else also renders a ReferenceGrant."
+                    },
+                    "port": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "JWKS path on that Service."
+                    },
+                    "cacheDuration": {
+                      "type": "string",
+                      "pattern": "^([0-9]{1,5}(h|m|s|ms)){1,4}$",
+                      "description": "How long a fetched JWKS is reused. agentgateway rejects anything below 5m."
+                    }
+                  }
+                }
+              }
+            },
+            "cors": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "CORS for the gateway \u2014 required once a browser calls it directly (the portal's Autopilot rail). The preflight carries no token and would be 403'd by the authorization policy. Enabled fill-if-absent from features.agentGateway; pin allowOrigins to the real portal origin when you know it.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "allowOrigins": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": [
+                    "*"
+                  ]
+                },
+                "allowMethods": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": [
+                    "GET",
+                    "POST",
+                    "OPTIONS"
+                  ]
+                },
+                "allowHeaders": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": [
+                    "Authorization",
+                    "Content-Type"
+                  ]
+                },
+                "allowCredentials": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "maxAge": {
+                  "type": "integer",
+                  "default": 300
+                }
+              }
+            },
+            "authorization": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Render the Gateway-level Allow policy carrying layers 1 and 3. false leaves the gateway authenticating without authorizing."
+                }
+              }
+            },
+            "endpointRules": {
+              "type": "array",
+              "description": "Layer 1 \u2014 which subjects may reach which agent's A2A endpoint directly.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "agents",
+                  "subjects"
+                ],
+                "properties": {
+                  "agents": {
+                    "type": "array",
+                    "minItems": 1,
+                    "description": "Agent names, or [\"*\"] for the whole /api/a2a/<ns>/ prefix.",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "subjects": {
+                    "type": "object",
+                    "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone.",
+                    "additionalProperties": false,
+                    "minProperties": 1,
+                    "properties": {
+                      "anyAuthenticated": {
+                        "type": "boolean",
+                        "description": "Any request carrying a token this gateway validated."
+                      },
+                      "users": {
+                        "type": "array",
+                        "description": "Values of the user claim (authn: the username in `sub`).",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "groups": {
+                        "type": "array",
+                        "description": "Values that must appear in the groups claim (authn: `groups`, a list of strings).",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "mcpTraffic": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Traffic-layer gate for the proxied /mcp hop. Which tool may run is mcpServers[].toolRules.",
+              "properties": {
+                "subjects": {
+                  "type": "object",
+                  "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone.",
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "anyAuthenticated": {
+                      "type": "boolean",
+                      "description": "Any request carrying a token this gateway validated."
+                    },
+                    "users": {
+                      "type": "array",
+                      "description": "Values of the user claim (authn: the username in `sub`).",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "groups": {
+                      "type": "array",
+                      "description": "Values that must appear in the groups claim (authn: `groups`, a list of strings).",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "mcpServers": {
+              "type": "array",
+              "description": "In-cluster MCP servers to front. Each entry renders an AgentgatewayBackend + route (required once the kagent controller proxies agent egress) and its per-tool rules. External MCP servers are not proxied and must not be listed.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "port"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Service name, which is also the x-kagent-host value (<service>.<namespace>)."
+                  },
+                  "port": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "MCP endpoint path on the server. Default /mcp."
+                  },
+                  "protocol": {
+                    "type": "string",
+                    "enum": [
+                      "StreamableHTTP",
+                      "SSE"
+                    ],
+                    "description": "MCP transport. Default StreamableHTTP."
+                  },
+                  "toolRules": {
+                    "type": "array",
+                    "description": "Layer 2 \u2014 each entry restricts the named tools to the given subjects. Rules are AND'd into one expression, so a rule can only narrow access. Tools named nowhere stay open.",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "tools",
+                        "subjects"
+                      ],
+                      "properties": {
+                        "tools": {
+                          "type": "array",
+                          "minItems": 1,
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "subjects": {
+                          "type": "object",
+                          "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone.",
+                          "additionalProperties": false,
+                          "minProperties": 1,
+                          "properties": {
+                            "anyAuthenticated": {
+                              "type": "boolean",
+                              "description": "Any request carrying a token this gateway validated."
+                            },
+                            "users": {
+                              "type": "array",
+                              "description": "Values of the user claim (authn: the username in `sub`).",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "groups": {
+                              "type": "array",
+                              "description": "Values that must appear in the groups claim (authn: `groups`, a list of strings).",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "subAgents": {
+              "type": "array",
+              "description": "Layer 3 \u2014 every agent that can be an A2A delegation target. Each entry renders the header-matched route, the token passthrough, the anonymous agent-card allowance and the delegation rule.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "subjects"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Agent name, which is also its Service name and the x-kagent-host value."
+                  },
+                  "port": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535,
+                    "description": "The agent's A2A port. Default 8080."
+                  },
+                  "subjects": {
+                    "type": "object",
+                    "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone.",
+                    "additionalProperties": false,
+                    "minProperties": 1,
+                    "properties": {
+                      "anyAuthenticated": {
+                        "type": "boolean",
+                        "description": "Any request carrying a token this gateway validated."
+                      },
+                      "users": {
+                        "type": "array",
+                        "description": "Values of the user claim (authn: the username in `sub`).",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "groups": {
+                        "type": "array",
+                        "description": "Values that must appear in the groups claim (authn: `groups`, a list of strings).",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "extraAllowExpressions": {
+              "type": "array",
+              "description": "Extra CEL expressions appended verbatim to the Gateway Allow policy. OR'd with the generated ones, so they can only widen access.",
+              "items": {
+                "type": "string",
+                "minLength": 1
               }
             }
           }

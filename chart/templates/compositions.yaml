@@ -64,7 +64,13 @@
 {{- end }}
 {{- if eq $render "true" }}
 {{- $spec := dict }}
-{{- if $c.expose }}
+{{/* agentgateway-policies: the Service exists but no VALUES key of this chart creates it (the
+     agentgateway controller provisions it from the Gateway), so there is nothing to flip — writing
+     `service` would fail the chart's own schema. Named directly rather than a new pin field/schema
+     property (e.g. `serviceUnmanaged`) so this one-off doesn't need its own entry in
+     values.schema.json's components[] schema and a regenerated Installer CRD. Exposure still READS
+     the live Service (inst.peerurl) and still emits an HTTPRoute for it. */}}
+{{- if and $c.expose (ne $c.name "agentgateway-policies") }}
 {{- if $isLB }}
 {{- if $c.serviceValuesPath }}
 {{- /* Component whose Service is NOT at the chart's top-level `service` (e.g. kagent's UI
@@ -258,6 +264,57 @@
 {{- end }}
 {{- end }}
 {{- end }}
+{{- /* Agent gateway (features.agentGateway): carry the CALLER'S identity past the gateway, which
+       no single component can do for itself — the kagent controller must trust and forward the
+       JWT and send agent egress back through the gateway, and each agent pod must re-attach the
+       token to its own MCP/A2A calls. Without both, only "which agent may this user reach" is
+       enforceable; tool and sub-agent RBAC stay inert.
+       Fill-if-absent (unlike the exposure/vertexAI wiring above), so componentValues wins.
+       Every tunable lives in the policies chart; the two values read here only so proxy.url and
+       the controller's claim follow an override of them. */ -}}
+{{- if $top.Values.features.agentGateway -}}
+{{- $agw := dig "agentgateway-policies" "gateway" dict (default dict $top.Values.componentValues) -}}
+{{- $userClaim := dig "agentgateway-policies" "jwt" "userClaim" "sub" (default dict $top.Values.componentValues) -}}
+{{- if eq $c.name "kagent" -}}
+{{- /* The controller's default `unsecure` mode stamps a static admin@kagent.dev and forwards
+     nothing, so every agent would see one identity no matter who called. */ -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "kagentapp" "controller" "auth" "mode") "value" "trusted-proxy") -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "kagentapp" "controller" "auth" "userIdClaim") "value" $userClaim) -}}
+{{- /* The proxy Service the controller provisions for a Gateway carries the GATEWAY's name. */ -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "kagentapp" "proxy" "url") "value" (printf "http://%s.%s.svc.cluster.local:%v" (default "krateo-agent-gateway" $agw.name) $top.Values.namespaces.krateo (default 8080 $agw.port))) -}}
+{{- end -}}
+{{- /* Same flag on the frontend, which is not an agent but IS a caller: it routes the portal's
+     Autopilot A2A requests (carrying the logged-in user's Bearer) at the gateway instead of
+     kagent-ui, which is the only way that token is ever validated. */ -}}
+{{- if or $c.vertexAI (eq $c.name "frontend") -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "agentgateway" "enabled") "value" true) -}}
+{{- end -}}
+{{- /* And CORS on the gateway, because that portal call is a cross-origin BROWSER call: the
+     preflight it sends first carries no token, so the authorization policy would 403 it and the
+     rail could never start. Only the preflight is short-circuited.
+     FORCED, not fill-if-absent: cors's own schema declares defaults for allowOrigins/allowMethods/
+     allowHeaders/etc alongside `enabled: false`, so pinning allowOrigins to the real portal origin
+     (which every real install needs to do) drags `enabled: false` into explicit presence too —
+     fill-if-absent then finds the leaf already there and never flips it. Safe to force: nothing
+     else has a reason to want CORS off here while the portal is calling the gateway directly. */ -}}
+{{- if eq $c.name "agentgateway-policies" -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "cors" "enabled") "value" true) -}}
+{{- end -}}
+{{- /* features.ingress already installs the Gateway API CRDs, an agentgateway controller and a
+     GatewayClass of the same name — all cluster-scoped, so a second owner collides. Stand down.
+     FORCED, not fill-if-absent: these three leaves are also user-facing componentValues, so an
+     override left at its default `true` would otherwise be "present" and survive fill-if-absent,
+     reinstalling a second cluster-scoped owner. Same reasoning as cors.enabled above. */ -}}
+{{- if $top.Values.features.ingress -}}
+{{- if eq $c.name "agentgateway-controller" -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "controlPlane" "gatewayApiCrds") "value" false) -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "controlPlane" "controller") "value" false) -}}
+{{- end -}}
+{{- if eq $c.name "agentgateway-policies" -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "gatewayClass" "create") "value" false) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- /* Auto-orchestration: the model-owner (autopilot) attaches EVERY deployed agent as an A2A
        sub-agent. When extraAgents is NOT explicitly set, the installer AUTO-DERIVES it from the
        feature-enabled `vertexAI` agent components (excluding the owner itself) — so the enterprise

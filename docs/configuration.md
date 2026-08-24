@@ -4,7 +4,7 @@ title: installer — configuration
 description: The whole values surface — feature gates, the exposure model (LoadBalancer/NodePort lookups), componentValues deep-merge, registryAuth, vertexAI, localModel, hitlApproval and the bootstrap switch — with the render-time mechanics behind each.
 resource: oci://ghcr.io/krateo-platformops/charts/installer
 tags: [configuration, values, exposure, features]
-timestamp: 2026-08-07T00:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # Configuration
@@ -49,6 +49,7 @@ later on the CR.
 | `coreAgents` | `false` | The base agent layer: `kagent-crds` → `kagent` → `installer-agent` + `krateo-autopilot` + `incident-agent`. The autopilot component brings up `repo-mcp-server`, the grounding server every agent in the fleet reads through. |
 | `specialistAgents` | `false` | The 5 component specialist agents (`authn/snowplow/frontend/clickstack/core-provider-agent`) + `clickhouse-mcp-server`. Needs `coreAgents` (they all dep on `kagent`). |
 | `ingress` | `false` | Opt-in **edge layer**, dep-chained: `gateway-api-crds` (the Gateway API CRDs) → `agentgateway` (the Gateway API controller + CRDs + the platform `GatewayClass`/`Gateway`) → `cert-manager` (operator + CRDs) → `cert-manager-issuers` (ACME/CA Issuers) → `external-dns` (DNS records) — all **public** `oci://ghcr.io/krateo-blueprints/charts`. Off by default; the base install pulls nothing from `krateo-blueprints` unless enabled. Leave off if you front Krateo another way (an existing ingress controller / cloud LB / mesh, or your own Gateway). |
+| `agentGateway` | `false` | Opt-in **agent gateway**, dep-chained: `agentgateway-controller` (Gateway API CRDs + the agentgateway controller) → `agentgateway-policies` (the `GatewayClass`, the agent `Gateway`, the routes and the JWT/RBAC policies) — both **private** `oci://ghcr.io/krateo-agentiko/charts`, so `registryAuth` applies. Needs `coreAgents`, and an issuer whose JWKS the gateway trusts (`authn`, via `portal`, by default) — below. |
 
 **`ingress` is the whole edge, no BYO Gateway.** Everything-is-a-blueprint: the Gateway
 itself (`agentgateway`) and its CRDs (`gateway-api-crds`) are installer components too, so
@@ -323,6 +324,94 @@ model id `model`; every other agent is pointed at the owner-created ModelConfig
 (`modelConfig.create: false`, `name: refName`) — the whole fleet on one local LLM with
 no per-agent-chart change. Use a tool-calling-capable model (`qwen3.6` is the default;
 `gemma ≤ 3` cannot tool-call).
+
+## `features.agentGateway` — JWT auth and per-user RBAC for the agent fleet
+
+Opt-in, `false`. Without it a kagent agent sees one static identity for every caller, and
+anyone who can reach an agent can make it run any tool it owns. Turning it on puts an
+agentgateway data plane in front of the fleet and makes the **calling user's** JWT (issued by
+`authn`) the thing every access decision is keyed on — through every hop:
+
+```
+user ──▶ gateway ──▶ kagent-controller ──▶ agent ──▶ tool
+                                             └──▶ sub-agent
+```
+
+Enabling it is a **breaking change for existing callers**: a valid token becomes mandatory.
+That is why no upgrade turns it on.
+
+### What the flag installs, and what it wires
+
+| | |
+|---|---|
+| `agentgateway-controller` | The Gateway API CRDs, the agentgateway CRDs and the agentgateway controller — the upstream charts from `oci://cr.agentgateway.dev/charts` (the registry the agentgateway install docs publish), wrapped only so they can be a Composition. Separate from the policies component because helm maps every kind in a manifest before applying any of it, so the release shipping the Gateway API CRDs can carry no Gateway API resource. |
+| `agentgateway-policies` | The `GatewayClass`, the agent `Gateway`, the routes to the controller / the agents / their MCP servers, and the JWT + authorization policies. Deps: `agentgateway-controller` + `kagent`. |
+| `kagent` (wired) | `controller.auth.mode=trusted-proxy` + `userIdClaim`, so it trusts and forwards the caller's token instead of stamping a static `admin@kagent.dev`; and `proxy.url`, so agent egress flows back through the gateway. |
+| every agent (wired) | `agentgateway.enabled: true` (`KAGENT_PROPAGATE_TOKEN` in the pod), so each re-attaches the caller's token to its own outbound MCP/A2A calls. |
+| `frontend` (wired) | the same `agentgateway.enabled: true`. The portal is not an agent but it *is* a caller: the flag points its Autopilot A2A requests at the gateway instead of kagent-ui, which is the only way the user Bearer they carry is ever validated. The gateway's browser-reachable origin reaches it through the ordinary exposure model — `agentgateway-policies` is an `expose: true` peer with `configKeys: [AUTOPILOT_API_BASE_URL]`, exactly like authn/snowplow/sse-proxy — and the frontend chart appends the A2A path. |
+| `agentgateway-policies` (wired) | `cors.enabled: true`. That portal call is a cross-origin *browser* call, so the gateway has to answer the unauthenticated `OPTIONS` preflight the browser sends first; its own authorization policy would `403` it and the rail would never start. Only the preflight is short-circuited — a real request with no or a bad token is still `403`/`401`. |
+
+The agent and controller entries are what make **tool** and **delegation** RBAC possible at all;
+without them only "which agent may this user reach" is enforceable. All of them are injected
+**fill-if-absent**, so a
+`componentValues` override wins on every leaf — including `componentValues.kagent.kagentapp.proxy.url`.
+This is the opposite of the exposure/vertexAI wiring, which stays authoritative.
+
+### Everything else is the charts' own values
+
+There is no second copy of the policies chart's surface in this chart: every setting — the gateway
+name and port, the JWKS endpoint, the claims, and all three RBAC layers — is
+`componentValues.agentgateway-policies`, with the defaults chosen by that chart. The installer
+reads only `gateway.name`/`gateway.port` and `jwt.userClaim` from there, so `proxy.url` and the
+controller's claim follow an override of them.
+
+```yaml
+componentValues:
+  agentgateway-policies:
+    endpointRules:                     # layer 1: who may reach which agent
+      - agents: [installer-agent, core-provider-agent]
+        subjects: { groups: [admins] }
+      - agents: [autopilot, clickstack-agent]
+        subjects: { groups: [admins, devs] }
+    mcpServers:                        # layer 2: which tools — and the routes that reach them
+      - name: kagent-tools
+        port: 8084
+        toolRules:
+          - tools: [k8s_apply_manifest, k8s_delete_resource, helm_upgrade]
+            subjects: { groups: [admins] }
+    subAgents:                         # layer 3: who may delegate to which agent
+      - name: installer-agent
+        subjects: { groups: [admins] }
+```
+
+The chart's defaults, with no rules set, authenticate every caller and gate nothing.
+
+Three things worth knowing before turning it on:
+
+- **The gateway's Service is not this chart's to flip.** The agentgateway controller creates the
+  proxy Service from the `Gateway`, so `agentgateway-policies` is named directly in the exposure
+  template (not a pin field) to skip the service-flip: the exposure layer *reads* that Service
+  (and routes to it under `exposure.type: Gateway`) but never writes a `service` value the policies
+  chart has no key for. It is a `LoadBalancer` by default, so
+  `AUTOPILOT_API_BASE_URL` resolves on any cluster with an LB controller; without one (kind), pin
+  `componentValues.frontend.config.AUTOPILOT_API_BASE_URL` to a reachable **origin** — the frontend
+  chart adds the path — and keep `componentValues.agentgateway-policies.cors.allowOrigins` in step
+  with the portal's own origin.
+- **`mcpServers` is load-bearing.** With `proxy.url` set, every agent's MCP call is rewritten
+  through the gateway, so an in-cluster server missing from that list `404`s and its agents lose
+  every tool. If you replace the chart's list, cross-check it against
+  `kubectl -n krateo-system get remotemcpserver`. External MCP servers (`flux-schema-mcp-server`)
+  are *not* proxied and must not be listed.
+- **With `ingress` also on**, the edge blueprint already owns the Gateway API CRDs, an
+  agentgateway controller and a `GatewayClass` of the same name — all cluster-scoped. The
+  installer stands this feature's copies down (`controlPlane.*: false`,
+  `gatewayClass.create: false`). The two dep chains are independent, so `agentgateway-policies` may
+  fail its first apply or two while `gateway-api-crds` is still coming up; it converges on the
+  next reconcile.
+- **Turning it back off unwinds cleanly but not atomically.** Setting it `false` drops both
+  components and removes the controller injections in the same reconcile; the controller rolls
+  back to direct egress, and tool calls fail for the moment between the routes going away and the
+  new controller pod being ready.
 
 ## `hitlApproval`
 

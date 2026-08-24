@@ -4,7 +4,7 @@ title: installer — log
 description: Curated chronological history of the umbrella installer since its migration to krateo-platformops — notable changes and decisions, newest first; release notes stay in GitHub Releases.
 resource: oci://ghcr.io/krateo-platformops/charts/installer
 tags: [history]
-timestamp: 2026-08-07T00:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # Log
@@ -12,6 +12,48 @@ timestamp: 2026-08-07T00:00:00Z
 Curated history, newest first. This repo starts at the 2026-08-04 migration of the
 umbrella chart into `krateo-platformops` (0.3.1); the pre-migration 0.2.x line lived
 in the predecessor personal-org repo and is not mirrored here.
+
+## 2026-08-20 — agent gateway (JWT auth + per-user RBAC for the fleet)
+
+New opt-in `features.agentGateway` (default `false`). It installs two dep-chained
+`krateo-agentiko` components and wires two others:
+
+- `agentgateway-controller` (kind `AgentgatewayController`) — the Gateway API CRDs, the
+  agentgateway CRDs and the controller, subcharted from `oci://cr.agentgateway.dev/charts`
+  (upstream's own registry; the wrapper exists only because a Composition needs a
+  `values.schema.json`, which the upstream chart does not ship). Separate from the policies because helm maps every kind
+  in a manifest before applying any of it, so the release shipping the Gateway API CRDs can carry
+  no Gateway API resource.
+- `agentgateway-policies` (kind `AgentgatewayPolicies`, deps `agentgateway-controller` + `kagent`) — the
+  `GatewayClass`, the agent `Gateway`, the routes and the JWT/RBAC policies. Its deps stop at the
+  substrate: depending on the agents would stall it on any profile where one is absent.
+- `kagent` gets `controller.auth.mode=trusted-proxy` + `userIdClaim` and `proxy.url`; every agent
+  component gets `agentgateway.enabled` (`KAGENT_PROPAGATE_TOKEN` in the pod). Those two carry the
+  caller's identity past the gateway, which is what makes tool and delegation RBAC possible.
+- `frontend` gets the same `agentgateway.enabled`, which repoints the portal's Autopilot A2A
+  calls at the gateway instead of kagent-ui — otherwise the Bearer the browser sends reaches the
+  `trusted-proxy` controller without ever being validated, and no RBAC layer applies to portal
+  traffic. The gateway's browser-reachable origin arrives through the ordinary exposure model:
+  `agentgateway-policies` is now an `expose: true` peer with `configKeys: [AUTOPILOT_API_BASE_URL]`.
+  Its Service is provisioned by the agentgateway controller (not the chart), so
+  compositions.yaml skips the service-flip for it by name instead of adding a new pin field/schema
+  property — a one-off boolean would need its own entry in values.schema.json's `components[]`
+  schema, and thus a regenerated Installer CRD, for a single component's plumbing quirk.
+- `agentgateway-policies` gets `cors.enabled`, because that portal call is cross-origin: a browser
+  sends an unauthenticated `OPTIONS` preflight first and the gateway's own authorization policy
+  `403`s it. The CORS filter short-circuits the preflight only — a real request with no or a bad
+  token is still `403`/`401`.
+
+The injection is **fill-if-absent** (new `inst.fillPath` helper), unlike the exposure and vertexAI
+wiring: a `componentValues` override wins on every leaf. Nothing else lands in this chart's values
+— the gateway name, the JWKS endpoint, the claims and all three RBAC layers are the policies chart's
+own values under `componentValues.agentgateway-policies`, with its defaults, and the installer reads
+only `gateway.name`/`gateway.port`/`jwt.userClaim` back out so `proxy.url` follows an override.
+
+The `ingress` pins are untouched. When both features are on, the edge blueprint already owns the
+Gateway API CRDs, a controller and a `GatewayClass` of that name, so the installer stands this
+feature's copies down. With `features.agentGateway: false` the render is unchanged except for the
+two new Kinds in the ordered-teardown list.
 
 ## 2026-08-13 — actually removed the fetch-mcp-server pin
 
