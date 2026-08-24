@@ -110,17 +110,17 @@ components:
 # krateo-platformops/charts (no repo override).
 - name: clickhouse-operator
   kind: ClickhouseOperator
-  version: 0.1.0
+  version: 0.1.1
   tier: observability
   feature: portal
 - name: mongodb-operator
   kind: MongodbOperator
-  version: 0.1.0
+  version: 0.2.0
   tier: observability
   feature: portal
 - name: krateo-observability
   kind: KrateoObservability
-  version: 0.1.11
+  version: 0.1.12
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -128,14 +128,14 @@ components:
   feature: portal
 - name: otel-collector-deployment
   kind: OtelCollectorDeployment
-  version: 0.3.4
+  version: 0.3.5
   deps:
   - krateo-observability
   tier: observability
   feature: portal
 - name: otel-collector-daemonset
   kind: OtelCollectorDaemonset
-  version: 0.1.6
+  version: 0.1.7
   deps:
   - otel-collector-deployment
   tier: observability
