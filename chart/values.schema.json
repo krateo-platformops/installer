@@ -1522,6 +1522,19 @@
                 }
               }
             },
+            "structureGraph": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Code-STRUCTURE grounding layer (RemoteMCPServer structure-graph-mcp-server, opt-in, deployed by the krateo-autopilot chart when its own mcpServers.structureGraph.enabled is true). Must match that flag.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                }
+              }
+            },
             "resources": {
               "type": "object",
               "additionalProperties": false,
@@ -2562,6 +2575,18 @@
               "type": "string",
               "description": "Namespace where the autopilot resources are installed."
             },
+            "runtime": {
+              "type": "string",
+              "enum": [
+                "go",
+                "python"
+              ],
+              "description": "kagent agent runtime: Go ADK (go) or Python ADK (python)."
+            },
+            "runtimeImageRegistry": {
+              "type": "string",
+              "description": "Registry for the kagent runtime image (app/golang-adk)."
+            },
             "geminiApiKey": {
               "type": "object",
               "additionalProperties": false,
@@ -2622,6 +2647,10 @@
                 },
                 "secretName": {
                   "type": "string"
+                },
+                "secretKey": {
+                  "type": "string",
+                  "description": "File name (key) inside secretName; GOOGLE_APPLICATION_CREDENTIALS points at /var/secrets/gcp/<secretKey>. Defaults to key.json."
                 }
               },
               "description": "Gemini Vertex AI provider configuration. When enabled, ModelConfigs use provider GeminiVertexAI with Application Default Credentials (no API key) \u2014 the pod's GKE node SA must have aiplatform access. secretName is optional (only for explicit SA-key auth)."
@@ -2659,6 +2688,120 @@
                   },
                   "protocol": {
                     "type": "string"
+                  },
+                  "replicaCount": {
+                    "type": "integer",
+                    "description": "Keep at 1 for the servers this chart deploys: Streamable-HTTP MCP sessions are stateful, so a second replica breaks follow-up calls with \"400 No valid session ID provided\".",
+                    "minimum": 1,
+                    "maximum": 1
+                  },
+                  "image": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "repository": {
+                        "type": "string"
+                      },
+                      "tag": {
+                        "type": "string",
+                        "description": "Empty means the chart version, so chart X.Y.Z asks for image X.Y.Z."
+                      },
+                      "pullPolicy": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "serviceAccount": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "create": {
+                        "type": "boolean"
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "Empty means the server's own default name."
+                      },
+                      "annotations": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "imagePullSecrets": {
+                    "type": "array",
+                    "description": "Required for the server's private image, e.g. [{name: agentiko-image-pull}].",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "githubTokenSecret": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "Optional GitHub token (Secret ref) to raise repo-mcp-server's anonymous rate limit under heavy fetch load.",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "key": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "prefetch": {
+                    "type": "boolean",
+                    "description": "Warm every repository with a default version at startup instead of fetching lazily on first use."
+                  },
+                  "graph": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "repo-mcp-server's own Graphify DOMAIN graph tools — a different flag from mcpServers.structureGraph, which is a separate server.",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      }
+                    }
+                  },
+                  "cacheSizeLimit": {
+                    "type": "string"
+                  },
+                  "resources": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "limits": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "cpu": {
+                            "x-kubernetes-int-or-string": true
+                          },
+                          "memory": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "requests": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "cpu": {
+                            "x-kubernetes-int-or-string": true
+                          },
+                          "memory": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
                   }
                 }
               },
@@ -2689,6 +2832,10 @@
               "properties": {
                 "language": {
                   "type": "string"
+                },
+                "portalProtocol": {
+                  "type": "boolean",
+                  "description": "Append the portal-rail protocol key to the orchestrator systemMessage. true (default) for any install with the Composable Portal; false for a portal-less install."
                 }
               },
               "description": "Prompts configuration."
@@ -2761,6 +2908,16 @@
                   "apiGroup": {
                     "type": "string"
                   }
+                }
+              }
+            },
+            "agentgateway": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN), so the gateway can enforce per-user RBAC. Needs the kagent controller in trusted-proxy mode; the Krateo installer wires this from its own agentgateway.enabled.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
                 }
               }
             }
