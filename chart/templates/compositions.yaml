@@ -301,14 +301,17 @@
 {{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "cors" "enabled") "value" true) -}}
 {{- end -}}
 {{- /* features.ingress already installs the Gateway API CRDs, an agentgateway controller and a
-     GatewayClass of the same name — all cluster-scoped, so a second owner collides. Stand down. */ -}}
+     GatewayClass of the same name — all cluster-scoped, so a second owner collides. Stand down.
+     FORCED, not fill-if-absent: these three leaves are also user-facing componentValues, so an
+     override left at its default `true` would otherwise be "present" and survive fill-if-absent,
+     reinstalling a second cluster-scoped owner. Same reasoning as cors.enabled above. */ -}}
 {{- if $top.Values.features.ingress -}}
 {{- if eq $c.name "agentgateway-controller" -}}
-{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "controlPlane" "gatewayApiCrds") "value" false) -}}
-{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "controlPlane" "controller") "value" false) -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "controlPlane" "gatewayApiCrds") "value" false) -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "controlPlane" "controller") "value" false) -}}
 {{- end -}}
 {{- if eq $c.name "agentgateway-policies" -}}
-{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "gatewayClass" "create") "value" false) -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "gatewayClass" "create") "value" false) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
