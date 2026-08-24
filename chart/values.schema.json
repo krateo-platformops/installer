@@ -1522,6 +1522,19 @@
                 }
               }
             },
+            "structureGraph": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Code-STRUCTURE grounding layer (RemoteMCPServer structure-graph-mcp-server, opt-in, deployed by the krateo-autopilot chart when its own mcpServers.structureGraph.enabled is true). Must match that flag.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
+                }
+              }
+            },
             "resources": {
               "type": "object",
               "additionalProperties": false,
