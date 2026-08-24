@@ -256,7 +256,7 @@ components:
   modelOwner: true
 - name: incident-agent
   kind: IncidentAgent
-  version: 0.1.0
+  version: 0.1.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - krateo-autopilot
@@ -375,7 +375,7 @@ components:
   vertexAI: true
 - name: krateo-blueprint-agent
   kind: KrateoBlueprintAgent
-  version: 0.2.2
+  version: 0.2.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
