@@ -329,7 +329,7 @@
     "componentValues": {
       "type": "object",
       "title": "Per-component spec overrides",
-      "description": "Per-component Composition spec overrides, STRICTLY TYPED against each pinned component's chart schema (regenerated per installer version by hack/gen-componentvalues-schema.py). Deep-merged into the rendered Composition spec; the installer-computed wiring (service.type/config/vertexAI/hitlApproval) stays authoritative and wins on any leaf conflict.",
+      "description": "Per-component Composition spec overrides, STRICTLY TYPED against each pinned component's chart schema. This is a HAND-CURATED, deliberate override surface: every leaf is explicitly typed and unknown keys are REJECTED (additionalProperties is false on every object). No free-form escapes remain anywhere in this schema (neither an open additionalProperties nor the k8s preserve-unknown extension) \u2014 enforced in CI by .github/workflows/check-no-unknowns.yaml. Invariants: each component's `global` is the fixed engine-injected block (plumbing InjectGlobalValues) plus imageRegistry; `resources` is k8s ResourceRequirements (limits/requests each with cpu/memory); label, annotation and nodeSelector maps are typed string maps. To expose a NEW override knob for a component, add it here explicitly and typed \u2014 do not reintroduce a free-form object. Deep-merged into the rendered Composition spec; the installer-computed wiring (service.type/config/vertexAI/hitlApproval) stays authoritative and wins on any leaf conflict.",
       "additionalProperties": false,
       "properties": {
         "authn": {
@@ -523,7 +523,33 @@
             },
             "resources": {
               "type": "object",
-              "title": "Resources"
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
             },
             "livenessProbe": {
               "type": "object",
@@ -648,8 +674,48 @@
             },
             "global": {
               "type": "object",
-              "title": "Global values",
-              "description": "Helm global values (injected when this chart is used as a subchart)."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -748,11 +814,78 @@
             },
             "resources": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
             },
             "global": {
               "type": "object",
-              "additionalProperties": true
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -764,8 +897,48 @@
           "properties": {
             "global": {
               "type": "object",
-              "title": "Global values",
-              "description": "Helm global values (injected when this chart is used as a subchart)."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -776,7 +949,48 @@
           "properties": {
             "global": {
               "type": "object",
-              "additionalProperties": true
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "replicaCount": {
               "type": "integer",
@@ -939,18 +1153,58 @@
           "properties": {
             "global": {
               "type": "object",
-              "title": "Global values",
-              "description": "Helm global values propagated to the upstream subchart."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "operator": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": false,
               "title": "Upstream clickhouse-operator-helm passthrough",
               "description": "Values forwarded to the upstream clickhouse-operator-helm subchart (webhook, certManager, crd, manager, rbac, etc.).",
               "properties": {
                 "webhook": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "enable": {
                       "type": "boolean"
@@ -959,7 +1213,7 @@
                 },
                 "certManager": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "enable": {
                       "type": "boolean"
@@ -1064,11 +1318,78 @@
             },
             "resources": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
             },
             "global": {
               "type": "object",
-              "additionalProperties": true
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -1203,11 +1524,78 @@
             },
             "resources": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
             },
             "global": {
               "type": "object",
-              "additionalProperties": true
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "mcpServers": {
               "type": "object",
@@ -1312,7 +1700,33 @@
                     },
                     "resources": {
                       "type": "object",
-                      "additionalProperties": true
+                      "additionalProperties": false,
+                      "properties": {
+                        "limits": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "cpu": {
+                              "x-kubernetes-int-or-string": true
+                            },
+                            "memory": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "requests": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "cpu": {
+                              "x-kubernetes-int-or-string": true
+                            },
+                            "memory": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
                     },
                     "imagePullSecrets": {
                       "type": "array",
@@ -1552,8 +1966,33 @@
             },
             "resources": {
               "type": "object",
-              "title": "Resources",
-              "default": {}
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
             },
             "livenessProbe": {
               "type": "object",
@@ -1679,7 +2118,7 @@
               "default": {
                 "enabled": false
               },
-              "additionalProperties": true,
+              "additionalProperties": false,
               "properties": {
                 "enabled": {
                   "type": "boolean"
@@ -1692,7 +2131,7 @@
                 },
                 "quota": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": false
                 },
                 "widgetPlurals": {
                   "type": "array",
@@ -1704,8 +2143,48 @@
             },
             "global": {
               "type": "object",
-              "title": "Global values",
-              "description": "Helm global values (injected when used as a subchart)."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -1803,11 +2282,78 @@
             },
             "resources": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
             },
             "global": {
               "type": "object",
-              "additionalProperties": true
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -1819,7 +2365,48 @@
           "properties": {
             "global": {
               "type": "object",
-              "title": "Global values"
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -1831,23 +2418,66 @@
           "properties": {
             "global": {
               "type": "object",
-              "title": "Global values",
-              "description": "Helm global values propagated to the upstream subchart."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "kagentapp": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": false,
               "title": "Upstream kagent passthrough",
               "description": "Values forwarded to the upstream kagent subchart (providers, per-agent enabled flags, tool server, etc.).",
               "properties": {
                 "providers": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "default": {
                       "type": "string"
                     }
                   }
+                },
+                "fullnameOverride": {
+                  "type": "string"
                 }
               }
             }
@@ -1861,18 +2491,58 @@
           "properties": {
             "global": {
               "type": "object",
-              "title": "Global values",
-              "description": "Helm global values propagated to the upstream subchart."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "crds": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": false,
               "title": "Upstream kagent-crds passthrough",
               "description": "Values forwarded to the upstream kagent-crds subchart (e.g. kmcp.enabled).",
               "properties": {
                 "kmcp": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "enabled": {
                       "type": "boolean"
@@ -1909,7 +2579,7 @@
               "type": "object",
               "additionalProperties": {
                 "type": "object",
-                "additionalProperties": true,
+                "additionalProperties": false,
                 "properties": {
                   "name": {
                     "type": "string"
@@ -1979,7 +2649,7 @@
               "type": "object",
               "additionalProperties": {
                 "type": "object",
-                "additionalProperties": true,
+                "additionalProperties": false,
                 "properties": {
                   "enabled": {
                     "type": "boolean"
@@ -1998,7 +2668,7 @@
               "type": "object",
               "additionalProperties": {
                 "type": "object",
-                "additionalProperties": true,
+                "additionalProperties": false,
                 "properties": {
                   "enabled": {
                     "type": "boolean"
@@ -2029,8 +2699,48 @@
             },
             "global": {
               "type": "object",
-              "additionalProperties": true,
-              "description": "Helm global values (injected by the composition runtime)."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "extraAgents": {
               "type": "array",
@@ -2142,20 +2852,85 @@
             },
             "resources": {
               "type": "object",
-              "additionalProperties": true,
-              "description": "Agent pod resource requests/limits."
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
             },
             "global": {
               "type": "object",
-              "additionalProperties": true,
-              "description": "Helm global values (injected by the composition runtime)."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
         "krateo-helm-render-service": {
           "title": "krateo-helm-render-service values",
           "type": "object",
-          "additionalProperties": true
+          "additionalProperties": false
         },
         "krateo-observability": {
           "title": "krateo-observability values",
@@ -2164,13 +2939,51 @@
           "properties": {
             "global": {
               "type": "object",
-              "additionalProperties": true,
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
               "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                },
                 "storageClassName": {
                   "type": "string"
                 }
-              },
-              "description": "Global values propagated to clickstack and its subcharts."
+              }
             },
             "otelCredentials": {
               "type": "object",
@@ -2209,14 +3022,14 @@
             },
             "clickstack": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": false,
               "properties": {
                 "fullnameOverride": {
                   "type": "string"
                 },
                 "clickhouse": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "enabled": {
                       "type": "boolean"
@@ -2226,7 +3039,7 @@
                     },
                     "persistence": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "enabled": {
                           "type": "boolean"
@@ -2238,11 +3051,11 @@
                     },
                     "resources": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "limits": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "cpu": {
                               "x-kubernetes-int-or-string": true
@@ -2254,7 +3067,7 @@
                         },
                         "requests": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "cpu": {
                               "x-kubernetes-int-or-string": true
@@ -2270,18 +3083,18 @@
                 },
                 "otel": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "enabled": {
                       "type": "boolean"
                     },
                     "resources": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "limits": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "cpu": {
                               "x-kubernetes-int-or-string": true
@@ -2293,7 +3106,7 @@
                         },
                         "requests": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "cpu": {
                               "x-kubernetes-int-or-string": true
@@ -2309,14 +3122,14 @@
                 },
                 "hyperdx": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "enabled": {
                       "type": "boolean"
                     },
                     "ingress": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "enabled": {
                           "type": "boolean"
@@ -2327,14 +3140,14 @@
                 },
                 "mongodb": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "enabled": {
                       "type": "boolean"
                     },
                     "persistence": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "size": {
                           "type": "string"
@@ -2355,8 +3168,48 @@
           "properties": {
             "global": {
               "type": "object",
-              "additionalProperties": true,
-              "description": "Global values shared across charts."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "replicaCount": {
               "type": "integer",
@@ -2484,18 +3337,22 @@
             },
             "podAnnotations": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": {
+                "type": "string"
+              }
             },
             "nodeSelector": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": {
+                "type": "string"
+              }
             },
             "tolerations": {
               "type": "array"
             },
             "affinity": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": false
             }
           }
         },
@@ -2507,12 +3364,52 @@
           "properties": {
             "global": {
               "type": "object",
-              "title": "Global values",
-              "description": "Helm global values propagated to the upstream subchart."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "operator": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": false,
               "title": "Upstream community-operator passthrough",
               "description": "Values forwarded to the upstream MongoDB community-operator subchart (operator deployment, RBAC, community-operator-crds, createResource, etc.)."
             }
@@ -2680,7 +3577,33 @@
             },
             "resources": {
               "type": "object",
-              "title": "Resources"
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
             },
             "autoscaling": {
               "type": "object",
@@ -2900,7 +3823,33 @@
                 },
                 "resources": {
                   "type": "object",
-                  "title": "Resources"
+                  "additionalProperties": false,
+                  "properties": {
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "x-kubernetes-int-or-string": true
+                        },
+                        "memory": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "requests": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "x-kubernetes-int-or-string": true
+                        },
+                        "memory": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
                 },
                 "autoscaling": {
                   "type": "object",
@@ -2989,18 +3938,58 @@
             },
             "global": {
               "type": "object",
-              "title": "Global values",
-              "description": "Helm global values (injected when this chart is used as a subchart)."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "livenessProbe": {
               "type": "object",
               "description": "Kubernetes probe configuration (httpGet/tcpSocket/exec + timing). Empty/unset uses chart defaults.",
-              "additionalProperties": true
+              "additionalProperties": false
             },
             "readinessProbe": {
               "type": "object",
               "description": "Kubernetes probe configuration (httpGet/tcpSocket/exec + timing). Empty/unset uses chart defaults.",
-              "additionalProperties": true
+              "additionalProperties": false
             }
           }
         },
@@ -3012,8 +4001,48 @@
           "properties": {
             "global": {
               "type": "object",
-              "title": "Global values",
-              "description": "Helm global values (injected when this chart is used as a subchart)."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -3024,12 +4053,52 @@
           "properties": {
             "global": {
               "type": "object",
-              "additionalProperties": true,
-              "description": "Global values shared across charts."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "opentelemetry-collector": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": false,
               "properties": {
                 "mode": {
                   "type": "string",
@@ -3041,7 +4110,7 @@
                 },
                 "image": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "repository": {
                       "type": "string"
@@ -3050,7 +4119,7 @@
                 },
                 "command": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "name": {
                       "type": "string"
@@ -3059,7 +4128,7 @@
                 },
                 "clusterRole": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "create": {
                       "type": "boolean"
@@ -3068,7 +4137,7 @@
                       "type": "array",
                       "items": {
                         "type": "object",
-                        "additionalProperties": true,
+                        "additionalProperties": false,
                         "properties": {
                           "apiGroups": {
                             "type": "array",
@@ -3095,11 +4164,11 @@
                 },
                 "presets": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "logsCollection": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "enabled": {
                           "type": "boolean"
@@ -3111,7 +4180,7 @@
                     },
                     "hostMetrics": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "enabled": {
                           "type": "boolean"
@@ -3120,7 +4189,7 @@
                     },
                     "kubernetesAttributes": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "enabled": {
                           "type": "boolean"
@@ -3132,7 +4201,7 @@
                     },
                     "kubeletMetrics": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "enabled": {
                           "type": "boolean"
@@ -3143,21 +4212,21 @@
                 },
                 "config": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "receivers": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "filelog": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "operators": {
                               "type": "array",
                               "items": {
                                 "type": "object",
-                                "additionalProperties": true,
+                                "additionalProperties": false,
                                 "properties": {
                                   "id": {
                                     "type": "string"
@@ -3175,7 +4244,7 @@
                         },
                         "hostmetrics": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "collection_interval": {
                               "type": "string"
@@ -3184,7 +4253,7 @@
                         },
                         "kubeletstats": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "collection_interval": {
                               "type": "string"
@@ -3200,11 +4269,11 @@
                             },
                             "metrics": {
                               "type": "object",
-                              "additionalProperties": true,
+                              "additionalProperties": false,
                               "properties": {
                                 "k8s.pod.cpu_limit_utilization": {
                                   "type": "object",
-                                  "additionalProperties": true,
+                                  "additionalProperties": false,
                                   "properties": {
                                     "enabled": {
                                       "type": "boolean"
@@ -3213,7 +4282,7 @@
                                 },
                                 "k8s.pod.cpu_request_utilization": {
                                   "type": "object",
-                                  "additionalProperties": true,
+                                  "additionalProperties": false,
                                   "properties": {
                                     "enabled": {
                                       "type": "boolean"
@@ -3222,7 +4291,7 @@
                                 },
                                 "k8s.pod.memory_limit_utilization": {
                                   "type": "object",
-                                  "additionalProperties": true,
+                                  "additionalProperties": false,
                                   "properties": {
                                     "enabled": {
                                       "type": "boolean"
@@ -3231,7 +4300,7 @@
                                 },
                                 "k8s.pod.memory_request_utilization": {
                                   "type": "object",
-                                  "additionalProperties": true,
+                                  "additionalProperties": false,
                                   "properties": {
                                     "enabled": {
                                       "type": "boolean"
@@ -3240,7 +4309,7 @@
                                 },
                                 "k8s.pod.uptime": {
                                   "type": "object",
-                                  "additionalProperties": true,
+                                  "additionalProperties": false,
                                   "properties": {
                                     "enabled": {
                                       "type": "boolean"
@@ -3249,7 +4318,7 @@
                                 },
                                 "k8s.node.uptime": {
                                   "type": "object",
-                                  "additionalProperties": true,
+                                  "additionalProperties": false,
                                   "properties": {
                                     "enabled": {
                                       "type": "boolean"
@@ -3258,7 +4327,7 @@
                                 },
                                 "k8s.container.cpu_limit_utilization": {
                                   "type": "object",
-                                  "additionalProperties": true,
+                                  "additionalProperties": false,
                                   "properties": {
                                     "enabled": {
                                       "type": "boolean"
@@ -3267,7 +4336,7 @@
                                 },
                                 "k8s.container.cpu_request_utilization": {
                                   "type": "object",
-                                  "additionalProperties": true,
+                                  "additionalProperties": false,
                                   "properties": {
                                     "enabled": {
                                       "type": "boolean"
@@ -3276,7 +4345,7 @@
                                 },
                                 "k8s.container.memory_limit_utilization": {
                                   "type": "object",
-                                  "additionalProperties": true,
+                                  "additionalProperties": false,
                                   "properties": {
                                     "enabled": {
                                       "type": "boolean"
@@ -3285,7 +4354,7 @@
                                 },
                                 "k8s.container.memory_request_utilization": {
                                   "type": "object",
-                                  "additionalProperties": true,
+                                  "additionalProperties": false,
                                   "properties": {
                                     "enabled": {
                                       "type": "boolean"
@@ -3294,7 +4363,7 @@
                                 },
                                 "container.uptime": {
                                   "type": "object",
-                                  "additionalProperties": true,
+                                  "additionalProperties": false,
                                   "properties": {
                                     "enabled": {
                                       "type": "boolean"
@@ -3309,17 +4378,17 @@
                     },
                     "processors": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "transform": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "log_statements": {
                               "type": "array",
                               "items": {
                                 "type": "object",
-                                "additionalProperties": true,
+                                "additionalProperties": false,
                                 "properties": {
                                   "context": {
                                     "type": "string"
@@ -3337,7 +4406,7 @@
                         },
                         "batch": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "send_batch_size": {
                               "type": "integer"
@@ -3349,7 +4418,7 @@
                         },
                         "memory_limiter": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "check_interval": {
                               "type": "string"
@@ -3366,11 +4435,11 @@
                     },
                     "exporters": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "clickhouse": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "endpoint": {
                               "type": "string"
@@ -3401,7 +4470,7 @@
                             },
                             "retry_on_failure": {
                               "type": "object",
-                              "additionalProperties": true,
+                              "additionalProperties": false,
                               "properties": {
                                 "enabled": {
                                   "type": "boolean"
@@ -3423,15 +4492,15 @@
                     },
                     "service": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "pipelines": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "logs": {
                               "type": "object",
-                              "additionalProperties": true,
+                              "additionalProperties": false,
                               "properties": {
                                 "receivers": {
                                   "type": "array",
@@ -3455,7 +4524,7 @@
                             },
                             "metrics": {
                               "type": "object",
-                              "additionalProperties": true,
+                              "additionalProperties": false,
                               "properties": {
                                 "receivers": {
                                   "type": "array",
@@ -3487,18 +4556,18 @@
                   "type": "array",
                   "items": {
                     "type": "object",
-                    "additionalProperties": true,
+                    "additionalProperties": false,
                     "properties": {
                       "name": {
                         "type": "string"
                       },
                       "valueFrom": {
                         "type": "object",
-                        "additionalProperties": true,
+                        "additionalProperties": false,
                         "properties": {
                           "secretKeyRef": {
                             "type": "object",
-                            "additionalProperties": true,
+                            "additionalProperties": false,
                             "properties": {
                               "name": {
                                 "type": "string"
@@ -3515,11 +4584,11 @@
                 },
                 "resources": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "limits": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "cpu": {
                           "x-kubernetes-int-or-string": true
@@ -3531,7 +4600,7 @@
                     },
                     "requests": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "cpu": {
                           "x-kubernetes-int-or-string": true
@@ -3555,12 +4624,52 @@
           "properties": {
             "global": {
               "type": "object",
-              "additionalProperties": true,
-              "description": "Global values shared across charts."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "opentelemetry-collector": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": false,
               "properties": {
                 "mode": {
                   "type": "string",
@@ -3576,7 +4685,7 @@
                 },
                 "image": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "repository": {
                       "type": "string"
@@ -3591,7 +4700,7 @@
                 },
                 "command": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "name": {
                       "type": "string"
@@ -3600,7 +4709,7 @@
                 },
                 "clusterRole": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "create": {
                       "type": "boolean"
@@ -3609,7 +4718,7 @@
                       "type": "array",
                       "items": {
                         "type": "object",
-                        "additionalProperties": true,
+                        "additionalProperties": false,
                         "properties": {
                           "apiGroups": {
                             "type": "array",
@@ -3636,11 +4745,11 @@
                 },
                 "presets": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "kubernetesAttributes": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "enabled": {
                           "type": "boolean"
@@ -3649,7 +4758,7 @@
                     },
                     "kubernetesEvents": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "enabled": {
                           "type": "boolean"
@@ -3658,7 +4767,7 @@
                     },
                     "clusterMetrics": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "enabled": {
                           "type": "boolean"
@@ -3669,11 +4778,11 @@
                 },
                 "config": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "receivers": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "jaeger": {},
                         "otlp": {},
@@ -3681,13 +4790,13 @@
                         "zipkin": {},
                         "k8sobjects": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "objects": {
                               "type": "array",
                               "items": {
                                 "type": "object",
-                                "additionalProperties": true,
+                                "additionalProperties": false,
                                 "properties": {
                                   "name": {
                                     "type": "string"
@@ -3708,7 +4817,7 @@
                         },
                         "k8s_cluster": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "collection_interval": {
                               "type": "string"
@@ -3731,11 +4840,11 @@
                     },
                     "processors": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "batch": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "send_batch_size": {
                               "type": "integer"
@@ -3747,7 +4856,7 @@
                         },
                         "memory_limiter": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "check_interval": {
                               "type": "string"
@@ -3762,11 +4871,11 @@
                         },
                         "k8sattributes": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "extract": {
                               "type": "object",
-                              "additionalProperties": true,
+                              "additionalProperties": false,
                               "properties": {
                                 "metadata": {
                                   "type": "array",
@@ -3778,7 +4887,7 @@
                                   "type": "array",
                                   "items": {
                                     "type": "object",
-                                    "additionalProperties": true,
+                                    "additionalProperties": false,
                                     "properties": {
                                       "tag_name": {
                                         "type": "string"
@@ -3801,13 +4910,13 @@
                               "type": "array",
                               "items": {
                                 "type": "object",
-                                "additionalProperties": true,
+                                "additionalProperties": false,
                                 "properties": {
                                   "sources": {
                                     "type": "array",
                                     "items": {
                                       "type": "object",
-                                      "additionalProperties": true,
+                                      "additionalProperties": false,
                                       "properties": {
                                         "from": {
                                           "type": "string"
@@ -3825,13 +4934,13 @@
                         },
                         "resource": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "attributes": {
                               "type": "array",
                               "items": {
                                 "type": "object",
-                                "additionalProperties": true,
+                                "additionalProperties": false,
                                 "properties": {
                                   "key": {
                                     "type": "string"
@@ -3849,7 +4958,7 @@
                         },
                         "compositionresolver": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "cache_ttl": {
                               "type": "string"
@@ -3866,11 +4975,11 @@
                     },
                     "exporters": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "clickhouse": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "endpoint": {
                               "type": "string"
@@ -3901,7 +5010,7 @@
                             },
                             "retry_on_failure": {
                               "type": "object",
-                              "additionalProperties": true,
+                              "additionalProperties": false,
                               "properties": {
                                 "enabled": {
                                   "type": "boolean"
@@ -3923,15 +5032,15 @@
                     },
                     "service": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "pipelines": {
                           "type": "object",
-                          "additionalProperties": true,
+                          "additionalProperties": false,
                           "properties": {
                             "logs": {
                               "type": "object",
-                              "additionalProperties": true,
+                              "additionalProperties": false,
                               "properties": {
                                 "receivers": {
                                   "type": "array",
@@ -3955,7 +5064,7 @@
                             },
                             "metrics": {
                               "type": "object",
-                              "additionalProperties": true,
+                              "additionalProperties": false,
                               "properties": {
                                 "receivers": {
                                   "type": "array",
@@ -3988,18 +5097,18 @@
                   "type": "array",
                   "items": {
                     "type": "object",
-                    "additionalProperties": true,
+                    "additionalProperties": false,
                     "properties": {
                       "name": {
                         "type": "string"
                       },
                       "valueFrom": {
                         "type": "object",
-                        "additionalProperties": true,
+                        "additionalProperties": false,
                         "properties": {
                           "secretKeyRef": {
                             "type": "object",
-                            "additionalProperties": true,
+                            "additionalProperties": false,
                             "properties": {
                               "name": {
                                 "type": "string"
@@ -4016,11 +5125,11 @@
                 },
                 "resources": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "limits": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "cpu": {
                           "x-kubernetes-int-or-string": true
@@ -4032,7 +5141,7 @@
                     },
                     "requests": {
                       "type": "object",
-                      "additionalProperties": true,
+                      "additionalProperties": false,
                       "properties": {
                         "cpu": {
                           "x-kubernetes-int-or-string": true
@@ -4050,7 +5159,7 @@
           }
         },
         "portal": {
-          "additionalProperties": true,
+          "additionalProperties": false,
           "properties": {
             "enableAdminUser": {
               "default": true,
@@ -4147,7 +5256,9 @@
                 },
                 "annotations": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "type": "string"
+                  },
                   "description": "Annotations to add to the service account.",
                   "title": "Annotations"
                 },
@@ -4162,25 +5273,29 @@
             },
             "podAnnotations": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": {
+                "type": "string"
+              },
               "description": "Annotations to add to the pod.",
               "title": "Pod Annotations"
             },
             "podLabels": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": {
+                "type": "string"
+              },
               "description": "Labels to add to the pod.",
               "title": "Pod Labels"
             },
             "podSecurityContext": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": false,
               "description": "Pod-level security context.",
               "title": "Pod Security Context"
             },
             "securityContext": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": false,
               "description": "Container-level security context.",
               "title": "Security Context"
             },
@@ -4232,7 +5347,9 @@
                 },
                 "annotations": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "type": "string"
+                  },
                   "description": "Annotations to add to the Ingress.",
                   "title": "Annotations"
                 },
@@ -4572,7 +5689,9 @@
             },
             "nodeSelector": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": {
+                "type": "string"
+              },
               "description": "Node selector for pod scheduling.",
               "title": "Node Selector"
             },
@@ -4583,13 +5702,13 @@
             },
             "affinity": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": false,
               "description": "Pod affinity/anti-affinity rules.",
               "title": "Affinity"
             },
             "env": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": false,
               "properties": {
                 "DEBUG": {
                   "type": "string",
@@ -4690,8 +5809,48 @@
             },
             "global": {
               "type": "object",
-              "additionalProperties": true,
-              "description": "Helm global values (injected by the composition runtime)."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           },
           "description": "Krateo PlatformOps Snowplow blueprint \u2014 full-coverage schema (chart 0.30.249)."
@@ -4791,11 +5950,78 @@
             },
             "resources": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "x-kubernetes-int-or-string": true
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
             },
             "global": {
               "type": "object",
-              "additionalProperties": true
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -4807,8 +6033,48 @@
           "properties": {
             "global": {
               "type": "object",
-              "title": "Global values",
-              "description": "Helm global values (injected when this chart is used as a subchart)."
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -4816,17 +6082,17 @@
           "type": "object",
           "title": "external-dns (edge / ingress)",
           "description": "Spec for the external-dns edge component (feature: ingress), deep-merged into its Composition. Mirrors oci://ghcr.io/krateo-blueprints/charts/external-dns 0.3.x: config lives under the `external-dns` subchart-passthrough key (0.2.0 exposed these at the top level where they never reached the workload \u2014 a breaking-shape fix). The provider API token is referenced via `env[]` from an out-of-band Secret, never part of the blueprint.",
-          "additionalProperties": true,
+          "additionalProperties": false,
           "properties": {
             "external-dns": {
               "type": "object",
               "title": "upstream external-dns passthrough",
               "description": "Passthrough to the upstream external-dns chart. Required for DNS publication: provider.name, domainFilters, txtOwnerId, and env with the provider token.",
-              "additionalProperties": true,
+              "additionalProperties": false,
               "properties": {
                 "provider": {
                   "type": "object",
-                  "additionalProperties": true,
+                  "additionalProperties": false,
                   "properties": {
                     "name": {
                       "type": "string",
@@ -4876,11 +6142,11 @@
           "type": "object",
           "title": "cert-manager operator (edge / ingress)",
           "description": "Optional spec for the cert-manager edge component (feature: ingress) \u2014 the upstream cert-manager operator + CRDs, split out from cert-manager-issuers in blueprint 0.4.0 (installer#34) so its CRDs are established before the Issuers apply. No required fields (installs with upstream defaults); override the operator via the `cert-manager` subchart passthrough.",
-          "additionalProperties": true,
+          "additionalProperties": false,
           "properties": {
             "cert-manager": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": false
             }
           }
         },
@@ -4888,15 +6154,15 @@
           "type": "object",
           "title": "cert-manager-issuers (edge / ingress)",
           "description": "Spec for the cert-manager-issuers edge component (feature: ingress), deep-merged into its Composition. Mirrors oci://ghcr.io/krateo-blueprints/charts/cert-manager-issuers (0.4.0: Issuers only, the operator is now the cert-manager component); REQUIRED: internalCA, acme (acme.gatewayRef points the ACME HTTP-01 solver at the Gateway API edge).",
-          "additionalProperties": true,
+          "additionalProperties": false,
           "properties": {
             "internalCA": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": false
             },
             "acme": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": false
             }
           }
         },
@@ -4904,7 +6170,7 @@
           "type": "object",
           "title": "agentgateway (edge / ingress)",
           "description": "Spec for the agentgateway edge component (feature: ingress), deep-merged into its Composition. Mirrors oci://ghcr.io/krateo-blueprints/charts/agentgateway; renders the platform GatewayClass + Gateway over the bundled upstream controller. gateway.name defaults to krateo-gateway and MUST equal exposure.gatewayRef.name and cert-manager-issuers' acme.gatewayRef.name; leave unset to accept the aligned defaults.",
-          "additionalProperties": true,
+          "additionalProperties": false,
           "properties": {
             "gatewayClassName": {
               "type": "string"
@@ -4914,7 +6180,7 @@
             },
             "gateway": {
               "type": "object",
-              "additionalProperties": true,
+              "additionalProperties": false,
               "properties": {
                 "name": {
                   "type": "string"
