@@ -223,13 +223,13 @@ components:
 # extraAgents fleet from every feature-enabled vertexAI agent.
 - name: kagent-crds
   kind: KagentCrds
-  version: 0.1.3
+  version: 0.1.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   tier: observability
   feature: coreAgents
 - name: kagent
   kind: Kagent
-  version: 0.1.10
+  version: 0.1.11
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent-crds
