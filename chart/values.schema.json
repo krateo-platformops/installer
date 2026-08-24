@@ -569,34 +569,67 @@
               }
             },
             "resources": {
-              "type": "object",
-              "additionalProperties": false,
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
               "properties": {
-                "limits": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
                     },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 },
                 "requests": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
-                    },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 }
-              }
+              },
+              "type": "object"
             },
             "livenessProbe": {
               "type": "object",
@@ -860,34 +893,67 @@
               }
             },
             "resources": {
-              "type": "object",
-              "additionalProperties": false,
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
               "properties": {
-                "limits": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
                     },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 },
                 "requests": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
-                    },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 }
-              }
+              },
+              "type": "object"
             },
             "global": {
               "type": "object",
@@ -1173,34 +1239,67 @@
               }
             },
             "resources": {
-              "type": "object",
-              "additionalProperties": false,
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
               "properties": {
-                "limits": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
                     },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 },
                 "requests": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
-                    },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 }
-              }
+              },
+              "type": "object"
             }
           }
         },
@@ -1276,6 +1375,75 @@
                   "properties": {
                     "enable": {
                       "type": "boolean"
+                    }
+                  }
+                },
+                "manager": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "resources": {
+                      "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
+                      "properties": {
+                        "claims": {
+                          "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                          "items": {
+                            "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                            "properties": {
+                              "name": {
+                                "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                                "type": "string"
+                              },
+                              "request": {
+                                "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array",
+                          "x-kubernetes-list-map-keys": [
+                            "name"
+                          ],
+                          "x-kubernetes-list-type": "map"
+                        },
+                        "limits": {
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ],
+                            "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                            "x-kubernetes-int-or-string": true
+                          },
+                          "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                          "type": "object"
+                        },
+                        "requests": {
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ],
+                            "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                            "x-kubernetes-int-or-string": true
+                          },
+                          "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
                     }
                   }
                 }
@@ -1376,34 +1544,67 @@
               }
             },
             "resources": {
-              "type": "object",
-              "additionalProperties": false,
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
               "properties": {
-                "limits": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
                     },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 },
                 "requests": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
-                    },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 }
-              }
+              },
+              "type": "object"
             },
             "global": {
               "type": "object",
@@ -1607,34 +1808,67 @@
               }
             },
             "resources": {
-              "type": "object",
-              "additionalProperties": false,
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
               "properties": {
-                "limits": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
                     },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 },
                 "requests": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
-                    },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 }
-              }
+              },
+              "type": "object"
             },
             "global": {
               "type": "object",
@@ -2061,34 +2295,67 @@
               }
             },
             "resources": {
-              "type": "object",
-              "additionalProperties": false,
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
               "properties": {
-                "limits": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
                     },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 },
                 "requests": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
-                    },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 }
-              }
+              },
+              "type": "object"
             },
             "livenessProbe": {
               "type": "object",
@@ -2389,34 +2656,67 @@
               }
             },
             "resources": {
-              "type": "object",
-              "additionalProperties": false,
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
               "properties": {
-                "limits": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
                     },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 },
                 "requests": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
-                    },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 }
-              }
+              },
+              "type": "object"
             },
             "global": {
               "type": "object",
@@ -2590,14 +2890,79 @@
                 "providers": {
                   "type": "object",
                   "additionalProperties": false,
-                  "properties": {
-                    "default": {
-                      "type": "string"
-                    }
-                  }
+                  "properties": {}
                 },
                 "fullnameOverride": {
                   "type": "string"
+                },
+                "controller": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "resources": {
+                      "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
+                      "properties": {
+                        "claims": {
+                          "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                          "items": {
+                            "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                            "properties": {
+                              "name": {
+                                "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                                "type": "string"
+                              },
+                              "request": {
+                                "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array",
+                          "x-kubernetes-list-map-keys": [
+                            "name"
+                          ],
+                          "x-kubernetes-list-type": "map"
+                        },
+                        "limits": {
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ],
+                            "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                            "x-kubernetes-int-or-string": true
+                          },
+                          "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                          "type": "object"
+                        },
+                        "requests": {
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ],
+                            "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                            "x-kubernetes-int-or-string": true
+                          },
+                          "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  }
                 }
               }
             }
@@ -3117,34 +3482,67 @@
               }
             },
             "resources": {
-              "type": "object",
-              "additionalProperties": false,
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
               "properties": {
-                "limits": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
                     },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 },
                 "requests": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
-                    },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 }
-              }
+              },
+              "type": "object"
             },
             "global": {
               "type": "object",
@@ -3392,34 +3790,67 @@
               }
             },
             "resources": {
-              "type": "object",
-              "additionalProperties": false,
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
               "properties": {
-                "limits": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
                     },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 },
                 "requests": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
-                    },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 }
-              }
+              },
+              "type": "object"
             },
             "global": {
               "type": "object",
@@ -3619,6 +4050,307 @@
                           }
                         }
                       }
+                    },
+                    "cluster": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "spec": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "containerTemplate": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "resources": {
+                                  "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
+                                  "properties": {
+                                    "claims": {
+                                      "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                                      "items": {
+                                        "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                                        "properties": {
+                                          "name": {
+                                            "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                                            "type": "string"
+                                          },
+                                          "request": {
+                                            "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "name"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "type": "array",
+                                      "x-kubernetes-list-map-keys": [
+                                        "name"
+                                      ],
+                                      "x-kubernetes-list-type": "map"
+                                    },
+                                    "limits": {
+                                      "additionalProperties": {
+                                        "anyOf": [
+                                          {
+                                            "type": "integer"
+                                          },
+                                          {
+                                            "type": "string"
+                                          }
+                                        ],
+                                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                                        "x-kubernetes-int-or-string": true
+                                      },
+                                      "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                                      "type": "object"
+                                    },
+                                    "requests": {
+                                      "additionalProperties": {
+                                        "anyOf": [
+                                          {
+                                            "type": "integer"
+                                          },
+                                          {
+                                            "type": "string"
+                                          }
+                                        ],
+                                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                                        "x-kubernetes-int-or-string": true
+                                      },
+                                      "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                                      "type": "object"
+                                    }
+                                  },
+                                  "type": "object"
+                                }
+                              }
+                            },
+                            "podTemplate": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "nodeSelector": {
+                                  "additionalProperties": {
+                                    "type": "string"
+                                  },
+                                  "description": "NodeSelector is a selector which must be true for the pod to fit on a node.\nSelector which must match a node's labels for the pod to be scheduled on that node.\nMore info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",
+                                  "type": "object",
+                                  "x-kubernetes-map-type": "atomic"
+                                },
+                                "tolerations": {
+                                  "description": "If specified, the pod's Tolerations.",
+                                  "items": {
+                                    "description": "The pod this Toleration is attached to tolerates any taint that matches\nthe triple <key,value,effect> using the matching operator <operator>.",
+                                    "properties": {
+                                      "effect": {
+                                        "description": "Effect indicates the taint effect to match. Empty means match all taint effects.\nWhen specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.",
+                                        "type": "string"
+                                      },
+                                      "key": {
+                                        "description": "Key is the taint key that the toleration applies to. Empty means match all taint keys.\nIf the key is empty, operator must be Exists; this combination means to match all values and all keys.",
+                                        "type": "string"
+                                      },
+                                      "operator": {
+                                        "description": "Operator represents a key's relationship to the value.\nValid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.\nExists is equivalent to wildcard for value, so that a pod can\ntolerate all taints of a particular category.\nLt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).",
+                                        "type": "string"
+                                      },
+                                      "tolerationSeconds": {
+                                        "description": "TolerationSeconds represents the period of time the toleration (which must be\nof effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,\nit is not set, which means tolerate the taint forever (do not evict). Zero and\nnegative values will be treated as 0 (evict immediately) by the system.",
+                                        "format": "int64",
+                                        "type": "integer"
+                                      },
+                                      "value": {
+                                        "description": "Value is the taint value the toleration matches to.\nIf the operator is Exists, the value should be empty, otherwise just a regular string.",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "type": "array",
+                                  "x-kubernetes-list-type": "atomic"
+                                }
+                              }
+                            },
+                            "dataVolumeClaimSpec": {
+                              "description": "Specification of persistent storage for ClickHouse data.",
+                              "properties": {
+                                "accessModes": {
+                                  "description": "accessModes contains the desired access modes the volume should have.\nMore info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes-1",
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array",
+                                  "x-kubernetes-list-type": "atomic"
+                                },
+                                "dataSource": {
+                                  "description": "dataSource field can be used to specify either:\n* An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot)\n* An existing PVC (PersistentVolumeClaim)\nIf the provisioner or an external controller can support the specified data source,\nit will create a new volume based on the contents of the specified data source.\nWhen the AnyVolumeDataSource feature gate is enabled, dataSource contents will be copied to dataSourceRef,\nand dataSourceRef contents will be copied to dataSource when dataSourceRef.namespace is not specified.\nIf the namespace is specified, then dataSourceRef will not be copied to dataSource.",
+                                  "properties": {
+                                    "apiGroup": {
+                                      "description": "APIGroup is the group for the resource being referenced.\nIf APIGroup is not specified, the specified Kind must be in the core API group.\nFor any other third-party types, APIGroup is required.",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "description": "Kind is the type of resource being referenced",
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "description": "Name is the name of resource being referenced",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "name"
+                                  ],
+                                  "type": "object",
+                                  "x-kubernetes-map-type": "atomic"
+                                },
+                                "dataSourceRef": {
+                                  "description": "dataSourceRef specifies the object from which to populate the volume with data, if a non-empty\nvolume is desired. This may be any object from a non-empty API group (non\ncore object) or a PersistentVolumeClaim object.\nWhen this field is specified, volume binding will only succeed if the type of\nthe specified object matches some installed volume populator or dynamic\nprovisioner.\nThis field will replace the functionality of the dataSource field and as such\nif both fields are non-empty, they must have the same value. For backwards\ncompatibility, when namespace isn't specified in dataSourceRef,\nboth fields (dataSource and dataSourceRef) will be set to the same\nvalue automatically if one of them is empty and the other is non-empty.\nWhen namespace is specified in dataSourceRef,\ndataSource isn't set to the same value and must be empty.\nThere are three important differences between dataSource and dataSourceRef:\n* While dataSource only allows two specific types of objects, dataSourceRef\n  allows any non-core object, as well as PersistentVolumeClaim objects.\n* While dataSource ignores disallowed values (dropping them), dataSourceRef\n  preserves all values, and generates an error if a disallowed value is\n  specified.\n* While dataSource only allows local objects, dataSourceRef allows objects\n  in any namespaces.\n(Beta) Using this field requires the AnyVolumeDataSource feature gate to be enabled.\n(Alpha) Using the namespace field of dataSourceRef requires the CrossNamespaceVolumeDataSource feature gate to be enabled.",
+                                  "properties": {
+                                    "apiGroup": {
+                                      "description": "APIGroup is the group for the resource being referenced.\nIf APIGroup is not specified, the specified Kind must be in the core API group.\nFor any other third-party types, APIGroup is required.",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "description": "Kind is the type of resource being referenced",
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "description": "Name is the name of resource being referenced",
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "description": "Namespace is the namespace of resource being referenced\nNote that when a namespace is specified, a gateway.networking.k8s.io/ReferenceGrant object is required in the referent namespace to allow that namespace's owner to accept the reference. See the ReferenceGrant documentation for details.\n(Alpha) This field requires the CrossNamespaceVolumeDataSource feature gate to be enabled.",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "name"
+                                  ],
+                                  "type": "object"
+                                },
+                                "resources": {
+                                  "description": "resources represents the minimum resources the volume should have.\nUsers are allowed to specify resource requirements\nthat are lower than previous value but must still be higher than capacity recorded in the\nstatus field of the claim.\nMore info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#resources",
+                                  "properties": {
+                                    "limits": {
+                                      "additionalProperties": {
+                                        "anyOf": [
+                                          {
+                                            "type": "integer"
+                                          },
+                                          {
+                                            "type": "string"
+                                          }
+                                        ],
+                                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                                        "x-kubernetes-int-or-string": true
+                                      },
+                                      "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                                      "type": "object"
+                                    },
+                                    "requests": {
+                                      "additionalProperties": {
+                                        "anyOf": [
+                                          {
+                                            "type": "integer"
+                                          },
+                                          {
+                                            "type": "string"
+                                          }
+                                        ],
+                                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                                        "x-kubernetes-int-or-string": true
+                                      },
+                                      "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                                      "type": "object"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "selector": {
+                                  "description": "selector is a label query over volumes to consider for binding.",
+                                  "properties": {
+                                    "matchExpressions": {
+                                      "description": "matchExpressions is a list of label selector requirements. The requirements are ANDed.",
+                                      "items": {
+                                        "description": "A label selector requirement is a selector that contains values, a key, and an operator that\nrelates the key and values.",
+                                        "properties": {
+                                          "key": {
+                                            "description": "key is the label key that the selector applies to.",
+                                            "type": "string"
+                                          },
+                                          "operator": {
+                                            "description": "operator represents a key's relationship to a set of values.\nValid operators are In, NotIn, Exists and DoesNotExist.",
+                                            "type": "string"
+                                          },
+                                          "values": {
+                                            "description": "values is an array of string values. If the operator is In or NotIn,\nthe values array must be non-empty. If the operator is Exists or DoesNotExist,\nthe values array must be empty. This array is replaced during a strategic\nmerge patch.",
+                                            "items": {
+                                              "type": "string"
+                                            },
+                                            "type": "array",
+                                            "x-kubernetes-list-type": "atomic"
+                                          }
+                                        },
+                                        "required": [
+                                          "key",
+                                          "operator"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "type": "array",
+                                      "x-kubernetes-list-type": "atomic"
+                                    },
+                                    "matchLabels": {
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      },
+                                      "description": "matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels\nmap is equivalent to an element of matchExpressions, whose key field is \"key\", the\noperator is \"In\", and the values array contains only \"value\". The requirements are ANDed.",
+                                      "type": "object"
+                                    }
+                                  },
+                                  "type": "object",
+                                  "x-kubernetes-map-type": "atomic"
+                                },
+                                "storageClassName": {
+                                  "description": "storageClassName is the name of the StorageClass required by the claim.\nMore info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#class-1",
+                                  "type": "string"
+                                },
+                                "volumeAttributesClassName": {
+                                  "description": "volumeAttributesClassName may be used to set the VolumeAttributesClass used by this claim.\nIf specified, the CSI driver will create or update the volume with the attributes defined\nin the corresponding VolumeAttributesClass. This has a different purpose than storageClassName,\nit can be changed after the claim is created. An empty string or nil value indicates that no\nVolumeAttributesClass will be applied to the claim. If the claim enters an Infeasible error state,\nthis field can be reset to its previous value (including nil) to cancel the modification.\nIf the resource referred to by volumeAttributesClass does not exist, this PersistentVolumeClaim will be\nset to a Pending state, as reflected by the modifyVolumeStatus field, until such as a resource\nexists.\nMore info: https://kubernetes.io/docs/concepts/storage/volume-attributes-classes/",
+                                  "type": "string"
+                                },
+                                "volumeMode": {
+                                  "description": "volumeMode defines what type of volume is required by the claim.\nValue of Filesystem is implied when not included in claim spec.",
+                                  "type": "string"
+                                },
+                                "volumeName": {
+                                  "description": "volumeName is the binding reference to the PersistentVolume backing this claim.",
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "replicas": {
+                              "description": "Number of replicas.",
+                              "format": "int32",
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "shards": {
+                              "description": "Number of shards.",
+                              "format": "int32",
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
                     }
                   }
                 },
@@ -3676,6 +4408,121 @@
                           "type": "boolean"
                         }
                       }
+                    },
+                    "deployment": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "resources": {
+                          "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
+                          "properties": {
+                            "claims": {
+                              "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                              "items": {
+                                "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                                "properties": {
+                                  "name": {
+                                    "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                                    "type": "string"
+                                  },
+                                  "request": {
+                                    "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array",
+                              "x-kubernetes-list-map-keys": [
+                                "name"
+                              ],
+                              "x-kubernetes-list-type": "map"
+                            },
+                            "limits": {
+                              "additionalProperties": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "string"
+                                  }
+                                ],
+                                "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                                "x-kubernetes-int-or-string": true
+                              },
+                              "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                              "type": "object"
+                            },
+                            "requests": {
+                              "additionalProperties": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "string"
+                                  }
+                                ],
+                                "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                                "x-kubernetes-int-or-string": true
+                              },
+                              "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                              "type": "object"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "nodeSelector": {
+                          "additionalProperties": {
+                            "type": "string"
+                          },
+                          "description": "NodeSelector is a selector which must be true for the pod to fit on a node.\nSelector which must match a node's labels for the pod to be scheduled on that node.\nMore info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",
+                          "type": "object",
+                          "x-kubernetes-map-type": "atomic"
+                        },
+                        "tolerations": {
+                          "description": "If specified, the pod's Tolerations.",
+                          "items": {
+                            "description": "The pod this Toleration is attached to tolerates any taint that matches\nthe triple <key,value,effect> using the matching operator <operator>.",
+                            "properties": {
+                              "effect": {
+                                "description": "Effect indicates the taint effect to match. Empty means match all taint effects.\nWhen specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.",
+                                "type": "string"
+                              },
+                              "key": {
+                                "description": "Key is the taint key that the toleration applies to. Empty means match all taint keys.\nIf the key is empty, operator must be Exists; this combination means to match all values and all keys.",
+                                "type": "string"
+                              },
+                              "operator": {
+                                "description": "Operator represents a key's relationship to the value.\nValid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.\nExists is equivalent to wildcard for value, so that a pod can\ntolerate all taints of a particular category.\nLt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).",
+                                "type": "string"
+                              },
+                              "tolerationSeconds": {
+                                "description": "TolerationSeconds represents the period of time the toleration (which must be\nof effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,\nit is not set, which means tolerate the taint forever (do not evict). Zero and\nnegative values will be treated as 0 (evict immediately) by the system.",
+                                "format": "int64",
+                                "type": "integer"
+                              },
+                              "value": {
+                                "description": "Value is the taint value the toleration matches to.\nIf the operator is Exists, the value should be empty, otherwise just a regular string.",
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "type": "array",
+                          "x-kubernetes-list-type": "atomic"
+                        },
+                        "replicas": {
+                          "description": "Number of replicas.",
+                          "format": "int32",
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      }
                     }
                   }
                 },
@@ -3692,6 +4539,166 @@
                       "properties": {
                         "size": {
                           "type": "string"
+                        }
+                      }
+                    },
+                    "spec": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "statefulSet": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "spec": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "template": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "spec": {
+                                      "type": "object",
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "containers": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "name": {
+                                                "type": "string"
+                                              },
+                                              "resources": {
+                                                "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
+                                                "properties": {
+                                                  "claims": {
+                                                    "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                                                    "items": {
+                                                      "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                                                      "properties": {
+                                                        "name": {
+                                                          "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                                                          "type": "string"
+                                                        },
+                                                        "request": {
+                                                          "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "name"
+                                                      ],
+                                                      "type": "object"
+                                                    },
+                                                    "type": "array",
+                                                    "x-kubernetes-list-map-keys": [
+                                                      "name"
+                                                    ],
+                                                    "x-kubernetes-list-type": "map"
+                                                  },
+                                                  "limits": {
+                                                    "additionalProperties": {
+                                                      "anyOf": [
+                                                        {
+                                                          "type": "integer"
+                                                        },
+                                                        {
+                                                          "type": "string"
+                                                        }
+                                                      ],
+                                                      "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                                                      "x-kubernetes-int-or-string": true
+                                                    },
+                                                    "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                                                    "type": "object"
+                                                  },
+                                                  "requests": {
+                                                    "additionalProperties": {
+                                                      "anyOf": [
+                                                        {
+                                                          "type": "integer"
+                                                        },
+                                                        {
+                                                          "type": "string"
+                                                        }
+                                                      ],
+                                                      "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                                                      "x-kubernetes-int-or-string": true
+                                                    },
+                                                    "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                                                    "type": "object"
+                                                  }
+                                                },
+                                                "type": "object"
+                                              }
+                                            }
+                                          }
+                                        },
+                                        "nodeSelector": {
+                                          "additionalProperties": {
+                                            "type": "string"
+                                          },
+                                          "description": "NodeSelector is a selector which must be true for the pod to fit on a node.\nSelector which must match a node's labels for the pod to be scheduled on that node.\nMore info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",
+                                          "type": "object",
+                                          "x-kubernetes-map-type": "atomic"
+                                        },
+                                        "tolerations": {
+                                          "description": "If specified, the pod's Tolerations.",
+                                          "items": {
+                                            "description": "The pod this Toleration is attached to tolerates any taint that matches\nthe triple <key,value,effect> using the matching operator <operator>.",
+                                            "properties": {
+                                              "effect": {
+                                                "description": "Effect indicates the taint effect to match. Empty means match all taint effects.\nWhen specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.",
+                                                "type": "string"
+                                              },
+                                              "key": {
+                                                "description": "Key is the taint key that the toleration applies to. Empty means match all taint keys.\nIf the key is empty, operator must be Exists; this combination means to match all values and all keys.",
+                                                "type": "string"
+                                              },
+                                              "operator": {
+                                                "description": "Operator represents a key's relationship to the value.\nValid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.\nExists is equivalent to wildcard for value, so that a pod can\ntolerate all taints of a particular category.\nLt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).",
+                                                "type": "string"
+                                              },
+                                              "tolerationSeconds": {
+                                                "description": "TolerationSeconds represents the period of time the toleration (which must be\nof effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,\nit is not set, which means tolerate the taint forever (do not evict). Zero and\nnegative values will be treated as 0 (evict immediately) by the system.",
+                                                "format": "int64",
+                                                "type": "integer"
+                                              },
+                                              "value": {
+                                                "description": "Value is the taint value the toleration matches to.\nIf the operator is Exists, the value should be empty, otherwise just a regular string.",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "type": "object"
+                                          },
+                                          "type": "array",
+                                          "x-kubernetes-list-type": "atomic"
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "persistentVolumeClaimRetentionPolicy": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "whenDeleted": {
+                                      "type": "string"
+                                    },
+                                    "whenScaled": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "members": {
+                          "type": "integer"
                         }
                       }
                     }
@@ -3847,34 +4854,67 @@
               "type": "string"
             },
             "resources": {
-              "type": "object",
-              "additionalProperties": false,
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
               "properties": {
-                "limits": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
                     },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 },
                 "requests": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
-                    },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 }
-              }
+              },
+              "type": "object"
             },
             "podAnnotations": {
               "type": "object",
@@ -3952,7 +4992,78 @@
               "type": "object",
               "additionalProperties": false,
               "title": "Upstream community-operator passthrough",
-              "description": "Values forwarded to the upstream MongoDB community-operator subchart (operator deployment, RBAC, community-operator-crds, createResource, etc.)."
+              "description": "Values forwarded to the upstream MongoDB community-operator subchart (operator deployment, RBAC, community-operator-crds, createResource, etc.).",
+              "properties": {
+                "operator": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "resources": {
+                      "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
+                      "properties": {
+                        "claims": {
+                          "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                          "items": {
+                            "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                            "properties": {
+                              "name": {
+                                "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                                "type": "string"
+                              },
+                              "request": {
+                                "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array",
+                          "x-kubernetes-list-map-keys": [
+                            "name"
+                          ],
+                          "x-kubernetes-list-type": "map"
+                        },
+                        "limits": {
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ],
+                            "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                            "x-kubernetes-int-or-string": true
+                          },
+                          "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                          "type": "object"
+                        },
+                        "requests": {
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ],
+                            "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                            "x-kubernetes-int-or-string": true
+                          },
+                          "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  }
+                }
+              }
             }
           }
         },
@@ -4117,34 +5228,67 @@
               }
             },
             "resources": {
-              "type": "object",
-              "additionalProperties": false,
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
               "properties": {
-                "limits": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
                     },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 },
                 "requests": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
-                    },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 }
-              }
+              },
+              "type": "object"
             },
             "autoscaling": {
               "type": "object",
@@ -5124,34 +6268,67 @@
                   }
                 },
                 "resources": {
-                  "type": "object",
-                  "additionalProperties": false,
+                  "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
                   "properties": {
-                    "limits": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "cpu": {
-                          "x-kubernetes-int-or-string": true
+                    "claims": {
+                      "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                      "items": {
+                        "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                        "properties": {
+                          "name": {
+                            "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                            "type": "string"
+                          },
+                          "request": {
+                            "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                            "type": "string"
+                          }
                         },
-                        "memory": {
-                          "type": "string"
-                        }
-                      }
+                        "required": [
+                          "name"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array",
+                      "x-kubernetes-list-map-keys": [
+                        "name"
+                      ],
+                      "x-kubernetes-list-type": "map"
+                    },
+                    "limits": {
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                        "x-kubernetes-int-or-string": true
+                      },
+                      "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                      "type": "object"
                     },
                     "requests": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "cpu": {
-                          "x-kubernetes-int-or-string": true
-                        },
-                        "memory": {
-                          "type": "string"
-                        }
-                      }
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                        "x-kubernetes-int-or-string": true
+                      },
+                      "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                      "type": "object"
                     }
-                  }
+                  },
+                  "type": "object"
                 }
               },
               "description": "Values forwarded to the upstream opentelemetry-collector subchart."
@@ -5665,34 +6842,67 @@
                   }
                 },
                 "resources": {
-                  "type": "object",
-                  "additionalProperties": false,
+                  "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
                   "properties": {
-                    "limits": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "cpu": {
-                          "x-kubernetes-int-or-string": true
+                    "claims": {
+                      "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                      "items": {
+                        "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                        "properties": {
+                          "name": {
+                            "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                            "type": "string"
+                          },
+                          "request": {
+                            "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                            "type": "string"
+                          }
                         },
-                        "memory": {
-                          "type": "string"
-                        }
-                      }
+                        "required": [
+                          "name"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array",
+                      "x-kubernetes-list-map-keys": [
+                        "name"
+                      ],
+                      "x-kubernetes-list-type": "map"
+                    },
+                    "limits": {
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                        "x-kubernetes-int-or-string": true
+                      },
+                      "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                      "type": "object"
                     },
                     "requests": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "cpu": {
-                          "x-kubernetes-int-or-string": true
-                        },
-                        "memory": {
-                          "type": "string"
-                        }
-                      }
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                        "x-kubernetes-int-or-string": true
+                      },
+                      "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                      "type": "object"
                     }
-                  }
+                  },
+                  "type": "object"
                 }
               },
               "description": "Values forwarded to the upstream opentelemetry-collector subchart."
@@ -5941,48 +7151,67 @@
               "title": "Ingress"
             },
             "resources": {
-              "type": "object",
-              "additionalProperties": false,
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
               "properties": {
-                "limits": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true,
-                      "description": "CPU limit.",
-                      "title": "CPU"
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
                     },
-                    "memory": {
-                      "type": "string",
-                      "description": "Memory limit.",
-                      "title": "Memory"
-                    }
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
                   },
-                  "description": "Resource limits.",
-                  "title": "Limits"
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 },
                 "requests": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true,
-                      "description": "CPU request.",
-                      "title": "CPU"
-                    },
-                    "memory": {
-                      "type": "string",
-                      "description": "Memory request.",
-                      "title": "Memory"
-                    }
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
                   },
-                  "description": "Resource requests.",
-                  "title": "Requests"
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 }
               },
-              "description": "Compute resource requests and limits.",
-              "title": "Resources"
+              "type": "object"
             },
             "startupProbe": {
               "type": "object",
@@ -6490,34 +7719,67 @@
               }
             },
             "resources": {
-              "type": "object",
-              "additionalProperties": false,
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
               "properties": {
-                "limits": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
                     },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 },
                 "requests": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "cpu": {
-                      "x-kubernetes-int-or-string": true
-                    },
-                    "memory": {
-                      "type": "string"
-                    }
-                  }
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
                 }
-              }
+              },
+              "type": "object"
             },
             "global": {
               "type": "object",
@@ -6686,6 +7948,69 @@
                   "items": {
                     "type": "object"
                   }
+                },
+                "resources": {
+                  "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
+                  "properties": {
+                    "claims": {
+                      "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                      "items": {
+                        "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                        "properties": {
+                          "name": {
+                            "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                            "type": "string"
+                          },
+                          "request": {
+                            "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array",
+                      "x-kubernetes-list-map-keys": [
+                        "name"
+                      ],
+                      "x-kubernetes-list-type": "map"
+                    },
+                    "limits": {
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                        "x-kubernetes-int-or-string": true
+                      },
+                      "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                      "type": "object"
+                    },
+                    "requests": {
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                        "x-kubernetes-int-or-string": true
+                      },
+                      "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
                 }
               }
             }
@@ -6699,7 +8024,72 @@
           "properties": {
             "cert-manager": {
               "type": "object",
-              "additionalProperties": false
+              "additionalProperties": false,
+              "properties": {
+                "resources": {
+                  "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
+                  "properties": {
+                    "claims": {
+                      "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                      "items": {
+                        "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                        "properties": {
+                          "name": {
+                            "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                            "type": "string"
+                          },
+                          "request": {
+                            "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array",
+                      "x-kubernetes-list-map-keys": [
+                        "name"
+                      ],
+                      "x-kubernetes-list-type": "map"
+                    },
+                    "limits": {
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                        "x-kubernetes-int-or-string": true
+                      },
+                      "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                      "type": "object"
+                    },
+                    "requests": {
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                        "x-kubernetes-int-or-string": true
+                      },
+                      "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
             }
           }
         },
@@ -6743,6 +8133,75 @@
                   "items": {
                     "type": "object"
                   }
+                }
+              }
+            },
+            "agentgateway": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "resources": {
+                  "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
+                  "properties": {
+                    "claims": {
+                      "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                      "items": {
+                        "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                        "properties": {
+                          "name": {
+                            "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                            "type": "string"
+                          },
+                          "request": {
+                            "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array",
+                      "x-kubernetes-list-map-keys": [
+                        "name"
+                      ],
+                      "x-kubernetes-list-type": "map"
+                    },
+                    "limits": {
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                        "x-kubernetes-int-or-string": true
+                      },
+                      "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                      "type": "object"
+                    },
+                    "requests": {
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                        "x-kubernetes-int-or-string": true
+                      },
+                      "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
                 }
               }
             }
