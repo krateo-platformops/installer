@@ -14,7 +14,7 @@ components:
 - name: frontend-crd
   kind: FrontendCrds
   chart: frontend-crds
-  version: 1.4.8
+  version: 1.5.3
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -65,7 +65,7 @@ components:
 - name: frontend
   kind: Frontend
   chart: frontend
-  version: 1.5.2
+  version: 1.5.3
   deps:
   - frontend-crd
   - authn
@@ -91,7 +91,7 @@ components:
   # the catalog installs). Pulled from the public krateo-blueprints /charts base (no registryAuth).
 - name: portal
   kind: Portal
-  version: 1.7.1
+  version: 1.7.3
   deps:
   - frontend
   tier: platform
