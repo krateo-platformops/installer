@@ -53,6 +53,15 @@ components:
   configKeys:
   - SNOWPLOW_API_BASE_URL
   frontendConfigEnv: FRONTEND_CONFIG_CONFIGMAP
+  # Internal (ClusterIP, server-to-server) URLs the snowplow chart hardcodes at the per-component
+  # default ports (env.URL_SELF=snowplow:8081, env.URL_AUTHN=authn:8082) for the #57 seed->authn
+  # loopback-token exchange (and the JWKS fetch derived from URL_AUTHN). exposure.port collapses those
+  # Services to the shared port, so compositions.yaml recomputes these on exposure.port.
+  internalUrls:
+  - path: env.URL_SELF
+    peer: snowplow
+  - path: env.URL_AUTHN
+    peer: authn
 - name: frontend
   kind: Frontend
   chart: frontend
@@ -154,6 +163,12 @@ components:
   configKeys:
   - EVENTS_API_BASE_URL
   - EVENTS_PUSH_API_BASE_URL
+  # sse-proxy verifies authn JWTs MANDATORY/fail-closed, fetching the JWKS from <auth.urlAuthn>/
+  # .well-known/jwks.json (chart-hardcoded authn:8082). exposure.port collapses authn to the shared
+  # port, so recompute auth.urlAuthn on it (else the events bell can't verify tokens and breaks).
+  internalUrls:
+  - path: auth.urlAuthn
+    peer: authn
 # ---- ingress / edge (OPT-IN, feature: ingress — default OFF) ---------------------------
 # The FULL edge as blueprints (everything-is-a-blueprint): the Gateway itself + its CRDs, DNS,
 # and certs — so exposure.type=Gateway needs no BYO Gateway. Public krateo-blueprints charts

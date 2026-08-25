@@ -106,6 +106,24 @@
 {{- end }}
 {{- end }}
 {{- end }}
+{{/* Internal (ClusterIP, server-to-server) URLs. A component declares `internalUrls` in
+     component-pins as a list of `{path: <dotted chart-values path>, peer: <peer-service-name>}` for
+     URLs its chart HARDCODES at a per-component default port — e.g. snowplow's `env.URL_SELF`/
+     `env.URL_AUTHN` (the #57 seed->authn loopback-token exchange + the JWKS fetch derived from
+     URL_AUTHN) and sse-proxy's `auth.urlAuthn` (its MANDATORY, fail-closed JWKS verification source).
+     When exposure.port (LB/NodePort only) collapses every browser-facing Service to the shared port,
+     those hardcoded ports go DEAD: snowplow's content API hangs the portal login, sse-proxy can't
+     fetch authn's JWKS so the events bell breaks. Recompute each on the shared port here. Only when
+     exposure.port is set — unset => the chart defaults already match the per-component Service ports,
+     so this stays byte-identical. forcePath onto $spec (authoritative, before the componentValues
+     merge below, so it survives dest-wins). Peers are expose:true browser-facing components, so their
+     effective port is the shared exposure.port. */}}
+{{- if and $isLB $top.Values.exposure.port $c.internalUrls }}
+{{- range $iu := $c.internalUrls }}
+{{- $url := printf "http://%s.%s.svc.cluster.local:%v" $iu.peer $top.Values.namespaces.krateo (int $top.Values.exposure.port) }}
+{{- include "inst.forcePath" (dict "target" $spec "path" (splitList "." $iu.path) "value" $url) }}
+{{- end }}
+{{- end }}
 {{- if $c.consumer }}
 {{- $cfg := dict }}
 {{- range $d := $components }}
