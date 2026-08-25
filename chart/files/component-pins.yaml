@@ -79,7 +79,7 @@ components:
   consumer: true
 - name: krateo-marketplace-catalog
   kind: KrateoMarketplaceCatalog
-  version: 0.1.1
+  version: 0.1.2
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: portal
