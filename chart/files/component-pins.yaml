@@ -91,7 +91,7 @@ components:
   # the catalog installs). Pulled from the public krateo-blueprints /charts base (no registryAuth).
 - name: portal
   kind: Portal
-  version: 1.7.0
+  version: 1.7.1
   deps:
   - frontend
   tier: platform
