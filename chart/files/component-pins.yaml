@@ -399,6 +399,12 @@ components:
   # namespace the agents live in (agentgateway.enabled).
   configKeys:
   - AUTOPILOT_API_BASE_URL
+  # jwt.jwks.port is the port of the authn Service the gateway fetches JWKS from to verify agent
+  # tokens (chart-default 8082). exposure.port collapses authn to the shared port, so the gateway
+  # would fetch from a dead port and reject EVERY token ("unknown key krateo-authn-key-1"). Port-only
+  # sibling of internalUrls: compositions.yaml sets this to exposure.port when it is set.
+  internalPorts:
+  - path: jwt.jwks.port
 # ---- codegen agents (OPT-IN, feature: codegenAgents — default OFF) ---------------------
 # Cross-cutting codegen/conversion specialists from krateo-agentiko/codegen-agents (migrated
 # from krateo-agentiko (formerly krateo-codegen-agents), krateo- prefix dropped). A distinct opt-in group

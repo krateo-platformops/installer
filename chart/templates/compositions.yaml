@@ -124,6 +124,18 @@
 {{- include "inst.forcePath" (dict "target" $spec "path" (splitList "." $iu.path) "value" $url) }}
 {{- end }}
 {{- end }}
+{{/* Internal service PORTS (the port-only sibling of internalUrls). A component declares
+     `internalPorts: [{path: <dotted chart-values path>}]` for an INTEGER port it hardcodes at an
+     exposed peer's per-component default — e.g. agentgateway-policies' `jwt.jwks.port` (the JWKS
+     backendRef to authn). Here the chart already carries the peer SERVICE separately, so only the
+     port needs to follow exposure.port; recompute it to the shared port. Same gate/authority as
+     internalUrls (isLB && exposure.port, forcePath before the componentValues merge, byte-identical
+     when unset). Peers are expose:true, so their effective port is the shared exposure.port. */}}
+{{- if and $isLB $top.Values.exposure.port $c.internalPorts }}
+{{- range $ip := $c.internalPorts }}
+{{- include "inst.forcePath" (dict "target" $spec "path" (splitList "." $ip.path) "value" (int $top.Values.exposure.port)) }}
+{{- end }}
+{{- end }}
 {{- if $c.consumer }}
 {{- $cfg := dict }}
 {{- range $d := $components }}
