@@ -77,9 +77,21 @@ components:
   nodePort: 31000   # pinned deterministic NodePort (host-mappable) for exposure.type=NodePort
   svcMatch: frontend
   consumer: true
+- name: krateo-marketplace-catalog
+  kind: KrateoMarketplaceCatalog
+  version: 0.1.1
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  tier: platform
+  feature: portal
+  # The marketplace catalog: a tiny composition (no deps) whose chart renders ConfigMap
+  # blueprints-catalog-index (the curated blueprint+operator indexes as JSON). The portal reads it
+  # in-cluster (marketplace.source=configmap, the portal chart default) instead of an external Pages
+  # fetch. NOT a portal dep — the portal reads the ConfigMap with continueOnError, so the catalog pull
+  # never gates portal availability (a missing ConfigMap = an empty marketplace that self-heals when
+  # the catalog installs). Pulled from the public krateo-blueprints /charts base (no registryAuth).
 - name: portal
   kind: Portal
-  version: 1.6.3
+  version: 1.7.0
   deps:
   - frontend
   tier: platform
