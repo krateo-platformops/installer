@@ -65,7 +65,7 @@ components:
 - name: frontend
   kind: Frontend
   chart: frontend
-  version: 1.5.0
+  version: 1.5.2
   deps:
   - frontend-crd
   - authn
@@ -375,7 +375,7 @@ components:
   feature: agentGateway
 - name: agentgateway-policies
   kind: AgentgatewayPolicies
-  version: 0.1.0
+  version: 0.1.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
