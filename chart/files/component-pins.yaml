@@ -352,7 +352,7 @@ components:
 # pattern clickhouse-mcp-server uses. Public krateo-platformops chart, so no repo override.
 - name: alert-troubleshooter
   kind: AlertTroubleshooter
-  version: 0.2.30
+  version: 0.2.31
   deps:
   - incident-agent
   - krateo-observability
