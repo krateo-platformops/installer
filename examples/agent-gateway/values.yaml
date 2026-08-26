@@ -123,3 +123,66 @@ componentValues:
       - name: snowplow-agent
         subjects:
           groups: [admins, devs]
+
+    # ------------------------------------------------------------------------------------
+    # Guardrails — the fourth layer, and the only one that is ON by default. The three above
+    # decide who may make an agent do what; these decide what may be SAID, in either direction.
+    #
+    # They also need one thing the others do not: the agents' MODEL calls have to come through the
+    # gateway, because an agentgateway prompt guard is a `backend.ai` policy and only runs on a
+    # route whose backend declares an LLM provider. The installer wires that half itself
+    # (krateo-autopilot.llmGateway) from this block, so there is nothing to set for it here — and
+    # `vertexAI.enabled` above already tells the gateway which provider to reach.
+    # ------------------------------------------------------------------------------------
+    # Who may spend provider budget on the LLM route the block above rides on. Narrowed from the
+    # chart's "any authenticated user" to match the two-tier split above; a `devs` user can still
+    # reach the agents they are allowed to, and their turns work because `devs` is listed here too.
+    # Drop a group to cut it off at the model call without touching agent reachability.
+    llm:
+      callerAuth:
+        mode: Jwt                      # the caller's own token IS the LLM credential
+        subjects:
+          groups: [admins, devs]
+
+    guardrails:
+      # false drops just the content filtering — the LLM route and the ModelConfig repointing stay
+      # in place. To take the gateway out of the LLM path entirely, set llm.enabled: false instead.
+      enabled: true
+
+      regex:
+        # Inspect tool arguments and results as well as the prompt. Worth it on this fleet: the
+        # tools return live cluster state, which is where PII in a platform actually turns up.
+        pii:
+          scope: [SystemPrompt, Messages, ToolInput, ToolOutput]
+
+        # This fleet's operators paste manifests and logs, so masking (the default) is right on the
+        # request path — they still get an answer. Keep the response side rejecting: a model
+        # echoing a live credential is worth a hard failure.
+        secrets:
+          request:
+            action: Mask
+
+        # Add the organisation's own confidentiality markers to the shipped defaults.
+        companyData:
+          matches:
+            - "(?i)\\b(strictly\\s+)?(confidential|internal use only|not for distribution)\\b"
+            - "\\b[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}\\b"
+            - "(?i)\\bACME-(PROJ|CUST|CASE)-[0-9]{6}\\b"
+
+        # Left OFF, as shipped: these patterns match legitimate platform engineering ("how to
+        # exploit CVE-…", "generate a payload"). A tenant-facing deployment turns them on; an
+        # internal platform uses the ML moderator below instead, which judges intent.
+        # harmfulContent:  { enabled: true }
+        # selfHarmAndHate: { enabled: true }
+
+      # An ML moderator, for the intent a regex cannot see. The template lives in your own cloud
+      # account, so security owns the policy and the platform owns only the wiring. REGIONAL — the
+      # wrong `location` is a 404 at request time, not at install time.
+      #   googleModelArmor:
+      #     enabled: true
+      #     templateId: autopilot
+      #     projectId: <your-gcp-project>
+      #     location: europe-southwest1
+      #     auth:
+      #       gcp:
+      #         type: AccessToken       # omit secretRef on GKE to use the node SA

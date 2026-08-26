@@ -49,7 +49,7 @@ later on the CR.
 | `coreAgents` | `false` | The base agent layer: `kagent-crds` → `kagent` → `installer-agent` + `krateo-autopilot` + `incident-agent`. The autopilot component brings up `repo-mcp-server`, the grounding server every agent in the fleet reads through. |
 | `specialistAgents` | `false` | The 5 component specialist agents (`authn/snowplow/frontend/clickstack/core-provider-agent`) + `clickhouse-mcp-server`. Needs `coreAgents` (they all dep on `kagent`). |
 | `ingress` | `false` | Opt-in **edge layer**, dep-chained: `gateway-api-crds` (the Gateway API CRDs) → `agentgateway` (the Gateway API controller + CRDs + the platform `GatewayClass`/`Gateway`) → `cert-manager` (operator + CRDs) → `cert-manager-issuers` (ACME/CA Issuers) → `external-dns` (DNS records) — all **public** `oci://ghcr.io/krateo-blueprints/charts`. Off by default; the base install pulls nothing from `krateo-blueprints` unless enabled. Leave off if you front Krateo another way (an existing ingress controller / cloud LB / mesh, or your own Gateway). |
-| `agentGateway` | `false` | Opt-in **agent gateway**, dep-chained: `agentgateway-controller` (Gateway API CRDs + the agentgateway controller) → `agentgateway-policies` (the `GatewayClass`, the agent `Gateway`, the routes and the JWT/RBAC policies) — both **private** `oci://ghcr.io/krateo-agentiko/charts`, so `registryAuth` applies. Needs `coreAgents`, and an issuer whose JWKS the gateway trusts (`authn`, via `portal`, by default) — below. |
+| `agentGateway` | `false` | Opt-in **agent gateway**, dep-chained: `agentgateway-controller` (Gateway API CRDs + the agentgateway controller) → `agentgateway-policies` (the `GatewayClass`, the agent `Gateway`, the routes, the JWT/RBAC policies, and the guardrails on the fleet's LLM traffic) — both **private** `oci://ghcr.io/krateo-agentiko/charts`, so `registryAuth` applies. Needs `coreAgents`, and an issuer whose JWKS the gateway trusts (`authn`, via `portal`, by default) — below. |
 
 **`ingress` is the whole edge, no BYO Gateway.** Everything-is-a-blueprint: the Gateway
 itself (`agentgateway`) and its CRDs (`gateway-api-crds`) are installer components too, so
@@ -325,7 +325,7 @@ model id `model`; every other agent is pointed at the owner-created ModelConfig
 no per-agent-chart change. Use a tool-calling-capable model (`qwen3.6` is the default;
 `gemma ≤ 3` cannot tool-call).
 
-## `features.agentGateway` — JWT auth and per-user RBAC for the agent fleet
+## `features.agentGateway` — JWT auth, per-user RBAC and guardrails for the agent fleet
 
 Opt-in, `false`. Without it a kagent agent sees one static identity for every caller, and
 anyone who can reach an agent can make it run any tool it owns. Turning it on puts an
@@ -349,10 +349,12 @@ That is why no upgrade turns it on.
 | `kagent` (wired) | `controller.auth.mode=trusted-proxy` + `userIdClaim`, so it trusts and forwards the caller's token instead of stamping a static `admin@kagent.dev`; and `proxy.url`, so agent egress flows back through the gateway. |
 | every agent (wired) | `agentgateway.enabled: true` (`KAGENT_PROPAGATE_TOKEN` in the pod), so each re-attaches the caller's token to its own outbound MCP/A2A calls. |
 | `frontend` (wired) | the same `agentgateway.enabled: true`. The portal is not an agent but it *is* a caller: the flag points its Autopilot A2A requests at the gateway instead of kagent-ui, which is the only way the user Bearer they carry is ever validated. The gateway's browser-reachable origin reaches it through the ordinary exposure model — `agentgateway-policies` is an `expose: true` peer with `configKeys: [AUTOPILOT_API_BASE_URL]`, exactly like authn/snowplow/sse-proxy — and the frontend chart appends the A2A path. |
-| `agentgateway-policies` (wired) | `cors.enabled: true`. That portal call is a cross-origin *browser* call, so the gateway has to answer the unauthenticated `OPTIONS` preflight the browser sends first; its own authorization policy would `403` it and the rail would never start. Only the preflight is short-circuited — a real request with no or a bad token is still `403`/`401`. |
+| `agentgateway-policies` (wired) | `cors.enabled: true`. That portal call is a cross-origin *browser* call, so the gateway has to answer the unauthenticated `OPTIONS` preflight the browser sends first; its own authorization policy would `403` it and the rail would never start. Only the preflight is short-circuited — a real request with no or a bad token is still `403`/`401`. Plus, when `vertexAI.enabled`, `llm.vertexai.projectId`/`region` (and the SA-key Secret when set), so the guardrail route reaches the same provider the agents were reaching directly. |
+| `krateo-autopilot` (wired) | `llmGateway.enabled: true` + `baseUrl`, so the shared ModelConfigs send their model calls to the gateway's `llm` route. This is what makes anything attached to that route act at all — the **guardrails** today, and rate limits, token budgets, cost controls, model aliases or failover if they get added: they are `backend.ai` policies and only run on a route whose backend declares an LLM provider, so an agent calling Gemini directly is invisible to every one of them. Read from `componentValues.agentgateway-policies.llm.*` (not `guardrails.*` — the route is infrastructure and outlives any one policy on it), so one flag there moves both halves and they cannot drift apart. Skipped on a `localModel` install — that path deliberately points every ModelConfig at an in-cluster Ollama, and the gateway's default upstream is Gemini. |
 
 The agent and controller entries are what make **tool** and **delegation** RBAC possible at all;
-without them only "which agent may this user reach" is enforceable. All of them are injected
+without them only "which agent may this user reach" is enforceable. The autopilot entry is what
+makes the guardrails inspect anything. All of them are injected
 **fill-if-absent**, so a
 `componentValues` override wins on every leaf — including `componentValues.kagent.kagentapp.proxy.url`.
 This is the opposite of the exposure/vertexAI wiring, which stays authoritative.
@@ -360,10 +362,10 @@ This is the opposite of the exposure/vertexAI wiring, which stays authoritative.
 ### Everything else is the charts' own values
 
 There is no second copy of the policies chart's surface in this chart: every setting — the gateway
-name and port, the JWKS endpoint, the claims, and all three RBAC layers — is
+name and port, the JWKS endpoint, the claims, all three RBAC layers and every guardrail knob — is
 `componentValues.agentgateway-policies`, with the defaults chosen by that chart. The installer
-reads only `gateway.name`/`gateway.port` and `jwt.userClaim` from there, so `proxy.url` and the
-controller's claim follow an override of them.
+reads `gateway.name`/`gateway.port`, `jwt.userClaim` and the `llm` block back out, so `proxy.url`,
+the controller's claim and autopilot's `llmGateway.baseUrl` all follow an override of them.
 
 ```yaml
 componentValues:
@@ -384,9 +386,50 @@ componentValues:
         subjects: { groups: [admins] }
 ```
 
-The chart's defaults, with no rules set, authenticate every caller and gate nothing.
+Guardrails are the one part that is **on** by default, because the regex layer costs under a
+millisecond and has no external dependency. Two flags, meaning two different things:
 
-Three things worth knowing before turning it on:
+```yaml
+componentValues:
+  agentgateway-policies:
+    guardrails:
+      enabled: false                   # drop the guards; traffic still goes through the gateway
+    llm:
+      enabled: false                   # drop the route too — agents go back to direct calls
+```
+
+The split is deliberate: `llm` is the AI backend and the route the agents' model calls arrive on,
+and it is where every other `backend.ai` policy would attach (rate limits, token budgets, cost
+controls, model aliases, failover). Guardrails are its first consumer, not its owner. Enabling the
+guards with `llm.enabled: false` and no `guardrails.targetRefs` is a render-time failure rather than
+a silently inert policy.
+
+Or keep it on and add an ML moderator — the template lives in your cloud account, so the platform
+only carries the wiring:
+
+```yaml
+componentValues:
+  agentgateway-policies:
+    guardrails:
+      regex:
+        harmfulContent: { enabled: true }        # ships off: its vocabulary overlaps platform work
+      googleModelArmor:
+        enabled: true
+        templateId: autopilot
+        projectId: my-gcp-project
+        location: europe-southwest1              # a template is REGIONAL
+      webhook:                                   # or your own DLP service
+        enabled: true
+        backendRef: { name: acme-dlp-guardrail, port: 8000 }
+        failureMode: FailClosed
+      llm:
+        callerAuth:
+          subjects: { groups: [platform-operators] }   # who may spend provider budget
+```
+
+The RBAC defaults, with no rules set, authenticate every caller and gate nothing.
+
+Six things worth knowing before turning it on:
 
 - **The gateway's Service is not this chart's to flip.** The agentgateway controller creates the
   proxy Service from the `Gateway`, so `agentgateway-policies` is named directly in the exposure
@@ -412,6 +455,20 @@ Three things worth knowing before turning it on:
   components and removes the controller injections in the same reconcile; the controller rolls
   back to direct egress, and tool calls fail for the moment between the routes going away and the
   new controller pod being ready.
+- **The gateway joins the critical path of every agent turn.** With guardrails on, the
+  orchestrator's model calls go through it, so a `Gateway` that is not `Programmed`, a missing
+  authorization clause on the LLM route, or an external guardrail that is unreachable with
+  `failureMode: FailClosed` all surface as an agent that cannot answer. `openAIModeration` has no
+  failure mode at all: a wrong key fails every turn with
+  `503 processing failed: prompt guard failed`.
+- **A guardrail rejection is not user-facing copy.** kagent streams, so the portal shows
+  `LLM error: STREAM_ERROR … 403 Forbidden` rather than the guard's own `message`. The message is in
+  the proxy log.
+- **Guardrails cover the orchestrator, not yet the whole fleet.** Only `krateo-autopilot` is
+  repointed (and with it the agents that share its ModelConfigs). Every specialist keeps its own
+  direct provider path, so their prompts are unguarded until they are repointed the same way — a
+  deliberate first step, since the rail users actually touch is Autopilot's and the blast radius of
+  the whole fleet behind one gateway is a fleet-wide outage.
 
 ## `hitlApproval`
 

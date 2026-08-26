@@ -319,6 +319,59 @@
 {{- /* The proxy Service the controller provisions for a Gateway carries the GATEWAY's name. */ -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "kagentapp" "proxy" "url") "value" (printf "http://%s.%s.svc.cluster.local:%v" (default "krateo-agent-gateway" $agw.name) $top.Values.namespaces.krateo (default 8080 $agw.port))) -}}
 {{- end -}}
+{{- /* THE LLM HOP — the agent half. The policies chart can render the AI backend and its route,
+     but only the agents' own ModelConfigs decide whether any traffic arrives on it, and that is a
+     different component. This points the model OWNER's ModelConfigs at the route (provider OpenAI +
+     openAI.baseUrl), which covers autopilot and the agents that share its ModelConfigs (k8s-agent,
+     helm-agent). The specialists keep their own direct provider path until they are repointed too.
+
+     Why it matters beyond the flag: agentgateway's `backend.ai` policies — guardrails today, and
+     rate limits, token budgets, cost controls, model aliases or failover tomorrow — run ONLY on a
+     route whose backend declares an LLM provider. An agent calling Gemini directly is invisible to
+     every one of them.
+
+     Gated on the policies chart's `llm.enabled`, NOT on `guardrails.enabled`: the route is
+     infrastructure and outlives any one policy attached to it, so turning the content filtering off
+     leaves the traffic flowing through the gateway (unguarded) rather than yanking the hop out from
+     under it. `llm.enabled: false` is the flag that puts the agents back on direct provider calls.
+
+     SKIPPED on a localModel install: that path deliberately points every ModelConfig at an
+     in-cluster Ollama, and the gateway's own default upstream is Gemini — repointing it here would
+     silently take a no-cloud install back to the cloud. Guardrails for a local model mean pointing
+     the policies chart's `llm.custom` at the Ollama Service instead.
+
+     Fill-if-absent, so an explicit componentValues.krateo-autopilot.llmGateway still wins. */ -}}
+{{- $agwLlm := dig "agentgateway-policies" "llm" dict (default dict $top.Values.componentValues) -}}
+{{- $llmOn := dig "enabled" true $agwLlm -}}
+{{- if and $llmOn (not $top.Values.localModel.enabled) -}}
+{{- $prefix := dig "routePrefix" "/llm/v1" $agwLlm -}}
+{{- $callerAuth := dig "callerAuth" dict $agwLlm -}}
+{{- $mode := dig "mode" "Jwt" $callerAuth -}}
+{{- if $c.modelOwner -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llmGateway" "enabled") "value" true) -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llmGateway" "baseUrl") "value" (printf "http://%s.%s.svc.cluster.local:%v%s" (default "krateo-agent-gateway" $agw.name) $top.Values.namespaces.krateo (default 8080 $agw.port) $prefix)) -}}
+{{- /* The gateway's Jwt mode expects the CALLER's token forwarded as the LLM credential
+     (kagent apiKeyPassthrough); its ApiKey mode expects a shared key, which the agent then has to
+     hold — so the two sides' names differ but the choice is the same one. */ -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llmGateway" "auth") "value" (ternary "ApiKey" "Passthrough" (eq $mode "ApiKey"))) -}}
+{{- if eq $mode "ApiKey" -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llmGateway" "apiKeySecret") "value" (dig "apiKey" "secretRef" "name" "" $callerAuth)) -}}
+{{- end -}}
+{{- end -}}
+{{- /* And the gateway half: which upstream the LLM backend talks to. `provider: auto` in the
+     policies chart resolves to vertexai as soon as a project id is present, so injecting the
+     installer's own vertexAI block is all it takes for the gateway to reach the same provider the
+     agents were reaching directly — including the off-GKE explicit-key path, where the same SA-key
+     Secret the agent pods mount becomes the gateway's ADC credential. */ -}}
+{{- if and (eq $c.name "agentgateway-policies") $top.Values.vertexAI.enabled -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llm" "vertexai" "projectId") "value" $top.Values.vertexAI.projectID) -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llm" "vertexai" "region") "value" $top.Values.vertexAI.location) -}}
+{{- if $top.Values.vertexAI.secretName -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llm" "vertexai" "auth" "gcp" "secretRef" "name") "value" $top.Values.vertexAI.secretName) -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llm" "vertexai" "auth" "gcp" "secretRef" "key") "value" $top.Values.vertexAI.secretKey) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- /* Same flag on the frontend, which is not an agent but IS a caller: it routes the portal's
      Autopilot A2A requests (carrying the logged-in user's Bearer) at the gateway instead of
      kagent-ui, which is the only way that token is ever validated. */ -}}

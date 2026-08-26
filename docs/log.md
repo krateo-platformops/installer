@@ -13,6 +13,44 @@ Curated history, newest first. This repo starts at the 2026-08-04 migration of t
 umbrella chart into `krateo-platformops` (0.3.1); the pre-migration 0.2.x line lived
 in the predecessor personal-org repo and is not mirrored here.
 
+## 2026-08-25 — guardrails: the agent fleet's LLM traffic, filtered
+
+`features.agentGateway` now also puts guardrails on the fleet's LLM traffic — PII and secret
+masking, company-data redaction, prompt-injection blocking, and optional OpenAI moderation, Google
+Model Armor, AWS Bedrock Guardrails or a bring-your-own webhook. Every knob is the policies chart's
+own (`componentValues.agentgateway-policies.guardrails`), fully typed in this chart's
+`values.schema.json` so it is settable from the Installer CR; `guardrails.enabled` is the single
+switch that turns the layer off and on.
+
+The wiring this chart adds is the half no component can do for itself. An agentgateway
+`backend.ai` policy runs only on a route whose backend declares an LLM provider, so the agents' model
+calls have to arrive on the gateway: `compositions.yaml` sets
+`krateo-autopilot.llmGateway.enabled` + `baseUrl`, read from
+`componentValues.agentgateway-policies.llm.*` so one flag there moves both halves and they cannot
+drift. It follows `llm.enabled`, not `guardrails.enabled`: in the policies chart the LLM route is a
+top-level block because it is infrastructure — every `backend.ai` policy attaches to it, guardrails
+being the first — so turning the content filtering off leaves the traffic flowing through the
+gateway rather than yanking the hop out from under it. When `vertexAI.enabled`, the installer also
+fills `llm.vertexai.projectId`/`region` (and the SA-key Secret when set) so the gateway reaches the
+same provider the agents were reaching directly — the same mirror-the-existing-switch shape as the
+per-agent `vertexAI` injection. Both are fill-if-absent, so a `componentValues` override wins.
+
+Skipped on a `localModel` install: that path deliberately points every ModelConfig at an in-cluster
+Ollama, and the gateway's own default upstream is Gemini, so repointing it would take a no-cloud
+install back to the cloud.
+
+Schema drift fixed while in there: `componentValues.agentgateway-policies.sessionTrace` was added to
+the policies chart with the Evidence panel (0.1.1) and never mirrored here, so an override of it was
+rejected by the generated Installer CRD as an unknown field. The whole `agentgateway-policies` block
+is now byte-identical to the chart's own schema with `$ref`s inlined (this file carries no `$ref`,
+because crdgen consumes it).
+
+Verified on kind-krateo end to end: with the flag on, an Autopilot A2A turn's model call traverses
+the gateway (`route=krateo-system/agentgateway-policies-llm`, `gen_ai.provider.name=gcp.gemini`), a
+prompt-injection attempt fails at the model call, `4242424242424242` reaches the model as
+`<CREDIT_CARD>`, and delegation to a specialist still works. The trade is that the gateway is now on
+the critical path of every agent turn.
+
 ## 2026-08-20 — agent gateway (JWT auth + per-user RBAC for the fleet)
 
 New opt-in `features.agentGateway` (default `false`). It installs two dep-chained
