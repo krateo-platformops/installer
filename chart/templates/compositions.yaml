@@ -344,6 +344,21 @@
 {{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "gatewayClass" "create") "value" false) -}}
 {{- end -}}
 {{- end -}}
+{{- /* alert-troubleshooter is a plain webhook (NOT a kagent agent), so it can't carry a caller's
+     token the way the agents above do — it has no caller; a HyperDX alert fires it. Instead it
+     exchanges its OWN projected SA token (audience "authn") at authn for a Krateo JWT and presents
+     THAT on its A2A call to incident-agent, so incident-agent can propagate it to its now-gated MCP
+     tools. So under the gateway we point config.authnUrl at authn's in-cluster Service (chart default
+     "" = disabled, which is exactly right when the gateway is OFF and nothing downstream is gated).
+     Port follows the shared exposure.port when set, else authn's per-component default — the same rule
+     the peer-url/internalUrls wiring uses. Fill-if-absent so a componentValues override still wins.
+     Requires authn's serviceaccount strategy, always present under specialistAgents (needs portal→authn). */ -}}
+{{- if eq $c.name "alert-troubleshooter" -}}
+{{- $authnPort := 8082 -}}
+{{- range $d := $components -}}{{- if eq $d.name "authn" -}}{{- $authnPort = $d.exposePort -}}{{- end -}}{{- end -}}
+{{- if $top.Values.exposure.port -}}{{- $authnPort = $top.Values.exposure.port -}}{{- end -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "config" "authnUrl") "value" (printf "http://authn.%s.svc.cluster.local:%v" $top.Values.namespaces.krateo (int $authnPort))) -}}
+{{- end -}}
 {{- end -}}
 {{- /* Auto-orchestration: the model-owner (autopilot) attaches EVERY deployed agent as an A2A
        sub-agent. When extraAgents is NOT explicitly set, the installer AUTO-DERIVES it from the
