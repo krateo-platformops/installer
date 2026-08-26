@@ -141,9 +141,15 @@
 {{- range $d := $components }}
 {{- if $d.configKeys }}
 {{/* Peer's browser URL port: the shared exposure.port when set, else the peer's own exposePort.
-     (Used for LoadBalancer; NodePort uses the Service's allocated nodePort instead.) */}}
+     (Used for LoadBalancer; NodePort uses the Service's allocated nodePort instead.)
+     EXCEPTION — agentgateway-policies: exposure.port collapses the Services the installer FLIPS
+     (authn/snowplow/frontend/sse-proxy) to the shared port, but the gateway's proxy Service is
+     provisioned by the agentgateway controller on the gateway's OWN listener port (its exposePort,
+     8080), and the service-flip above skips it by name — so its Service never follows exposure.port.
+     Keep exposePort for it, else the frontend's AUTOPILOT_API_BASE_URL is computed on the shared port
+     (e.g. :80) which the gateway does not listen on (it listens on :8080) → a dead browser target. */}}
 {{- $eport := $d.exposePort }}
-{{- if $top.Values.exposure.port }}{{- $eport = $top.Values.exposure.port }}{{- end }}
+{{- if and $top.Values.exposure.port (ne $d.name "agentgateway-policies") }}{{- $eport = $top.Values.exposure.port }}{{- end }}
 {{/* Browser-reachable base URL for this peer, resolved per exposure.type:
      LoadBalancer -> http://<lb-ip>:<exposure.port>; NodePort -> http://<node-ip>:<nodePort>;
      Gateway -> https://<hostname> (exposure.hosts[name] or <svcMatch>.<baseDomain>).
@@ -358,6 +364,17 @@
 {{- range $d := $components -}}{{- if eq $d.name "authn" -}}{{- $authnPort = $d.exposePort -}}{{- end -}}{{- end -}}
 {{- if $top.Values.exposure.port -}}{{- $authnPort = $top.Values.exposure.port -}}{{- end -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "config" "authnUrl") "value" (printf "http://authn.%s.svc.cluster.local:%v" $top.Values.namespaces.krateo (int $authnPort))) -}}
+{{- /* And route its A2A call to incident-agent THROUGH the gateway so the minted JWT is gateway-
+     validated and per-agent RBAC is enforced on that hop — not merely presented to a directly-dialed
+     Service (kagent agents get this for free via the controller's proxy.url rewrite; a plain webhook
+     does not). Use the gateway's CONTROLLER A2A path (/api/a2a/<ns>/incident-agent) — the same route
+     the frontend uses for autopilot — which needs no x-kagent-host header and no app change. The
+     gateway is on its OWN listener port (not exposure.port). Fill-if-absent, so the chart default
+     (direct incident-agent:8080) correctly stands when the gateway is OFF and nothing enforces RBAC. */ -}}
+{{- $gwName := default "krateo-agent-gateway" $agw.name -}}
+{{- $gwPort := default 8080 $agw.port -}}
+{{- $a2a := printf "http://%s.%s.svc.cluster.local:%v/api/a2a/%s/incident-agent" $gwName $top.Values.namespaces.krateo (int $gwPort) $top.Values.namespaces.krateo -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "config" "autopilotA2aUrl") "value" $a2a) -}}
 {{- end -}}
 {{- end -}}
 {{- /* Auto-orchestration: the model-owner (autopilot) attaches EVERY deployed agent as an A2A
