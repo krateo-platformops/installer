@@ -5,7 +5,7 @@
 docs/index.md: the map — what the umbrella installer is + links to the whole bundle
 docs/overview.md: how it works — bootstrap vs composition mode, Pass A/Pass B gating, the self-reconcile loop, the three teardown hooks
 docs/usage.md: the ONE canonical install, surgical upgrade semantics, day-2 CR editing, uninstall, the agent-only profile
-docs/configuration.md: the whole values surface — features, exposure, componentValues, registryAuth, vertexAI, localModel, hitlApproval, bootstrap
+docs/configuration.md: the whole values surface — features (incl. agentGateway: JWT auth, per-user RBAC and LLM guardrails), exposure, componentValues, registryAuth, vertexAI, localModel, hitlApproval, bootstrap
 docs/api.md: the generated Installer CRD (crdgen from values.schema.json), emitted CompositionDefinitions/Compositions, component-pins as version source of truth
 docs/examples.md: index of the runnable examples
 docs/release.md: how a release ships — plain-semver tag → canonical release-oci → GHCR; what a version bump means downstream (GVK migration)
@@ -32,5 +32,5 @@ docs/runbooks/kind-agent-only-profile.md: agent-only install (kagent + autopilot
 docs/runbooks/kind-full-profile.md: full-profile install (portal + observability + agent fleet) on a local kind cluster — kind config, registryAuth, vertexAI, exposure, pinned NodePorts
 examples/kind-full-profile/README.md: full-profile kind values — precondition + helm install -f
 examples/kind-full-profile/values-full.yaml: the full-profile values file (all feature tiers on)
-examples/agent-gateway/README.md: features.agentGateway with a two-tier RBAC split over the fleet — what the installer installs and wires, and how to verify each layer
-examples/agent-gateway/values.yaml: the agent-gateway profile — endpoint/tool/delegation rules under componentValues.agentgateway-policies
+examples/agent-gateway/README.md: features.agentGateway with a two-tier RBAC split over the fleet plus guardrails on the LLM traffic — what the installer installs and wires, how to verify each layer, and how to drop only the guardrails
+examples/agent-gateway/values.yaml: the agent-gateway profile — endpoint/tool/delegation rules and the guardrail block under componentValues.agentgateway-policies

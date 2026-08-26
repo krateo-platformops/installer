@@ -319,6 +319,44 @@
 {{- /* The proxy Service the controller provisions for a Gateway carries the GATEWAY's name. */ -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "kagentapp" "proxy" "url") "value" (printf "http://%s.%s.svc.cluster.local:%v" (default "krateo-agent-gateway" $agw.name) $top.Values.namespaces.krateo (default 8080 $agw.port))) -}}
 {{- end -}}
+{{- /* THE LLM HOP — the agent half. The policies chart renders the AI backend and its route, but
+     whether traffic actually arrives on it is decided by the agents' own ModelConfigs — a different
+     component. Points the model OWNER's ModelConfigs at the route (provider OpenAI + openAI.baseUrl);
+     the agents sharing them (k8s-agent, helm-agent) follow, specialists keep their direct provider path.
+     Gated on the policies chart's `llm.enabled`, not `guardrails.enabled`: the route is infrastructure
+     that outlives any one policy on it, and agentgateway's `backend.ai` policies run ONLY on a route
+     whose backend declares an LLM provider — an agent calling Gemini directly is invisible to them.
+     SKIPPED on localModel, whose ModelConfigs point at an in-cluster Ollama while the gateway's own
+     default upstream is Gemini; guarding a local model means the policies chart's `llm.custom`. */ -}}
+{{- $agwLlm := dig "agentgateway-policies" "llm" dict (default dict $top.Values.componentValues) -}}
+{{- $llmOn := dig "enabled" true $agwLlm -}}
+{{- if and $llmOn (not $top.Values.localModel.enabled) -}}
+{{- $prefix := dig "routePrefix" "/llm/v1" $agwLlm -}}
+{{- $callerAuth := dig "callerAuth" dict $agwLlm -}}
+{{- $mode := dig "mode" "Jwt" $callerAuth -}}
+{{- if $c.modelOwner -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llmGateway" "enabled") "value" true) -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llmGateway" "baseUrl") "value" (printf "http://%s.%s.svc.cluster.local:%v%s" (default "krateo-agent-gateway" $agw.name) $top.Values.namespaces.krateo (default 8080 $agw.port) $prefix)) -}}
+{{- /* The gateway's Jwt mode wants the CALLER's token forwarded as the LLM credential — kagent
+     calls that Passthrough. ApiKey means a shared key the agent holds. Same choice, two names. */ -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llmGateway" "auth") "value" (ternary "ApiKey" "Passthrough" (eq $mode "ApiKey"))) -}}
+{{- if eq $mode "ApiKey" -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llmGateway" "apiKeySecret") "value" (dig "apiKey" "secretRef" "name" "" $callerAuth)) -}}
+{{- end -}}
+{{- end -}}
+{{- /* And the gateway half: which upstream the LLM backend talks to. The policies chart's
+     `provider: auto` resolves to vertexai as soon as a project id is present, so injecting the
+     installer's own vertexAI block is enough — including the off-GKE explicit-key path, where the
+     SA-key Secret the agent pods mount becomes the gateway's ADC credential. */ -}}
+{{- if and (eq $c.name "agentgateway-policies") $top.Values.vertexAI.enabled -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llm" "vertexai" "projectId") "value" $top.Values.vertexAI.projectID) -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llm" "vertexai" "region") "value" $top.Values.vertexAI.location) -}}
+{{- if $top.Values.vertexAI.secretName -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llm" "vertexai" "auth" "gcp" "secretRef" "name") "value" $top.Values.vertexAI.secretName) -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llm" "vertexai" "auth" "gcp" "secretRef" "key") "value" $top.Values.vertexAI.secretKey) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- /* Same flag on the frontend, which is not an agent but IS a caller: it routes the portal's
      Autopilot A2A requests (carrying the logged-in user's Bearer) at the gateway instead of
      kagent-ui, which is the only way that token is ever validated. */ -}}

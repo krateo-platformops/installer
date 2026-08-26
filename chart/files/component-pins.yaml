@@ -264,7 +264,7 @@ components:
   feature: coreAgents
 - name: installer-agent
   kind: InstallerAgent
-  version: 0.2.0
+  version: 0.2.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -273,7 +273,7 @@ components:
   vertexAI: true
 - name: krateo-autopilot
   kind: KrateoAutopilot
-  version: 0.3.3
+  version: 0.3.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -283,7 +283,7 @@ components:
   modelOwner: true
 - name: incident-agent
   kind: IncidentAgent
-  version: 0.1.1
+  version: 0.1.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - krateo-autopilot
@@ -300,7 +300,7 @@ components:
   feature: specialistAgents
 - name: authn-agent
   kind: AuthnAgent
-  version: 0.23.0
+  version: 0.23.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -309,7 +309,7 @@ components:
   vertexAI: true
 - name: snowplow-agent
   kind: SnowplowAgent
-  version: 1.1.0
+  version: 1.1.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -318,7 +318,7 @@ components:
   vertexAI: true
 - name: frontend-agent
   kind: FrontendAgent
-  version: 1.4.0
+  version: 1.4.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -328,7 +328,7 @@ components:
   requireApproval: []
 - name: clickstack-agent
   kind: ClickstackAgent
-  version: 3.1.0
+  version: 3.1.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -337,7 +337,7 @@ components:
   vertexAI: true
 - name: core-provider-agent
   kind: CoreProviderAgent
-  version: 0.55.1
+  version: 0.55.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -375,7 +375,7 @@ components:
   feature: agentGateway
 - name: agentgateway-policies
   kind: AgentgatewayPolicies
-  version: 0.1.1
+  version: 0.1.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
@@ -413,7 +413,7 @@ components:
 # enabled. Kinds are crdgen PascalCase(chart) — tf is NOT an initialism (-> Tf).
 - name: code-analysis-agent
   kind: CodeAnalysisAgent
-  version: 0.2.0
+  version: 0.2.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -422,7 +422,7 @@ components:
   vertexAI: true
 - name: ansible-to-operator-agent
   kind: AnsibleToOperatorAgent
-  version: 0.2.0
+  version: 0.2.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -431,7 +431,7 @@ components:
   vertexAI: true
 - name: tf-provider-to-operator-agent
   kind: TfProviderToOperatorAgent
-  version: 0.2.0
+  version: 0.2.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -440,7 +440,7 @@ components:
   vertexAI: true
 - name: tf-to-helm-agent
   kind: TfToHelmAgent
-  version: 0.2.0
+  version: 0.2.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent

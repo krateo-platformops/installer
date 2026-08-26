@@ -8637,7 +8637,7 @@
             "cors": {
               "type": "object",
               "additionalProperties": false,
-              "description": "CORS for the gateway \u2014 required once a browser calls it directly (the portal's Autopilot rail). The preflight carries no token and would be 403'd by the authorization policy. Enabled fill-if-absent from features.agentGateway; pin allowOrigins to the real portal origin when you know it.",
+              "description": "CORS for the gateway. Only needed when a BROWSER calls it directly (the Krateo portal's Autopilot rail does): the browser sends an unauthenticated OPTIONS preflight first, which the authorization policy would 403, and refuses the real request unless the answer carries Access-Control-Allow-*. Short-circuits the preflight ONLY \u2014 a real request with no/bad token is still 403/401. Server-to-server callers are unaffected. The Krateo installer enables it with features.agentGateway.",
               "properties": {
                 "enabled": {
                   "type": "boolean",
@@ -8645,6 +8645,7 @@
                 },
                 "allowOrigins": {
                   "type": "array",
+                  "description": "Origins allowed to call the gateway from a browser. Defaults to '*' because the portal's browser-facing origin is not knowable in-cluster; pin it to the real portal origin when you know it. Safe by default only while allowCredentials is false \u2014 the credential is a Bearer header the page must set itself, not a cookie.",
                   "items": {
                     "type": "string"
                   },
@@ -8675,10 +8676,12 @@
                 },
                 "allowCredentials": {
                   "type": "boolean",
+                  "description": "Leave false: no cookies are involved, and true alongside allowOrigins ['*'] is rejected by browsers.",
                   "default": false
                 },
                 "maxAge": {
                   "type": "integer",
+                  "description": "Seconds a browser may cache the preflight answer.",
                   "default": 300
                 }
               }
@@ -8715,13 +8718,13 @@
                   },
                   "subjects": {
                     "type": "object",
-                    "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone.",
+                    "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone. `anyAuthenticated` is IGNORED when `users` or `groups` is set: these blocks are deep-merged maps, so a caller narrowing a rule to a group never sees the default `anyAuthenticated: true` disappear, and OR'ing it back in would silently restore access to everyone. Widen again with `anyAuthenticated: true` and no users/groups.",
                     "additionalProperties": false,
                     "minProperties": 1,
                     "properties": {
                       "anyAuthenticated": {
                         "type": "boolean",
-                        "description": "Any request carrying a token this gateway validated."
+                        "description": "Any request carrying a token this gateway validated. Ignored when `users` or `groups` is set."
                       },
                       "users": {
                         "type": "array",
@@ -8751,13 +8754,13 @@
               "properties": {
                 "subjects": {
                   "type": "object",
-                  "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone.",
+                  "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone. `anyAuthenticated` is IGNORED when `users` or `groups` is set: these blocks are deep-merged maps, so a caller narrowing a rule to a group never sees the default `anyAuthenticated: true` disappear, and OR'ing it back in would silently restore access to everyone. Widen again with `anyAuthenticated: true` and no users/groups.",
                   "additionalProperties": false,
                   "minProperties": 1,
                   "properties": {
                     "anyAuthenticated": {
                       "type": "boolean",
-                      "description": "Any request carrying a token this gateway validated."
+                      "description": "Any request carrying a token this gateway validated. Ignored when `users` or `groups` is set."
                     },
                     "users": {
                       "type": "array",
@@ -8834,13 +8837,13 @@
                         },
                         "subjects": {
                           "type": "object",
-                          "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone.",
+                          "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone. `anyAuthenticated` is IGNORED when `users` or `groups` is set: these blocks are deep-merged maps, so a caller narrowing a rule to a group never sees the default `anyAuthenticated: true` disappear, and OR'ing it back in would silently restore access to everyone. Widen again with `anyAuthenticated: true` and no users/groups.",
                           "additionalProperties": false,
                           "minProperties": 1,
                           "properties": {
                             "anyAuthenticated": {
                               "type": "boolean",
-                              "description": "Any request carrying a token this gateway validated."
+                              "description": "Any request carrying a token this gateway validated. Ignored when `users` or `groups` is set."
                             },
                             "users": {
                               "type": "array",
@@ -8890,13 +8893,13 @@
                   },
                   "subjects": {
                     "type": "object",
-                    "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone.",
+                    "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone. `anyAuthenticated` is IGNORED when `users` or `groups` is set: these blocks are deep-merged maps, so a caller narrowing a rule to a group never sees the default `anyAuthenticated: true` disappear, and OR'ing it back in would silently restore access to everyone. Widen again with `anyAuthenticated: true` and no users/groups.",
                     "additionalProperties": false,
                     "minProperties": 1,
                     "properties": {
                       "anyAuthenticated": {
                         "type": "boolean",
-                        "description": "Any request carrying a token this gateway validated."
+                        "description": "Any request carrying a token this gateway validated. Ignored when `users` or `groups` is set."
                       },
                       "users": {
                         "type": "array",
@@ -8926,6 +8929,2319 @@
                 "type": "string",
                 "minLength": 1
               }
+            },
+            "guardrails": {
+              "additionalProperties": false,
+              "description": "Content guardrails on the LLM traffic: PII and secret masking, company-data redaction, prompt-injection blocking, and the external moderation services. An agentgateway prompt guard is a `backend.ai` policy and only runs on a route whose backend declares `spec.ai.provider` \u2014 that route is the top-level `llm` block; these policies attach to it. Disabling this removes every guard and leaves the route in place, so the traffic keeps flowing through the gateway, just unguarded.",
+              "properties": {
+                "bedrockGuardrails": {
+                  "additionalProperties": false,
+                  "description": "Layer 2 \u2014 AWS Bedrock Guardrails, usable in front of any provider (not only a Bedrock model). The one external layer that also honours `scope`, so it can inspect tool arguments and tool results as well as the prompt.",
+                  "properties": {
+                    "apply": {
+                      "additionalProperties": false,
+                      "description": "Which directions this layer runs in. Each direction is a separate guard entry and counts against the 8-per-direction ceiling.",
+                      "properties": {
+                        "request": {
+                          "description": "Inspect the prompt on its way to the provider.",
+                          "type": "boolean"
+                        },
+                        "response": {
+                          "description": "Inspect the model's answer on its way back.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "auth": {
+                      "additionalProperties": false,
+                      "description": "AWS SigV4 (`aws`) for the real service, or an API key for a Bedrock-compatible endpoint behind a gateway.",
+                      "properties": {
+                        "aws": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "assumeRole": {
+                              "description": "STS AssumeRole settings, passed through verbatim. Mutually exclusive with secretRef.",
+                              "type": "object"
+                            },
+                            "region": {
+                              "description": "SigV4 signing region, when the target service is not in the gateway's region.",
+                              "type": "string"
+                            },
+                            "secretRef": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "description": "Secret with `accessKey`, `secretKey` and optionally `sessionToken`.",
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "serviceName": {
+                              "description": "SigV4 service name. Typed AWS backends supply this themselves.",
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "key": {
+                          "description": "Inline key. Least secure.",
+                          "type": "string"
+                        },
+                        "location": {
+                          "additionalProperties": false,
+                          "description": "Where the credential is written on the outgoing request. Empty = the `Authorization` header with a `Bearer ` prefix. Exactly one of the three when set.",
+                          "properties": {
+                            "cookie": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "header": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "prefix": {
+                                  "description": "Prepended to the value, e.g. `Bearer `.",
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "queryParameter": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "secretRef": {
+                          "additionalProperties": false,
+                          "description": "A Kubernetes Secret holding one credential. Empty `name` = the credential source is unset.",
+                          "properties": {
+                            "key": {
+                              "description": "Data key to read. Empty = the location's default (`Authorization` for a header credential, `credentials.json` for GCP). A `Bearer ` prefix is stripped only from the default `Authorization` key, so a raw key must name its own data key.",
+                              "type": "string"
+                            },
+                            "name": {
+                              "description": "Secret name, in this release's namespace.",
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "http": {
+                      "additionalProperties": false,
+                      "description": "HTTP settings for the connection the gateway opens to this backend.",
+                      "properties": {
+                        "requestTimeout": {
+                          "description": "Response deadline, e.g. `5s`. Empty = no chart-set deadline. A short one on the MODEL hop turns a long generation into a 504; on a guardrail hop it is protection against a hung dependency.",
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "identifier": {
+                      "description": "Guardrail id from the Bedrock console.",
+                      "type": "string"
+                    },
+                    "region": {
+                      "description": "Region the guardrail lives in.",
+                      "type": "string"
+                    },
+                    "request": {
+                      "additionalProperties": false,
+                      "description": "What the client is told when this guard rejects. Both empty = the gateway's own default text and 403.",
+                      "properties": {
+                        "message": {
+                          "description": "Response body returned instead of the model's answer.",
+                          "type": "string"
+                        },
+                        "statusCode": {
+                          "description": "HTTP status. 0 = unset (the gateway uses 403).",
+                          "maximum": 599,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "response": {
+                      "additionalProperties": false,
+                      "description": "What the client is told when this guard rejects. Both empty = the gateway's own default text and 403.",
+                      "properties": {
+                        "message": {
+                          "description": "Response body returned instead of the model's answer.",
+                          "type": "string"
+                        },
+                        "statusCode": {
+                          "description": "HTTP status. 0 = unset (the gateway uses 403).",
+                          "maximum": 599,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "scope": {
+                      "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                      "items": {
+                        "enum": [
+                          "SystemPrompt",
+                          "Messages",
+                          "ToolInput",
+                          "ToolOutput"
+                        ],
+                        "type": "string"
+                      },
+                      "maxItems": 4,
+                      "type": "array"
+                    },
+                    "version": {
+                      "description": "Published guardrail version, or DRAFT. A string, not a number \u2014 the API takes it as one.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "enabled": {
+                  "description": "The master switch for the CONTENT filtering. false = no guardrail policy at all; the `llm` route and anything else attached to it is untouched. To take the gateway out of the LLM path entirely, set `llm.enabled: false`.",
+                  "type": "boolean"
+                },
+                "extraRequestGuards": {
+                  "description": "Guard entries appended verbatim to `promptGuard.request`, for a shape these values cannot express. They count against the 8-per-direction ceiling.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "extraResponseGuards": {
+                  "description": "Guard entries appended verbatim to `promptGuard.response`. Same caveat.",
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "googleModelArmor": {
+                  "additionalProperties": false,
+                  "description": "Layer 2 \u2014 Google Cloud Model Armor. Sanitizes against a template you manage in GCP, so the policy itself lives outside this chart: security owns the template, the platform owns the wiring.",
+                  "properties": {
+                    "apply": {
+                      "additionalProperties": false,
+                      "description": "Which directions this layer runs in. Each direction is a separate guard entry and counts against the 8-per-direction ceiling.",
+                      "properties": {
+                        "request": {
+                          "description": "Inspect the prompt on its way to the provider.",
+                          "type": "boolean"
+                        },
+                        "response": {
+                          "description": "Inspect the model's answer on its way back.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "auth": {
+                      "additionalProperties": false,
+                      "description": "Google Cloud credentials. All fields empty = ambient discovery (on GKE, the proxy pod's node SA \u2014 the same path the agents use for Vertex today).",
+                      "properties": {
+                        "gcp": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "audience": {
+                              "description": "Explicit `aud` for an ID token. IdToken only; derived from the backend hostname when empty.",
+                              "type": "string"
+                            },
+                            "secretRef": {
+                              "additionalProperties": false,
+                              "description": "A Kubernetes Secret holding one credential. Empty `name` = the credential source is unset.",
+                              "properties": {
+                                "key": {
+                                  "description": "Data key to read. Empty = the location's default (`Authorization` for a header credential, `credentials.json` for GCP). A `Bearer ` prefix is stripped only from the default `Authorization` key, so a raw key must name its own data key.",
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "description": "Secret name, in this release's namespace.",
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": {
+                              "description": "AccessToken for Google APIs; IdToken only for a Cloud Run style upstream.",
+                              "enum": [
+                                "",
+                                "AccessToken",
+                                "IdToken"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "http": {
+                      "additionalProperties": false,
+                      "description": "HTTP settings for the connection the gateway opens to this backend.",
+                      "properties": {
+                        "requestTimeout": {
+                          "description": "Response deadline, e.g. `5s`. Empty = no chart-set deadline. A short one on the MODEL hop turns a long generation into a 504; on a guardrail hop it is protection against a hung dependency.",
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "location": {
+                      "description": "Region the template was created in. A Model Armor template is REGIONAL, and the wrong region is a 404 at request time, not at install time.",
+                      "type": "string"
+                    },
+                    "projectId": {
+                      "description": "Project the template lives in.",
+                      "type": "string"
+                    },
+                    "request": {
+                      "additionalProperties": false,
+                      "description": "What the client is told when this guard rejects. Both empty = the gateway's own default text and 403.",
+                      "properties": {
+                        "message": {
+                          "description": "Response body returned instead of the model's answer.",
+                          "type": "string"
+                        },
+                        "statusCode": {
+                          "description": "HTTP status. 0 = unset (the gateway uses 403).",
+                          "maximum": 599,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "response": {
+                      "additionalProperties": false,
+                      "description": "What the client is told when this guard rejects. Both empty = the gateway's own default text and 403.",
+                      "properties": {
+                        "message": {
+                          "description": "Response body returned instead of the model's answer.",
+                          "type": "string"
+                        },
+                        "statusCode": {
+                          "description": "HTTP status. 0 = unset (the gateway uses 403).",
+                          "maximum": 599,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "templateId": {
+                      "description": "Template id from the Model Armor console.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "openAIModeration": {
+                  "additionalProperties": false,
+                  "description": "Layer 2 \u2014 the OpenAI Moderations endpoint: ML judgement of intent across hate, harassment, self-harm, sexual and violent content, which regex cannot do. REQUEST path only; the response-side guard type has no moderation form. Costs a network round trip (50-200ms) on every LLM call.",
+                  "properties": {
+                    "auth": {
+                      "additionalProperties": false,
+                      "description": "An API-key credential. Set `secretRef` (preferred) or `key`; `secretRef` wins if both are given.",
+                      "properties": {
+                        "key": {
+                          "description": "Inline key. Least secure \u2014 it lands in the Composition spec and in helm's release Secret in cleartext.",
+                          "type": "string"
+                        },
+                        "location": {
+                          "additionalProperties": false,
+                          "description": "Where the credential is written on the outgoing request. Empty = the `Authorization` header with a `Bearer ` prefix. Exactly one of the three when set.",
+                          "properties": {
+                            "cookie": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "header": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "prefix": {
+                                  "description": "Prepended to the value, e.g. `Bearer `.",
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "queryParameter": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "secretRef": {
+                          "additionalProperties": false,
+                          "description": "A Kubernetes Secret holding one credential. Empty `name` = the credential source is unset.",
+                          "properties": {
+                            "key": {
+                              "description": "Data key to read. Empty = the location's default (`Authorization` for a header credential, `credentials.json` for GCP). A `Bearer ` prefix is stripped only from the default `Authorization` key, so a raw key must name its own data key.",
+                              "type": "string"
+                            },
+                            "name": {
+                              "description": "Secret name, in this release's namespace.",
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "http": {
+                      "additionalProperties": false,
+                      "description": "HTTP settings for the connection the gateway opens to this backend.",
+                      "properties": {
+                        "requestTimeout": {
+                          "description": "Response deadline, e.g. `5s`. Empty = no chart-set deadline. A short one on the MODEL hop turns a long generation into a 504; on a guardrail hop it is protection against a hung dependency.",
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "model": {
+                      "description": "Moderation model, e.g. `omni-moderation-latest`.",
+                      "type": "string"
+                    },
+                    "request": {
+                      "additionalProperties": false,
+                      "description": "What the client is told when this guard rejects. Both empty = the gateway's own default text and 403.",
+                      "properties": {
+                        "message": {
+                          "description": "Response body returned instead of the model's answer.",
+                          "type": "string"
+                        },
+                        "statusCode": {
+                          "description": "HTTP status. 0 = unset (the gateway uses 403).",
+                          "maximum": 599,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "regex": {
+                  "additionalProperties": false,
+                  "description": "Layer 1 \u2014 deterministic, sub-millisecond, no external dependency. Each class renders at most two guard entries (one per direction), evaluated in the order listed here.",
+                  "properties": {
+                    "combine": {
+                      "description": "agentgateway allows at most 8 guards per direction, and the full set here (7 default regex classes + moderation + Model Armor + Bedrock + webhook) is 11. WhenNeeded (the default) keeps one entry per class while the total fits and folds every same-action, same-scope class into one entry once it would exceed 8. Never always keeps them separate and fails the render with an actionable message instead. Always folds unconditionally \u2014 cheapest on slots, and the rejection message stops naming which class fired.",
+                      "enum": [
+                        "WhenNeeded",
+                        "Never",
+                        "Always"
+                      ],
+                      "type": "string"
+                    },
+                    "companyData": {
+                      "additionalProperties": false,
+                      "description": "Company-confidential data. Everything here is organisation-specific by nature, so treat the defaults as a starting shape and add your own classification markers, internal domains and id formats.",
+                      "properties": {
+                        "builtins": {
+                          "description": "agentgateway's own PII recognizers, which validate by pattern AND checksum rather than by keyword.",
+                          "items": {
+                            "enum": [
+                              "CreditCard",
+                              "Ssn",
+                              "Email",
+                              "PhoneNumber",
+                              "CaSin"
+                            ],
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "enabled": {
+                          "description": "Master switch for the class, both directions.",
+                          "type": "boolean"
+                        },
+                        "matches": {
+                          "description": "Rust regex patterns. Additive with `builtins`.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "response": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "scope": {
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "items": {
+                            "enum": [
+                              "SystemPrompt",
+                              "Messages",
+                              "ToolInput",
+                              "ToolOutput"
+                            ],
+                            "type": "string"
+                          },
+                          "maxItems": 4,
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "custom": {
+                      "description": "Your own classes. A LIST, so an override replaces it wholesale rather than deep-merging \u2014 which is what you want for \"these are my organisation's patterns\".",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "A class of your own, in the same shape as the built-in ones.",
+                        "properties": {
+                          "builtins": {
+                            "items": {
+                              "enum": [
+                                "CreditCard",
+                                "Ssn",
+                                "Email",
+                                "PhoneNumber",
+                                "CaSin"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "matches": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "name": {
+                            "description": "Labels the class in render-time failures and in the folded-guard name. Not sent to the gateway.",
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "request": {
+                            "additionalProperties": false,
+                            "description": "How this class behaves in one direction.",
+                            "properties": {
+                              "action": {
+                                "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                                "enum": [
+                                  "Mask",
+                                  "Reject"
+                                ],
+                                "type": "string"
+                              },
+                              "enabled": {
+                                "description": "Render a guard entry for this direction.",
+                                "type": "boolean"
+                              },
+                              "message": {
+                                "description": "Rejection body. Ignored by a Mask action.",
+                                "type": "string"
+                              },
+                              "statusCode": {
+                                "description": "Rejection status. 0 = the gateway's default 403.",
+                                "maximum": 599,
+                                "minimum": 0,
+                                "type": "integer"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "response": {
+                            "additionalProperties": false,
+                            "description": "How this class behaves in one direction.",
+                            "properties": {
+                              "action": {
+                                "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                                "enum": [
+                                  "Mask",
+                                  "Reject"
+                                ],
+                                "type": "string"
+                              },
+                              "enabled": {
+                                "description": "Render a guard entry for this direction.",
+                                "type": "boolean"
+                              },
+                              "message": {
+                                "description": "Rejection body. Ignored by a Mask action.",
+                                "type": "string"
+                              },
+                              "statusCode": {
+                                "description": "Rejection status. 0 = the gateway's default 403.",
+                                "maximum": 599,
+                                "minimum": 0,
+                                "type": "integer"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "scope": {
+                            "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                            "items": {
+                              "enum": [
+                                "SystemPrompt",
+                                "Messages",
+                                "ToolInput",
+                                "ToolOutput"
+                              ],
+                              "type": "string"
+                            },
+                            "maxItems": 4,
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "enabled": {
+                      "description": "Master switch for the whole regex layer.",
+                      "type": "boolean"
+                    },
+                    "encodingEvasion": {
+                      "additionalProperties": false,
+                      "description": "Encoded payloads and injected chat-template delimiters \u2014 the standard way past a pattern-matching filter, which is exactly what this layer is.",
+                      "properties": {
+                        "builtins": {
+                          "description": "agentgateway's own PII recognizers, which validate by pattern AND checksum rather than by keyword.",
+                          "items": {
+                            "enum": [
+                              "CreditCard",
+                              "Ssn",
+                              "Email",
+                              "PhoneNumber",
+                              "CaSin"
+                            ],
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "enabled": {
+                          "description": "Master switch for the class, both directions.",
+                          "type": "boolean"
+                        },
+                        "matches": {
+                          "description": "Rust regex patterns. Additive with `builtins`.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "response": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "scope": {
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "items": {
+                            "enum": [
+                              "SystemPrompt",
+                              "Messages",
+                              "ToolInput",
+                              "ToolOutput"
+                            ],
+                            "type": "string"
+                          },
+                          "maxItems": 4,
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "harmfulContent": {
+                      "additionalProperties": false,
+                      "description": "Weapons, drug synthesis, malware, phishing. OFF by default, and not because it does not matter: these patterns match the vocabulary of legitimate platform engineering (\"how to exploit CVE-\u2026\", \"generate a payload\", \"hack into the test cluster\"). Turn it on for a tenant-facing deployment, or use moderation / Model Armor, which judge intent instead of words.",
+                      "properties": {
+                        "builtins": {
+                          "description": "agentgateway's own PII recognizers, which validate by pattern AND checksum rather than by keyword.",
+                          "items": {
+                            "enum": [
+                              "CreditCard",
+                              "Ssn",
+                              "Email",
+                              "PhoneNumber",
+                              "CaSin"
+                            ],
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "enabled": {
+                          "description": "Master switch for the class, both directions.",
+                          "type": "boolean"
+                        },
+                        "matches": {
+                          "description": "Rust regex patterns. Additive with `builtins`.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "response": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "scope": {
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "items": {
+                            "enum": [
+                              "SystemPrompt",
+                              "Messages",
+                              "ToolInput",
+                              "ToolOutput"
+                            ],
+                            "type": "string"
+                          },
+                          "maxItems": 4,
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "jailbreak": {
+                      "additionalProperties": false,
+                      "description": "Persona jailbreaks \u2014 DAN, \"developer mode\", role hijacking. Worth its own class on this fleet: the agents hold real cluster credentials, so an unconstrained persona is a privilege problem, not just a content one.",
+                      "properties": {
+                        "builtins": {
+                          "description": "agentgateway's own PII recognizers, which validate by pattern AND checksum rather than by keyword.",
+                          "items": {
+                            "enum": [
+                              "CreditCard",
+                              "Ssn",
+                              "Email",
+                              "PhoneNumber",
+                              "CaSin"
+                            ],
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "enabled": {
+                          "description": "Master switch for the class, both directions.",
+                          "type": "boolean"
+                        },
+                        "matches": {
+                          "description": "Rust regex patterns. Additive with `builtins`.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "response": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "scope": {
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "items": {
+                            "enum": [
+                              "SystemPrompt",
+                              "Messages",
+                              "ToolInput",
+                              "ToolOutput"
+                            ],
+                            "type": "string"
+                          },
+                          "maxItems": 4,
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "pii": {
+                      "additionalProperties": false,
+                      "description": "Actual PII values \u2014 not the words for them. Masked rather than rejected on purpose: an operator pasting a log line with a customer email should get an answer with the email redacted, not a 403 they work around by retyping.",
+                      "properties": {
+                        "builtins": {
+                          "description": "agentgateway's own PII recognizers, which validate by pattern AND checksum rather than by keyword.",
+                          "items": {
+                            "enum": [
+                              "CreditCard",
+                              "Ssn",
+                              "Email",
+                              "PhoneNumber",
+                              "CaSin"
+                            ],
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "enabled": {
+                          "description": "Master switch for the class, both directions.",
+                          "type": "boolean"
+                        },
+                        "matches": {
+                          "description": "Rust regex patterns. Additive with `builtins`.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "response": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "scope": {
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "items": {
+                            "enum": [
+                              "SystemPrompt",
+                              "Messages",
+                              "ToolInput",
+                              "ToolOutput"
+                            ],
+                            "type": "string"
+                          },
+                          "maxItems": 4,
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "promptInjection": {
+                      "additionalProperties": false,
+                      "description": "Attempts to override the system instructions. Rejected, not masked: masking would strip the words and hand the model a mutilated prompt.",
+                      "properties": {
+                        "builtins": {
+                          "description": "agentgateway's own PII recognizers, which validate by pattern AND checksum rather than by keyword.",
+                          "items": {
+                            "enum": [
+                              "CreditCard",
+                              "Ssn",
+                              "Email",
+                              "PhoneNumber",
+                              "CaSin"
+                            ],
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "enabled": {
+                          "description": "Master switch for the class, both directions.",
+                          "type": "boolean"
+                        },
+                        "matches": {
+                          "description": "Rust regex patterns. Additive with `builtins`.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "response": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "scope": {
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "items": {
+                            "enum": [
+                              "SystemPrompt",
+                              "Messages",
+                              "ToolInput",
+                              "ToolOutput"
+                            ],
+                            "type": "string"
+                          },
+                          "maxItems": 4,
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "secrets": {
+                      "additionalProperties": false,
+                      "description": "Credentials heading out of the platform. Masked on the request (a pasted manifest with a token still gets a useful answer) and rejected on the response, because a model echoing a live credential back is a leak worth surfacing \u2014 and on a streamed response Reject is the only action that bites.",
+                      "properties": {
+                        "builtins": {
+                          "description": "agentgateway's own PII recognizers, which validate by pattern AND checksum rather than by keyword.",
+                          "items": {
+                            "enum": [
+                              "CreditCard",
+                              "Ssn",
+                              "Email",
+                              "PhoneNumber",
+                              "CaSin"
+                            ],
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "enabled": {
+                          "description": "Master switch for the class, both directions.",
+                          "type": "boolean"
+                        },
+                        "matches": {
+                          "description": "Rust regex patterns. Additive with `builtins`.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "response": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "scope": {
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "items": {
+                            "enum": [
+                              "SystemPrompt",
+                              "Messages",
+                              "ToolInput",
+                              "ToolOutput"
+                            ],
+                            "type": "string"
+                          },
+                          "maxItems": 4,
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "selfHarmAndHate": {
+                      "additionalProperties": false,
+                      "description": "Self-harm, hate speech, and requests for individual medical or financial decisions. OFF for the same reason as harmfulContent, but shipped so a tenant-facing install can switch it on without writing the patterns.",
+                      "properties": {
+                        "builtins": {
+                          "description": "agentgateway's own PII recognizers, which validate by pattern AND checksum rather than by keyword.",
+                          "items": {
+                            "enum": [
+                              "CreditCard",
+                              "Ssn",
+                              "Email",
+                              "PhoneNumber",
+                              "CaSin"
+                            ],
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "enabled": {
+                          "description": "Master switch for the class, both directions.",
+                          "type": "boolean"
+                        },
+                        "matches": {
+                          "description": "Rust regex patterns. Additive with `builtins`.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "response": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "scope": {
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "items": {
+                            "enum": [
+                              "SystemPrompt",
+                              "Messages",
+                              "ToolInput",
+                              "ToolOutput"
+                            ],
+                            "type": "string"
+                          },
+                          "maxItems": 4,
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "systemPromptLeak": {
+                      "additionalProperties": false,
+                      "description": "Attempts to read back an agent's own system prompt. On this fleet those prompts encode the platform's grounding rules and tool policy, so they are configuration, not content.",
+                      "properties": {
+                        "builtins": {
+                          "description": "agentgateway's own PII recognizers, which validate by pattern AND checksum rather than by keyword.",
+                          "items": {
+                            "enum": [
+                              "CreditCard",
+                              "Ssn",
+                              "Email",
+                              "PhoneNumber",
+                              "CaSin"
+                            ],
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "enabled": {
+                          "description": "Master switch for the class, both directions.",
+                          "type": "boolean"
+                        },
+                        "matches": {
+                          "description": "Rust regex patterns. Additive with `builtins`.",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "request": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "response": {
+                          "additionalProperties": false,
+                          "description": "How this class behaves in one direction.",
+                          "properties": {
+                            "action": {
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "enum": [
+                                "Mask",
+                                "Reject"
+                              ],
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "description": "Render a guard entry for this direction.",
+                              "type": "boolean"
+                            },
+                            "message": {
+                              "description": "Rejection body. Ignored by a Mask action.",
+                              "type": "string"
+                            },
+                            "statusCode": {
+                              "description": "Rejection status. 0 = the gateway's default 403.",
+                              "maximum": 599,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "scope": {
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "items": {
+                            "enum": [
+                              "SystemPrompt",
+                              "Messages",
+                              "ToolInput",
+                              "ToolOutput"
+                            ],
+                            "type": "string"
+                          },
+                          "maxItems": 4,
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "streaming": {
+                  "description": "Run the guards on STREAMED responses too. Disabled upstream by default to protect streaming throughput; Enabled here because kagent streams and response guards would otherwise never run. Note the asymmetry: a streamed response can be REJECTED but not MASKED \u2014 matched content is already in flight, so a Mask response guard passes it through unmodified and records nothing. Request guards are unaffected (a request is always buffered).",
+                  "enum": [
+                    "",
+                    "Disabled",
+                    "Enabled"
+                  ],
+                  "type": "string"
+                },
+                "targetRefs": {
+                  "description": "What the guardrail policy attaches to. Empty = the route the top-level `llm` block renders, which is the only route on this Gateway carrying LLM traffic. Set it to attach the same guards to an HTTPRoute or AgentgatewayBackend someone else owns (and then usually `llm.enabled: false`). The API group is filled in from the kind.",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "group": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "Gateway",
+                          "HTTPRoute",
+                          "GRPCRoute",
+                          "ListenerSet",
+                          "AgentgatewayBackend",
+                          "InferencePool"
+                        ],
+                        "type": "string"
+                      },
+                      "name": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sectionName": {
+                        "description": "A named LLM provider inside a multi-provider AgentgatewayBackend.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "webhook": {
+                  "additionalProperties": false,
+                  "description": "Layer 3 \u2014 your own guardrail server. This chart ships none on purpose: the point of the layer is that the logic is yours (a DLP tool you already run, an NER model, a compliance service). Deploy a server that speaks the Guardrail Webhook API \u2014 POST /request and POST /response, answering pass, mask or reject \u2014 and name it here.",
+                  "properties": {
+                    "apply": {
+                      "additionalProperties": false,
+                      "description": "Which directions this layer runs in. Each direction is a separate guard entry and counts against the 8-per-direction ceiling.",
+                      "properties": {
+                        "request": {
+                          "description": "Inspect the prompt on its way to the provider.",
+                          "type": "boolean"
+                        },
+                        "response": {
+                          "description": "Inspect the model's answer on its way back.",
+                          "type": "boolean"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "backendRef": {
+                      "additionalProperties": false,
+                      "description": "The webhook server. A Service, or an agentgateway.dev/AgentgatewayBackend for anything off-cluster.",
+                      "properties": {
+                        "group": {
+                          "description": "Empty = the core API group (Service).",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "description": "Service or AgentgatewayBackend.",
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "namespace": {
+                          "description": "Empty = this release's namespace. A different one also needs a ReferenceGrant.",
+                          "type": "string"
+                        },
+                        "port": {
+                          "maximum": 65535,
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "failureMode": {
+                      "description": "What happens when your server is down or errors. FailClosed (the default) is the safe choice and the expensive one: your webhook becomes a hard dependency of every LLM turn. FailOpen lets the exchange through unguarded.",
+                      "enum": [
+                        "FailClosed",
+                        "FailOpen"
+                      ],
+                      "type": "string"
+                    },
+                    "forwardHeaderMatches": {
+                      "description": "Which of the client's own headers to forward. None by default. Gateway API HTTPHeaderMatch entries, passed through verbatim.",
+                      "items": {
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "headers": {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "CEL-computed headers on the outgoing webhook call, evaluated against the ORIGINAL client request \u2014 so `jwt.sub` carries the caller's identity through to your server. The `:path` pseudo-header overrides the default /request and /response paths, and its value is a CEL expression, so a literal path needs inner quotes: '\"/api/guardrails/request\"'.",
+                      "type": "object"
+                    },
+                    "request": {
+                      "additionalProperties": false,
+                      "description": "What the client is told when this guard rejects. Both empty = the gateway's own default text and 403.",
+                      "properties": {
+                        "message": {
+                          "description": "Response body returned instead of the model's answer.",
+                          "type": "string"
+                        },
+                        "statusCode": {
+                          "description": "HTTP status. 0 = unset (the gateway uses 403).",
+                          "maximum": 599,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "response": {
+                      "additionalProperties": false,
+                      "description": "What the client is told when this guard rejects. Both empty = the gateway's own default text and 403.",
+                      "properties": {
+                        "message": {
+                          "description": "Response body returned instead of the model's answer.",
+                          "type": "string"
+                        },
+                        "statusCode": {
+                          "description": "HTTP status. 0 = unset (the gateway uses 403).",
+                          "maximum": 599,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "llm": {
+              "additionalProperties": false,
+              "description": "The LLM hop: the AI backend the agents' model calls resolve to, and the OpenAI-compatible route they arrive on. INFRASTRUCTURE rather than a guardrail detail \u2014 once the calls arrive here every `backend.ai` policy agentgateway has becomes available on them, and guardrails are only the first consumer (rate limits and token budgets, cost controls, model aliases, failover across providers, prompt enrichment and per-model RBAC all attach to this same route). Disabling it hands the hop back: the route disappears and the agents go straight to the provider.",
+              "properties": {
+                "anthropic": {
+                  "additionalProperties": false,
+                  "description": "Anthropic. Both fields as for gemini.",
+                  "properties": {
+                    "auth": {
+                      "additionalProperties": false,
+                      "description": "An API-key credential. Set `secretRef` (preferred) or `key`; `secretRef` wins if both are given.",
+                      "properties": {
+                        "key": {
+                          "description": "Inline key. Least secure \u2014 it lands in the Composition spec and in helm's release Secret in cleartext.",
+                          "type": "string"
+                        },
+                        "location": {
+                          "additionalProperties": false,
+                          "description": "Where the credential is written on the outgoing request. Empty = the `Authorization` header with a `Bearer ` prefix. Exactly one of the three when set.",
+                          "properties": {
+                            "cookie": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "header": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "prefix": {
+                                  "description": "Prepended to the value, e.g. `Bearer `.",
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "queryParameter": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "secretRef": {
+                          "additionalProperties": false,
+                          "description": "A Kubernetes Secret holding one credential. Empty `name` = the credential source is unset.",
+                          "properties": {
+                            "key": {
+                              "description": "Data key to read. Empty = the location's default (`Authorization` for a header credential, `credentials.json` for GCP). A `Bearer ` prefix is stripped only from the default `Authorization` key, so a raw key must name its own data key.",
+                              "type": "string"
+                            },
+                            "name": {
+                              "description": "Secret name, in this release's namespace.",
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "model": {
+                      "description": "Model override. Empty = from the request.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "bedrock": {
+                  "additionalProperties": false,
+                  "description": "AWS Bedrock as the model provider (distinct from `bedrockGuardrails`, which is a guardrail service and can front any provider).",
+                  "properties": {
+                    "auth": {
+                      "additionalProperties": false,
+                      "description": "AWS credentials for SigV4 signing. An empty `secretRef.name` means the default AWS credential chain (IRSA, instance profile, environment).",
+                      "properties": {
+                        "aws": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "assumeRole": {
+                              "description": "STS AssumeRole settings, passed through verbatim. Mutually exclusive with secretRef.",
+                              "type": "object"
+                            },
+                            "region": {
+                              "description": "SigV4 signing region, when the target service is not in the gateway's region.",
+                              "type": "string"
+                            },
+                            "secretRef": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "description": "Secret with `accessKey`, `secretKey` and optionally `sessionToken`.",
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "serviceName": {
+                              "description": "SigV4 service name. Typed AWS backends supply this themselves.",
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "model": {
+                      "description": "Model override. Empty = from the request.",
+                      "type": "string"
+                    },
+                    "region": {
+                      "description": "Bedrock region.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "callerAuth": {
+                  "additionalProperties": false,
+                  "description": "Who may use the LLM route \u2014 the traffic-layer gate for this hop, the analogue of `mcpTraffic` for the MCP hop. It matters more than it looks: the gateway is browser-reachable in the Krateo portal's exposure model, so an ungated LLM route is an open, credentialed proxy to your provider account.",
+                  "properties": {
+                    "apiKey": {
+                      "additionalProperties": false,
+                      "description": "ApiKey mode.",
+                      "properties": {
+                        "mode": {
+                          "description": "Strict = no key or a bad key is 401. Optional and Permissive exist for migrations; both let keyless requests reach the authorization layer.",
+                          "enum": [
+                            "Strict",
+                            "Optional",
+                            "Permissive"
+                          ],
+                          "type": "string"
+                        },
+                        "secretRef": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "name": {
+                              "description": "Secret whose every data entry is one accepted key (a bare string, or a JSON object with `key`/`keyHash`/`metadata`).",
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "mode": {
+                      "description": "Jwt \u2014 kagent's `apiKeyPassthrough` forwards the CALLER's authn token as the LLM credential, the Gateway JWT policy validates it, and `subjects` decides who may spend tokens; a turn with no caller token (an unauthenticated webhook trigger, a cron) has nothing to forward and is denied. ApiKey \u2014 a shared key from a Secret, validated on the route; pick this for callers that are not user-driven. Anonymous \u2014 path-only allow, safe ONLY when this Gateway is unreachable from outside the cluster.",
+                      "enum": [
+                        "Jwt",
+                        "ApiKey",
+                        "Anonymous"
+                      ],
+                      "type": "string"
+                    },
+                    "subjects": {
+                      "additionalProperties": false,
+                      "description": "Jwt mode: who may spend provider tokens. Same matcher shape as every other rule in this chart.",
+                      "minProperties": 1,
+                      "properties": {
+                        "anyAuthenticated": {
+                          "description": "Any request carrying a token this gateway validated. Ignored when `users` or `groups` is set.",
+                          "type": "boolean"
+                        },
+                        "groups": {
+                          "description": "Values that must appear in the groups claim (authn: `groups`, a list of strings).",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "users": {
+                          "description": "Values of the user claim (authn: the username in `sub`).",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "custom": {
+                  "additionalProperties": false,
+                  "description": "A self-hosted or non-managed OpenAI-compatible upstream (vLLM, Ollama behind a Service, a corporate LLM proxy). Give it EITHER `backendRef` OR `host`+`port` \u2014 agentgateway rejects both together \u2014 and at least one format.",
+                  "properties": {
+                    "auth": {
+                      "additionalProperties": false,
+                      "description": "An API-key credential. Set `secretRef` (preferred) or `key`; `secretRef` wins if both are given.",
+                      "properties": {
+                        "key": {
+                          "description": "Inline key. Least secure \u2014 it lands in the Composition spec and in helm's release Secret in cleartext.",
+                          "type": "string"
+                        },
+                        "location": {
+                          "additionalProperties": false,
+                          "description": "Where the credential is written on the outgoing request. Empty = the `Authorization` header with a `Bearer ` prefix. Exactly one of the three when set.",
+                          "properties": {
+                            "cookie": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "header": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "prefix": {
+                                  "description": "Prepended to the value, e.g. `Bearer `.",
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "queryParameter": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "secretRef": {
+                          "additionalProperties": false,
+                          "description": "A Kubernetes Secret holding one credential. Empty `name` = the credential source is unset.",
+                          "properties": {
+                            "key": {
+                              "description": "Data key to read. Empty = the location's default (`Authorization` for a header credential, `credentials.json` for GCP). A `Bearer ` prefix is stripped only from the default `Authorization` key, so a raw key must name its own data key.",
+                              "type": "string"
+                            },
+                            "name": {
+                              "description": "Secret name, in this release's namespace.",
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "backendRef": {
+                      "additionalProperties": false,
+                      "description": "An in-cluster Service or InferencePool in this namespace.",
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "Service",
+                            "InferencePool"
+                          ],
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "port": {
+                          "maximum": 65535,
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "formats": {
+                      "description": "Which wire protocols the upstream speaks. Completions is the OpenAI-compatible /chat/completions API, which is what kagent sends.",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "path": {
+                            "description": "Upstream path override for this format. Empty = the format's default.",
+                            "type": "string"
+                          },
+                          "type": {
+                            "enum": [
+                              "Completions",
+                              "Messages",
+                              "Responses",
+                              "Embeddings",
+                              "AnthropicTokenCount",
+                              "Realtime",
+                              "Rerank"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "type": "object"
+                      },
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "host": {
+                      "description": "External hostname. Mutually exclusive with backendRef.",
+                      "type": "string"
+                    },
+                    "model": {
+                      "description": "Model override. Empty = from the request.",
+                      "type": "string"
+                    },
+                    "port": {
+                      "description": "Port for `host`.",
+                      "maximum": 65535,
+                      "minimum": 1,
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                },
+                "enabled": {
+                  "description": "Render the AI backend, the LLM route and its authorization clause. false = an LLM route already exists on this Gateway (someone else's AgentgatewayBackend): point `guardrails.targetRefs` at it instead.",
+                  "type": "boolean"
+                },
+                "gemini": {
+                  "additionalProperties": false,
+                  "description": "Gemini API key path. The secret is the same one the agents use today (autopilot: geminiApiKey.secretName/secretKey) \u2014 the gateway simply becomes the thing that holds it.",
+                  "properties": {
+                    "auth": {
+                      "additionalProperties": false,
+                      "description": "An API-key credential. Set `secretRef` (preferred) or `key`; `secretRef` wins if both are given.",
+                      "properties": {
+                        "key": {
+                          "description": "Inline key. Least secure \u2014 it lands in the Composition spec and in helm's release Secret in cleartext.",
+                          "type": "string"
+                        },
+                        "location": {
+                          "additionalProperties": false,
+                          "description": "Where the credential is written on the outgoing request. Empty = the `Authorization` header with a `Bearer ` prefix. Exactly one of the three when set.",
+                          "properties": {
+                            "cookie": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "header": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "prefix": {
+                                  "description": "Prepended to the value, e.g. `Bearer `.",
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "queryParameter": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "secretRef": {
+                          "additionalProperties": false,
+                          "description": "A Kubernetes Secret holding one credential. Empty `name` = the credential source is unset.",
+                          "properties": {
+                            "key": {
+                              "description": "Data key to read. Empty = the location's default (`Authorization` for a header credential, `credentials.json` for GCP). A `Bearer ` prefix is stripped only from the default `Authorization` key, so a raw key must name its own data key.",
+                              "type": "string"
+                            },
+                            "name": {
+                              "description": "Secret name, in this release's namespace.",
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "model": {
+                      "description": "Empty = the model id from the request wins, i.e. whatever the ModelConfig asked for. Setting it PINS every agent to one model regardless of its ModelConfig.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "http": {
+                  "additionalProperties": false,
+                  "description": "Connection tuning for the hop from the gateway to the provider. A model call is slow by nature \u2014 leave requestTimeout empty unless you have a reason.",
+                  "properties": {
+                    "requestTimeout": {
+                      "description": "Response deadline, e.g. `5s`. Empty = no chart-set deadline. A short one on the MODEL hop turns a long generation into a 504; on a guardrail hop it is protection against a hung dependency.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "openai": {
+                  "additionalProperties": false,
+                  "description": "OpenAI. Both fields as for gemini.",
+                  "properties": {
+                    "auth": {
+                      "additionalProperties": false,
+                      "description": "An API-key credential. Set `secretRef` (preferred) or `key`; `secretRef` wins if both are given.",
+                      "properties": {
+                        "key": {
+                          "description": "Inline key. Least secure \u2014 it lands in the Composition spec and in helm's release Secret in cleartext.",
+                          "type": "string"
+                        },
+                        "location": {
+                          "additionalProperties": false,
+                          "description": "Where the credential is written on the outgoing request. Empty = the `Authorization` header with a `Bearer ` prefix. Exactly one of the three when set.",
+                          "properties": {
+                            "cookie": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "header": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "prefix": {
+                                  "description": "Prepended to the value, e.g. `Bearer `.",
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "queryParameter": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "secretRef": {
+                          "additionalProperties": false,
+                          "description": "A Kubernetes Secret holding one credential. Empty `name` = the credential source is unset.",
+                          "properties": {
+                            "key": {
+                              "description": "Data key to read. Empty = the location's default (`Authorization` for a header credential, `credentials.json` for GCP). A `Bearer ` prefix is stripped only from the default `Authorization` key, so a raw key must name its own data key.",
+                              "type": "string"
+                            },
+                            "name": {
+                              "description": "Secret name, in this release's namespace.",
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "model": {
+                      "description": "Model override. Empty = from the request.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "provider": {
+                  "description": "Which upstream the backend talks to. `auto` resolves to `vertexai` when vertexai.projectId is set, else `gemini` \u2014 mirroring how every agent chart already chooses (the installer fills projectId/region from its own vertexAI block).",
+                  "enum": [
+                    "auto",
+                    "gemini",
+                    "vertexai",
+                    "openai",
+                    "anthropic",
+                    "bedrock",
+                    "custom"
+                  ],
+                  "type": "string"
+                },
+                "routePrefix": {
+                  "description": "Path prefix of the rendered route, and therefore the `openAI.baseUrl` every agent gets: http://<gateway.name>.<namespace>.svc.cluster.local:<gateway.port><routePrefix>. Deliberately not a bare `/v1`: this Gateway also carries /api/a2a/\u2026, /mcp and the header-matched `/` sub-agent routes. kagent appends `/chat/completions`, so the full path still ends in `/v1/chat/completions` and agentgateway's route-type detection matches it.",
+                  "minLength": 1,
+                  "pattern": "^/.*",
+                  "type": "string"
+                },
+                "vertexai": {
+                  "additionalProperties": false,
+                  "description": "Vertex AI path. Leave `auth.gcp.secretRef` empty to use ambient credentials; off GKE, point it at a service-account key JSON (installer: vertexAI.secretName/secretKey).",
+                  "properties": {
+                    "auth": {
+                      "additionalProperties": false,
+                      "description": "Google Cloud credentials. All fields empty = ambient discovery (on GKE, the proxy pod's node SA \u2014 the same path the agents use for Vertex today).",
+                      "properties": {
+                        "gcp": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "audience": {
+                              "description": "Explicit `aud` for an ID token. IdToken only; derived from the backend hostname when empty.",
+                              "type": "string"
+                            },
+                            "secretRef": {
+                              "additionalProperties": false,
+                              "description": "A Kubernetes Secret holding one credential. Empty `name` = the credential source is unset.",
+                              "properties": {
+                                "key": {
+                                  "description": "Data key to read. Empty = the location's default (`Authorization` for a header credential, `credentials.json` for GCP). A `Bearer ` prefix is stripped only from the default `Authorization` key, so a raw key must name its own data key.",
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "description": "Secret name, in this release's namespace.",
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "type": {
+                              "description": "AccessToken for Google APIs; IdToken only for a Cloud Run style upstream.",
+                              "enum": [
+                                "",
+                                "AccessToken",
+                                "IdToken"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "model": {
+                      "description": "Model override. Empty = from the request.",
+                      "type": "string"
+                    },
+                    "projectId": {
+                      "description": "GCP project hosting Vertex AI. Required for this provider.",
+                      "type": "string"
+                    },
+                    "region": {
+                      "description": "`global` routes across regions instead of pinning one Dynamic Shared Quota pool; `us`/`eu` are restricted multi-region endpoints; anything else is a regional location.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "sessionTrace": {
+              "additionalProperties": false,
+              "description": "Allows the portal's Evidence panel to read a session's stored activity (GET /api/sessions/...). Read-only.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "subjects": {
+                  "additionalProperties": false,
+                  "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone. `anyAuthenticated` is IGNORED when `users` or `groups` is set: these blocks are deep-merged maps, so a caller narrowing a rule to a group never sees the default `anyAuthenticated: true` disappear, and OR'ing it back in would silently restore access to everyone. Widen again with `anyAuthenticated: true` and no users/groups.",
+                  "minProperties": 1,
+                  "properties": {
+                    "anyAuthenticated": {
+                      "description": "Any request carrying a token this gateway validated. Ignored when `users` or `groups` is set.",
+                      "type": "boolean"
+                    },
+                    "groups": {
+                      "description": "Values that must appear in the groups claim (authn: `groups`, a list of strings).",
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "users": {
+                      "description": "Values of the user claim (authn: the username in `sub`).",
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
             }
           }
         }

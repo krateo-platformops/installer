@@ -158,10 +158,18 @@ features:
                                   #   Preconditions when on: external-dns needs its provider Secret out-of-band; the
                                   #   cert-manager-issuers ACME HTTP-01 solver assumes the Gateway API edge is present.
   agentGateway: false              # OPT-IN: agentgateway in front of the kagent fleet — JWT auth + per-user RBAC over
-                                  #   agents, MCP tools and A2A delegation. A valid token becomes MANDATORY on every
-                                  #   agent endpoint, so it never turns on through an upgrade. Needs coreAgents, and
-                                  #   an issuer whose JWKS the gateway trusts (authn, via features.portal, by default).
-                                  #   Every setting is the agentgateway-policies chart's own: componentValues.agentgateway-policies.
+                                  #   agents, MCP tools and A2A delegation, PLUS guardrails on their LLM traffic (PII
+                                  #   and secret masking, prompt-injection blocking, and optional OpenAI moderation /
+                                  #   Google Model Armor / AWS Bedrock Guardrails / your own webhook). A valid token
+                                  #   becomes MANDATORY on every agent endpoint, and the gateway lands on the critical
+                                  #   path of every agent turn, so it never turns on through an upgrade. Needs
+                                  #   coreAgents, and an issuer whose JWKS the gateway trusts (authn, via
+                                  #   features.portal, by default).
+                                  #   Every setting is the agentgateway-policies chart's own:
+                                  #   componentValues.agentgateway-policies — including componentValues.
+                                  #   agentgateway-policies.guardrails.enabled, the single switch that turns the
+                                  #   guardrail layer (and the LLM route that feeds it) off and on. Turning it off also
+                                  #   points krateo-autopilot's ModelConfigs straight back at the provider.
 
 # HITL approval gate for the autopilot's mutating Kubernetes tools. true (default)=
 # pause for human approval before any cluster change; false=autonomous remediation.
