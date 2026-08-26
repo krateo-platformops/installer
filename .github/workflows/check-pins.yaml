@@ -4,13 +4,19 @@ name: check-pins
 # chart/files/component-pins.yaml must match the Kind core-provider's crdgen derives from the chart
 # name (flect.Pascalize ∘ ToGolangName — initialism-aware: api->API, dns->DNS). Pass B matches
 # spec.names.kind by exact string, so a mispin silently blocks Pass B on a live cluster (installer#31).
+#
+# Second guard: every field a pin uses must be declared in values.schema.json's components[] schema.
+# crdgen compiles that schema into the Installer CRD and self-bootstrap applies the rendered pin list
+# against it, so an undeclared field fails strict decoding and CrashLoopBackOffs installer-self-instance.
 
 on:
   pull_request:
     branches: [main]
     paths:
       - "chart/files/component-pins.yaml"
+      - "chart/values.schema.json"
       - ".github/scripts/check-pin-kinds.py"
+      - ".github/scripts/check-pin-fields.py"
       - ".github/workflows/check-pins.yaml"
   push:
     branches: [main]
@@ -29,3 +35,5 @@ jobs:
         run: pip install --quiet pyyaml
       - name: Assert pin kinds == crdgen derivation
         run: python3 .github/scripts/check-pin-kinds.py
+      - name: Assert pin fields are declared in values.schema.json
+        run: python3 .github/scripts/check-pin-fields.py

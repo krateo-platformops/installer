@@ -13,6 +13,22 @@ Curated history, newest first. This repo starts at the 2026-08-04 migration of t
 umbrella chart into `krateo-platformops` (0.3.1); the pre-migration 0.2.x line lived
 in the predecessor personal-org repo and is not mirrored here.
 
+## 2026-08-26 — internalUrls/internalPorts reach the components schema
+
+`internalUrls` (0.3.59) and `internalPorts` (0.3.66) were read off `$c` in `compositions.yaml` and
+carried in `component-pins.yaml`, but never declared in `values.schema.json`'s
+`components.items.properties` (`additionalProperties:false`). crdgen compiles that schema into the
+Installer CRD and `self-bootstrap.yaml` applies the fully rendered pin list against it, so every
+release from 0.3.59 on strict-rejected its own CR — `unknown field "spec.components[5].internalUrls"`
+— and `installer-self-instance` failed on a clean install. The chart rendered, linted and published
+cleanly throughout; nothing catches this before someone installs. Same shape as the 0.3.20 `nodePort`
+half-landing below.
+
+Both fields are now declared, and `check-pins` gained a second guard
+(`.github/scripts/check-pin-fields.py`) asserting every field used in `component-pins.yaml` exists in
+the components schema — the drift is only visible by comparing two hand-maintained files, so it needs
+a machine to hold them together.
+
 ## 2026-08-25 — guardrails: the agent fleet's LLM traffic, filtered
 
 `features.agentGateway` now also puts guardrails on the fleet's LLM traffic — PII and secret

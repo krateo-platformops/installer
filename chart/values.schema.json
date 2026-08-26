@@ -250,6 +250,38 @@
             "type": "string",
             "description": "Dotted path to the component chart's Service values block when it is NOT the chart top-level `service` (e.g. kagent's UI Service lives at `kagentapp.ui.service`). The exposure layer builds this nested path and sets `.type` = .Values.exposure.type, flipping the right Service to LoadBalancer/NodePort while the component chart keeps its default."
           },
+          "internalUrls": {
+            "type": "array",
+            "description": "Internal (ClusterIP) URLs this component's chart hardcodes at a peer's per-component default port \u2014 e.g. snowplow's env.URL_AUTHN, sse-proxy's auth.urlAuthn. When exposure.port collapses the browser-facing Services onto one shared port those hardcoded ports go dead, so compositions.yaml recomputes each URL on the shared port.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Dotted path in the component chart's values to overwrite."
+                },
+                "peer": {
+                  "type": "string",
+                  "description": "Service name of the peer the URL points at."
+                }
+              }
+            }
+          },
+          "internalPorts": {
+            "type": "array",
+            "description": "Port-only sibling of internalUrls: an INTEGER port the chart hardcodes at an exposed peer's default \u2014 e.g. agentgateway-policies' jwt.jwks.port. Recomputed to exposure.port under the same gate.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Dotted path in the component chart's values to overwrite."
+                }
+              }
+            }
+          },
           "consumer": {
             "type": "boolean"
           },
