@@ -350,10 +350,22 @@ components:
 # BOTH the observability stack (HyperDX API + the hyperdx-api-token secret, from krateo-observability) AND
 # incident-agent, so it deps both and rides the specialistAgents feature — the same portal cross-dep
 # pattern clickhouse-mcp-server uses. Public krateo-platformops chart, so no repo override.
+# Dedicated CRD composition (Alert + TroubleshootingReport). Every CRD-owning component ships a
+# *-crds composition (cf. authn-crd/frontend-crd/snowplow-crd) so the CRD lifecycle is DECOUPLED from
+# the app's version churn — an app-only bump no longer migrates or (on a handover mis-fire) tears down
+# these CRDs (core-provider#89). crdgen kind = PascalCase(chart): crds -> Crds. Versioned in lockstep
+# with alert-troubleshooter (same repo tag). Public krateo-platformops chart.
+- name: alert-troubleshooter-crd
+  kind: AlertTroubleshooterCrds
+  chart: alert-troubleshooter-crds
+  version: 0.2.35
+  tier: observability
+  feature: specialistAgents
 - name: alert-troubleshooter
   kind: AlertTroubleshooter
-  version: 0.2.32
+  version: 0.2.35
   deps:
+  - alert-troubleshooter-crd
   - incident-agent
   - krateo-observability
   tier: observability
