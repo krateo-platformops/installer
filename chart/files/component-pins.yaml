@@ -14,7 +14,7 @@ components:
 - name: frontend-crd
   kind: FrontendCrds
   chart: frontend-crds
-  version: 1.5.4
+  version: 1.5.5
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -65,7 +65,7 @@ components:
 - name: frontend
   kind: Frontend
   chart: frontend
-  version: 1.5.4
+  version: 1.5.5
   deps:
   - frontend-crd
   - authn
