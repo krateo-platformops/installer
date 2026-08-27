@@ -20,7 +20,7 @@ components:
 - name: snowplow-crd
   kind: SnowplowCrds
   chart: snowplow-crds
-  version: 1.10.1
+  version: 1.11.0
   tier: platform
   feature: portal
 - name: authn
@@ -40,7 +40,7 @@ components:
 - name: snowplow
   kind: Snowplow
   chart: snowplow
-  version: 1.10.1
+  version: 1.11.0
   deps:
   - snowplow-crd
   - authn
@@ -381,7 +381,7 @@ components:
 # componentValues.agentgateway-policies.
 - name: agentgateway-controller
   kind: AgentgatewayController
-  version: 0.1.1
+  version: 0.1.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   tier: platform
   feature: agentGateway
