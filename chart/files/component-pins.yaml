@@ -65,7 +65,7 @@ components:
 - name: frontend
   kind: Frontend
   chart: frontend
-  version: 1.5.12
+  version: 1.5.13
   deps:
   - frontend-crd
   - authn
@@ -91,7 +91,7 @@ components:
   # the catalog installs). Pulled from the public krateo-blueprints /charts base (no registryAuth).
 - name: portal
   kind: Portal
-  version: 1.7.8
+  version: 1.7.10
   deps:
   - frontend
   tier: platform
@@ -149,7 +149,7 @@ components:
   feature: portal
 - name: otel-collector-deployment
   kind: OtelCollectorDeployment
-  version: 0.3.6
+  version: 0.3.7
   deps:
   - krateo-observability
   tier: observability
