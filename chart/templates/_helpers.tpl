@@ -70,27 +70,37 @@
 
 {{/* The name of the image-pull dockerconfigjson Secret the installer derives from registryAuth (see
      templates/imagepull-secret.yaml) and injects into the components that ship PRIVATE krateo-agentiko
-     IMAGES (autopilot's repo-mcp-server, core-provider-agent's chart-gate). registryAuth.imagePullSecretName
+     IMAGES (autopilot's repo-mcp-server, core-provider-agent's chart-gate, agentgateway-policies' native-RBAC
+     decider — see inst.privateImageComponents). registryAuth.imagePullSecretName
      overrides the default so a caller can point at a pre-existing dockerconfigjson Secret instead. arg: $top */}}
 {{- define "inst.imagePullSecretName" -}}
 {{- .Values.registryAuth.imagePullSecretName | default "krateo-registry-image-pull" -}}
 {{- end -}}
 
 {{/* SINGLE source of truth for the components that ship PRIVATE krateo-agentiko IMAGES and expose an
-     imagePullSecrets knob their chart documents as "wired from registryAuth". `path` is the (dot-free,
-     2-segment) location of that knob inside the component spec. Shared by compositions.yaml (the injection
-     target) and inst.imagePullAuths (which registries to derive image-pull creds for) so the two lists can
-     never drift. Add a component here to wire its image pull. arg: $top */}}
+     imagePullSecrets knob their chart documents as "wired from registryAuth". `path` is the FULL (dot-free)
+     location of that knob inside the component spec, INCLUDING the final key: the injection walks all but the
+     last segment as nested maps and sets the last segment to the pull-secret list, so a knob at ANY depth works
+     (mcpServers.repoSearch.imagePullSecrets, or the decider's nativeRbac.image.pullSecrets). Shared by
+     compositions.yaml (the injection target) and inst.imagePullAuths (which registries to derive image-pull
+     creds for) so the two lists can never drift. Add a component here to wire its image pull. arg: $top */}}
 {{- define "inst.privateImageComponents" -}}
 components:
 - name: krateo-autopilot
   path:
   - mcpServers
   - repoSearch
+  - imagePullSecrets
 - name: core-provider-agent
   path:
   - mcpServers
   - chartGate
+  - imagePullSecrets
+- name: agentgateway-policies
+  path:
+  - nativeRbac
+  - image
+  - pullSecrets
 {{- end -}}
 
 {{/* inst.imagePullAuths — the image-pull credential REFERENCES for the private-image components, as a JSON
