@@ -306,6 +306,7 @@ components:
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - model-configs
+  - krateo-autopilot
   tier: observability
   feature: coreAgents
   agent: true
