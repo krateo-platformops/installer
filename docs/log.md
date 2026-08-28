@@ -64,12 +64,15 @@ Three consequences in this chart:
   an alias-resolution layer to auto-follow that rename was tried and removed as unearned (it cost a
   `modelSlots` map hand-synced with the model-configs chart, ~30 lines of `compositions.yaml`, a
   `fail` guard, and a pin field, to save one edit on an event nobody performs).
-- **The gateway wiring shrank** to one conditional fill of `agentgateway.modelRoute.url`, firing only
-  when the gateway's `name`/`port`/`routePrefix` or `namespaces.krateo` are off their defaults;
-  otherwise `model-configs` derives the route itself. The `localModel` skip moved into that chart's
-  tri-state derivation. One thing is now the operator's to state: setting
-  `componentValues.agentgateway-policies.llm.enabled: false` leaves no LLM route on the Gateway, so
-  it must be paired with `componentValues.model-configs.agentgateway.modelRoute.enabled: false`.
+- **The gateway wiring shrank** to one fill of `agentgateway.modelRoute.url`. The installer is its
+  single authority: it composes the URL from the values that actually render the Gateway and its
+  route (`agentgateway-policies`' `gateway.name`/`gateway.port`/`llm.routePrefix` + `namespaces.
+  krateo`) rather than guarding on whether those still match a default baked into `model-configs`.
+  The chart's own derivation stays the fallback for a standalone install. The `localModel` skip
+  moved into that chart's tri-state derivation, and the route's on/off follows the route's
+  existence: `componentValues.agentgateway-policies.llm.enabled: false` leaves no LLM route on the
+  Gateway, so the installer fills `model-configs`' `agentgateway.modelRoute.enabled: false` to
+  match — fill-if-absent, and only in that direction, so the chart keeps deriving the ON case.
 
 Breaking, deliberately: `spec.llmGateway` and `modelConfig.{create,provider,model,vertexAI,
 apiKeySecret,apiKeySecretKey}` are removed from the component CRDs, and `localModel.refName` from

@@ -170,9 +170,10 @@ features:
                                   #   agentgateway-policies.guardrails.enabled, the single switch that turns the
                                   #   guardrail layer off and on. Turning off the LLM ROUTE itself
                                   #   (componentValues.agentgateway-policies.llm.enabled=false) leaves the Gateway with no
-                                  #   route to send model calls to, so pair it with
-                                  #   componentValues.model-configs.agentgateway.modelRoute.enabled=false, which points the
-                                  #   fleet's ModelConfigs straight back at the provider.
+                                  #   route to send model calls to, and the installer pairs that for you: the fleet's
+                                  #   ModelConfigs are pointed straight back at the provider (componentValues.
+                                  #   model-configs.agentgateway.modelRoute.enabled=false, fill-if-absent, so an explicit
+                                  #   override still wins).
 
 # HITL approval gate for the autopilot's mutating Kubernetes tools. true (default)=
 # pause for human approval before any cluster change; false=autonomous remediation.

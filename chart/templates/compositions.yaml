@@ -311,38 +311,44 @@
 {{- if $top.Values.features.agentGateway -}}
 {{- $agw := dig "agentgateway-policies" "gateway" dict (default dict $top.Values.componentValues) -}}
 {{- $userClaim := dig "agentgateway-policies" "jwt" "userClaim" "sub" (default dict $top.Values.componentValues) -}}
+{{- /* The gateway's address, resolved ONCE: every URL below (the controller's proxy, the LLM hop,
+     alert-troubleshooter's A2A call) is built from these, so the defaults are stated in exactly one
+     place instead of being re-spelled at each site. */ -}}
+{{- $gwName := default "krateo-agent-gateway" $agw.name -}}
+{{- $gwPort := int (default 8080 $agw.port) -}}
 {{- if eq $c.name "kagent" -}}
 {{- /* The controller's default `unsecure` mode stamps a static admin@kagent.dev and forwards
      nothing, so every agent would see one identity no matter who called. */ -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "kagentapp" "controller" "auth" "mode") "value" "trusted-proxy") -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "kagentapp" "controller" "auth" "userIdClaim") "value" $userClaim) -}}
 {{- /* The proxy Service the controller provisions for a Gateway carries the GATEWAY's name. */ -}}
-{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "kagentapp" "proxy" "url") "value" (printf "http://%s.%s.svc.cluster.local:%v" (default "krateo-agent-gateway" $agw.name) $top.Values.namespaces.krateo (default 8080 $agw.port))) -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "kagentapp" "proxy" "url") "value" (printf "http://%s.%s.svc.cluster.local:%v" $gwName $top.Values.namespaces.krateo $gwPort)) -}}
 {{- end -}}
 {{- $agwLlm := dig "agentgateway-policies" "llm" dict (default dict $top.Values.componentValues) -}}
 {{- /* THE LLM HOP — the agent half. The policies chart renders the AI backend and its route, but
      whether traffic actually arrives on it is decided by the fleet's ModelConfigs — a different
-     component. model-configs derives that route ITSELF from the gateway's DEFAULT name, port and
-     routePrefix, and derives on/off from its own `agentgateway.enabled` (filled just below) — so
-     the only thing left for the installer is the case the chart cannot derive: a gateway that is
-     not at those defaults, or a non-default krateo namespace. Fill only then; otherwise the
-     chart's derivation is already correct and injecting a URL would merely freeze it.
-     Fill-if-absent, so componentValues.model-configs.agentgateway.modelRoute.url still wins.
+     component. model-configs can derive that route itself from the gateway's DEFAULT name, port and
+     routePrefix, but under the installer the gateway those defaults describe is configurable, so the
+     INSTALLER is the single authority for the URL: it composes it unconditionally from the values
+     that actually render the Gateway ($agw) and its route ($agwLlm.routePrefix). One file to read,
+     and no guard betting on model-configs' baked-in default still matching the policies chart's.
+     Fill-if-absent, so componentValues.model-configs.agentgateway.modelRoute.url still wins, and the
+     chart's own default stays the fallback for a standalone (non-installer) install.
 
      Two things deliberately NOT wired here, because the chart owns them:
        - the localModel skip (model-configs derives modelRoute OFF on a localModel install, whose
          ModelConfigs point at an in-cluster Ollama while the gateway's default upstream is Gemini);
-       - the caller-auth mode (an empty modelRoute.apiKeySecret means kagent apiKeyPassthrough).
-     And one thing the operator must state explicitly: turning the policies chart's `llm.enabled`
-     off leaves no LLM route on the Gateway, so pair it with
-     componentValues.model-configs.agentgateway.modelRoute.enabled=false — otherwise every model
-     call is routed at a path that 404s. */ -}}
+       - the caller-auth mode (an empty modelRoute.apiKeySecret means kagent apiKeyPassthrough). */ -}}
 {{- if $c.modelOwner -}}
 {{- $prefix := dig "routePrefix" "/llm/v1" $agwLlm -}}
-{{- $gwName := default "krateo-agent-gateway" $agw.name -}}
-{{- $gwPort := int (default 8080 $agw.port) -}}
-{{- if or (ne $gwName "krateo-agent-gateway") (ne $gwPort 8080) (ne $prefix "/llm/v1") (ne $top.Values.namespaces.krateo "krateo-system") -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "agentgateway" "modelRoute" "url") "value" (printf "http://%s.%s.svc.cluster.local:%v%s" $gwName $top.Values.namespaces.krateo $gwPort $prefix)) -}}
+{{- /* And the route's on/off follows the route's EXISTENCE. `llm.enabled: false` leaves no LLM route
+     on the Gateway at all, so a ModelConfig still pointed at it 404s on every model call. Derive the
+     pairing instead of asking the operator to keep two flags in sync by hand. Fill-if-absent and only
+     in the false direction: left absent when the route exists, model-configs keeps its own tri-state
+     derivation (agentgateway.enabled AND not localModel), which the installer must not flatten. */ -}}
+{{- if not (dig "enabled" true $agwLlm) -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "agentgateway" "modelRoute" "enabled") "value" false) -}}
 {{- end -}}
 {{- end -}}
 {{- /* And the gateway half: which upstream the LLM backend talks to. The policies chart's
@@ -414,9 +420,7 @@
      the frontend uses for autopilot — which needs no x-kagent-host header and no app change. The
      gateway is on its OWN listener port (not exposure.port). Fill-if-absent, so the chart default
      (direct incident-agent:8080) correctly stands when the gateway is OFF and nothing enforces RBAC. */ -}}
-{{- $gwName := default "krateo-agent-gateway" $agw.name -}}
-{{- $gwPort := default 8080 $agw.port -}}
-{{- $a2a := printf "http://%s.%s.svc.cluster.local:%v/api/a2a/%s/incident-agent" $gwName $top.Values.namespaces.krateo (int $gwPort) $top.Values.namespaces.krateo -}}
+{{- $a2a := printf "http://%s.%s.svc.cluster.local:%v/api/a2a/%s/incident-agent" $gwName $top.Values.namespaces.krateo $gwPort $top.Values.namespaces.krateo -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "config" "autopilotA2aUrl") "value" $a2a) -}}
 {{- end -}}
 {{- end -}}
