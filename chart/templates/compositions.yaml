@@ -221,13 +221,15 @@
 {{- end }}
 {{- end }}
 {{- /* Agent model wiring. localModel (opt-in) takes precedence over vertexAI:
-       - localModel.enabled: the model OWNER (krateo-autopilot, modelOwner:true) gets
-         .Values.localModel injected so it renders its gemini-flash/gemini-pro ModelConfigs
-         as provider Ollama at localModel.host; every OTHER agent (vertexAI:true) is pointed
-         at that owner-created ModelConfig (modelConfig.create=false, name=localModel.refName),
-         so the WHOLE fleet runs on the one local LLM with no per-agent-chart change.
-       - else (default): components flagged vertexAI:true get .Values.vertexAI injected so the
-         autopilot/agents use GeminiVertexAI via ADC.
+       - localModel.enabled: the model OWNER (model-configs, modelOwner:true) gets .Values.localModel
+         injected so it renders EVERY slot as provider Ollama at localModel.host. No per-agent wiring
+         is needed: each agent already references a slot by name (componentValues.<agent>.modelConfig.name),
+         and on this path every one of those slots is an Ollama ModelConfig — so the whole fleet runs
+         on the one local LLM. (This is why localModel.refName is gone: pointing the fleet at a single
+         named ModelConfig was only ever a workaround for the agents not being assigned a slot.)
+       - else (default): the agents and the model owner get .Values.vertexAI injected so the
+         model-configs ModelConfigs use GeminiVertexAI via ADC and the agent PODS get the matching
+         GOOGLE_* env / SA-key mount. Both halves must agree, so both take the same block.
 
        The `enabled` value is injected VERBATIM, including false. Skipping the injection when
        .Values.vertexAI.enabled is false would leave each agent chart on its OWN default — which is
@@ -239,13 +241,11 @@
 {{- if $top.Values.localModel.enabled }}
 {{- if $c.modelOwner }}
 {{- $_ := set $spec "localModel" (dict "enabled" true "host" $top.Values.localModel.host "model" $top.Values.localModel.model) }}
-{{- else if $c.vertexAI }}
-{{- $_ := set $spec "modelConfig" (dict "create" false "name" $top.Values.localModel.refName) }}
 {{- end }}
-{{- else if $c.vertexAI }}
+{{- else if or $c.agent $c.modelOwner }}
 {{- $_ := set $spec "vertexAI" (dict "enabled" $top.Values.vertexAI.enabled "projectID" $top.Values.vertexAI.projectID "location" $top.Values.vertexAI.location "secretName" $top.Values.vertexAI.secretName "secretKey" $top.Values.vertexAI.secretKey) }}
 {{- end }}
-{{- /* HITL approval gate. Applies to EVERY vertexAI agent — the user-facing orchestrator AND its
+{{- /* HITL approval gate. Applies to EVERY agent — the user-facing orchestrator AND its
        delegated subagents. kagent >=0.9.9 propagates a subagent's tool-approval interrupt up to the
        orchestrator: when a subagent (e.g. installer-agent) hits a requireApproval tool it returns an
        A2A input_required task, and the orchestrator's remote_a2a_tool surfaces it via
@@ -261,7 +261,7 @@
        is gated and the real write gate stays downstream (publishPage blast-radius). Every OTHER agent
        omits the key and inherits the coarse global `hitlApproval` (its chart gates its own mutating
        tools). This lets one agent opt a specific tool in/out without an all-or-nothing switch. */}}
-{{- if $c.vertexAI }}
+{{- if $c.agent }}
 {{- if hasKey $c "requireApproval" }}
 {{- $_ := set $spec "requireApproval" $c.requireApproval }}
 {{- else }}
@@ -319,35 +319,39 @@
 {{- /* The proxy Service the controller provisions for a Gateway carries the GATEWAY's name. */ -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "kagentapp" "proxy" "url") "value" (printf "http://%s.%s.svc.cluster.local:%v" (default "krateo-agent-gateway" $agw.name) $top.Values.namespaces.krateo (default 8080 $agw.port))) -}}
 {{- end -}}
-{{- /* THE LLM HOP — the agent half. The policies chart renders the AI backend and its route, but
-     whether traffic actually arrives on it is decided by the agents' own ModelConfigs — a different
-     component. Points the model OWNER's ModelConfigs at the route (provider OpenAI + openAI.baseUrl);
-     the agents sharing them (k8s-agent, helm-agent) follow, specialists keep their direct provider path.
-     Gated on the policies chart's `llm.enabled`, not `guardrails.enabled`: the route is infrastructure
-     that outlives any one policy on it, and agentgateway's `backend.ai` policies run ONLY on a route
-     whose backend declares an LLM provider — an agent calling Gemini directly is invisible to them.
-     SKIPPED on localModel, whose ModelConfigs point at an in-cluster Ollama while the gateway's own
-     default upstream is Gemini; guarding a local model means the policies chart's `llm.custom`. */ -}}
 {{- $agwLlm := dig "agentgateway-policies" "llm" dict (default dict $top.Values.componentValues) -}}
-{{- $llmOn := dig "enabled" true $agwLlm -}}
-{{- if and $llmOn (not $top.Values.localModel.enabled) -}}
-{{- $prefix := dig "routePrefix" "/llm/v1" $agwLlm -}}
-{{- $callerAuth := dig "callerAuth" dict $agwLlm -}}
-{{- $mode := dig "mode" "Jwt" $callerAuth -}}
+{{- /* THE LLM HOP — the agent half. The policies chart renders the AI backend and its route, but
+     whether traffic actually arrives on it is decided by the fleet's ModelConfigs — a different
+     component. model-configs derives that route ITSELF from the gateway's DEFAULT name, port and
+     routePrefix, and derives on/off from its own `agentgateway.enabled` (filled just below) — so
+     the only thing left for the installer is the case the chart cannot derive: a gateway that is
+     not at those defaults, or a non-default krateo namespace. Fill only then; otherwise the
+     chart's derivation is already correct and injecting a URL would merely freeze it.
+     Fill-if-absent, so componentValues.model-configs.agentgateway.modelRoute.url still wins.
+
+     Two things deliberately NOT wired here, because the chart owns them:
+       - the localModel skip (model-configs derives modelRoute OFF on a localModel install, whose
+         ModelConfigs point at an in-cluster Ollama while the gateway's default upstream is Gemini);
+       - the caller-auth mode (an empty modelRoute.apiKeySecret means kagent apiKeyPassthrough).
+     And one thing the operator must state explicitly: turning the policies chart's `llm.enabled`
+     off leaves no LLM route on the Gateway, so pair it with
+     componentValues.model-configs.agentgateway.modelRoute.enabled=false — otherwise every model
+     call is routed at a path that 404s. */ -}}
 {{- if $c.modelOwner -}}
-{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llmGateway" "enabled") "value" true) -}}
-{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llmGateway" "baseUrl") "value" (printf "http://%s.%s.svc.cluster.local:%v%s" (default "krateo-agent-gateway" $agw.name) $top.Values.namespaces.krateo (default 8080 $agw.port) $prefix)) -}}
-{{- /* The gateway's Jwt mode wants the CALLER's token forwarded as the LLM credential — kagent
-     calls that Passthrough. ApiKey means a shared key the agent holds. Same choice, two names. */ -}}
-{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llmGateway" "auth") "value" (ternary "ApiKey" "Passthrough" (eq $mode "ApiKey"))) -}}
-{{- if eq $mode "ApiKey" -}}
-{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llmGateway" "apiKeySecret") "value" (dig "apiKey" "secretRef" "name" "" $callerAuth)) -}}
+{{- $prefix := dig "routePrefix" "/llm/v1" $agwLlm -}}
+{{- $gwName := default "krateo-agent-gateway" $agw.name -}}
+{{- $gwPort := int (default 8080 $agw.port) -}}
+{{- if or (ne $gwName "krateo-agent-gateway") (ne $gwPort 8080) (ne $prefix "/llm/v1") (ne $top.Values.namespaces.krateo "krateo-system") -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "agentgateway" "modelRoute" "url") "value" (printf "http://%s.%s.svc.cluster.local:%v%s" $gwName $top.Values.namespaces.krateo $gwPort $prefix)) -}}
 {{- end -}}
 {{- end -}}
 {{- /* And the gateway half: which upstream the LLM backend talks to. The policies chart's
      `provider: auto` resolves to vertexai as soon as a project id is present, so injecting the
      installer's own vertexAI block is enough — including the off-GKE explicit-key path, where the
-     SA-key Secret the agent pods mount becomes the gateway's ADC credential. */ -}}
+     SA-key Secret the agent pods mount becomes the gateway's ADC credential. Gated as before on
+     the route existing at all and on not being a localModel install (there the upstream the guards
+     need is that Ollama, via the policies chart's `llm.custom`, not Vertex). */ -}}
+{{- if and (dig "enabled" true $agwLlm) (not $top.Values.localModel.enabled) -}}
 {{- if and (eq $c.name "agentgateway-policies") $top.Values.vertexAI.enabled -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llm" "vertexai" "projectId") "value" $top.Values.vertexAI.projectID) -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "llm" "vertexai" "region") "value" $top.Values.vertexAI.location) -}}
@@ -357,10 +361,11 @@
 {{- end -}}
 {{- end -}}
 {{- end -}}
-{{- /* Same flag on the frontend, which is not an agent but IS a caller: it routes the portal's
-     Autopilot A2A requests (carrying the logged-in user's Bearer) at the gateway instead of
-     kagent-ui, which is the only way that token is ever validated. */ -}}
-{{- if or $c.vertexAI (eq $c.name "frontend") -}}
+{{- /* The model owner takes it too (its ModelConfigs derive modelRoute from this flag), and so does
+     the frontend — not an agent but a CALLER: it routes the portal's Autopilot A2A requests
+     (carrying the logged-in user's Bearer) at the gateway instead of kagent-ui, which is the only
+     way that token is ever validated. */ -}}
+{{- if or $c.agent $c.modelOwner (eq $c.name "frontend") -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "agentgateway" "enabled") "value" true) -}}
 {{- end -}}
 {{- /* And CORS on the gateway, because that portal call is a cross-origin BROWSER call: the
@@ -415,15 +420,19 @@
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "config" "autopilotA2aUrl") "value" $a2a) -}}
 {{- end -}}
 {{- end -}}
-{{- /* Auto-orchestration: the model-owner (autopilot) attaches EVERY deployed agent as an A2A
+{{- /* Auto-orchestration: the ORCHESTRATOR (autopilot, `orchestrator: true`) attaches EVERY deployed
+       agent as an A2A
        sub-agent. When extraAgents is NOT explicitly set, the installer AUTO-DERIVES it from the
-       feature-enabled `vertexAI` agent components (excluding the owner itself) — so the enterprise
+       feature-enabled `agent` components (excluding the orchestrator itself) — so the enterprise
        profile wires the whole fleet (installer/authn/snowplow/frontend/clickstack/core-provider
        agents) and agent-only wires just the installer-agent, with no manual list. An explicit
        componentValues.<owner>.extraAgents (including `[]` for standalone) is honored instead. Either
        way the set is gated to feature-enabled components — a reference to a feature-disabled Agent
-       makes kagent fail to compile the orchestrator ("Agent <name> not found"). */}}
-{{- if $c.modelOwner }}
+       makes kagent fail to compile the orchestrator ("Agent <name> not found").
+       Keyed on `orchestrator`, NOT `modelOwner`: routing the fleet and owning the fleet's
+       ModelConfigs are different jobs and now live on different components (model-configs owns the
+       models). Collapsing them again would silently disable fleet auto-orchestration. */}}
+{{- if $c.orchestrator }}
 {{- $enabled := dict }}
 {{- range $comp := $components }}
 {{- if eq (include "inst.featureEnabled" (list $top $comp.feature)) "true" }}
@@ -437,7 +446,7 @@
 {{- end }}
 {{- else }}
 {{- range $comp := $components }}
-{{- if and $comp.vertexAI (ne $comp.name $c.name) (hasKey $enabled $comp.name) }}
+{{- if and $comp.agent (ne $comp.name $c.name) (hasKey $enabled $comp.name) }}
 {{- $fleet = append $fleet (dict "name" (default $comp.name $comp.chart)) }}
 {{- end }}
 {{- end }}

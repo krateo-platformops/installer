@@ -13,6 +13,68 @@ Curated history, newest first. This repo starts at the 2026-08-04 migration of t
 umbrella chart into `krateo-platformops` (0.3.1); the pre-migration 0.2.x line lived
 in the predecessor personal-org repo and is not mirrored here.
 
+## 2026-08-26 — the fleet's ModelConfigs move to their own component; `llmGateway` is gone
+
+Every agent chart carried a 6-field `llmGateway:` block that no installer path could reach: the
+installer filled it only for the `modelOwner` component, and `componentValues.<agent>` (which is
+`additionalProperties: false`) declared no `llmGateway` key for any component — so a user could not
+set it and `fillPath` always won. It also only ever rendered inside `if modelConfig.create`, which
+defaults to `false` in every specialist. Dead in both directions, in eight charts.
+
+It collapses to one boolean (`agentgateway.enabled`) in every agent chart, and one 4-field block
+(`agentgateway.modelRoute`) in **one new component, `model-configs`** (Kind `ModelConfigs`, feature
+`coreAgents`, deps `kagent`), which is now the sole owner of the fleet's kagent ModelConfigs —
+extracted out of `krateo-autopilot` along with `models`, `geminiApiKey` and `localModel`. Owning the
+fleet's models has nothing to do with being an orchestrator, and it kept forcing an autopilot
+release (the image that gets rebuilt constantly) for a model pin. `vertexAI` was **copied**, not
+moved: autopilot still needs it for its own pods' ADC.
+
+Three consequences in this chart:
+
+- **`modelOwner` split.** It was doing two unrelated jobs — inject `localModel` / wire the LLM route
+  (a *models* concern, now on `model-configs`) and auto-derive `extraAgents` (an *orchestrator*
+  concern, still `krateo-autopilot`). The second moves to a new pin, `orchestrator: true`. Deleting
+  `modelOwner` from the autopilot without that split would have silently disabled fleet
+  auto-orchestration.
+- **`vertexAI` un-overloaded into `agent`.** The pin meant two things at once — "inject
+  `.Values.vertexAI`" and "is an agent" — which is why adding a non-agent component that still needs
+  the Vertex block (`model-configs`) forced two `(not $c.modelOwner)` patches and two comment blocks
+  explaining them. The flag is now `agent: true` on the 13 components that DEPLOY a kagent Agent,
+  and it drives all four agent-shaped behaviours directly: the `.vertexAI` injection, the HITL gate,
+  `agentgateway.enabled`, and `extraAgents` membership. `model-configs` carries `modelOwner: true`
+  alone and is added explicitly where it genuinely needs the same wiring (the injection and
+  `agentgateway.enabled`, since its ModelConfigs derive `modelRoute` from that flag). Both double
+  negatives are gone. `.Values.vertexAI` — the operator-facing block — is untouched; only the pin
+  field was renamed.
+- **Explicit model assignment, as values not pins.** Which ModelConfig each agent runs on is now
+  plain chart values: `componentValues.<agent>.modelConfig.name` in `values.yaml`, seven entries
+  carrying the tier rationale. This replaces a naming *convention*: each agent chart used to default
+  `modelConfig.name` to a ModelConfig it did not own, so renaming a slot pointed seven charts at
+  nothing and every Agent CR failed to compile. The charts now default to kagent's inert
+  `default-model-config`, a reference that always resolves, and the installer states the choice.
+  `localModel.refName` is gone with it — on that path every slot renders as Ollama anyway.
+
+  Deliberately NOT a pin field. A pin is chart content, and `.Values.components` overrides are
+  whitelisted to `version`/`registerOnly`/`tier`/`repo`/`chart` — so a `model:` pin would have been
+  unoverridable, while adding a `components[]` schema field (and therefore an Installer CRD field)
+  purely to express operator policy. `componentValues` is already deep-merged into the spec, so this
+  costs `compositions.yaml` nothing and makes the choice `--set`-able against a fixed release:
+  `--set componentValues.core-provider-agent.modelConfig.name=gemini-flash`. The tradeoff taken
+  knowingly: the names are literals, so renaming a slot means editing both it and these entries —
+  an alias-resolution layer to auto-follow that rename was tried and removed as unearned (it cost a
+  `modelSlots` map hand-synced with the model-configs chart, ~30 lines of `compositions.yaml`, a
+  `fail` guard, and a pin field, to save one edit on an event nobody performs).
+- **The gateway wiring shrank** to one conditional fill of `agentgateway.modelRoute.url`, firing only
+  when the gateway's `name`/`port`/`routePrefix` or `namespaces.krateo` are off their defaults;
+  otherwise `model-configs` derives the route itself. The `localModel` skip moved into that chart's
+  tri-state derivation. One thing is now the operator's to state: setting
+  `componentValues.agentgateway-policies.llm.enabled: false` leaves no LLM route on the Gateway, so
+  it must be paired with `componentValues.model-configs.agentgateway.modelRoute.enabled: false`.
+
+Breaking, deliberately: `spec.llmGateway` and `modelConfig.{create,provider,model,vertexAI,
+apiKeySecret,apiKeySecretKey}` are removed from the component CRDs, and `localModel.refName` from
+this chart's.
+
 ## 2026-08-26 — internalUrls/internalPorts reach the components schema
 
 `internalUrls` (0.3.59) and `internalPorts` (0.3.66) were read off `$c` in `compositions.yaml` and

@@ -130,9 +130,12 @@ componentValues:
     #
     # They also need one thing the others do not: the agents' MODEL calls have to come through the
     # gateway, because an agentgateway prompt guard is a `backend.ai` policy and only runs on a
-    # route whose backend declares an LLM provider. The installer wires that half itself
-    # (krateo-autopilot.llmGateway) from this block, so there is nothing to set for it here — and
-    # `vertexAI.enabled` above already tells the gateway which provider to reach.
+    # route whose backend declares an LLM provider. The chart that owns the fleet's ModelConfigs
+    # (model-configs) puts them on that route itself, off the `agentgateway.enabled` the installer
+    # sets for it — so there is nothing to set for that half here, and `vertexAI.enabled` above
+    # already tells the gateway which provider to reach. The one thing to remember: setting
+    # `llm.enabled: false` below leaves no LLM route at all, so pair it with
+    # componentValues.model-configs.agentgateway.modelRoute.enabled: false.
     # ------------------------------------------------------------------------------------
     # Who may spend provider budget on the LLM route the block above rides on. Narrowed from the
     # chart's "any authenticated user" to match the two-tier split above; a `devs` user can still

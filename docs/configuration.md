@@ -46,7 +46,7 @@ later on the CR.
 | `coreProvider` | `true` | Nothing — an engine-present *marker* (the engine is always-on via bootstrap). |
 | `portal` | `true` | The non-agent platform: `authn` → `snowplow` → `frontend` → `portal` + `krateo-helm-render-service`, their `*-crd` charts, **and the observability tier** (clickhouse/mongodb operators, `krateo-observability`, both OTel collectors, `krateo-sse-proxy`). |
 | `oasgenProvider` | `true` | `oasgen-provider` + its CRD chart. |
-| `coreAgents` | `false` | The base agent layer: `kagent-crds` → `kagent` → `installer-agent` + `krateo-autopilot` + `incident-agent`. The autopilot component brings up `repo-mcp-server`, the grounding server every agent in the fleet reads through. |
+| `coreAgents` | `false` | The base agent layer: `kagent-crds` → `kagent` → `model-configs` + `installer-agent` + `krateo-autopilot` + `incident-agent`. `model-configs` owns the kagent ModelConfigs the whole fleet references by name — one place to pin a model or switch provider. The autopilot component brings up `repo-mcp-server`, the grounding server every agent in the fleet reads through. |
 | `specialistAgents` | `false` | The 5 component specialist agents (`authn/snowplow/frontend/clickstack/core-provider-agent`) + `clickhouse-mcp-server`. Needs `coreAgents` (they all dep on `kagent`). |
 | `ingress` | `false` | Opt-in **edge layer**, dep-chained: `gateway-api-crds` (the Gateway API CRDs) → `agentgateway` (the Gateway API controller + CRDs + the platform `GatewayClass`/`Gateway`) → `cert-manager` (operator + CRDs) → `cert-manager-issuers` (ACME/CA Issuers) → `external-dns` (DNS records) — all **public** `oci://ghcr.io/krateo-blueprints/charts`. Off by default; the base install pulls nothing from `krateo-blueprints` unless enabled. Leave off if you front Krateo another way (an existing ingress controller / cloud LB / mesh, or your own Gateway). |
 | `agentGateway` | `false` | Opt-in **agent gateway**, dep-chained: `agentgateway-controller` (Gateway API CRDs + the agentgateway controller) → `agentgateway-policies` (the `GatewayClass`, the agent `Gateway`, the routes, the JWT/RBAC policies, and the guardrails on the fleet's LLM traffic) — both **private** `oci://ghcr.io/krateo-agentiko/charts`, so `registryAuth` applies. Needs `coreAgents`, and an issuer whose JWKS the gateway trusts (`authn`, via `portal`, by default) — below. |
@@ -193,7 +193,7 @@ Helm sub-agents on in every profile).
 
 For the autopilot, `componentValues.krateo-autopilot.extraAgents` pins an explicit
 orchestration fleet; when absent the installer **auto-derives** it from every
-feature-enabled `vertexAI` agent component (excluding the autopilot itself), and
+feature-enabled `agent` component (excluding the autopilot itself), and
 either way the list is filtered to deployed agents — a reference to an absent Agent
 would fail kagent's compile.
 
@@ -303,9 +303,10 @@ may raise it for its own registry.
 
 ## `vertexAI`
 
-Injected as `spec.vertexAI` into every component flagged `vertexAI: true` in the pins
-(the autopilot + the specialist agents). Provider is GeminiVertexAI with Application
-Default Credentials — **no API key**:
+Injected as `spec.vertexAI` into every component flagged `vertexAI: true` in the pins —
+`model-configs`, which uses it to render the fleet's ModelConfigs with provider
+GeminiVertexAI, plus every agent, which uses it to set its pods up for the matching
+Application Default Credentials. **No API key** either side:
 
 - `projectID` — **required when enabled**, no default: your GCP project hosting Vertex.
 - `location` — `global` by default (Google's recommended cross-region routing for
@@ -318,12 +319,13 @@ Default Credentials — **no API key**:
 ## `localModel`
 
 Opt-in (default off); when enabled it **takes precedence over `vertexAI`** in Pass B:
-the model owner (`krateo-autopilot`, `modelOwner: true` in the pins) renders its shared
-`gemini-flash`/`gemini-pro` ModelConfigs as provider Ollama pointing at `host` with
-model id `model`; every other agent is pointed at the owner-created ModelConfig
-(`modelConfig.create: false`, `name: refName`) — the whole fleet on one local LLM with
-no per-agent-chart change. Use a tool-calling-capable model (`qwen3.6` is the default;
-`gemma ≤ 3` cannot tool-call).
+the model owner (`model-configs`, `modelOwner: true` in the pins) renders **every** slot in
+its `models` map — `gemini-flash`, `gemini-pro` — as provider Ollama pointing at `host` with
+model id `model`. Nothing else needs wiring: each agent already references a slot by name
+(`componentValues.<agent>.modelConfig.name`), and on this path every one of those slots is a
+local-LLM ModelConfig, so the whole fleet runs on the one local model with no per-agent-chart
+change. Use a tool-calling-capable model (`qwen3.6` is the default; `gemma ≤ 3` cannot
+tool-call).
 
 ## `features.agentGateway` — JWT auth, per-user RBAC and guardrails for the agent fleet
 
@@ -350,11 +352,11 @@ That is why no upgrade turns it on.
 | every agent (wired) | `agentgateway.enabled: true` (`KAGENT_PROPAGATE_TOKEN` in the pod), so each re-attaches the caller's token to its own outbound MCP/A2A calls. |
 | `frontend` (wired) | the same `agentgateway.enabled: true`. The portal is not an agent but it *is* a caller: the flag points its Autopilot A2A requests at the gateway instead of kagent-ui, which is the only way the user Bearer they carry is ever validated. The gateway's browser-reachable origin reaches it through the ordinary exposure model — `agentgateway-policies` is an `expose: true` peer with `configKeys: [AUTOPILOT_API_BASE_URL]`, exactly like authn/snowplow/sse-proxy — and the frontend chart appends the A2A path. |
 | `agentgateway-policies` (wired) | `cors.enabled: true`. That portal call is a cross-origin *browser* call, so the gateway has to answer the unauthenticated `OPTIONS` preflight the browser sends first; its own authorization policy would `403` it and the rail would never start. Only the preflight is short-circuited — a real request with no or a bad token is still `403`/`401`. Plus, when `vertexAI.enabled`, `llm.vertexai.projectId`/`region` (and the SA-key Secret when set), so the guardrail route reaches the same provider the agents were reaching directly. |
-| `krateo-autopilot` (wired) | `llmGateway.enabled: true` + `baseUrl`, so the shared ModelConfigs send their model calls to the gateway's `llm` route. This is what makes anything attached to that route act at all — the **guardrails** today, and rate limits, token budgets, cost controls, model aliases or failover if they get added: they are `backend.ai` policies and only run on a route whose backend declares an LLM provider, so an agent calling Gemini directly is invisible to every one of them. Read from `componentValues.agentgateway-policies.llm.*` (not `guardrails.*` — the route is infrastructure and outlives any one policy on it), so one flag there moves both halves and they cannot drift apart. Skipped on a `localModel` install — that path deliberately points every ModelConfig at an in-cluster Ollama, and the gateway's default upstream is Gemini. |
+| `model-configs` (wired) | `agentgateway.enabled: true`, from which the chart derives `agentgateway.modelRoute` — every ModelConfig it owns is rendered as provider `OpenAI` with `openAI.baseUrl` at the gateway's `llm` route, so the whole fleet's model calls go through it. This is what makes anything attached to that route act at all — the **guardrails** today, and rate limits, token budgets, cost controls, model aliases or failover if they get added: they are `backend.ai` policies and only run on a route whose backend declares an LLM provider, so an agent calling Gemini directly is invisible to every one of them. The route URL is **derived by the chart** from the gateway's default name/port/`routePrefix`; the installer fills `agentgateway.modelRoute.url` only when one of those — or `namespaces.krateo` — is non-default. The chart also derives the route OFF on a `localModel` install, whose ModelConfigs deliberately point at an in-cluster Ollama while the gateway's default upstream is Gemini. **If you set `componentValues.agentgateway-policies.llm.enabled: false`** there is no LLM route on the Gateway at all, so pair it with `componentValues.model-configs.agentgateway.modelRoute.enabled: false` — otherwise every model call is routed at a path that 404s. |
 
 The agent and controller entries are what make **tool** and **delegation** RBAC possible at all;
-without them only "which agent may this user reach" is enforceable. The autopilot entry is what
-makes the guardrails inspect anything. All of them are injected
+without them only "which agent may this user reach" is enforceable. The `model-configs` entry is
+what makes the guardrails inspect anything. All of them are injected
 **fill-if-absent**, so a
 `componentValues` override wins on every leaf — including `componentValues.kagent.kagentapp.proxy.url`.
 This is the opposite of the exposure/vertexAI wiring, which stays authoritative.
@@ -365,7 +367,8 @@ There is no second copy of the policies chart's surface in this chart: every set
 name and port, the JWKS endpoint, the claims, all three RBAC layers and every guardrail knob — is
 `componentValues.agentgateway-policies`, with the defaults chosen by that chart. The installer
 reads `gateway.name`/`gateway.port`, `jwt.userClaim` and the `llm` block back out, so `proxy.url`,
-the controller's claim and autopilot's `llmGateway.baseUrl` all follow an override of them.
+the controller's claim and — when they are moved off their defaults —
+`model-configs`' `agentgateway.modelRoute.url` all follow an override of them.
 
 ```yaml
 componentValues:
@@ -473,7 +476,7 @@ Six things worth knowing before turning it on:
 ## `hitlApproval`
 
 The coarse human-in-the-loop gate, injected as `spec.hitlApproval` into every
-`vertexAI` agent — orchestrator and subagents alike (kagent ≥ 0.9.9 bubbles a
+`agent` component — orchestrator and subagents alike (kagent ≥ 0.9.9 bubbles a
 subagent's tool-approval interrupt up to the user's chat, so delegation does not
 deadlock). `true` (default) pauses for approval before any mutating cluster tool;
 `false` is autonomous remediation. A component may instead declare its own granular

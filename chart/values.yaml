@@ -146,7 +146,7 @@ exposure:
 # Feature flags (carried over from the installer chart).
 features:
   coreProvider: true              # engine-present MARKER: core-provider is always-on via bootstrap (gates no component here)
-  coreAgents: false                # base agent layer: kagent + installer-agent + krateo-autopilot (which ships repo-mcp-server, the fleet's grounding server) + incident-agent (alert root-cause analysis)
+  coreAgents: false                # base agent layer: kagent + model-configs (the fleet's ModelConfigs) + installer-agent + krateo-autopilot (which ships repo-mcp-server, the fleet's grounding server) + incident-agent (alert root-cause analysis)
   specialistAgents: false          # the 5 component specialist agents + clickhouse-mcp (needs coreAgents)
   codegenAgents: false             # OPT-IN codegen/conversion specialists (code-analysis, ansible-to-operator, tf-provider-to-operator, tf-to-helm); needs coreAgents
   oasgenProvider: true            # oasgen-provider
@@ -168,21 +168,25 @@ features:
                                   #   Every setting is the agentgateway-policies chart's own:
                                   #   componentValues.agentgateway-policies — including componentValues.
                                   #   agentgateway-policies.guardrails.enabled, the single switch that turns the
-                                  #   guardrail layer (and the LLM route that feeds it) off and on. Turning it off also
-                                  #   points krateo-autopilot's ModelConfigs straight back at the provider.
+                                  #   guardrail layer off and on. Turning off the LLM ROUTE itself
+                                  #   (componentValues.agentgateway-policies.llm.enabled=false) leaves the Gateway with no
+                                  #   route to send model calls to, so pair it with
+                                  #   componentValues.model-configs.agentgateway.modelRoute.enabled=false, which points the
+                                  #   fleet's ModelConfigs straight back at the provider.
 
 # HITL approval gate for the autopilot's mutating Kubernetes tools. true (default)=
 # pause for human approval before any cluster change; false=autonomous remediation.
 hitlApproval: true
 
-# Gemini Vertex AI for the autopilot agents (functional LLM, no API key).
-# When enabled, the krateo-autopilot ModelConfigs use provider GeminiVertexAI with
+# Gemini Vertex AI for the agent fleet (functional LLM, no API key).
+# When enabled, the model-configs ModelConfigs use provider GeminiVertexAI with
 # Application Default Credentials: the kagent agent pods authenticate to Vertex via the
 # GKE node SA token from the metadata server. Requirements on the node pool:
 #   - OAuth scope https://www.googleapis.com/auth/cloud-platform
 #   - the node SA has an IAM role covering aiplatform.* (roles/aiplatform.user or roles/editor)
-# No API key and no downloaded SA-key file are needed. Injected into the autopilot
-# Composition spec by templates/compositions.yaml (components with vertexAI: true).
+# No API key and no downloaded SA-key file are needed. Injected into every agent Composition spec
+# by templates/compositions.yaml (components pinned `agent: true`, plus the model owner) —
+# model-configs selects the provider with it, the agent charts set up their pods' ADC with it.
 vertexAI:
   enabled: true
   # REQUIRED when enabled: set to your own GCP project hosting Vertex AI
@@ -200,11 +204,11 @@ vertexAI:
   secretKey: key.json
 
 # Local LLM (Ollama) — OPT-IN, off by default (vertexAI above stays the default). When enabled,
-# the whole agent fleet runs on ONE local, no-cloud model instead of Gemini/Vertex:
-#   - the model OWNER (krateo-autopilot, modelOwner:true) renders its gemini-flash/gemini-pro
-#     ModelConfigs as provider Ollama pointing at `host`, with the model id from `model`;
-#   - every other agent (installer-agent + the 9 specialists) is pointed at the owner's
-#     `refName` ModelConfig (create:false) — so no per-agent-chart change is needed.
+# the whole agent fleet runs on ONE local, no-cloud model instead of Gemini/Vertex: the model OWNER
+# (model-configs, modelOwner:true) renders EVERY slot in its `models` map as provider Ollama
+# pointing at `host`, with the model id from `model`. Nothing else needs wiring — each agent already
+# references a slot by name (its component pin's `model:`), and on this path every one of those slots
+# is a local-LLM ModelConfig.
 # Point `host` at an in-cluster Ollama Service. Use a TOOL-CALLING-capable model (the agents are
 # tool-heavy — k8s_patch_resource, helm_*): qwen3.6 is recommended; gemma4 works but is fragile;
 # gemma <=3 cannot tool-call. See QUICKSTART "Run the agent layer on a local model (Ollama)".
@@ -212,7 +216,6 @@ localModel:
   enabled: false
   host: ""                 # e.g. http://ollama.ollama.svc.cluster.local:11434
   model: qwen3.6
-  refName: gemini-flash    # the owner-created ModelConfig the other agents reference
 
 # ---------------------------------------------------------------------------
 # Per-component spec overrides, keyed by component name. Each entry is deep-merged
@@ -221,6 +224,8 @@ localModel:
 # wins on any leaf conflict — so you can safely add anything else here (e.g.
 # resources, replicaCount, service.annotations) and edit it in place on the live
 # Installer composition; a direct kubectl edit of the component CR reverts.
+# `<component>.imagePullSecrets` is FILL-IF-ABSENT instead, so an entry here wins.
+# The fleet's model policy lives here too — see the `modelConfig.name` entries at the end.
 # The autopilot orchestrator auto-attaches the deployed agent fleet (see krateo-autopilot below);
 # no manual registration is needed. Add per-component overrides here too, e.g.:
 #     snowplow:
@@ -258,7 +263,7 @@ componentValues:
   #       protocol: http/protobuf
   krateo-autopilot:
     # ORCHESTRATOR BY DEFAULT: the autopilot auto-attaches EVERY deployed agent as an A2A
-    # sub-agent — the installer derives extraAgents from the feature-enabled `vertexAI` agent
+    # sub-agent — the installer derives extraAgents from the feature-enabled `agent`
     # components (excluding the autopilot itself). So the enterprise profile wires the whole fleet
     # (installer/authn/snowplow/frontend/clickstack/core-provider agents) and agent-only wires just
     # the installer-agent — no manual list needed, and it adapts to whatever profile is enabled.
@@ -276,6 +281,56 @@ componentValues:
         enabled: true
       helm:
         enabled: true
+
+  # ---- Fleet model policy -------------------------------------------------
+  # WHICH ModelConfig each agent runs on. The names are slots the model-configs component
+  # renders (its `models.<alias>.name`); to change a slot's underlying model id instead, set
+  # componentValues.model-configs.models.<alias>.model. RENAMING a slot means changing both — the
+  # name here is a literal, not an alias resolved for you.
+  # These are plain values, so `--set componentValues.<agent>.modelConfig.name=gemini-flash`
+  # retargets one agent against a FIXED installer release. Deep-merged into the Composition
+  # spec, where componentValues wins on any leaf conflict.
+  # Not set for krateo-autopilot: that chart carries THREE agents on two different slots, so its
+  # choice is per-sub-agent — componentValues.krateo-autopilot.agents.<name>.modelConfig
+  # (agents.autopilot -> gemini-pro for intent classification, agents.k8s/helm -> gemini-flash).
+  # The agent charts themselves default to kagent's inert default-model-config, a reference that
+  # always resolves — so a slot rename can never leave an agent pointing at nothing.
+
+  # pro: the heavy/reasoning agent of the fleet — it reads the installer's own values surface and
+  # schema and reasons about a multi-component DAG.
+  installer-agent:
+    modelConfig:
+      name: gemini-pro
+  # pro: root-cause analysis is judgment work (rank competing causes, notice a missing piece of
+  # evidence, refuse to guess) where the flash tier fabricates.
+  incident-agent:
+    modelConfig:
+      name: gemini-pro
+  # pro: an AUTHORING specialist — it composes RESTActions (+ widget apiRef wiring), the same
+  # authoring role that runs frontend-agent on pro. Authoring valid CRs and reading apiserver
+  # validation errors needs the stronger model.
+  snowplow-agent:
+    modelConfig:
+      name: gemini-pro
+  # pro: this agent AUTHORS + self-validates widget CRs. Authoring valid CRs and reading dry-run
+  # errors needs the stronger model; the author->dry-run->fix loop in its prompt is the
+  # correctness backstop.
+  frontend-agent:
+    modelConfig:
+      name: gemini-pro
+  # pro: an AUTHORING specialist. It composes multi-resource charts and then reads structured
+  # validator output — JSON pointers, CEL messages — and edits the right template in response.
+  # That read-diagnose-fix loop is what the stronger tier buys; on flash the loop burns
+  # iterations re-fixing the same file.
+  core-provider-agent:
+    modelConfig:
+      name: gemini-pro
+  authn-agent:
+    modelConfig:
+      name: gemini-flash
+  clickstack-agent:
+    modelConfig:
+      name: gemini-flash
 
 # ---------------------------------------------------------------------------
 # Component DAG. `deps` = component names whose Compositions must be Ready=True

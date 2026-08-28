@@ -74,9 +74,15 @@ trusted-proxy  http://krateo-agent-gateway.krateo-system.svc.cluster.local:8080
 $ kubectl -n krateo-system get krateoautopilot krateo-autopilot -o jsonpath='{.spec.agentgateway}'
 {"enabled":true}
 
-# the guardrail half: the orchestrator's model calls now go through the gateway's LLM route
-$ kubectl -n krateo-system get krateoautopilot krateo-autopilot -o jsonpath='{.spec.llmGateway}'
-{"auth":"Passthrough","baseUrl":"http://krateo-agent-gateway.krateo-system.svc.cluster.local:8080/llm/v1","enabled":true}
+# the guardrail half: the WHOLE fleet's model calls now go through the gateway's LLM route.
+# model-configs derives the route from the gateway's defaults, so the spec carries only the switch;
+# the rendered ModelConfigs are where the URL shows up.
+$ kubectl -n krateo-system get modelconfigs model-configs -o jsonpath='{.spec.agentgateway}'
+{"enabled":true}
+
+$ kubectl -n krateo-system get modelconfig.kagent.dev gemini-pro \
+    -o jsonpath='{.spec.provider}{"  "}{.spec.openAI.baseUrl}{"  "}{.spec.apiKeyPassthrough}'
+OpenAI  http://krateo-agent-gateway.krateo-system.svc.cluster.local:8080/llm/v1  true
 
 $ kubectl -n krateo-system logs deploy/autopilot | grep 'Initialized OpenAI model'
 {"msg":"Initialized OpenAI model","baseUrl":"http://krateo-agent-gateway.krateo-system.svc.cluster.local:8080/llm/v1"}
