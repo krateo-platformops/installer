@@ -19,8 +19,9 @@ registryAuth:
   # IMAGE-pull, not just chart-pull. registryAuth is one credential; besides stamping
   # spec.chart.credentials for the in-cluster CHART pull, the installer DERIVES a matching
   # dockerconfigjson Secret from the same token(s) (templates/imagepull-secret.yaml) and injects it into
-  # the only two components that ship PRIVATE krateo-agentiko IMAGES — autopilot's repo-mcp-server and
-  # core-provider-agent's chart-gate-mcp-server — so a full-fleet install needs NO manual ServiceAccount
+  # the components that ship PRIVATE krateo-agentiko IMAGES — autopilot's repo-mcp-server,
+  # core-provider-agent's chart-gate-mcp-server, and agentgateway-policies' native-RBAC decider
+  # (nativeRbac.image.pullSecrets) — so a full-fleet install needs NO manual ServiceAccount
   # patch. Works in BOTH modes: global (the token above) and registries[] (the entry matching each
   # component's repo, so the image-pull token is exactly the one that authorizes that registry). Leave
   # empty to auto-derive (Secret name `krateo-registry-image-pull`), or set to the name of a pre-existing

@@ -290,13 +290,15 @@
 {{- if $imagePullOn }}
 {{- range $ip := $ipComps }}
 {{- if eq $c.name $ip.name }}
-{{- $seg0 := index $ip.path 0 }}
-{{- $seg1 := index $ip.path 1 }}
-{{- $m0 := index $spec $seg0 | default dict }}
-{{- $_ := set $spec $seg0 $m0 }}
-{{- $m1 := index $m0 $seg1 | default dict }}
-{{- $_ := set $m0 $seg1 $m1 }}
-{{- if not (hasKey $m1 "imagePullSecrets") }}{{- $_ := set $m1 "imagePullSecrets" (list (dict "name" $ipsName)) }}{{- end }}
+{{- /* Walk all-but-last path segments as nested maps, then set the last (the pull-secret key) if absent. */}}
+{{- $leaf := last $ip.path }}
+{{- $cur := $spec }}
+{{- range $seg := (initial $ip.path) }}
+{{- $next := index $cur $seg | default dict }}
+{{- $_ := set $cur $seg $next }}
+{{- $cur = $next }}
+{{- end }}
+{{- if not (hasKey $cur $leaf) }}{{- $_ := set $cur $leaf (list (dict "name" $ipsName)) }}{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}
