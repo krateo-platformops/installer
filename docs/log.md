@@ -13,6 +13,57 @@ Curated history, newest first. This repo starts at the 2026-08-04 migration of t
 umbrella chart into `krateo-platformops` (0.3.1); the pre-migration 0.2.x line lived
 in the predecessor personal-org repo and is not mirrored here.
 
+## 2026-08-31 — the orchestrator renders after its fleet
+
+`autopilot`'s Agent CR sat at `Accepted=False`, `failed to compile agent
+krateo-system/autopilot: Agent.kagent.dev "incident-agent" not found`, on every fresh install and
+stayed there — a `kagent-controller` restart was the only way out.
+
+kagent 0.9.12 never retries a failed Agent translation. `ReconcileKagentAgent` logs the compile
+error and then returns the *status write's* error, i.e. `nil`, so controller-runtime never requeues;
+`For(&Agent{})` is predicated on generation-or-label change and the spec never changes afterwards.
+The only dependency changes that re-enqueue an Agent are `ModelConfig`, `RemoteMCPServer`,
+`Service`, `ConfigMap` and `MCPServer` — `agentWatchFinders` has no `Agent` entry. So an unresolved
+Agent→Agent reference is permanent while an unresolved RemoteMCPServer reference self-heals.
+Ordering is the installer's problem; nothing downstream will fix it.
+
+The dep direction now matches what the references imply — a referrer renders after its referent:
+
+- `incident-agent` loses `deps: - krateo-autopilot`. It was there to order `repo-mcp-server` (which
+  the autopilot release ships), already covered by the RemoteMCPServer watch, and it put
+  `incident-agent`'s Agent CR strictly *after* the orchestrator's, making the failure certain: on
+  0.3.92 the seven other agent Compositions landed together at 11:43:19Z and `incident-agent`'s at
+  11:44:26Z.
+- `krateo-autopilot` deps all 12 `agent: true` components, and `frontend-agent` deps
+  `snowplow-agent` (its chart attaches it as a delegatable sub-agent — the fleet's second
+  Agent→Agent reference, exposed to the same bug).
+
+Two gates had to learn about this, both in `_helpers.tpl`; `compositions.yaml` is untouched:
+
+- **`inst.depsReady` skips a dep whose own feature is disabled.** It never had a feature check, so it
+  waited on components that are never rendered and can therefore never go Ready — which is what made
+  a cross-feature dep impossible and is why the orchestrator could not simply depend on a fleet
+  spanning `coreAgents`, `specialistAgents` and `codegenAgents`. A cross-feature dep now reads
+  "after it, if it is installed at all". This also lifts the restriction the `agentgateway-policies`
+  pin comment records.
+- **`inst.dependentsGone` exempts an `orchestrator` → `agent` edge.** The teardown gate keeps a
+  component alive while any dependent still exists, which is right for a real dep and wrong for this
+  one: the orchestrator does not need any agent to function (it drops feature-disabled ones from
+  `extraAgents` on the next render), it only needs their CRs to pre-exist. Without the exemption,
+  disabling `specialistAgents` or `codegenAgents` would leave those agents rendered — alive —
+  forever, held by an orchestrator that no longer references them. Every other dep on an agent is a
+  real one and still blocks, so `frontend-agent` → `snowplow-agent` still drains leaves-first.
+
+Cost, deliberately accepted: `krateo-autopilot` moves from Pass-B depth 4 to 6 (two extra waves,
+behind `snowplow-agent` → `frontend-agent`), and its FIRST creation is gated on the whole enabled
+fleet being Ready — so one wedged specialist keeps the Autopilot rail down on a fresh install where
+it previously came up alongside. Only first creation is gated; the `$exists` clause keeps it rendered
+through later churn.
+
+Footgun: a `deps` name matching no pin resolves to an empty Kind, never goes Ready, and silently
+blocks that component forever. Verified at this commit that every entry resolves, that autopilot's
+deps cover exactly the `agent: true` set, and that the graph is acyclic.
+
 ## 2026-08-26 — the fleet's ModelConfigs move to their own component; `llmGateway` is gone
 
 Every agent chart carried a 6-field `llmGateway:` block that no installer path could reach: the
@@ -316,3 +367,33 @@ dependency order.
 - 0.3.4: the frontend's Autopilot toggle grays out (instead of dead-clicking) on
   agent-less installs — Pass B sets `config.AUTOPILOT_AVAILABLE: "false"` whenever
   `features.coreAgents` is off; frontend pin 1.4.2.
+
+## 2026-08-31 — repo-mcp-server and structure-graph-mcp-server are components
+
+Both MCP servers left the `krateo-autopilot` chart for their own repos
+([repo-mcp-server](https://github.com/krateo-agentiko/repo-mcp-server),
+[structure-graph-mcp-server](https://github.com/krateo-agentiko/structure-graph-mcp-server), both
+`0.1.0`) and are now pinned components here.
+
+**Why.** `krateo-autopilot` is the orchestrator: it names every specialist agent as an A2A
+sub-agent, so `deps:` must render it after them. It also shipped `repo-mcp-server`, which every one
+of those agents needs *before* it compiles. One component, two opposite orderings — so the grounding
+server became the last thing installed. Measured on a fresh install: six agents created at
+`15:33:59`, `repo-mcp-server` at `15:36:00`, every one of them compiled against a `RemoteMCPServer`
+that did not exist yet.
+
+That is a genuine cycle at component granularity, and no `deps:` edit can break it. Splitting the
+server out of the orchestrator's component does: `repo-mcp-server` now has `deps: [kagent]` and an
+edge *into* it from each of the eight agents whose charts name it. The orchestrator keeps its
+sub-agent edges. Verified: the enabled graph is acyclic, `repo-mcp-server` lands in wave 2 and
+`krateo-autopilot` in wave 5, with every grounding agent between them.
+
+`structure-graph-mcp-server` had the same shape — opt-in, and so far unexercised. It gets its own
+`structureGraph` feature rather than riding `coreAgents`: both its consumers default it off, so
+gating it on `coreAgents` would deploy a server nothing names.
+
+**Image-pull wiring.** `inst.privateImageComponents` now names the two servers instead of
+`krateo-autopilot`, with an empty `path` — their imagePullSecrets knob is at the spec root, not
+under `mcpServers.<name>`. The injection in `compositions.yaml` walked exactly two path segments;
+it now delegates to `inst.fillPath`, which walks any length and already had the fill-if-absent
+semantics the hand-rolled version implemented inline.

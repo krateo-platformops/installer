@@ -86,10 +86,11 @@
      creds for) so the two lists can never drift. Add a component here to wire its image pull. arg: $top */}}
 {{- define "inst.privateImageComponents" -}}
 components:
-- name: krateo-autopilot
+- name: repo-mcp-server
   path:
-  - mcpServers
-  - repoSearch
+  - imagePullSecrets
+- name: structure-graph-mcp-server
+  path:
   - imagePullSecrets
 - name: core-provider-agent
   path:
@@ -274,9 +275,11 @@ components:
 {{- $top := index . 0 -}}{{- $deps := index . 1 -}}{{- $comps := index . 2 -}}{{- $allCRDs := index . 3 -}}
 {{- $all := "true" -}}
 {{- range $d := $deps -}}
-  {{- $kind := "" -}}{{- $ver := "" -}}
-  {{- range $c := $comps -}}{{- if eq $c.name $d -}}{{- $kind = $c.kind -}}{{- $ver = $c.version -}}{{- end -}}{{- end -}}
+  {{- $kind := "" -}}{{- $ver := "" -}}{{- $feat := "" -}}
+  {{- range $c := $comps -}}{{- if eq $c.name $d -}}{{- $kind = $c.kind -}}{{- $ver = $c.version -}}{{- $feat = $c.feature -}}{{- end -}}{{- end -}}
+  {{- if eq (include "inst.featureEnabled" (list $top $feat)) "true" -}}
   {{- if ne (include "inst.ready" (list $top $kind $d $ver $allCRDs)) "true" -}}{{- $all = "" -}}{{- end -}}
+  {{- end -}}
 {{- end -}}
 {{- $all -}}
 {{- end -}}
@@ -292,8 +295,10 @@ components:
 {{- define "inst.dependentsGone" -}}
 {{- $top := index . 0 -}}{{- $name := index . 1 -}}{{- $comps := index . 2 -}}{{- $allCRDs := index . 3 -}}
 {{- $gone := "true" -}}
+{{- $isAgent := "" -}}
+{{- range $c := $comps -}}{{- if and (eq $c.name $name) $c.agent -}}{{- $isAgent = "true" -}}{{- end -}}{{- end -}}
 {{- range $c := $comps -}}
-  {{- if has $name ($c.deps | default list) -}}
+  {{- if and (has $name ($c.deps | default list)) (not (and $c.orchestrator (eq $isAgent "true"))) -}}
     {{- if eq (include "inst.crdExists" (list $c.kind $c.version $allCRDs)) "true" -}}
       {{- if (lookup (include "inst.apiVersion" (list $c.version)) $c.kind $top.Values.namespaces.krateo $c.name) -}}{{- $gone = "" -}}{{- end -}}
     {{- end -}}

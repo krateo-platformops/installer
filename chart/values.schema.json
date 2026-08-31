@@ -188,6 +188,10 @@
           "type": "boolean",
           "default": false,
           "description": "Opt-in agent gateway: an agentgateway data plane in front of the kagent fleet (components agentgateway-controller + agentgateway-policies, from oci://ghcr.io/krateo-agentiko/charts), giving JWT authentication and per-user RBAC over which agent a caller may reach, which MCP tools it may run and which sub-agents it may delegate to. A valid token becomes mandatory on every agent endpoint, so it never turns on through an upgrade. Needs coreAgents and an issuer whose JWKS the gateway trusts (authn, via portal, by default). Every setting is the policies chart's own: componentValues.agentgateway-policies."
+        },
+        "structureGraph": {
+          "type": "boolean",
+          "description": "Deploy structure-graph-mcp-server, the code-STRUCTURE grounding layer (a Graphify tree-sitter AST graph of the engine repos: query_graph/shortest_path/get_neighbors/graph_stats). Both consumers — krateo-autopilot and core-provider-agent — reference it off by default, so turning this on without also setting their mcpServers.structureGraph.enabled deploys a server nothing names. Needs coreAgents. Default false."
         }
       }
     },
@@ -3094,7 +3098,39 @@
                   }
                 }
               },
-              "description": "Remote MCP servers, keyed by an arbitrary alias."
+              "description": "Remote MCP servers, keyed by an arbitrary alias.",
+              "properties": {
+                "repoSearch": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Reference-only: which of repo-mcp-server's tools this chart's agents name. The server itself is componentValues.repo-mcp-server.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "graph": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "Name the domain-graph tools too. MUST match componentValues.repo-mcp-server.graph.enabled.",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                },
+                "structureGraph": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Reference-only: whether this chart's agents name structure-graph-mcp-server's tools. The server itself is componentValues.structure-graph-mcp-server, gated by features.structureGraph.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
             },
             "agents": {
               "type": "object",
@@ -11167,6 +11203,337 @@
                   "type": "string"
                 },
                 "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "repo-mcp-server": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The fleet's grounding MCP server (krateo-agentiko/repo-mcp-server) — greps and reads the Krateo chart/source corpus at pinned versions, returning citable repo/path:line. A prerequisite of every agent that grounds: kagent compiles an Agent's tool list once and does not requeue, so an agent created before this component comes up silently ungrounded.",
+          "properties": {
+            "namespace": {
+              "type": "string"
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string",
+                  "description": "Empty means the chart version, so chart X.Y.Z asks for image X.Y.Z."
+                },
+                "pullPolicy": {
+                  "type": "string"
+                }
+              }
+            },
+            "serviceAccount": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Empty means the server's own default name."
+                },
+                "annotations": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "description": "Required for the private image. Left unset the installer wires it from registryAuth; set it (including []) to override.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "replicaCount": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1,
+              "description": "Keep at 1: Streamable-HTTP MCP sessions are stateful, so a second replica breaks follow-up calls with \"400 No valid session ID provided\"."
+            },
+            "cacheSizeLimit": {
+              "type": "string",
+              "description": "Size limit of the emptyDir at /tmp; the root filesystem is read-only."
+            },
+            "resources": {
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
+              "properties": {
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
+                },
+                "requests": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "remoteMCPServer": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The kagent RemoteMCPServer CR the fleet discovers this server by.",
+              "properties": {
+                "create": {
+                  "type": "boolean",
+                  "description": "Turn off only on a cluster with no kagent CRDs."
+                },
+                "protocol": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Empty means the chart's own Service. Set it to point the fleet at a server deployed elsewhere."
+                },
+                "timeout": {
+                  "type": "string"
+                }
+              }
+            },
+            "githubTokenSecret": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Optional GitHub token (Secret ref) to raise the anonymous rate limit under heavy fetch load; every repository in the corpus is public and reads anonymously.",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": "string"
+                }
+              }
+            },
+            "prefetch": {
+              "type": "boolean",
+              "description": "Warm every repository with a default version at startup instead of fetching lazily on first use."
+            },
+            "graph": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The server's Graphify DOMAIN graph tools (graph_find/graph_map/graph_neighbors/graph_path/knowledge_lookup). MUST match componentValues.krateo-autopilot.mcpServers.repoSearch.graph.enabled — an agent naming a tool the server does not serve fails to compile.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "structure-graph-mcp-server": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The code-STRUCTURE grounding layer (krateo-agentiko/structure-graph-mcp-server) — a Graphify tree-sitter AST graph of the engine repos. Gated by features.structureGraph; its consumers reference it off by default.",
+          "properties": {
+            "namespace": {
+              "type": "string"
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string",
+                  "description": "Empty means the chart version, so chart X.Y.Z asks for image X.Y.Z."
+                },
+                "pullPolicy": {
+                  "type": "string"
+                }
+              }
+            },
+            "serviceAccount": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Empty means the server's own default name."
+                },
+                "annotations": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "description": "Required for the private image. Left unset the installer wires it from registryAuth; set it (including []) to override.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "replicaCount": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1,
+              "description": "Keep at 1: Streamable-HTTP MCP sessions are stateful, so a second replica breaks follow-up calls with \"400 No valid session ID provided\"."
+            },
+            "cacheSizeLimit": {
+              "type": "string",
+              "description": "Size limit of the emptyDir at /tmp; the root filesystem is read-only."
+            },
+            "resources": {
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
+              "properties": {
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
+                },
+                "requests": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "remoteMCPServer": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The kagent RemoteMCPServer CR the fleet discovers this server by.",
+              "properties": {
+                "create": {
+                  "type": "boolean",
+                  "description": "Turn off only on a cluster with no kagent CRDs."
+                },
+                "protocol": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Empty means the chart's own Service. Set it to point the fleet at a server deployed elsewhere."
+                },
+                "timeout": {
                   "type": "string"
                 }
               }

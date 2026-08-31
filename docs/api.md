@@ -109,10 +109,10 @@ The DAG at a glance (38 components): the `platform` tier
 `oasgen-provider`, the four `*-crd` charts), the `observability` tier gated on
 `portal` (clickhouse/mongodb operators → `krateo-observability` → OTel collectors,
 `krateo-sse-proxy`) and the agent tiers gated on `coreAgents`/`specialistAgents`
-(`kagent-crds` → `kagent` → `installer-agent` + `krateo-autopilot` + `incident-agent`, the five
-specialists + `clickhouse-mcp-server`, all pinned to the private
-`oci://ghcr.io/krateo-agentiko/charts`). The autopilot chart also deploys
-`repo-mcp-server`, the fleet's single grounding server — it is not a pinned component.
+(`kagent-crds` → `kagent` → `repo-mcp-server` → `installer-agent` + `krateo-autopilot` +
+`incident-agent`, the five specialists + `clickhouse-mcp-server`, all pinned to the private
+`oci://ghcr.io/krateo-agentiko/charts`). `repo-mcp-server` is the fleet's single grounding server
+and a pinned component in its own right, ordered before every agent that reads through it.
 
 Two `.Values.components` interactions (validated by name against the pins,
 [`_helpers.tpl`](../chart/templates/_helpers.tpl)):
