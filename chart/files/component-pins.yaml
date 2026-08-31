@@ -95,9 +95,12 @@ components:
 # its git.krateo.io CRDs (esp. LocalResource) are present before portal registers the builder-publish
 # composition that applies them. The SCM-publish CONSUMER is builder-publish (co-released WITH portal, chart
 # charts/builder-publish:{{portal version}}, registered by the portal chart — NOT a separate installer pin).
-# STILL TO WIRE for SCM publishing to work end-to-end: the git-provider-credentials secret (a git token,
-# key: token) + builder-publish's git.host/repo (defaults git.host=github.com, secretRef=git-provider-credentials);
-# without the secret the branch push fails even though every CR applies. Pending operator inputs (token + host/repo).
+# SCM publishing to github.com needs NO installer wiring: builder-publish's chart defaults already point at
+# git.host=github.com with authMethod=bearer and secretRef=git-provider-credentials (key: token). The ONE
+# PRECONDITION is operational (like external-dns's provider-cred secret): the operator places the
+# git-provider-credentials Secret (key: token = a GitHub PAT with repo push scope) in the release namespace
+# out-of-band; until it exists the branch push fails even though every CR applies. A non-github host would
+# need a portal->builder-publish git.host passthrough (not present today).
 - name: git-provider-crd
   kind: GitProviderCrds
   chart: git-provider-crds
