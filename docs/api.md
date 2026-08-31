@@ -98,8 +98,9 @@ frontend config, model injection, HITL, `extraAgents`) merged with
 tested-together component set: for each component its `name`, `kind`, `chart`,
 `version`, `deps`, `tier` (`platform` | `observability` | `catalog`), `feature` gate,
 optional `repo` override and the wiring flags (`expose`/`exposePort`/`svcMatch`,
-`configKeys`, `consumer`, `frontendConfigEnv`, `vertexAI`, `modelOwner`,
-`requireApproval`). It is **chart content**, sourced via `.Files.Get`
+`configKeys`, `consumer`, `frontendConfigEnv`, `agent`, `modelOwner`, `orchestrator`,
+`requireApproval`). Which ModelConfig each agent runs on is NOT a pin — it is operator policy in
+`values.yaml` under `componentValues.<agent>.modelConfig.name`. It is **chart content**, sourced via `.Files.Get`
 (`inst.componentsYaml`) — not values — so it is immune to
 `helm upgrade --reuse-values` and a chart bump always propagates its pins.
 

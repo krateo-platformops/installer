@@ -93,7 +93,7 @@ kubectl -n krateo-system create secret generic krateo-agentiko-chart-pull \
 ## 3. Vertex AI credentials (the agents' LLM)
 
 Create a Secret with your GCP service-account key JSON in the same namespace; `vertexAI`
-references it by name (the whole fleet shares the autopilot-owned ModelConfigs, so this
+references it by name (the whole fleet shares the `model-configs`-owned ModelConfigs, so this
 one credential drives every agent):
 
 ```sh

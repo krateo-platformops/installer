@@ -245,9 +245,12 @@ components:
 # (the license, model A). kagent stays ClusterIP: the frontend nginx `/autopilot/` proxies
 # to the kagent-ui Service in-cluster, so the Autopilot toggle works without an external LB.
 # Kinds are crdgen PascalCase(chart name): the 5 specialists dropped the krateo- prefix in the
-# migration, so authn-agent -> AuthnAgent (NOT KrateoAuthnAgent). vertexAI:true injects
-# .Values.vertexAI; modelOwner (autopilot) owns the shared ModelConfigs and auto-derives its
-# extraAgents fleet from every feature-enabled vertexAI agent.
+# migration, so authn-agent -> AuthnAgent (NOT KrateoAuthnAgent). agent:true marks the components
+# that DEPLOY a kagent Agent — it earns the .Values.vertexAI injection (pod ADC), the HITL gate, the
+# gateway wiring and fleet membership; modelOwner (model-configs) owns the shared ModelConfigs every
+# agent references by name (WHICH one each agent gets is operator policy, not a pin: values.yaml
+# componentValues.<agent>.modelConfig.name); orchestrator (autopilot) auto-derives its extraAgents
+# fleet from every feature-enabled agent.
 - name: kagent-crds
   kind: KagentCrds
   version: 0.1.5
@@ -262,34 +265,51 @@ components:
   - kagent-crds
   tier: observability
   feature: coreAgents
+- name: model-configs
+  kind: ModelConfigs
+  version: 0.1.0
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: coreAgents
+  # modelOwner: this component OWNS the fleet's ModelConfigs. Deliberately NOT `agent` — it deploys
+  # no kagent Agent, it only renders ModelConfigs. modelOwner earns it the same .vertexAI injection
+  # (which selects provider GeminiVertexAI on them) and agentgateway.enabled that agents get, plus
+  # the .localModel injection and the LLM-route wiring that are its alone.
+  modelOwner: true
 - name: installer-agent
   kind: InstallerAgent
-  version: 0.2.1
+  version: 0.2.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
+  - model-configs
   tier: observability
   feature: coreAgents
-  vertexAI: true
+  agent: true
 - name: krateo-autopilot
   kind: KrateoAutopilot
-  version: 0.3.5
+  version: 0.3.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
+  - model-configs
   tier: observability
   feature: coreAgents
-  vertexAI: true
-  modelOwner: true
+  agent: true
+  # orchestrator: auto-attaches every deployed, feature-enabled agent as an A2A sub-agent
+  orchestrator: true
 - name: incident-agent
   kind: IncidentAgent
-  version: 0.1.2
+  version: 0.1.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
+  - model-configs
   - krateo-autopilot
   tier: observability
   feature: coreAgents
-  vertexAI: true
+  agent: true
 - name: clickhouse-mcp-server
   kind: ClickhouseMcpServer
   version: 0.1.8
@@ -300,53 +320,58 @@ components:
   feature: specialistAgents
 - name: authn-agent
   kind: AuthnAgent
-  version: 0.23.1
+  version: 0.23.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
+  - model-configs
   tier: observability
   feature: specialistAgents
-  vertexAI: true
+  agent: true
 - name: snowplow-agent
   kind: SnowplowAgent
-  version: 1.1.1
+  version: 1.1.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
+  - model-configs
   tier: observability
   feature: specialistAgents
-  vertexAI: true
+  agent: true
 - name: frontend-agent
   kind: FrontendAgent
-  version: 1.4.1
+  version: 1.4.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
+  - model-configs
   tier: observability
   feature: specialistAgents
-  vertexAI: true
+  agent: true
   requireApproval: []
 - name: clickstack-agent
   kind: ClickstackAgent
-  version: 3.1.1
+  version: 3.1.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
+  - model-configs
   tier: observability
   feature: specialistAgents
-  vertexAI: true
+  agent: true
 - name: core-provider-agent
   kind: CoreProviderAgent
-  version: 0.55.2
+  version: 0.55.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
+  - model-configs
   tier: observability
   feature: specialistAgents
-  vertexAI: true
+  agent: true
 # alert-troubleshooter (krateo-platformops): the "auto-troubleshoot on fire" bridge — a HyperDX alert
 # fires a webhook -> incident-agent A2A root-cause analysis -> TroubleshootingReport CR the portal
-# renders. NOT a kagent Agent (a plain webhook service that CALLS incident-agent), so no vertexAI. Needs
+# renders. NOT a kagent Agent (a plain webhook service that CALLS incident-agent), so no `agent`. Needs
 # BOTH the observability stack (HyperDX API + the hyperdx-api-token secret, from krateo-observability) AND
 # incident-agent, so it deps both and rides the specialistAgents feature — the same portal cross-dep
 # pattern clickhouse-mcp-server uses. Public krateo-platformops chart, so no repo override.
@@ -421,7 +446,7 @@ components:
 # Cross-cutting codegen/conversion specialists from krateo-agentiko/codegen-agents (migrated
 # from krateo-agentiko (formerly krateo-codegen-agents), krateo- prefix dropped). A distinct opt-in group
 # (like ingress) so the default specialist fleet stays lean. Needs coreAgents (kagent + the
-# autopilot-owned ModelConfigs); vertexAI:true wires Vertex + joins the autopilot fleet when
+# model-configs-owned ModelConfigs); agent:true wires Vertex + joins the autopilot fleet when
 # enabled. Kinds are crdgen PascalCase(chart) — tf is NOT an initialism (-> Tf).
 - name: code-analysis-agent
   kind: CodeAnalysisAgent
@@ -431,7 +456,7 @@ components:
   - kagent
   tier: observability
   feature: codegenAgents
-  vertexAI: true
+  agent: true
 - name: ansible-to-operator-agent
   kind: AnsibleToOperatorAgent
   version: 0.2.1
@@ -440,7 +465,7 @@ components:
   - kagent
   tier: observability
   feature: codegenAgents
-  vertexAI: true
+  agent: true
 - name: tf-provider-to-operator-agent
   kind: TfProviderToOperatorAgent
   version: 0.2.1
@@ -449,7 +474,7 @@ components:
   - kagent
   tier: observability
   feature: codegenAgents
-  vertexAI: true
+  agent: true
 - name: tf-to-helm-agent
   kind: TfToHelmAgent
   version: 0.2.1
@@ -458,7 +483,7 @@ components:
   - kagent
   tier: observability
   feature: codegenAgents
-  vertexAI: true
+  agent: true
 - name: krateo-blueprint-agent
   kind: KrateoBlueprintAgent
   version: 0.2.3
@@ -467,4 +492,4 @@ components:
   - kagent
   tier: observability
   feature: codegenAgents
-  vertexAI: true
+  agent: true
