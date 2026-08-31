@@ -89,11 +89,32 @@ components:
   # fetch. NOT a portal dep — the portal reads the ConfigMap with continueOnError, so the catalog pull
   # never gates portal availability (a missing ConfigMap = an empty marketplace that self-heals when
   # the catalog installs). Pulled from the public krateo-blueprints /charts base (no registryAuth).
+# The classic Krateo git-provider controller (reconciles git.krateo.io Repo + LocalResource CRs),
+# made composition-ready in 0.14.1 (values.schema.json added so crdgen derives the GitProvider CRD).
+# Mandatory with the portal feature and ordered BEFORE portal (portal deps it), so the SCM controller
+# + its CRDs are present. NOTE: git.host / a git-provider-credentials secret / AUTOPILOT_PUBLISH_VIA_GIT_PROVIDER
+# are NOT wired here — no published consumer reads them yet (autopilot 0.3.6, frontend 1.5.16 don't), so the
+# controller installs idle until the SCM-publish consumer ships and the contract is known.
+- name: git-provider-crd
+  kind: GitProviderCrds
+  chart: git-provider-crds
+  version: 0.14.1
+  tier: platform
+  feature: portal
+- name: git-provider
+  kind: GitProvider
+  chart: git-provider
+  version: 0.14.1
+  deps:
+  - git-provider-crd
+  tier: platform
+  feature: portal
 - name: portal
   kind: Portal
   version: 1.7.17
   deps:
   - frontend
+  - git-provider
   tier: platform
   feature: portal
   chart: portal
