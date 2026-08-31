@@ -101,6 +101,11 @@ components:
   - nativeRbac
   - image
   - pullSecrets
+- name: agentgateway-policies
+  path:
+  - certReplayHop
+  - image
+  - pullSecrets
 {{- end -}}
 
 {{/* inst.imagePullAuths — the image-pull credential REFERENCES for the private-image components, as a JSON
