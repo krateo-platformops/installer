@@ -14,7 +14,7 @@ components:
 - name: frontend-crd
   kind: FrontendCrds
   chart: frontend-crds
-  version: 1.5.12
+  version: 1.5.16
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -65,7 +65,7 @@ components:
 - name: frontend
   kind: Frontend
   chart: frontend
-  version: 1.5.14
+  version: 1.5.16
   deps:
   - frontend-crd
   - authn
@@ -91,7 +91,7 @@ components:
   # the catalog installs). Pulled from the public krateo-blueprints /charts base (no registryAuth).
 - name: portal
   kind: Portal
-  version: 1.7.13
+  version: 1.7.16
   deps:
   - frontend
   tier: platform
@@ -259,7 +259,7 @@ components:
   feature: coreAgents
 - name: kagent
   kind: Kagent
-  version: 0.1.12
+  version: 0.1.14
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent-crds
@@ -412,7 +412,7 @@ components:
   feature: agentGateway
 - name: agentgateway-policies
   kind: AgentgatewayPolicies
-  version: 0.1.7
+  version: 0.1.9
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
