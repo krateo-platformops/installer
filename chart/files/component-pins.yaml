@@ -14,7 +14,7 @@ components:
 - name: frontend-crd
   kind: FrontendCrds
   chart: frontend-crds
-  version: 1.5.16
+  version: 1.5.18
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -65,7 +65,7 @@ components:
 - name: frontend
   kind: Frontend
   chart: frontend
-  version: 1.5.16
+  version: 1.5.18
   deps:
   - frontend-crd
   - authn
@@ -91,10 +91,13 @@ components:
   # the catalog installs). Pulled from the public krateo-blueprints /charts base (no registryAuth).
 # The classic Krateo git-provider controller (reconciles git.krateo.io Repo + LocalResource CRs),
 # made composition-ready in 0.14.1 (values.schema.json added so crdgen derives the GitProvider CRD).
-# Mandatory with the portal feature and ordered BEFORE portal (portal deps it), so the SCM controller
-# + its CRDs are present. NOTE: git.host / a git-provider-credentials secret / AUTOPILOT_PUBLISH_VIA_GIT_PROVIDER
-# are NOT wired here — no published consumer reads them yet (autopilot 0.3.6, frontend 1.5.16 don't), so the
-# controller installs idle until the SCM-publish consumer ships and the contract is known.
+# Mandatory with the portal feature and ordered BEFORE portal (portal deps it), so the SCM controller +
+# its git.krateo.io CRDs (esp. LocalResource) are present before portal registers the builder-publish
+# composition that applies them. The SCM-publish CONSUMER is builder-publish (co-released WITH portal, chart
+# charts/builder-publish:{{portal version}}, registered by the portal chart — NOT a separate installer pin).
+# STILL TO WIRE for SCM publishing to work end-to-end: the git-provider-credentials secret (a git token,
+# key: token) + builder-publish's git.host/repo (defaults git.host=github.com, secretRef=git-provider-credentials);
+# without the secret the branch push fails even though every CR applies. Pending operator inputs (token + host/repo).
 - name: git-provider-crd
   kind: GitProviderCrds
   chart: git-provider-crds
