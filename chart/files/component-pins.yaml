@@ -98,7 +98,7 @@ components:
 - name: git-provider-crd
   kind: GitProviderCrds
   chart: git-provider-crds
-  version: 0.14.1
+  version: 0.14.2
   tier: platform
   feature: portal
 - name: git-provider
