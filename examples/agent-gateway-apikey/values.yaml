@@ -54,6 +54,12 @@ componentValues:
     # Keep tokenless requests 401 on the user-facing routes.
     jwt:
       mode: Strict
+    # Export the gateway's spans to ClickStack so the gen_ai token/cost attributes on the /llm/v1
+    # spans land in ClickHouse — i.e. LLM cost + budgets become observable. On for this profile
+    # because the whole point of routing LLM through the gateway is governance. backendRef defaults
+    # to the ClickStack DAEMONSET collector (the one that ingests OTLP).
+    tracing:
+      enabled: true
     llm:
       # `auto` already resolves to gemini here (no Vertex project); pinned for clarity.
       provider: gemini
