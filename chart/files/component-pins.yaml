@@ -311,8 +311,6 @@ components:
   feature: structureGraph
 - name: krateo-autopilot
   kind: KrateoAutopilot
-  # >=0.4.0: earlier releases ship repo-mcp-server themselves, so two helm releases would own the
-  # same RemoteMCPServer CR.
   version: 0.4.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
