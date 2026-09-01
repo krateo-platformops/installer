@@ -8713,11 +8713,130 @@
                     },
                     "extraAllowedFrom": {
                       "type": "array",
+                      "description": "Extra ingress NetworkPolicyPeer entries, appended verbatim.",
                       "items": {
+                        "description": "A Kubernetes NetworkPolicyPeer. Set podSelector and/or namespaceSelector, OR ipBlock — ipBlock is mutually exclusive with the selectors.",
                         "type": "object",
-                        "additionalProperties": true
-                      },
-                      "description": "Extra ingress NetworkPolicyPeer entries, appended verbatim."
+                        "additionalProperties": false,
+                        "minProperties": 1,
+                        "properties": {
+                          "podSelector": {
+                            "description": "Selects pods. Without namespaceSelector it means pods in the policy's OWN namespace.",
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "matchLabels": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                },
+                                "description": "Label key/value pairs; all must match."
+                              },
+                              "matchExpressions": {
+                                "type": "array",
+                                "description": "Set-based label requirements; all must match.",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "key",
+                                    "operator"
+                                  ],
+                                  "properties": {
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "operator": {
+                                      "type": "string",
+                                      "enum": [
+                                        "In",
+                                        "NotIn",
+                                        "Exists",
+                                        "DoesNotExist"
+                                      ]
+                                    },
+                                    "values": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "description": "Required for In/NotIn; must be empty for Exists/DoesNotExist."
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "namespaceSelector": {
+                            "description": "Selects namespaces. kubernetes.io/metadata.name is set on every namespace by the apiserver.",
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "matchLabels": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                },
+                                "description": "Label key/value pairs; all must match."
+                              },
+                              "matchExpressions": {
+                                "type": "array",
+                                "description": "Set-based label requirements; all must match.",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "key",
+                                    "operator"
+                                  ],
+                                  "properties": {
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "operator": {
+                                      "type": "string",
+                                      "enum": [
+                                        "In",
+                                        "NotIn",
+                                        "Exists",
+                                        "DoesNotExist"
+                                      ]
+                                    },
+                                    "values": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "description": "Required for In/NotIn; must be empty for Exists/DoesNotExist."
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "ipBlock": {
+                            "description": "A CIDR range, e.g. the node CIDR when the CNI does not exempt kubelet probes.",
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "cidr"
+                            ],
+                            "properties": {
+                              "cidr": {
+                                "type": "string",
+                                "description": "CIDR, e.g. 10.244.0.0/16."
+                              },
+                              "except": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "description": "CIDRs excluded from `cidr`; each must be within it."
+                              }
+                            }
+                          }
+                        }
+                      }
                     }
                   }
                 },
@@ -8748,11 +8867,130 @@
                     },
                     "extraAllowedFrom": {
                       "type": "array",
+                      "description": "Extra ingress NetworkPolicyPeer entries. Needed on an install without proxy.url, where agent-to-agent delegation is a direct pod-to-pod call this policy blocks.",
                       "items": {
+                        "description": "A Kubernetes NetworkPolicyPeer. Set podSelector and/or namespaceSelector, OR ipBlock — ipBlock is mutually exclusive with the selectors.",
                         "type": "object",
-                        "additionalProperties": true
-                      },
-                      "description": "Extra ingress NetworkPolicyPeer entries. Needed on an install without proxy.url, where agent-to-agent delegation is a direct pod-to-pod call this policy blocks."
+                        "additionalProperties": false,
+                        "minProperties": 1,
+                        "properties": {
+                          "podSelector": {
+                            "description": "Selects pods. Without namespaceSelector it means pods in the policy's OWN namespace.",
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "matchLabels": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                },
+                                "description": "Label key/value pairs; all must match."
+                              },
+                              "matchExpressions": {
+                                "type": "array",
+                                "description": "Set-based label requirements; all must match.",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "key",
+                                    "operator"
+                                  ],
+                                  "properties": {
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "operator": {
+                                      "type": "string",
+                                      "enum": [
+                                        "In",
+                                        "NotIn",
+                                        "Exists",
+                                        "DoesNotExist"
+                                      ]
+                                    },
+                                    "values": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "description": "Required for In/NotIn; must be empty for Exists/DoesNotExist."
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "namespaceSelector": {
+                            "description": "Selects namespaces. kubernetes.io/metadata.name is set on every namespace by the apiserver.",
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "matchLabels": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                },
+                                "description": "Label key/value pairs; all must match."
+                              },
+                              "matchExpressions": {
+                                "type": "array",
+                                "description": "Set-based label requirements; all must match.",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "key",
+                                    "operator"
+                                  ],
+                                  "properties": {
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "operator": {
+                                      "type": "string",
+                                      "enum": [
+                                        "In",
+                                        "NotIn",
+                                        "Exists",
+                                        "DoesNotExist"
+                                      ]
+                                    },
+                                    "values": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "description": "Required for In/NotIn; must be empty for Exists/DoesNotExist."
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "ipBlock": {
+                            "description": "A CIDR range, e.g. the node CIDR when the CNI does not exempt kubelet probes.",
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "cidr"
+                            ],
+                            "properties": {
+                              "cidr": {
+                                "type": "string",
+                                "description": "CIDR, e.g. 10.244.0.0/16."
+                              },
+                              "except": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "description": "CIDRs excluded from `cidr`; each must be within it."
+                              }
+                            }
+                          }
+                        }
+                      }
                     }
                   }
                 },
@@ -8810,11 +9048,130 @@
                     },
                     "extraAllowedFrom": {
                       "type": "array",
+                      "description": "Extra ingress NetworkPolicyPeer entries, appended to EVERY MCP server's policy.",
                       "items": {
+                        "description": "A Kubernetes NetworkPolicyPeer. Set podSelector and/or namespaceSelector, OR ipBlock — ipBlock is mutually exclusive with the selectors.",
                         "type": "object",
-                        "additionalProperties": true
-                      },
-                      "description": "Extra ingress NetworkPolicyPeer entries, appended to EVERY MCP server's policy."
+                        "additionalProperties": false,
+                        "minProperties": 1,
+                        "properties": {
+                          "podSelector": {
+                            "description": "Selects pods. Without namespaceSelector it means pods in the policy's OWN namespace.",
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "matchLabels": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                },
+                                "description": "Label key/value pairs; all must match."
+                              },
+                              "matchExpressions": {
+                                "type": "array",
+                                "description": "Set-based label requirements; all must match.",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "key",
+                                    "operator"
+                                  ],
+                                  "properties": {
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "operator": {
+                                      "type": "string",
+                                      "enum": [
+                                        "In",
+                                        "NotIn",
+                                        "Exists",
+                                        "DoesNotExist"
+                                      ]
+                                    },
+                                    "values": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "description": "Required for In/NotIn; must be empty for Exists/DoesNotExist."
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "namespaceSelector": {
+                            "description": "Selects namespaces. kubernetes.io/metadata.name is set on every namespace by the apiserver.",
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "matchLabels": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                },
+                                "description": "Label key/value pairs; all must match."
+                              },
+                              "matchExpressions": {
+                                "type": "array",
+                                "description": "Set-based label requirements; all must match.",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "key",
+                                    "operator"
+                                  ],
+                                  "properties": {
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "operator": {
+                                      "type": "string",
+                                      "enum": [
+                                        "In",
+                                        "NotIn",
+                                        "Exists",
+                                        "DoesNotExist"
+                                      ]
+                                    },
+                                    "values": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "description": "Required for In/NotIn; must be empty for Exists/DoesNotExist."
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "ipBlock": {
+                            "description": "A CIDR range, e.g. the node CIDR when the CNI does not exempt kubelet probes.",
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "cidr"
+                            ],
+                            "properties": {
+                              "cidr": {
+                                "type": "string",
+                                "description": "CIDR, e.g. 10.244.0.0/16."
+                              },
+                              "except": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "description": "CIDRs excluded from `cidr`; each must be within it."
+                              }
+                            }
+                          }
+                        }
+                      }
                     }
                   }
                 }
