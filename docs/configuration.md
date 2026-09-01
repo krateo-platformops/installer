@@ -1,7 +1,7 @@
 ---
 type: Configuration
 title: installer — configuration
-description: The whole values surface — feature gates, the exposure model (LoadBalancer/NodePort lookups), componentValues deep-merge, registryAuth, vertexAI, localModel, hitlApproval and the bootstrap switch — with the render-time mechanics behind each.
+description: The whole values surface — feature gates, the exposure model (LoadBalancer/NodePort lookups), componentValues deep-merge, registryAuth, the three LLM paths (vertexAI / localModel / Gemini API key), git-provider SCM publishing, hitlApproval and the bootstrap switch — with the render-time mechanics behind each.
 resource: oci://ghcr.io/krateo-platformops/charts/installer
 tags: [configuration, values, exposure, features]
 timestamp: 2026-08-20T00:00:00Z
@@ -44,7 +44,7 @@ later on the CR.
 | Flag | Default | Gates |
 |---|---|---|
 | `coreProvider` | `true` | Nothing — an engine-present *marker* (the engine is always-on via bootstrap). |
-| `portal` | `true` | The non-agent platform: `authn` → `snowplow` → `frontend` → `portal` + `krateo-helm-render-service`, their `*-crd` charts, **and the observability tier** (clickhouse/mongodb operators, `krateo-observability`, both OTel collectors, `krateo-sse-proxy`). |
+| `portal` | `true` | The non-agent platform: `authn` → `snowplow` → `git-provider` → `frontend` → `portal` + `krateo-helm-render-service`, their `*-crd` charts, **and the observability tier** (clickhouse/mongodb operators, `krateo-observability`, both OTel collectors, `krateo-sse-proxy`). `git-provider` (ordered before `portal`) supplies the `git.krateo.io` CRDs the portal's Autopilot Builders publish through — [below](#git-provider--scm-agnostic-portal-builder-publishing). |
 | `oasgenProvider` | `true` | `oasgen-provider` + its CRD chart. |
 | `coreAgents` | `false` | The base agent layer: `kagent-crds` → `kagent` → `model-configs` + `repo-mcp-server` + `installer-agent` + `krateo-autopilot` + `incident-agent`. `model-configs` owns the kagent ModelConfigs the whole fleet references by name — one place to pin a model or switch provider. `repo-mcp-server` is the grounding server every agent reads through, and a `deps:` prerequisite of each of them. |
 | `specialistAgents` | `false` | The 5 component specialist agents (`authn/snowplow/frontend/clickstack/core-provider-agent`) + `clickhouse-mcp-server`. Needs `coreAgents` (they all dep on `kagent`). |
@@ -242,6 +242,37 @@ reconcile — see the two rules above).
 > content, and the `portal` chart's own values; for custom UI content see the `portal`
 > component and the Krateo marketplace/blueprint documentation.
 
+## `git-provider` — SCM-agnostic Portal Builder publishing
+
+`git-provider` is a mandatory `portal`-feature component, ordered **before** `portal`. It supplies
+the `git.krateo.io` CRDs — chiefly `LocalResource` — that the portal's three **Autopilot Builders**
+(Portal Builder = pages, Blueprint Builder, Controller Builder = KOG/RestDefinition) publish
+through. When you build an artifact and confirm the blast-radius dialog, the path is:
+
+```
+Builder ──▶ BuilderPublish claim ──▶ builder-publish composition ──▶ git-provider LocalResource ──▶ git push (PR)
+```
+
+`builder-publish` is the SCM-publish consumer. It is **co-released with `portal`** (chart
+`charts/builder-publish:<portal version>`, registered by the `portal` chart) — *not* a separate
+installer pin — so bumping `portal` moves it too.
+
+**Publishing to github.com needs no installer wiring.** `builder-publish`'s chart defaults already
+set `git.host=github.com`, `authMethod=bearer`, and `secretRef=git-provider-credentials`
+(`key: token`). The one thing you provide is that Secret — an out-of-band PAT, never in a
+blueprint:
+
+```bash
+kubectl -n krateo-system create secret generic git-provider-credentials \
+  --from-literal=token='<a GitHub PAT with repo push scope>'
+```
+
+Publish **destinations** are frontend config prefills that the publish form overrides per-artifact:
+PAGE is one repo (the portal chart); Controller/KOG and Blueprint are per-artifact (each new
+artifact its own repo, chosen at publish). A **non-github.com host** (GitLab, Gitea, GitHub
+Enterprise) would need a `portal → builder-publish` `git.host` passthrough, which is not present
+today.
+
 ## `registryAuth`
 
 core-provider pulls every component chart **in-cluster** (and the umbrella's
@@ -327,6 +358,40 @@ model id `model`. Nothing else needs wiring: each agent already references a slo
 local-LLM ModelConfig, so the whole fleet runs on the one local model with no per-agent-chart
 change. Use a tool-calling-capable model (`qwen3.6` is the default; `gemma ≤ 3` cannot
 tool-call).
+
+## Gemini API key — the Vertex-free path
+
+A third LLM option, for clusters with **no GCP/Vertex** (any distribution — EKS, AKS, on-prem,
+kind). It runs the same Gemini models as the Vertex path but authenticates with a plain
+[Google AI Studio](https://aistudio.google.com/apikey) API key instead of ADC, and it lives at
+the **gateway**, so it needs `features.agentGateway` on (the gateway holds the key; no agent
+does). Set two things together:
+
+- `vertexAI.enabled: false` — this is the selector. It stops the installer injecting
+  `llm.vertexai.*` into the gateway, and reaches every agent verbatim so their pods get
+  `GOOGLE_GENAI_USE_VERTEXAI=0` — without it a Vertex-shaped call carrying an API key is
+  rejected `401 API keys are not supported by this API`.
+- `componentValues.agentgateway-policies.llm` — point the gateway's LLM upstream at Gemini and
+  the key:
+
+  ```yaml
+  componentValues:
+    agentgateway-policies:
+      llm:
+        provider: gemini
+        gemini:
+          auth:
+            secretRef:
+              name: gemini-api-key   # an out-of-band Secret you create; its `apiKey` key holds the AI Studio key
+              key: apiKey
+  ```
+
+The fleet's ModelConfigs stay **gateway-routed** (provider `OpenAI` → the gateway `/llm/v1`
+route), so the key sits in exactly one place. `llm.provider: auto` already resolves to `gemini`
+once no Vertex project is present — it is pinned above for clarity. Pair it with
+`tracing.enabled: true` (needs `agentgateway-policies ≥ 0.1.10`) to export the `/llm/v1` route's
+`gen_ai.*` token/cost spans to ClickStack. Full profile:
+[`examples/agent-gateway-apikey`](../examples/agent-gateway-apikey/README.md).
 
 ## `features.agentGateway` — JWT auth, per-user RBAC and guardrails for the agent fleet
 
