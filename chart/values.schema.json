@@ -8661,6 +8661,165 @@
                 }
               }
             },
+            "networkPolicy": {
+              "description": "Containment: keep the kagent controller, the agent pods and the in-cluster MCP servers reachable only through the Gateway. The Gateway is the only hop that verifies a token's signature and the only place tool RBAC is decided: the controller merely decodes the token (an unsigned alg:none token is accepted), and the agent pods and MCP servers authenticate nothing. ON by default; requires a NetworkPolicy-enforcing CNI (kind's kindnet accepts these objects but ignores them).",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "ON by default. Without these policies every auth layer this chart renders is bypassable by any pod in the cluster. On a CNI that does not enforce NetworkPolicy the objects are inert, so verify enforcement rather than assume it."
+                },
+                "gatewayNamespace": {
+                  "type": "string",
+                  "description": "Namespace of the agentgateway data-plane pods — the allowed source on both policies. Empty = release namespace."
+                },
+                "gatewayPodLabels": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Pod labels of the agentgateway data plane (gateway.networking.k8s.io/gateway-name=<gateway>), stamped by the Gateway API controller."
+                },
+                "controller": {
+                  "description": "Restrict ingress to kagent-controller (port from kagent.controller.port) to the gateway and the agent pods.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "description": "Namespace the controller runs in, and where the policy is created — a NetworkPolicy governs only its own namespace's pods. Empty = release namespace."
+                    },
+                    "podLabels": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "kagent controller pod labels. The kagent chart's own labels, hence overridable: a relabel upstream must not leave the selector matching nothing, which would leave the port open."
+                    },
+                    "allowUi": {
+                      "type": "boolean",
+                      "description": "Admit kagent-ui, which dials the controller directly with no token and so already 401s under trusted-proxy. A documented bypass that does not fix the UI; repoint it at the gateway instead. Default false."
+                    },
+                    "uiPodLabels": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "kagent-ui pod labels, used only when allowUi is true."
+                    },
+                    "extraAllowedFrom": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      },
+                      "description": "Extra ingress NetworkPolicyPeer entries, appended verbatim."
+                    }
+                  }
+                },
+                "agents": {
+                  "description": "Restrict ingress to every agent pod's A2A port to the kagent controller and the gateway.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "description": "Namespace the Agent pods run in, and where the policy is created. Empty = kagent.agentNamespace."
+                    },
+                    "port": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535,
+                      "description": "The agents' A2A container port; kagent serves 8080 on every agent it provisions."
+                    },
+                    "podLabels": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Fleet label selecting every kagent-provisioned Agent pod. Selecting on the fleet rather than a list of names means an agent added later is protected the moment it is created."
+                    },
+                    "extraAllowedFrom": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      },
+                      "description": "Extra ingress NetworkPolicyPeer entries. Needed on an install without proxy.url, where agent-to-agent delegation is a direct pod-to-pod call this policy blocks."
+                    }
+                  }
+                },
+                "mcpServers": {
+                  "description": "Restrict ingress to every in-cluster MCP server's port to the gateway and the kagent controller. One NetworkPolicy per mcpServers[] entry, since those servers come from different charts and share no common label.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "ON by default. MCP servers do no authentication of their own; tool RBAC exists only on traffic that arrives through the gateway."
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "description": "Namespace the MCP servers run in, and where the policies are created. Empty = release namespace."
+                    },
+                    "nameLabel": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "The pod label whose VALUE equals the mcpServers[].name. Defaults to app.kubernetes.io/name, which every MCP pod carries."
+                    },
+                    "overrides": {
+                      "type": "object",
+                      "description": "Per-server escapes keyed by mcpServers[].name, for a server that breaks the nameLabel convention.",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "podLabels": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "description": "Replaces the nameLabel selector entirely for this server."
+                          },
+                          "port": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 65535,
+                            "description": "Overrides mcpServers[].port for this server."
+                          },
+                          "namespace": {
+                            "type": "string",
+                            "description": "This server lives outside the namespace above."
+                          }
+                        }
+                      }
+                    },
+                    "exclude": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "mcpServers[].names to leave ungoverned. kagent-tools is one of those entries and this is its only policy, so excluding it leaves the cluster-admin tool server reachable by any pod."
+                    },
+                    "extraAllowedFrom": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      },
+                      "description": "Extra ingress NetworkPolicyPeer entries, appended to EVERY MCP server's policy."
+                    }
+                  }
+                }
+              }
+            },
             "extraAllowExpressions": {
               "type": "array",
               "description": "Extra CEL expressions appended verbatim to the Gateway Allow policy. OR'd with the generated ones, so they can only widen access.",
