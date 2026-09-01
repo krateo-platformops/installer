@@ -1,0 +1,74 @@
+# Distribution-agnostic agent LLM: the whole kagent fleet routes its LLM traffic THROUGH
+# agentgateway, and the gateway reaches Gemini with a plain API key from a Secret — no Vertex AI,
+# no GKE Workload Identity, no GCP project. Runs unchanged on kind / EKS / AKS / on-prem.
+#
+# Why this profile exists: the default (vertexAI.enabled: true) has each agent pod call Vertex AI
+# directly via GCP Application Default Credentials — which needs a GCP project and cloud identity,
+# and (because google-genai goes straight to Vertex) BYPASSES the gateway, so the gateway can never
+# meter token spend. Flipping vertexAI.enabled:false selects the API-key path: agents get
+# GOOGLE_GENAI_USE_VERTEXAI=0, their ModelConfigs point at the gateway's /llm/v1, and the gateway's
+# `provider: auto` backend resolves to Gemini (no project id present) using the api-key Secret.
+# Result: portable auth + every LLM call is now on the gateway route, so budgets/rate-limits and
+# gen_ai cost telemetry work.
+#
+# ── Prereq: create the API-key Secret (any cluster, no cloud IAM) ─────────────────────────────
+#   kubectl -n krateo-system create secret generic gemini-api-key \
+#     --from-literal=apiKey='<your-google-ai-studio-key>'
+#   (Google AI Studio key for generativelanguage.googleapis.com — NOT a Vertex/GCP SA key.)
+#
+#   helm upgrade -i installer oci://ghcr.io/krateo-platformops/charts/installer \
+#     -n krateo-system -f values.yaml
+#   (or apply the same keys as a merge patch on the live Installer CR)
+
+features:
+  portal: true            # authn — the issuer whose JWKS the gateway validates the caller's token against
+  coreAgents: true
+  specialistAgents: true
+  agentGateway: true      # puts the gateway in the LLM path (and installs its own Gateway API CRDs)
+  ingress: false
+
+# The agent charts are in the private krateo-agentiko registry.
+registryAuth:
+  enabled: true
+  username: <github-user>
+  passwordRef:
+    name: agentiko-registry-pull
+    key: token
+
+# ── The switch: OFF selects the Gemini API-key path (no Vertex, no GCP) ────────────────────────
+# With enabled:false the installer injects GOOGLE_GENAI_USE_VERTEXAI=0 into every agent and gives
+# the fleet ModelConfigs provider Gemini pointed at the gateway; the gateway backend's `provider:
+# auto` then resolves to Gemini because no projectID is set.
+vertexAI:
+  enabled: false
+
+# The Gemini API key the GATEWAY holds and uses on the upstream hop. The gateway becomes the single
+# key-holder — no provider key lives in any agent (the agents authenticate to the gateway with the
+# caller's own authn token; see llm.callerAuth below). Points at the Secret created in the prereq.
+geminiApiKey:
+  secretName: gemini-api-key
+  secretKey: apiKey
+
+componentValues:
+  agentgateway-policies:
+    # Keep tokenless requests 401 on the user-facing routes.
+    jwt:
+      mode: Strict
+    # Export the gateway's spans to ClickStack so the gen_ai token/cost attributes on the /llm/v1
+    # spans land in ClickHouse — i.e. LLM cost + budgets become observable. On for this profile
+    # because the whole point of routing LLM through the gateway is governance. backendRef defaults
+    # to the ClickStack DAEMONSET collector (the one that ingests OTLP).
+    tracing:
+      enabled: true
+    llm:
+      # `auto` already resolves to gemini here (no Vertex project); pinned for clarity.
+      provider: gemini
+      gemini:
+        auth:
+          secretRef:
+            name: gemini-api-key      # the same Secret as geminiApiKey above
+            key: apiKey
+      callerAuth:
+        # Jwt = the caller's own authn token authorizes the LLM route (kagent apiKeyPassthrough),
+        # and `subjects` decides who may spend tokens — so no shared LLM key rides in the agents.
+        mode: Jwt
