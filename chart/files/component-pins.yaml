@@ -315,7 +315,10 @@ components:
   feature: structureGraph
 - name: krateo-autopilot
   kind: KrateoAutopilot
-  version: 0.3.6
+  # 0.4.0 is the first release that does NOT ship repo-mcp-server. Pinning any earlier version
+  # alongside the repo-mcp-server component gives two helm releases owning the same
+  # RemoteMCPServer CR.
+  version: 0.4.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
