@@ -13,6 +13,41 @@ Curated history, newest first. This repo starts at the 2026-08-04 migration of t
 umbrella chart into `krateo-platformops` (0.3.1); the pre-migration 0.2.x line lived
 in the predecessor personal-org repo and is not mirrored here.
 
+## 2026-08-31 — the two MCP servers become components
+
+`repo-mcp-server` and `structure-graph-mcp-server` left the `krateo-autopilot` chart for their own
+repos ([repo-mcp-server](https://github.com/krateo-agentiko/repo-mcp-server),
+[structure-graph-mcp-server](https://github.com/krateo-agentiko/structure-graph-mcp-server), both
+`0.1.0`) and are pinned here.
+
+The entry below makes the orchestrator render after the twelve agents it federates. But the same
+component shipped `repo-mcp-server`, which every one of those agents needs *before* it compiles —
+so the grounding server became the last thing installed. On a fresh install of `0.3.93-dev`: six
+agents at `15:33:59`, `repo-mcp-server` at `15:36:00`, each compiled against a `RemoteMCPServer`
+that did not exist yet. Unlike the Agent→Agent case that entry describes, this one self-heals (the
+Agent controller does watch `RemoteMCPServer`), so the symptom is a window of ungrounded agents
+rather than a stuck CR — do not read a converged cluster as proof the order was right.
+
+Two opposite orderings on one component is a real cycle; no `deps:` edit reaches it. Splitting the
+server out does. `repo-mcp-server` deps only `kagent`, with an edge *into* it from each of the eight
+agents whose charts name it; the orchestrator keeps its sub-agent edges. The enabled graph is
+acyclic, `repo-mcp-server` in wave 2 and `krateo-autopilot` in wave 5.
+
+`krateo-autopilot` is pinned `0.4.0` — the first release that no longer ships the server. Earlier
+versions alongside the new component would put two helm releases on the same `RemoteMCPServer` CR.
+
+`structure-graph-mcp-server` gets its own `structureGraph` feature rather than riding `coreAgents`:
+both its consumers reference it off by default, so `coreAgents` would deploy a server nothing names.
+
+`inst.privateImageComponents` names the two servers instead of `krateo-autopilot`; their
+imagePullSecrets knob is at the spec root. No template change — the path walker already handles any
+depth.
+
+Both charts declare the injected `global` block in their own `values.schema.json`: with
+`additionalProperties: false` at the root and no `global`, the composition fails create with
+`additional properties 'global' not allowed`. Their `componentValues.*` entries here mirror the
+chart schemas key-for-key. Pins `0.1.1`.
+
 ## 2026-08-31 — the orchestrator renders after its fleet
 
 `autopilot`'s Agent CR sat at `Accepted=False`, `failed to compile agent
@@ -367,33 +402,3 @@ dependency order.
 - 0.3.4: the frontend's Autopilot toggle grays out (instead of dead-clicking) on
   agent-less installs — Pass B sets `config.AUTOPILOT_AVAILABLE: "false"` whenever
   `features.coreAgents` is off; frontend pin 1.4.2.
-
-## 2026-08-31 — repo-mcp-server and structure-graph-mcp-server are components
-
-Both MCP servers left the `krateo-autopilot` chart for their own repos
-([repo-mcp-server](https://github.com/krateo-agentiko/repo-mcp-server),
-[structure-graph-mcp-server](https://github.com/krateo-agentiko/structure-graph-mcp-server), both
-`0.1.0`) and are now pinned components here.
-
-**Why.** `krateo-autopilot` is the orchestrator: it names every specialist agent as an A2A
-sub-agent, so `deps:` must render it after them. It also shipped `repo-mcp-server`, which every one
-of those agents needs *before* it compiles. One component, two opposite orderings — so the grounding
-server became the last thing installed. Measured on a fresh install: six agents created at
-`15:33:59`, `repo-mcp-server` at `15:36:00`, every one of them compiled against a `RemoteMCPServer`
-that did not exist yet.
-
-That is a genuine cycle at component granularity, and no `deps:` edit can break it. Splitting the
-server out of the orchestrator's component does: `repo-mcp-server` now has `deps: [kagent]` and an
-edge *into* it from each of the eight agents whose charts name it. The orchestrator keeps its
-sub-agent edges. Verified: the enabled graph is acyclic, `repo-mcp-server` lands in wave 2 and
-`krateo-autopilot` in wave 5, with every grounding agent between them.
-
-`structure-graph-mcp-server` had the same shape — opt-in, and so far unexercised. It gets its own
-`structureGraph` feature rather than riding `coreAgents`: both its consumers default it off, so
-gating it on `coreAgents` would deploy a server nothing names.
-
-**Image-pull wiring.** `inst.privateImageComponents` now names the two servers instead of
-`krateo-autopilot`, with an empty `path` — their imagePullSecrets knob is at the spec root, not
-under `mcpServers.<name>`. The injection in `compositions.yaml` walked exactly two path segments;
-it now delegates to `inst.fillPath`, which walks any length and already had the fill-if-absent
-semantics the hand-rolled version implemented inline.
