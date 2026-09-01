@@ -310,18 +310,52 @@ components:
   version: 0.2.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
+  - repo-mcp-server
   - kagent
   - model-configs
   tier: observability
   feature: coreAgents
   agent: true
-- name: krateo-autopilot
-  kind: KrateoAutopilot
-  version: 0.3.6
+- name: repo-mcp-server
+  kind: RepoMcpServer
+  version: 0.1.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
+  # Every grounding agent deps on this, not the reverse: kagent compiles an Agent's tool list once
+  # and never requeues, so an agent created first comes up silently ungrounded.
+  tier: observability
+  feature: coreAgents
+- name: structure-graph-mcp-server
+  kind: StructureGraphMcpServer
+  version: 0.1.1
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  # Own feature, not coreAgents: both consumers reference it off by default, so coreAgents would
+  # deploy a server nothing names.
+  tier: observability
+  feature: structureGraph
+- name: krateo-autopilot
+  kind: KrateoAutopilot
+  version: 0.4.0
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - repo-mcp-server
+  - kagent
   - model-configs
+  - installer-agent
+  - incident-agent
+  - authn-agent
+  - snowplow-agent
+  - frontend-agent
+  - clickstack-agent
+  - core-provider-agent
+  - code-analysis-agent
+  - ansible-to-operator-agent
+  - tf-provider-to-operator-agent
+  - tf-to-helm-agent
+  - krateo-blueprint-agent
   tier: observability
   feature: coreAgents
   agent: true
@@ -332,8 +366,9 @@ components:
   version: 0.1.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
+  - repo-mcp-server
+  - kagent
   - model-configs
-  - krateo-autopilot
   tier: observability
   feature: coreAgents
   agent: true
@@ -350,6 +385,7 @@ components:
   version: 0.23.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
+  - repo-mcp-server
   - kagent
   - model-configs
   tier: observability
@@ -360,6 +396,7 @@ components:
   version: 1.1.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
+  - repo-mcp-server
   - kagent
   - model-configs
   tier: observability
@@ -370,8 +407,10 @@ components:
   version: 1.4.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
+  - repo-mcp-server
   - kagent
   - model-configs
+  - snowplow-agent
   tier: observability
   feature: specialistAgents
   agent: true
@@ -381,6 +420,7 @@ components:
   version: 3.1.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
+  - repo-mcp-server
   - kagent
   - model-configs
   tier: observability
@@ -391,6 +431,7 @@ components:
   version: 0.55.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
+  - repo-mcp-server
   - kagent
   - model-configs
   tier: observability

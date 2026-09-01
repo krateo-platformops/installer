@@ -147,9 +147,12 @@ exposure:
 # Feature flags (carried over from the installer chart).
 features:
   coreProvider: true              # engine-present MARKER: core-provider is always-on via bootstrap (gates no component here)
-  coreAgents: false                # base agent layer: kagent + model-configs (the fleet's ModelConfigs) + installer-agent + krateo-autopilot (which ships repo-mcp-server, the fleet's grounding server) + incident-agent (alert root-cause analysis)
+  coreAgents: false                # base agent layer: kagent + model-configs (the fleet's ModelConfigs) + repo-mcp-server (the fleet's grounding server) + installer-agent + krateo-autopilot + incident-agent (alert root-cause analysis)
   specialistAgents: false          # the 5 component specialist agents + clickhouse-mcp (needs coreAgents)
   codegenAgents: false             # OPT-IN codegen/conversion specialists (code-analysis, ansible-to-operator, tf-provider-to-operator, tf-to-helm); needs coreAgents
+  structureGraph: false            # OPT-IN structure-graph-mcp-server (code-structure grounding); needs coreAgents.
+                                  #   Its consumers reference it off by default — set their
+                                  #   mcpServers.structureGraph.enabled too, or nothing names the server.
   oasgenProvider: true            # oasgen-provider
   portal: true                    # the non-agent platform: authn -> snowplow -> frontend -> portal + portal-starter
                                   #   + the observability stack (clickhouse/mongo operators, krateo-observability,
