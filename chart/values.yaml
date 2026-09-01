@@ -236,15 +236,6 @@ localModel:
 #     snowplow:
 #       replicaCount: 2
 componentValues:
-  # Portal Builder publishes its pages to ONE repo — the portal chart repo — so pin its destination.
-  # The frontend default AUTOPILOT_PAGE_BUILDER_REPO ships as krateo-platformops/krateo-portal-chart,
-  # which only 301-redirects; the canonical repo is krateo-platformops/portal. (The KOG/controller and
-  # blueprint builders are PER-ARTIFACT — each new controller/blueprint gets its own repo, chosen per
-  # publish via the claim's target.owner/repo, so they are NOT a single fixed value here; the frontend
-  # per-artifact emission + its wrong hardcoded fallbacks are tracked in krateo-platformops/frontend.)
-  frontend:
-    config:
-      AUTOPILOT_PAGE_BUILDER_REPO: krateo-platformops/portal
   # Pin the kagent composition's resource names to a fixed "kagent" prefix (instead of the
   # core-provider-generated release name like kagent-<hash>). The kagent tool server is named
   # "{{ kagent.fullname }}-tool-server"; the autopilot/installer-agent/k8s-agent/helm-agent all
