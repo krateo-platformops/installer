@@ -11095,6 +11095,45 @@
                 }
               },
               "type": "object"
+            },
+            "tracing": {
+              "additionalProperties": false,
+              "description": "OTel trace export for the whole gateway data plane. When enabled, renders the agentgateway-policies-tracing AgentgatewayPolicy (attached to the Gateway, not a single route) so every route's spans - including the /llm/v1 route's gen_ai.* token attributes - are exported to an OTLP collector, making LLM token/cost observable (ClickStack -> ClickHouse). Default off; needs agentgateway-policies >= 0.1.10.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "protocol": {
+                  "type": "string",
+                  "enum": [
+                    "GRPC",
+                    "HTTP"
+                  ]
+                },
+                "randomSampling": {
+                  "type": "string"
+                },
+                "backendRef": {
+                  "additionalProperties": false,
+                  "description": "OTLP collector Service to export spans to. Must INGEST OTLP: the ClickStack DAEMONSET collector (otel-collector-daemonset-opentelemetry-collector:4317), not the deployment collector (no OTLP receiver on its traces pipeline).",
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "namespace": {
+                      "type": "string"
+                    },
+                    "port": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
             }
           }
         },
