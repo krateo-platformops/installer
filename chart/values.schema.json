@@ -10919,6 +10919,10 @@
                       }
                     }
                   }
+                },
+                "enforce": {
+                  "type": "boolean",
+                  "description": "The single atomic switch from SHADOW to enforcing (agentgateway-policies >= 0.1.12). false (the default) keeps the gate observing per dryRun/failureMode. true ENFORCES: it forces the decider off --dry-run AND the extAuth to FailClosed together (overriding dryRun and failureMode), so the dangerous half-state — enforce with FailOpen, or shadow with FailClosed — can't be configured. Equivalent to setting BOTH dryRun: false AND failureMode: FailClosed; prefer this flag. Preflight the decider's shadow would-deny logs and keep the decider >= 2 replicas Ready before enforcing."
                 }
               }
             },
