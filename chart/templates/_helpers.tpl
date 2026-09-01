@@ -92,6 +92,9 @@ components:
 - name: structure-graph-mcp-server
   path:
   - imagePullSecrets
+- name: config-refs-mcp-server
+  path:
+  - imagePullSecrets
 - name: core-provider-agent
   path:
   - mcpServers

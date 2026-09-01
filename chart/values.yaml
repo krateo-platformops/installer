@@ -153,6 +153,10 @@ features:
   structureGraph: false            # OPT-IN structure-graph-mcp-server (code-structure grounding); needs coreAgents.
                                   #   Its consumers reference it off by default — set their
                                   #   mcpServers.structureGraph.enabled too, or nothing names the server.
+  configRefs: false                # OPT-IN config-refs-mcp-server: the config_refs RCA tool (which ConfigMaps/Secrets a
+                                  #   workload references + is the key present, incl. optional:true refs runtime hides).
+                                  #   Needs coreAgents. Consumers (autopilot + incident-agent) name it off by default —
+                                  #   set componentValues.<agent>.mcpServers.configRefs.enabled too, or nothing names it.
   oasgenProvider: true            # oasgen-provider
   portal: true                    # the non-agent platform: authn -> snowplow -> frontend -> portal + portal-starter
                                   #   + the observability stack (clickhouse/mongo operators, krateo-observability,

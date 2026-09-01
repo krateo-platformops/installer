@@ -192,6 +192,9 @@
         "structureGraph": {
           "type": "boolean",
           "description": "Deploy structure-graph-mcp-server, the code-STRUCTURE grounding layer (a Graphify tree-sitter AST graph of the engine repos: query_graph/shortest_path/get_neighbors/graph_stats). Both consumers — krateo-autopilot and core-provider-agent — reference it off by default, so turning this on without also setting their mcpServers.structureGraph.enabled deploys a server nothing names. Needs coreAgents. Default false."
+        },
+        "configRefs": {
+          "type": "boolean"
         }
       }
     },
@@ -12241,6 +12244,202 @@
                 },
                 "timeout": {
                   "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "config-refs-mcp-server": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The config_refs RCA MCP server (krateo-agentiko/config-refs-mcp-server) — resolves which ConfigMaps/Secrets a workload references and whether the referenced key is present (incl. optional:true refs the runtime hides). Read-only; the server reads secret KEY NAMES only, never values. Gated by features.configRefs.",
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            },
+            "namespace": {
+              "type": "string",
+              "description": "Namespace the ServiceAccount and the MCPServer CR are installed in."
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string",
+                  "description": "Empty means .Chart.Version, so chart X.Y.Z asks for image X.Y.Z. Set it only to test an unreleased build."
+                },
+                "pullPolicy": {
+                  "type": "string"
+                }
+              }
+            },
+            "serviceAccount": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Empty means the server's own default name."
+                },
+                "annotations": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "description": "Required for the private image, e.g. [{name: krateo-registry-image-pull}]. The Krateo installer wires this from registryAuth.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "replicaCount": {
+              "type": "integer",
+              "description": "MCPServer pod replicas (kagent runs it as a stdio process; 1 is all the per-session gateway needs)."
+            },
+            "resources": {
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
+              "properties": {
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
+                },
+                "requests": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "rbac": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Least-privilege cluster RBAC (GET only) for the object types config_refs resolves + the OpenAPI schema endpoints. Needs get on secrets for key-presence; the server never returns secret values.",
+              "properties": {
+                "create": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "mcpServer": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The kagent MCPServer CR (stdio). kagent spawns the pod from spec.deployment and generates the RemoteMCPServer the agents reference by name.",
+              "properties": {
+                "create": {
+                  "type": "boolean",
+                  "description": "Turn off on a cluster with no kagent CRDs."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The MCPServer / tool name the agents reference (config-refs)."
                 }
               }
             }

@@ -336,9 +336,22 @@ components:
   # deploy a server nothing names.
   tier: observability
   feature: structureGraph
+- name: config-refs-mcp-server
+  kind: ConfigRefsMcpServer
+  version: 0.1.1
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  # Own feature (like structure-graph, not coreAgents): the RCA agents reference the config_refs
+  # tool off by default, so coreAgents would deploy a server nothing names. Enabling features.configRefs
+  # deploys the server; the consumers name the tool via componentValues.<agent>.mcpServers.configRefs.enabled
+  # (the krateo-autopilot chart wires autopilot + incident-agent). kagent compiles a tool list ONCE and
+  # does not requeue, so on a live enable restart deploy/kagent-controller to recompile the agents.
+  tier: observability
+  feature: configRefs
 - name: krateo-autopilot
   kind: KrateoAutopilot
-  version: 0.4.0
+  version: 0.4.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
