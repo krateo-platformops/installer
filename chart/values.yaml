@@ -159,9 +159,23 @@ features:
                                   #   That matters because the two halves are broken apart: the feature alone
                                   #   deploys a server nothing names, and a consumer naming a server that was
                                   #   never deployed makes kagent REFUSE TO COMPILE that Agent.
-                                  #   Default OFF: it holds a graph in memory, so it is a real (if modest)
-                                  #   standing cost on every cluster that would otherwise not pay it. Turn it
-                                  #   on where agents are expected to answer questions about Krateo internals.
+                                  #   Default OFF, and NOT because of memory — that was measured and is a
+                                  #   non-issue: the pod requests 256Mi (0.9% of a 27.7GiB GKE node) against a
+                                  #   1Gi LIMIT, which is a ceiling the scheduler never reserves, and the graph
+                                  #   is baked at image-build time (5,751 nodes / 12,473 edges, a 7.5MiB
+                                  #   graph.json) so the load path measures ~62MiB RSS — ~6% of that limit.
+                                  #   (That 62MiB is a local docker run on arm64, not an in-cluster GKE figure;
+                                  #   no Graphify server has ever run on a Krateo cluster, so the real steady
+                                  #   state under query load is still unmeasured.)
+                                  #   The actual reasons it stays off:
+                                  #     - the pinned image 0.1.1 DOES NOT BOOT — it fails at ENTRYPOINT with
+                                  #       "HTTP transport needs the mcp extra" because the image's
+                                  #       requirements.txt omits graphifyy[mcp] (both published arches).
+                                  #       Enabling this today deploys a CrashLooping pod.
+                                  #     - it needs coreAgents (kagent), so it is meaningless on a portal-only
+                                  #       install.
+                                  #   Turn it on — once the image is fixed — where agents are expected to answer
+                                  #   questions about Krateo internals.
   configRefs: false                # OPT-IN config-refs-mcp-server: the config_refs RCA tool (which ConfigMaps/Secrets a
                                   #   workload references + is the key present, incl. optional:true refs runtime hides).
                                   #   Needs coreAgents. Consumers (autopilot + incident-agent) name it off by default —
