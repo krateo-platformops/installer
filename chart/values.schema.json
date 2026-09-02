@@ -191,7 +191,8 @@
         },
         "structureGraph": {
           "type": "boolean",
-          "description": "Deploy structure-graph-mcp-server, the code-STRUCTURE grounding layer (a Graphify tree-sitter AST graph of the engine repos: query_graph/shortest_path/get_neighbors/graph_stats). Both consumers — krateo-autopilot and core-provider-agent — reference it off by default, so turning this on without also setting their mcpServers.structureGraph.enabled deploys a server nothing names. Needs coreAgents. Default false."
+          "default": true,
+          "description": "Deploy structure-graph-mcp-server, the code-STRUCTURE grounding layer (a Graphify tree-sitter AST graph of the engine repos: query_graph/shortest_path/get_neighbors/graph_stats). ON BY DEFAULT together with both consumers (componentValues.krateo-autopilot.mcpServers.structureGraph.enabled and componentValues.core-provider-agent.structureGraph.enabled, also default true) — the three move as one, since the feature alone deploys a server nothing names and a name with no server fails to compile. Needs coreAgents, so it only lands where the agent fleet does. Cost: the graph is held in memory (~1Gi limit on the server pod). To opt out set this false AND both consumer flags false."
         },
         "configRefs": {
           "type": "boolean"
@@ -1721,10 +1722,11 @@
             "structureGraph": {
               "type": "object",
               "additionalProperties": false,
-              "description": "Code-STRUCTURE grounding layer (RemoteMCPServer structure-graph-mcp-server, opt-in, deployed by the krateo-autopilot chart when its own mcpServers.structureGraph.enabled is true). Must match that flag.",
+              "description": "Code-STRUCTURE grounding layer (RemoteMCPServer structure-graph-mcp-server, deployed by the krateo-autopilot chart when its own mcpServers.structureGraph.enabled is true). ON BY DEFAULT, matching features.structureGraph and krateo-autopilot's mcpServers.structureGraph.enabled (both default true). Must match those flags.",
               "properties": {
                 "enabled": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "default": true
                 },
                 "mcpServer": {
                   "type": "string"
@@ -3126,10 +3128,11 @@
                 "structureGraph": {
                   "type": "object",
                   "additionalProperties": false,
-                  "description": "Reference-only: whether this chart's agents name structure-graph-mcp-server's tools. The server itself is componentValues.structure-graph-mcp-server, gated by features.structureGraph.",
+                  "description": "Whether this chart's agents name structure-graph-mcp-server's tools. ON BY DEFAULT, matching features.structureGraph (also default true); the server itself is componentValues.structure-graph-mcp-server. Keep them in agreement — a server nobody names is dead weight, a name with no server fails to compile.",
                   "properties": {
                     "enabled": {
-                      "type": "boolean"
+                      "type": "boolean",
+                      "default": true
                     }
                   }
                 }

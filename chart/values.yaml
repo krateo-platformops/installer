@@ -150,9 +150,14 @@ features:
   coreAgents: false                # base agent layer: kagent + model-configs (the fleet's ModelConfigs) + repo-mcp-server (the fleet's grounding server) + installer-agent + krateo-autopilot + incident-agent (alert root-cause analysis)
   specialistAgents: false          # the 5 component specialist agents + clickhouse-mcp (needs coreAgents)
   codegenAgents: false             # OPT-IN codegen/conversion specialists (code-analysis, ansible-to-operator, tf-provider-to-operator, tf-to-helm); needs coreAgents
-  structureGraph: false            # OPT-IN structure-graph-mcp-server (code-structure grounding); needs coreAgents.
-                                  #   Its consumers reference it off by default — set their
-                                  #   mcpServers.structureGraph.enabled too, or nothing names the server.
+  structureGraph: true             # ON BY DEFAULT: structure-graph-mcp-server (code-structure grounding — a Graphify
+                                  #   tree-sitter AST graph of the engine repos). Needs coreAgents, so it only lands
+                                  #   where the agent fleet already does. Its two consumers are switched on WITH it
+                                  #   (componentValues.krateo-autopilot.mcpServers.structureGraph and
+                                  #   componentValues.core-provider-agent.structureGraph) — all three move together,
+                                  #   because the feature alone would deploy a server nothing names.
+                                  #   COST: the graph is held in memory (~1Gi limit on the server pod).
+                                  #   To opt out set this false AND both consumer flags false.
   configRefs: false                # OPT-IN config-refs-mcp-server: the config_refs RCA tool (which ConfigMaps/Secrets a
                                   #   workload references + is the key present, incl. optional:true refs runtime hides).
                                   #   Needs coreAgents. Consumers (autopilot + incident-agent) name it off by default —
@@ -290,6 +295,12 @@ componentValues:
         enabled: true
       helm:
         enabled: true
+    # Consumer half of features.structureGraph (on by default): makes this chart's agents name
+    # structure-graph-mcp-server's tools (query_graph / shortest_path / get_neighbors / graph_stats).
+    # Must agree with the feature — the server and the names are useless apart.
+    mcpServers:
+      structureGraph:
+        enabled: true
 
   # ---- Fleet model policy -------------------------------------------------
   # WHICH ModelConfig each agent runs on. The names are slots the model-configs component
@@ -334,6 +345,11 @@ componentValues:
   core-provider-agent:
     modelConfig:
       name: gemini-pro
+    # Consumer half of features.structureGraph (on by default). The feature deploys the server;
+    # this is what makes THIS chart's agents actually name its tools. Both must agree — a server
+    # nobody names is dead weight, and a name with no server fails to compile.
+    structureGraph:
+      enabled: true
   authn-agent:
     modelConfig:
       name: gemini-flash
