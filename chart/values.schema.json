@@ -191,7 +191,7 @@
         },
         "structureGraph": {
           "type": "boolean",
-          "description": "Deploy structure-graph-mcp-server, the code-STRUCTURE grounding layer (a Graphify tree-sitter AST graph of the engine repos: query_graph/shortest_path/get_neighbors/graph_stats). Both consumers — krateo-autopilot and core-provider-agent — reference it off by default, so turning this on without also setting their mcpServers.structureGraph.enabled deploys a server nothing names. Needs coreAgents. Default false."
+          "description": "Deploy structure-graph-mcp-server, the code-STRUCTURE grounding layer (a Graphify tree-sitter AST graph of the engine repos: query_graph/shortest_path/get_neighbors/graph_stats). ONE SWITCH: both consumers (krateo-autopilot's mcpServers.structureGraph, core-provider-agent's structureGraph) are DERIVED from this flag at render time and cannot disagree with it. Needs coreAgents. Default false — NOT for memory, which was measured and is a non-issue (256Mi request against a 1Gi limit, ~62MiB observed on the load path), but because the pinned image 0.1.1 fails at ENTRYPOINT with 'HTTP transport needs the mcp extra' (its requirements.txt omits the graphifyy[mcp] extra), so enabling it today deploys a CrashLooping pod."
         },
         "configRefs": {
           "type": "boolean"
@@ -1721,7 +1721,7 @@
             "structureGraph": {
               "type": "object",
               "additionalProperties": false,
-              "description": "Code-STRUCTURE grounding layer (RemoteMCPServer structure-graph-mcp-server, opt-in, deployed by the krateo-autopilot chart when its own mcpServers.structureGraph.enabled is true). Must match that flag.",
+              "description": "Code-STRUCTURE grounding layer (RemoteMCPServer structure-graph-mcp-server, opt-in, deployed by the krateo-autopilot chart when its own mcpServers.structureGraph.enabled is true). DERIVED from features.structureGraph at render time — setting it here has no effect and cannot drift from the feature flag.",
               "properties": {
                 "enabled": {
                   "type": "boolean"
