@@ -12249,7 +12249,7 @@
         "config-refs-mcp-server": {
           "type": "object",
           "additionalProperties": false,
-          "description": "The config_refs RCA MCP server (krateo-agentiko/config-refs-mcp-server) — resolves which ConfigMaps/Secrets a workload references and whether the referenced key is present (incl. optional:true refs the runtime hides). Read-only; the server reads secret KEY NAMES only, never values. Gated by features.configRefs.",
+          "description": "The config_refs RCA MCP server (krateo-agentiko/config-refs-mcp-server) — resolves which ConfigMaps/Secrets a workload references and whether the referenced key is present (incl. optional:true refs the runtime hides). Read-only; reads secret KEY NAMES only, never values. Served over streamable-HTTP as a Deployment+Service+RemoteMCPServer (like repo-mcp-server); gated by coreAgents.",
           "properties": {
             "global": {
               "type": "object",
@@ -12428,7 +12428,7 @@
             "mcpServer": {
               "type": "object",
               "additionalProperties": false,
-              "description": "The kagent MCPServer CR (stdio). kagent spawns the pod from spec.deployment and generates the RemoteMCPServer the agents reference by name.",
+              "description": "The server itself: a Deployment + Service registered with kagent as a RemoteMCPServer (STREAMABLE_HTTP) that the agents name. NOT a kagent-managed MCPServer — kagent 0.9.12 does not materialize a pod from spec.deployment, it only tries to connect, so nothing would run (issue #3). kagent compiles an Agent's tool list once and does not requeue, so consumers must be installed after this. Set create:false on a cluster with no kagent CRDs.",
               "properties": {
                 "create": {
                   "type": "boolean",
@@ -12437,6 +12437,29 @@
                 "name": {
                   "type": "string",
                   "description": "The MCPServer / tool name the agents reference (config-refs)."
+                },
+                "terminateOnClose": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "RemoteMCPServer spec.terminateOnClose."
+                },
+                "timeout": {
+                  "type": "string",
+                  "default": "60s",
+                  "description": "RemoteMCPServer spec.timeout (Go duration)."
+                }
+              }
+            },
+            "service": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The HTTP port the server listens on and the Service exposes; the RemoteMCPServer url is built from it. 8080 matches the other fleet MCP servers.",
+              "properties": {
+                "port": {
+                  "type": "integer",
+                  "default": 8080,
+                  "minimum": 1,
+                  "maximum": 65535
                 }
               }
             }

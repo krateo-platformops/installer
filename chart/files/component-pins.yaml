@@ -338,7 +338,7 @@ components:
   feature: structureGraph
 - name: config-refs-mcp-server
   kind: ConfigRefsMcpServer
-  version: 0.1.1
+  version: 0.2.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
