@@ -876,19 +876,6 @@
                 }
               }
             },
-            "github": {
-              "type": "object",
-              "additionalProperties": false,
-              "description": "github MCP server the agent uses to read its component's codebase + chart.",
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "mcpServer": {
-                  "type": "string"
-                }
-              }
-            },
             "resources": {
               "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
               "properties": {
@@ -1486,18 +1473,6 @@
                   "type": "string"
                 },
                 "location": {
-                  "type": "string"
-                }
-              }
-            },
-            "github": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "mcpServer": {
                   "type": "string"
                 }
               }
@@ -2522,18 +2497,6 @@
                   "type": "string"
                 },
                 "location": {
-                  "type": "string"
-                }
-              }
-            },
-            "github": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "mcpServer": {
                   "type": "string"
                 }
               }
@@ -7440,19 +7403,6 @@
                   "type": "string"
                 },
                 "location": {
-                  "type": "string"
-                }
-              }
-            },
-            "github": {
-              "type": "object",
-              "additionalProperties": false,
-              "description": "github MCP server the agent uses to read its component's codebase + chart.",
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "mcpServer": {
                   "type": "string"
                 }
               }
