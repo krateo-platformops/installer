@@ -9,7 +9,7 @@ dependencies:
 - condition: bootstrap.coreProvider.enabled
   name: core-provider
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.7
+  version: 2.13.9
 - condition: bootstrap.coreProvider.enabled
   name: core-provider-crds
   repository: oci://ghcr.io/krateo-platformops/charts

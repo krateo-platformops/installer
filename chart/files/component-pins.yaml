@@ -294,7 +294,7 @@ components:
   feature: coreAgents
 - name: model-configs
   kind: ModelConfigs
-  version: 0.1.0
+  version: 0.1.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -318,7 +318,7 @@ components:
   agent: true
 - name: repo-mcp-server
   kind: RepoMcpServer
-  version: 0.1.1
+  version: 0.1.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -333,7 +333,7 @@ components:
   feature: coreAgents
 - name: structure-graph-mcp-server
   kind: StructureGraphMcpServer
-  version: 0.1.1
+  version: 0.1.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -343,7 +343,7 @@ components:
   feature: structureGraph
 - name: config-refs-mcp-server
   kind: ConfigRefsMcpServer
-  version: 0.2.2
+  version: 0.2.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -358,7 +358,7 @@ components:
   feature: coreAgents
 - name: krateo-autopilot
   kind: KrateoAutopilot
-  version: 0.4.2
+  version: 0.4.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -447,7 +447,7 @@ components:
   agent: true
 - name: core-provider-agent
   kind: CoreProviderAgent
-  version: 0.55.3
+  version: 0.55.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -499,7 +499,7 @@ components:
   feature: agentGateway
 - name: agentgateway-policies
   kind: AgentgatewayPolicies
-  version: 0.1.13
+  version: 0.1.14
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
