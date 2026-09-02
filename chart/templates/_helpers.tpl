@@ -441,6 +441,16 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{/* Index the chart-pinned component names. */}}
 {{- $known := dict -}}
 {{- range $c := $components -}}{{- $_ := set $known (toString $c.name) true -}}{{- end -}}
+{{/* RETIRED-NAMES allowlist (files/retired-components.yaml, installer#144 Landmine 1):
+     a live Installer CR ships its FULL spec.components list wholesale on every upgrade
+     (self-bootstrap.yaml), so a name whose pin was DELETED when its feature was retired
+     still arrives here via .Values.components for at least one more reconcile. Such a
+     name is neither pinned nor a legitimate append — index it so the append branch below
+     can SKIP it (not fatal, not registered) while the typo-guard stays intact for every
+     truly-unknown name. Future retirements just append the name to that file. */}}
+{{- $retiredFile := .Files.Get "files/retired-components.yaml" | fromYaml -}}
+{{- $retired := dict -}}
+{{- range $n := ($retiredFile.retired | default list) -}}{{- $_ := set $retired (toString $n) true -}}{{- end -}}
 {{/* .Values.components entries do one of two things, matched by name:
        - name IS a pinned component  -> override the whitelisted fields version / registerOnly / tier
          on that live component. `version` bumps its chart; `registerOnly: true` demotes it to
@@ -477,11 +487,20 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- if hasKey $o $k -}}{{- $_ := set $fields $k (index $o $k) -}}{{- end -}}
 {{- end -}}
 {{- $_ := set $ov (toString $o.name) $fields -}}
+{{- else if hasKey $retired (toString $o.name) -}}
+{{/* RETIRED name (files/retired-components.yaml): its pin was deleted when its feature was
+     retired, but the live CR's wholesale spec.components still carries it. SKIP it — do not
+     append it (no dead CompositionDefinition) and do not fail (that would abort the whole
+     umbrella render on every existing install, installer#144 Landmine 1). Deliberately NOT
+     an `else` fallthrough: a retired name must be an explicit allowlist entry, never silence
+     for any unpinned name. */}}
 {{- else -}}
 {{/* Unknown name = a CMP-appended catalog blueprint. Guard the footgun: a typo'd known-component
      name (e.g. `snowplowe`) would otherwise silently register a dead CompositionDefinition whose
      chart URL resolves to nothing. Only allow the append when the entry explicitly opts in as a
-     registerOnly catalog blueprint — anything else is a mistake, so fail loudly at render time. */}}
+     registerOnly catalog blueprint — anything else is a mistake, so fail loudly at render time.
+     (Retired names are handled by the branch above; a name that is neither pinned nor retired
+     still fails here, preserving the typo-guard.) */}}
 {{- if not $o.registerOnly -}}{{- fail (printf "components[%s]: unknown name not in files/component-pins.yaml — only registerOnly catalog blueprints may be appended via .Values.components (typo?)" (toString $o.name)) -}}{{- end -}}
 {{/* An APPEND registers a brand-new CD, so it needs kind + version (the schema now requires only
      `name`, to let overrides of PINNED components omit them — installer#38). Guard here so an

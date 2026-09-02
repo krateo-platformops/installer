@@ -1,0 +1,26 @@
+# retired-components.yaml — the RETIRED-NAMES allowlist for inst.componentsYaml.
+#
+# WHY THIS EXISTS (installer#144 Landmine 1):
+# A live Installer CR ships its FULL component list wholesale (self-bootstrap.yaml
+# replaces spec.components on every upgrade). When a component pin is DELETED from
+# files/component-pins.yaml as part of retiring a feature, the live CR's own
+# spec.components (= .Values.components at render time) still carries that name for
+# at least one more reconcile. The inst.componentsYaml helper's typo-guard would then
+# `fail` with "unknown name not in files/component-pins.yaml", aborting the ENTIRE
+# umbrella render — in BOTH composition mode (ordered-teardown.yaml) and bootstrap
+# mode (self-bootstrap.yaml) — on every existing install.
+#
+# A name listed here is a KNOWN-RETIRED component: when it appears in
+# .Values.components but is NOT pinned, the helper SKIPS it (does not append it as a
+# new CompositionDefinition, does not fail). The typo-guard stays intact for every
+# name that is neither pinned nor listed here.
+#
+# To retire another component in a future release: DELETE its pin from
+# component-pins.yaml (and its krateo-autopilot deps: line) AND append its name here,
+# in the SAME commit. Removing a name from this list once no live CR can still carry
+# it is safe cleanup.
+retired:
+- code-analysis-agent
+- ansible-to-operator-agent
+- tf-provider-to-operator-agent
+- tf-to-helm-agent
