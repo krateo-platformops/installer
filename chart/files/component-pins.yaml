@@ -529,18 +529,22 @@ components:
   # sibling of internalUrls: compositions.yaml sets this to exposure.port when it is set.
   internalPorts:
   - path: jwt.jwks.port
-# ---- codegen agents (OPT-IN, feature: codegenAgents — default OFF) ---------------------
-# Cross-cutting codegen/conversion specialists from krateo-agentiko/codegen-agents (migrated
-# from krateo-agentiko (formerly krateo-codegen-agents), krateo- prefix dropped). A distinct opt-in group
-# (like ingress) so the default specialist fleet stays lean. Needs coreAgents (kagent + the
-# model-configs-owned ModelConfigs); agent:true wires Vertex + joins the autopilot fleet when
-# enabled. Kinds are crdgen PascalCase(chart) — tf is NOT an initialism (-> Tf).
+# ---- krateo-blueprint-agent (a CORE agent) ---------------------------------------------
+# The blueprint-authoring agent: PROMOTED from the (now-retired) codegen group to coreAgents in
+# #144 — "it is a core agent". Deploys with the base agent layer (kagent + the model-configs-owned
+# ModelConfigs) and joins the autopilot fleet as an A2A sub-agent. Its chart bundles the
+# krateo-chart-gate-mcp-server (render-and-validate gate) whose image ships from the SAME release
+# tag, so the pin version must name a chart whose gate image is published: 0.2.7 (fix #9 unblocked
+# the promotion + a clean tag builds the image); 0.2.3/0.2.6 are pre-fix (0.2.6's gate image is
+# `manifest unknown`). Kind is crdgen PascalCase(chart).
+# (The four codegen/conversion specialists code-analysis / ansible-to-operator / tf-provider-to-
+# operator / tf-to-helm were RETIRED in #144; features.codegenAgents is kept hard-defaulted false.)
 - name: krateo-blueprint-agent
   kind: KrateoBlueprintAgent
-  version: 0.2.3
+  version: 0.2.7
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
   tier: observability
-  feature: codegenAgents
+  feature: coreAgents
   agent: true
