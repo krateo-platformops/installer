@@ -286,7 +286,7 @@ components:
   feature: coreAgents
 - name: kagent
   kind: Kagent
-  version: 0.1.15
+  version: 0.1.16
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent-crds
