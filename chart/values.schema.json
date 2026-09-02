@@ -192,9 +192,6 @@
         "structureGraph": {
           "type": "boolean",
           "description": "Deploy structure-graph-mcp-server, the code-STRUCTURE grounding layer (a Graphify tree-sitter AST graph of the engine repos: query_graph/shortest_path/get_neighbors/graph_stats). Both consumers — krateo-autopilot and core-provider-agent — reference it off by default, so turning this on without also setting their mcpServers.structureGraph.enabled deploys a server nothing names. Needs coreAgents. Default false."
-        },
-        "configRefs": {
-          "type": "boolean"
         }
       }
     },
