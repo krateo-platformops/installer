@@ -11004,6 +11004,42 @@
                   },
                   "type": "object"
                 },
+                "benchRoute": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Guardrail-EXEMPT second HTTPRoute onto the SAME AI backend (same provider/credential), for benchmark measurement ONLY — OFF by default; keep it off in production. The fleet guardrails MASK identifiers in flight (e.g. checkout-db.otel-demo.internal -> checkout-db.<masked>), which is right for the fleet and fatal for an RCA benchmark scored on whether the answer NAMES the failing entity; the guard policy targets the LLM route by name, so this differently-named route is outside it and the fleet keeps every guard while the benchmark runs. While on, the cluster has an unmasked, credentialed path to the provider, so its identity rules are the narrowest in this chart: route-scoped jwtAuthentication:Strict (a tokenless call is 401 even where the gateway JWT mode is Optional) and an authorization Require rule that REFUSES anyAuthenticated — subjects.users/groups must name someone or the render fails. It also fails render unless llm.enabled, authorization.enabled and jwt.enabled are all true and routePrefix is a non-nested, '/'-prefixed path. Mirrors agentgateway-policies llm.benchRoute (PR#27).",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "false (default) renders not one bench object. Set true, for a named window, only on the cluster you are benchmarking — and only together with subjects, or the render fails."
+                    },
+                    "routePrefix": {
+                      "type": "string",
+                      "description": "The bench route's path prefix and the harness base URL. Must start with '/' and MUST NOT nest with llm.routePrefix (a nested prefix would be authorized by the LLM route's anyAuthenticated clause instead of the named subjects). Keep the '/v1' ending so <routePrefix>/chat/completions is detected as OpenAI-style. Default /bench/v1."
+                    },
+                    "subjects": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "WHO MAY USE IT. The one matcher in this chart that REFUSES anyAuthenticated: name users or groups, or the render fails. Both empty by default so enabling the route on its own fails rather than rendering a route on a matcher nobody chose.",
+                      "properties": {
+                        "users": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Named user subjects (matched on the validated jwt claim) allowed on the bench route."
+                        },
+                        "groups": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Named group subjects allowed on the bench route (only as narrow as the group's membership)."
+                        }
+                      }
+                    }
+                  }
+                },
                 "callerAuth": {
                   "additionalProperties": false,
                   "description": "Who may use the LLM route — the traffic-layer gate for this hop, the analogue of `mcpTraffic` for the MCP hop. It matters more than it looks: the gateway is browser-reachable in the Krateo portal's exposure model, so an ungated LLM route is an open, credentialed proxy to your provider account.",
