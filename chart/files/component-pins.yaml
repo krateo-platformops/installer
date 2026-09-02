@@ -439,6 +439,7 @@ components:
   - repo-mcp-server
   - kagent
   - model-configs
+  - clickhouse-mcp-server
   tier: observability
   feature: specialistAgents
   agent: true
