@@ -158,7 +158,7 @@
         },
         "coreAgents": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Deploy the base agent layer: kagent-crds -> kagent -> model-configs (the kagent ModelConfigs the whole fleet references by name) + installer-agent + krateo-autopilot (which also brings up repo-mcp-server, the fleet's grounding server) + incident-agent (alert root-cause analysis). Default false."
         },
         "portal": {
@@ -11753,7 +11753,7 @@
         "repo-mcp-server": {
           "type": "object",
           "additionalProperties": false,
-          "description": "The fleet's grounding MCP server (krateo-agentiko/repo-mcp-server) — greps and reads the Krateo chart/source corpus at pinned versions, returning citable repo/path:line. A prerequisite of every agent that grounds: kagent compiles an Agent's tool list once and does not requeue, so an agent created before this component comes up silently ungrounded.",
+          "description": "The fleet's grounding MCP server (krateo-agentiko/repo-mcp-server) — greps and reads the Krateo chart/source corpus at pinned versions, returning citable repo/path:line. Installed ahead of its consumers so the fleet converges in one pass. Ordering is a convergence concern, not a correctness one: an agent reconciled before this server's RemoteMCPServer CR exists fails its compile visibly (Accepted=False, ReconcileFailed) and self-heals when the kagent Agent controller re-reconciles it on the CR's creation.",
           "properties": {
             "global": {
               "type": "object",
@@ -11965,7 +11965,7 @@
             "graph": {
               "type": "object",
               "additionalProperties": false,
-              "description": "The server's Graphify DOMAIN graph tools (graph_find/graph_map/graph_neighbors/graph_path/knowledge_lookup). MUST match componentValues.krateo-autopilot.mcpServers.repoSearch.graph.enabled — an agent naming a tool the server does not serve fails to compile.",
+              "description": "The server's Graphify DOMAIN graph tools (graph_find/graph_map/graph_neighbors/graph_path/knowledge_lookup). MUST match componentValues.krateo-autopilot.mcpServers.repoSearch.graph.enabled. kagent does NOT enforce this: toolNames is a client-side allowlist filtered against the server's tools/list, so a name the server does not serve is silently dropped — the Agent still reports Accepted=True and the tool is simply absent. Keeping these two flags in sync is the only protection.",
               "properties": {
                 "enabled": {
                   "type": "boolean"
@@ -12353,7 +12353,7 @@
             "mcpServer": {
               "type": "object",
               "additionalProperties": false,
-              "description": "The server itself: a Deployment + Service registered with kagent as a RemoteMCPServer (STREAMABLE_HTTP) that the agents name. NOT a kagent-managed MCPServer — kagent 0.9.12 does not materialize a pod from spec.deployment, it only tries to connect, so nothing would run (issue #3). kagent compiles an Agent's tool list once and does not requeue, so consumers must be installed after this. Set create:false on a cluster with no kagent CRDs.",
+              "description": "The server itself: a Deployment + Service registered with kagent as a RemoteMCPServer (STREAMABLE_HTTP) that the agents name. NOT a kagent-managed MCPServer — kagent 0.9.12 does not materialize a pod from spec.deployment, it only tries to connect, so nothing would run (issue #3). Installed ahead of its consumers so the fleet converges in one pass. Ordering is a convergence concern, not a correctness one: an agent reconciled before this server's RemoteMCPServer CR exists fails its compile visibly (Accepted=False, ReconcileFailed) and self-heals when the kagent Agent controller re-reconciles it on the CR's creation. Set create:false on a cluster with no kagent CRDs.",
               "properties": {
                 "create": {
                   "type": "boolean",
