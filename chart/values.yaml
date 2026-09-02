@@ -145,6 +145,13 @@ exposure:
   #   frontend: portal.example.com
 
 # Feature flags (carried over from the installer chart).
+#
+# INSTALL-TIME ONLY: spec.features is applied when the platform is first installed. Editing a feature
+# here and running `helm upgrade` has NO effect — the self-bootstrap upgrade merge-patch deliberately
+# EXCLUDES features, preserving spec.features as live runtime state so an operator toggle isn't clobbered
+# on every chart bump. To change a feature on a running platform, patch the CR (survives future upgrades):
+#   kubectl patch installers.v<ver>.composition.krateo.io installer -n krateo-system \
+#     --type merge -p '{"spec":{"features":{"<key>":true}}}'
 features:
   coreProvider: true              # engine-present MARKER: core-provider is always-on via bootstrap (gates no component here)
   coreAgents: false                # base agent layer: kagent + model-configs (the fleet's ModelConfigs) + repo-mcp-server (the fleet's grounding server) + installer-agent + krateo-autopilot + incident-agent (alert root-cause analysis)

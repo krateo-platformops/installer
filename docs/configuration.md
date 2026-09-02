@@ -41,6 +41,17 @@ a `feature`; Pass A/B gate on it via `inst.featureEnabled`. No feature is
 force-enabled, so a minimal install can disable everything and let an agent enable it
 later on the CR.
 
+> **`features` is applied at INSTALL time only.** Editing a flag in a values file and running
+> `helm upgrade` has **no effect** — the self-bootstrap upgrade merge-patch deliberately
+> **excludes** `features`, preserving `spec.features` as live runtime state so an operator toggle
+> is never clobbered on a chart bump. To change a feature on a running platform, **patch the CR**
+> (the change is preserved by future upgrades):
+>
+> ```bash
+> kubectl patch installers.v<ver>.composition.krateo.io installer -n krateo-system \
+>   --type merge -p '{"spec":{"features":{"<key>":true}}}'
+> ```
+
 | Flag | Default | Gates |
 |---|---|---|
 | `coreProvider` | `true` | Nothing — an engine-present *marker* (the engine is always-on via bootstrap). |

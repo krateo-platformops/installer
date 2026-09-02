@@ -1,0 +1,33 @@
+name: check-feature-keys
+
+# Installer-specific guard (not the canonical shared lint.yaml): every distinct `feature:` a component
+# pin in chart/files/component-pins.yaml gates on must be declared under features.properties in
+# chart/values.schema.json. That schema is crdgen-compiled into the Installer CRD's spec.features, so a
+# pin gating on an undeclared feature names a flag that isn't a real CR field — the component can never
+# be enabled and silently stays off on every install, with no lint/render/publish error (installer#145).
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "chart/files/component-pins.yaml"
+      - "chart/values.schema.json"
+      - ".github/scripts/check-feature-keys.py"
+      - ".github/workflows/check-feature-keys.yaml"
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  feature-keys:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Assert pin features are declared in values.schema.json
+        run: python3 .github/scripts/check-feature-keys.py
