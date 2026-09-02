@@ -372,10 +372,6 @@ components:
   - frontend-agent
   - clickstack-agent
   - core-provider-agent
-  - code-analysis-agent
-  - ansible-to-operator-agent
-  - tf-provider-to-operator-agent
-  - tf-to-helm-agent
   - krateo-blueprint-agent
   tier: observability
   feature: coreAgents
@@ -539,42 +535,6 @@ components:
 # (like ingress) so the default specialist fleet stays lean. Needs coreAgents (kagent + the
 # model-configs-owned ModelConfigs); agent:true wires Vertex + joins the autopilot fleet when
 # enabled. Kinds are crdgen PascalCase(chart) — tf is NOT an initialism (-> Tf).
-- name: code-analysis-agent
-  kind: CodeAnalysisAgent
-  version: 0.2.1
-  repo: oci://ghcr.io/krateo-agentiko/charts
-  deps:
-  - kagent
-  tier: observability
-  feature: codegenAgents
-  agent: true
-- name: ansible-to-operator-agent
-  kind: AnsibleToOperatorAgent
-  version: 0.2.1
-  repo: oci://ghcr.io/krateo-agentiko/charts
-  deps:
-  - kagent
-  tier: observability
-  feature: codegenAgents
-  agent: true
-- name: tf-provider-to-operator-agent
-  kind: TfProviderToOperatorAgent
-  version: 0.2.1
-  repo: oci://ghcr.io/krateo-agentiko/charts
-  deps:
-  - kagent
-  tier: observability
-  feature: codegenAgents
-  agent: true
-- name: tf-to-helm-agent
-  kind: TfToHelmAgent
-  version: 0.2.1
-  repo: oci://ghcr.io/krateo-agentiko/charts
-  deps:
-  - kagent
-  tier: observability
-  feature: codegenAgents
-  agent: true
 - name: krateo-blueprint-agent
   kind: KrateoBlueprintAgent
   version: 0.2.3
