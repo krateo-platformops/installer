@@ -70,8 +70,8 @@
 
 {{/* The name of the image-pull dockerconfigjson Secret the installer derives from registryAuth (see
      templates/imagepull-secret.yaml) and injects into the components that ship PRIVATE krateo-agentiko
-     IMAGES (autopilot's repo-mcp-server, core-provider-agent's chart-gate, agentgateway-policies' native-RBAC
-     decider — see inst.privateImageComponents). registryAuth.imagePullSecretName
+     IMAGES (autopilot's repo-mcp-server, core-provider-agent's chart-gate, agentgateway-policies' cert-replay
+     hop — see inst.privateImageComponents). registryAuth.imagePullSecretName
      overrides the default so a caller can point at a pre-existing dockerconfigjson Secret instead. arg: $top */}}
 {{- define "inst.imagePullSecretName" -}}
 {{- .Values.registryAuth.imagePullSecretName | default "krateo-registry-image-pull" -}}
@@ -81,7 +81,7 @@
      imagePullSecrets knob their chart documents as "wired from registryAuth". `path` is the FULL (dot-free)
      location of that knob inside the component spec, INCLUDING the final key: the injection walks all but the
      last segment as nested maps and sets the last segment to the pull-secret list, so a knob at ANY depth works
-     (mcpServers.repoSearch.imagePullSecrets, or the decider's nativeRbac.image.pullSecrets). Shared by
+     (mcpServers.repoSearch.imagePullSecrets, or the cert-replay hop's certReplayHop.image.pullSecrets). Shared by
      compositions.yaml (the injection target) and inst.imagePullAuths (which registries to derive image-pull
      creds for) so the two lists can never drift. Add a component here to wire its image pull. arg: $top */}}
 {{- define "inst.privateImageComponents" -}}
@@ -100,11 +100,6 @@ components:
   - mcpServers
   - chartGate
   - imagePullSecrets
-- name: agentgateway-policies
-  path:
-  - nativeRbac
-  - image
-  - pullSecrets
 - name: agentgateway-policies
   path:
   - certReplayHop

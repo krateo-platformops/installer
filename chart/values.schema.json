@@ -10865,71 +10865,10 @@
               },
               "type": "object"
             },
-            "nativeRbac": {
-              "type": "object",
-              "additionalProperties": false,
-              "description": "Native per-tool MCP RBAC (the ext_authz \"decider\" the policies chart deploys, 0.1.5+). Enabled by design and SAFE by default (shadow: dryRun + FailOpen, denies nothing). The installer auto-wires image.pullSecrets from registryAuth for the private tool-rbac-decider image (a third private-krateo-agentiko-image component, alongside repo-mcp-server and chart-gate); the rest are the policies chart's own knobs.",
-              "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "description": "Deploy the decider + extAuth policy. Default true (in shadow)."
-                },
-                "dryRun": {
-                  "type": "boolean",
-                  "description": "Shadow mode: evaluate + LOG every verdict but always allow. Set false to actually deny a would-be denial."
-                },
-                "failureMode": {
-                  "type": "string",
-                  "enum": [
-                    "FailOpen",
-                    "FailClosed"
-                  ],
-                  "description": "Behavior when the decider is unreachable. Default FailOpen (a decider outage lets calls through)."
-                },
-                "replicas": {
-                  "type": "integer",
-                  "description": "Decider Deployment replica count."
-                },
-                "image": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "description": "The private tool-rbac-decider image (ghcr.io/krateo-agentiko/tool-rbac-decider).",
-                  "properties": {
-                    "repository": {
-                      "type": "string"
-                    },
-                    "tag": {
-                      "type": "string",
-                      "description": "Empty = the chart's own appVersion."
-                    },
-                    "pullPolicy": {
-                      "type": "string"
-                    },
-                    "pullSecrets": {
-                      "type": "array",
-                      "description": "IMAGE-pull secrets for the private decider image. Auto-wired by the installer from registryAuth (the derived krateo-registry-image-pull dockerconfigjson); set explicitly to override, or [] to opt out.",
-                      "items": {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "properties": {
-                          "name": {
-                            "type": "string"
-                          }
-                        }
-                      }
-                    }
-                  }
-                },
-                "enforce": {
-                  "type": "boolean",
-                  "description": "The single atomic switch from SHADOW to enforcing (agentgateway-policies >= 0.1.12). false (the default) keeps the gate observing per dryRun/failureMode. true ENFORCES: it forces the decider off --dry-run AND the extAuth to FailClosed together (overriding dryRun and failureMode), so the dangerous half-state — enforce with FailOpen, or shadow with FailClosed — can't be configured. Equivalent to setting BOTH dryRun: false AND failureMode: FailClosed; prefer this flag. Preflight the decider's shadow would-deny logs and keep the decider >= 2 replicas Ready before enforcing."
-                }
-              }
-            },
             "certReplayHop": {
               "type": "object",
               "additionalProperties": false,
-              "description": "Cert-replay hop (issue #12): a per-user-RBAC hop so kagent tool calls run under the CALLING USER's RBAC (kagent-tools with tokenPassthrough, mounting the hop's kubeconfig). Default-on in policies 0.1.5+. The installer auto-wires image.pullSecrets from registryAuth for the private cert-replay-hop image (a fourth private-krateo-agentiko-image component); the rest are the policies chart's own knobs.",
+              "description": "Cert-replay hop (issue #12): a per-user-RBAC hop so kagent tool calls run under the CALLING USER's RBAC (kagent-tools with tokenPassthrough, mounting the hop's kubeconfig). This is the policies chart's ONLY Layer 5 mechanism (the earlier SAR-on-claims decider, nativeRbac, was removed) and is default-on. The installer auto-wires image.pullSecrets from registryAuth for the private cert-replay-hop image (a third private-krateo-agentiko-image component, alongside repo-mcp-server and chart-gate); the rest are the policies chart's own knobs.",
               "properties": {
                 "enabled": {
                   "type": "boolean",
@@ -12497,7 +12436,7 @@
         },
         "imagePullSecretName": {
           "type": "string",
-          "description": "IMAGE-pull, not just chart-pull. The installer derives a dockerconfigjson Secret from the same registryAuth token(s) and injects it into the components shipping private krateo-agentiko images (autopilot's repo-mcp-server, core-provider-agent's chart-gate-mcp-server, agentgateway-policies' native-RBAC decider), so a full-fleet install needs no manual ServiceAccount patch. Works in BOTH global mode (the top-level token) and registries[] mode (the entry matching each component's repo, so the image-pull token is exactly the one that authorizes that registry). Empty auto-derives (Secret name krateo-registry-image-pull); set to the name of a pre-existing dockerconfigjson Secret in namespaces.krateo to supply your own."
+          "description": "IMAGE-pull, not just chart-pull. The installer derives a dockerconfigjson Secret from the same registryAuth token(s) and injects it into the components shipping private krateo-agentiko images (autopilot's repo-mcp-server, core-provider-agent's chart-gate-mcp-server, agentgateway-policies' cert-replay hop), so a full-fleet install needs no manual ServiceAccount patch. Works in BOTH global mode (the top-level token) and registries[] mode (the entry matching each component's repo, so the image-pull token is exactly the one that authorizes that registry). Empty auto-derives (Secret name krateo-registry-image-pull); set to the name of a pre-existing dockerconfigjson Secret in namespaces.krateo to supply your own."
         },
         "insecureSkipVerifyTLS": {
           "type": "boolean",
