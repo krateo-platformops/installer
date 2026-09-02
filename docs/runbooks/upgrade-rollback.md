@@ -39,6 +39,19 @@ What happens (validated live, 0.3.39 → 0.3.40):
 3. core-provider reconciles the patched CR; each changed component's Composition re-renders
    and its Helm release moves to the new pin.
 
+> **`spec.features` is applied at INSTALL time only — an upgrade never re-applies it.** Because
+> the step-2 merge-patch **excludes `features`**, editing a flag in your values file and running
+> `helm upgrade` has **no effect**: the live `spec.features` (operator runtime state) wins and is
+> preserved. To flip a feature on a running platform, **patch the CR** — the change survives future
+> upgrades:
+>
+> ```sh
+> kubectl patch installers.<crVer>.composition.krateo.io installer -n krateo-system \
+>   --type merge -p '{"spec":{"features":{"<key>":true}}}'
+> ```
+>
+> (`<crVer>` is the served version of the running chart, e.g. `v0-3-40`.)
+
 **Verified end-to-end:** upgrading 0.3.39 → 0.3.40 (whose only pin change is portal
 `1.6.0 → 1.6.3`) moved the live CR's portal pin to `1.6.3`, regenerated the `portals` CRD to
 serve `v1-6-3`, and the running `portal` Helm release became `portal-1.6.3` — while a runtime
