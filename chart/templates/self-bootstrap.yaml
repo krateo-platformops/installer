@@ -236,15 +236,19 @@ data:
         krateo.io/release-name: {{ .Release.Name }}-platform
     spec:
 {{ $spec | toYaml | indent 6 }}
-  # Surgical upgrade patch: ONLY the chart-managed component pins (versions/repos/deps) and
-  # componentValues, plus `exposure` (all values-managed — the runbook passes live values on every
-  # upgrade) — NOT spec.features or any other runtime/user-edited field. Applied as an
-  # RFC-7386 merge patch on `helm upgrade` (see the post-upgrade branch below) so chart-side
-  # component version/set/config bumps AND exposure changes (type/port) propagate WITHOUT clobbering
-  # what the installer-agent (or a user) changed at runtime. The `components` list is replaced
-  # wholesale; `componentValues` and `exposure` deep-merge, so chart-set keys win and any user-only
-  # keys are preserved.
-  components-patch.json: {{ dict "spec" (dict "components" (include "inst.componentsYaml" $ | fromYaml).components "componentValues" .Values.componentValues "exposure" .Values.exposure) | toJson | quote }}
+  # Surgical upgrade patch: the chart-managed component pins (versions/repos/deps) and
+  # componentValues, plus `exposure` AND `vertexAI` (all values-managed — the runbook passes live
+  # values on every upgrade) — but NOT spec.features or hitlApproval, which the installer-agent
+  # (or a user) toggles at RUNTIME and which re-applying would clobber. `vertexAI` is the LLM-path
+  # selector (Vertex ADC vs Gemini API key vs — via localModel — a local model), driven entirely by
+  # values / the agent-gateway-apikey profile, so it MUST propagate on upgrade: without it, flipping
+  # `vertexAI.enabled` on an EXISTING install is silently ignored (helm says false, the CR keeps its
+  # old value), so the Gemini-API-key switch can neither be applied nor un-done on a live cluster —
+  # exactly the regression that 401'd the fleet's LLM on krateo-057. Applied as an RFC-7386 merge
+  # patch on `helm upgrade` (see the post-upgrade branch below). The `components` list is replaced
+  # wholesale; `componentValues`, `exposure`, and `vertexAI` deep-merge, so chart/values-set keys win
+  # and any user-only keys are preserved.
+  components-patch.json: {{ dict "spec" (dict "components" (include "inst.componentsYaml" $ | fromYaml).components "componentValues" .Values.componentValues "exposure" .Values.exposure "vertexAI" .Values.vertexAI) | toJson | quote }}
 ---
 {{- /*
   The bootstrap is FOUR ordered, bounded, idempotent hook WAVES (helm hook-weights) instead of one
