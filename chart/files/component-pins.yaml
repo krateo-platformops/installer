@@ -322,8 +322,13 @@ components:
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
-  # Every grounding agent deps on this, not the reverse: kagent compiles an Agent's tool list once
-  # and never requeues, so an agent created first comes up silently ungrounded.
+  # Every grounding agent deps on this, not the reverse: the edge makes the fleet converge in one
+  # pass. It is a convergence/log-noise concern, not a correctness cliff — an agent reconciled
+  # before this server's RemoteMCPServer CR exists fails its compile LOUDLY (Accepted=False,
+  # ReconcileFailed, `RemoteMCPServer.kagent.dev "repo-mcp-server" not found`) and gets no
+  # Deployment at all; the kagent Agent controller watches RemoteMCPServer and re-reconciles
+  # within a second of the CR appearing, so it self-heals. (kagent v0.9.12,
+  # go/core/internal/controller/watch_helpers.go:58-65.)
   tier: observability
   feature: coreAgents
 - name: structure-graph-mcp-server
