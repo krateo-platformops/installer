@@ -236,19 +236,22 @@ data:
         krateo.io/release-name: {{ .Release.Name }}-platform
     spec:
 {{ $spec | toYaml | indent 6 }}
-  # Surgical upgrade patch: the chart-managed component pins (versions/repos/deps) and
-  # componentValues, plus `exposure` AND `vertexAI` (all values-managed — the runbook passes live
-  # values on every upgrade) — but NOT spec.features or hitlApproval, which the installer-agent
-  # (or a user) toggles at RUNTIME and which re-applying would clobber. `vertexAI` is the LLM-path
-  # selector (Vertex ADC vs Gemini API key vs — via localModel — a local model), driven entirely by
-  # values / the agent-gateway-apikey profile, so it MUST propagate on upgrade: without it, flipping
-  # `vertexAI.enabled` on an EXISTING install is silently ignored (helm says false, the CR keeps its
-  # old value), so the Gemini-API-key switch can neither be applied nor un-done on a live cluster —
-  # exactly the regression that 401'd the fleet's LLM on krateo-057. Applied as an RFC-7386 merge
-  # patch on `helm upgrade` (see the post-upgrade branch below). The `components` list is replaced
-  # wholesale; `componentValues`, `exposure`, and `vertexAI` deep-merge, so chart/values-set keys win
-  # and any user-only keys are preserved.
-  components-patch.json: {{ dict "spec" (dict "components" (include "inst.componentsYaml" $ | fromYaml).components "componentValues" .Values.componentValues "exposure" .Values.exposure "vertexAI" .Values.vertexAI) | toJson | quote }}
+  # Surgical upgrade patch: the chart-managed component pins (versions/repos/deps) plus every
+  # VALUES-DRIVEN top-level field — componentValues, exposure, vertexAI, registryAuth, hitlApproval —
+  # so a `helm upgrade` change to any of them reaches an EXISTING install (the runbook passes live
+  # values on every upgrade). Deliberately EXCLUDED: `features`, which the installer-agent toggles at
+  # RUNTIME and which re-applying would clobber (enable a new feature via a CR toggle / the agent, not
+  # here), and `namespaces`, which is immutable post-install. Why the included fields MUST propagate: a
+  # values-driven field left out of this patch is silently un-updatable on a live cluster — helm says
+  # the new value while the CR keeps the old one. That is exactly what 401'd the fleet's LLM on
+  # krateo-057 (`vertexAI.enabled` stuck at true while the gateway held a Gemini key); the same trap
+  # would otherwise strand a `registryAuth` credential rotation / private-registry enable / mirror
+  # repoint, and a `hitlApproval` HITL<->autonomous switch. (Per-agent granular HITL lives in
+  # componentValues.<agent>.requireApproval, which already rides this patch.) Applied as an RFC-7386
+  # merge patch on `helm upgrade` (see the post-upgrade branch below): the `components` list is
+  # replaced wholesale; the object fields deep-merge, so chart/values-set keys win and any user-only
+  # keys are preserved.
+  components-patch.json: {{ dict "spec" (dict "components" (include "inst.componentsYaml" $ | fromYaml).components "componentValues" .Values.componentValues "exposure" .Values.exposure "vertexAI" .Values.vertexAI "registryAuth" .Values.registryAuth "hitlApproval" .Values.hitlApproval) | toJson | quote }}
 ---
 {{- /*
   The bootstrap is FOUR ordered, bounded, idempotent hook WAVES (helm hook-weights) instead of one
