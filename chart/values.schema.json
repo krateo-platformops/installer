@@ -11533,6 +11533,39 @@
                     }
                   },
                   "type": "object"
+                },
+                "retry": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Gateway-side retry on the model hop (agentgateway-policies llm.retry). attempts 0 = off. Applied to the LLM route and the bench route when on.",
+                  "properties": {
+                    "attempts": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 5,
+                      "description": "Retries per request beyond the first. 0 disables the policy."
+                    },
+                    "backoff": {
+                      "type": "string",
+                      "description": "Minimum wait between attempts (Gateway API duration). Provider Retry-After honoured when present."
+                    },
+                    "codes": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 400,
+                        "maximum": 599
+                      },
+                      "description": "Response codes that trigger a retry."
+                    }
+                  }
+                },
+                "modelAliases": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Friendly model names resolved at the gateway to provider model ids (agentgateway-policies llm.modelAliases). Empty = unchanged."
                 }
               },
               "type": "object"
