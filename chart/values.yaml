@@ -143,6 +143,27 @@ exposure:
   # baseDomain: example.com       # -> authn.example.com, snowplow.example.com, sse-proxy.example.com
   # hosts:                        # per-component hostname overrides (keys are component names)
   #   frontend: portal.example.com
+  #
+  # gatewayMode: host             # host (default) | path
+  # HOST (default): each exposed component gets its OWN hostname (above) and its own HTTPRoute,
+  #   attached to the BYO gatewayRef — the classic host-based routing. The frontend config peer URLs
+  #   become https://<host>. Requires baseDomain and/or hosts.
+  # PATH: route the WHOLE portal stack (frontend/authn/snowplow/sse-proxy) through the AGENTGATEWAY on
+  #   ONE listener at per-component paths — the portal is served at the gateway ORIGIN `/`, with
+  #   /auth -> authn, /content -> snowplow, /events -> sse-proxy (the paths + rewrite + auth posture
+  #   are chart content in component-pins.yaml: gatewayPath/gatewayRewrite/gatewayAuth). No per-
+  #   component hostname is needed. The installer emits the route table onto the agentgateway-policies
+  #   composition as spec.platformRoutes (the agentgateway-policies chart programs the listener from
+  #   it), flips those four Services to ClusterIP, and computes the frontend peer URLs as
+  #   http://<gateway-ip>:<platformPort><path> (e.g. http://<gw>/auth). The Autopilot A2A URL still
+  #   targets the gateway's OWN listener (:8080), unchanged. gatewayMode=path applies only when
+  #   type=Gateway (LoadBalancer/NodePort ignore it) and is INERT unless set to path.
+  #
+  # platformPort: 80              # the single listener port the path-mode routes are served on
+  #   (default 80). Only used when type=Gateway AND gatewayMode=path; it is the port baked into the
+  #   frontend peer URLs (http://<gateway-ip>:<platformPort><path>) and the platform-http listener the
+  #   agentgateway-policies chart programs. Distinct from the gateway's OWN A2A listener port (8080),
+  #   which the Autopilot URL keeps.
 
 # Feature flags (carried over from the installer chart).
 #

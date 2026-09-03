@@ -143,6 +143,24 @@
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "gatewayMode": {
+          "type": "string",
+          "title": "Gateway routing mode (type=Gateway)",
+          "description": "host (default): each exposed component gets its own hostname + HTTPRoute on the BYO gatewayRef; frontend peer URLs become https://<host>. path: route the whole portal stack (frontend/authn/snowplow/sse-proxy) through the agentgateway on ONE listener at per-component paths (portal at the origin /, /auth -> authn, /content -> snowplow, /events -> sse-proxy; paths/rewrite/auth are component-pins content), flip those Services to ClusterIP, emit the route table as agentgateway-policies spec.platformRoutes, and compute the frontend peer URLs as http://<gateway-ip>:<platformPort><path>. Only used when type=Gateway; INERT unless set to path.",
+          "enum": [
+            "host",
+            "path"
+          ],
+          "default": "host"
+        },
+        "platformPort": {
+          "type": "integer",
+          "title": "Platform listener port (type=Gateway, gatewayMode=path)",
+          "description": "The single listener port the path-mode portal routes are served on (default 80). Only used when type=Gateway AND gatewayMode=path: it is baked into the frontend peer URLs (http://<gateway-ip>:<platformPort><path>) and the platform-http listener the agentgateway-policies chart programs from spec.platformRoutes. Distinct from the gateway's own A2A listener port (8080), which the Autopilot URL keeps.",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 80
         }
       }
     },
@@ -249,6 +267,22 @@
           },
           "svcMatch": {
             "type": "string"
+          },
+          "gatewayPath": {
+            "type": "string",
+            "description": "exposure.type=Gateway + gatewayMode=path only: the listener path prefix this component is routed at through the agentgateway on the single platform listener (frontend /, authn /auth, snowplow /content, sse-proxy /events). compositions.yaml emits it into agentgateway-policies spec.platformRoutes and, for the consumer's peer config URL, appends it to the gateway origin (http://<gw-ip>:<platformPort><path>). Ignored in host mode and for LoadBalancer/NodePort."
+          },
+          "gatewayRewrite": {
+            "type": "boolean",
+            "description": "exposure.type=Gateway + gatewayMode=path only: whether the agentgateway strips gatewayPath before forwarding to the backend Service (true when the backend serves at / — authn/snowplow/sse-proxy; false for the frontend whose gatewayPath is / already). Threaded into the platformRoutes entry as `rewrite`."
+          },
+          "gatewayAuth": {
+            "type": "string",
+            "description": "exposure.type=Gateway + gatewayMode=path only: the listener-route auth posture in the platformRoutes entry — public (no token required; login and static portal assets) or optional (a token is verified when present but not required; snowplow content + sse-proxy events). Threaded into the platformRoutes entry as auth.mode.",
+            "enum": [
+              "public",
+              "optional"
+            ]
           },
           "serviceValuesPath": {
             "type": "string",
@@ -11579,6 +11613,68 @@
                 }
               },
               "type": "object"
+            },
+            "platformRoutes": {
+              "type": "array",
+              "description": "exposure.type=Gateway + exposure.gatewayMode=path only: the portal-stack route table the installer computes and injects onto this composition (one entry per exposed component with a gatewayPath — frontend/authn/snowplow/sse-proxy — all on the single platform-http listener at exposure.platformPort). The agentgateway-policies chart programs the listener + one route per entry from it. The installer fills this fill-if-absent, so an explicit override here WINS; leave it unset to let the installer compute it. Inert outside path mode.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Route name (the routed component's name)."
+                  },
+                  "listener": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "The gateway listener this route attaches to.",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "pathPrefix": {
+                    "type": "string",
+                    "description": "The listener path prefix this route matches (e.g. /auth, /content, /events, or / for the portal origin)."
+                  },
+                  "rewrite": {
+                    "type": "boolean",
+                    "description": "Whether the gateway strips pathPrefix before forwarding to the backend."
+                  },
+                  "backend": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "The ClusterIP Service this route forwards to.",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "auth": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "The route auth posture.",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "public",
+                          "optional"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         },

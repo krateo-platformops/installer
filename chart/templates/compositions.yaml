@@ -36,6 +36,20 @@
      re-LISTing all CRDs per component/dep — see inst.crdExists (D9). */}}
 {{- $allCRDs := (lookup "apiextensions.k8s.io/v1" "CustomResourceDefinition" "" "").items }}
 {{- $isLB := or (eq .Values.exposure.type "LoadBalancer") (eq .Values.exposure.type "NodePort") }}
+{{/* Gateway PATH sub-mode (exposure.type=Gateway + exposure.gatewayMode=path): route the whole portal
+     stack (frontend/authn/snowplow/sse-proxy) through the agentgateway on ONE listener at per-component
+     paths, instead of host-based per-component HTTPRoutes. Resolved ONCE here (not per-component):
+       - $gwPathMode: the mode is on;
+       - $gwPlatformPort: the single listener port the routes/peer-URLs use (exposure.platformPort, def 80);
+       - $gwComp: the agentgateway-policies component pin (the gateway; its svcMatch krateo-agent-gateway
+         is the proxy Service the agentgateway controller provisions), so the consumer-URL wiring and the
+         platformRoutes injection below resolve the gateway's live Service the same way exposure already
+         reads it (inst.peerurl / inst.svcname). All INERT unless gatewayMode=path — host mode (default)
+         leaves $gwPathMode "" and every branch below is skipped, byte-identical to today. */}}
+{{- $gwPathMode := and (eq .Values.exposure.type "Gateway") (eq (.Values.exposure.gatewayMode | default "host") "path") }}
+{{- $gwPlatformPort := int (default 80 .Values.exposure.platformPort) }}
+{{- $gwComp := dict }}
+{{- if $gwPathMode }}{{- range $gc := $components }}{{- if eq $gc.name "agentgateway-policies" }}{{- $gwComp = $gc }}{{- end }}{{- end }}{{- end }}
 {{- range $c := $components }}
 {{/* registerOnly (catalog) blueprints are registered (definitions.yaml) but never auto-emitted —
      the operator/end-user instantiates them from the portal on demand. */}}
@@ -156,7 +170,29 @@
      "" until the address/hostname is known, so the key is omitted and the next reconcile fills it.
      A static override is handled below and wins over this. */}}
 {{- $url := "" }}
-{{- if eq $top.Values.exposure.type "Gateway" }}
+{{- if $gwPathMode }}
+{{/* Gateway PATH mode: the whole portal stack rides ONE gateway listener at per-component paths, so a
+     peer's browser URL is the gateway ORIGIN + that peer's gatewayPath — NOT a per-peer hostname. The
+     gateway's Service (the agentgateway-policies proxy Service, svcMatch krateo-agent-gateway) is
+     resolved live at exposure.platformPort via inst.peerurl (the same LB/NodePort resolution the LB
+     branch uses), then the pin's gatewayPath is appended (trimSuffix "/" so the origin frontend `/`
+     yields the bare origin, not a trailing-slash duplicate). "" until the gateway Service has an
+     address, so the key is omitted and the next reconcile fills it — same eventual-consistency posture.
+     EXCEPTION — agentgateway-policies itself (the AUTOPILOT peer): it is NOT a platform route; its URL
+     stays the gateway's OWN A2A listener (http://<gw-ip>:8080/...) exactly as in every other mode. The
+     $eport exception at the top of this loop already kept $eport = its exposePort (8080) for it, so
+     inst.peerurl below returns the unchanged Autopilot origin. Peers with no gatewayPath (none today)
+     fall through with $url "" and are simply omitted. */}}
+{{- if eq $d.name "agentgateway-policies" }}
+{{- $url = include "inst.peerurl" (list $top $d.svcMatch $eport) }}
+{{- else if and $d.gatewayPath $gwComp.svcMatch }}
+{{/* Guard on $gwComp.svcMatch: path mode presupposes the agentgateway (features.agentGateway); with
+     the gateway component absent $gwComp is empty and there is no origin to resolve, so leave $url ""
+     (key omitted, frontend keeps its default) rather than resolve inst.peerurl on a nil svcMatch. */}}
+{{- $origin := include "inst.peerurl" (list $top $gwComp.svcMatch $gwPlatformPort) }}
+{{- if $origin }}{{- $url = printf "%s%s" $origin (trimSuffix "/" $d.gatewayPath) }}{{- end }}
+{{- end }}
+{{- else if eq $top.Values.exposure.type "Gateway" }}
 {{/* Gateway: the peer URL is https://<host> from the pins (no Service lookup), so it is written even
      before the HTTPRoute CRD / route exists — unlike httproutes.yaml which gates on the CRD. Same
      eventual-consistency posture as the LB branch (frontend serves config.json statically, picked up
@@ -458,6 +494,37 @@
 {{- end }}
 {{- end }}
 {{- $_ := set $spec "extraAgents" $fleet }}
+{{- end }}
+{{- /* Gateway PATH sub-mode — the route table. When gatewayMode=path, the agentgateway-policies
+       composition carries the whole portal stack's routing as spec.platformRoutes: one entry per
+       exposed component that declares a gatewayPath (frontend/authn/snowplow/sse-proxy), all on the
+       single `platform-http` listener at exposure.platformPort. The agentgateway-policies chart (the
+       sibling that programs the listener) reads this list and builds the listener + one route per
+       entry. Each entry's backend.name is the peer's LIVE ClusterIP Service (inst.svcname, resolved
+       the same way httproutes.yaml resolves an HTTPRoute backendRef; falls back to the component name
+       until the Service exists) and backend.port its per-component exposePort; pathPrefix/rewrite/
+       auth.mode come straight from the pins (gatewayPath/gatewayRewrite/gatewayAuth). Feature-gated
+       via inst.featureEnabled so a disabled component is not routed. fillPath (fill-if-absent) onto
+       $spec.platformRoutes so a componentValues.agentgateway-policies.platformRoutes override still
+       wins. INERT outside path mode: $gwPathMode is "" and this whole block is skipped, so host-mode
+       and LB/NodePort renders are byte-identical to today. */ -}}
+{{- if and (eq $c.name "agentgateway-policies") $gwPathMode }}
+{{- $routes := list }}
+{{- range $d := $components }}
+{{- if and $d.gatewayPath (eq (include "inst.featureEnabled" (list $top $d.feature)) "true") }}
+{{- $backendName := include "inst.svcname" (list $top $d.svcMatch) }}
+{{- if not $backendName }}{{- $backendName = $d.name }}{{- end }}
+{{- $route := dict
+     "name" $d.name
+     "listener" (dict "name" "platform-http" "port" $gwPlatformPort)
+     "pathPrefix" $d.gatewayPath
+     "rewrite" (default false $d.gatewayRewrite)
+     "backend" (dict "name" $backendName "port" (int $d.exposePort))
+     "auth" (dict "mode" (default "public" $d.gatewayAuth)) }}
+{{- $routes = append $routes $route }}
+{{- end }}
+{{- end }}
+{{- include "inst.fillPath" (dict "target" $spec "path" (list "platformRoutes") "value" $routes) }}
 {{- end }}
 ---
 apiVersion: {{ include "inst.apiVersion" (list $c.version) }}
