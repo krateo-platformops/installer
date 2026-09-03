@@ -105,6 +105,10 @@ components:
   - certReplayHop
   - image
   - pullSecrets
+- name: krateo-blueprint-agent
+  path:
+  - chartGate
+  - imagePullSecrets
 {{- end -}}
 
 {{/* inst.imagePullAuths — the image-pull credential REFERENCES for the private-image components, as a JSON
