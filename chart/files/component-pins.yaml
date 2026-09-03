@@ -37,6 +37,14 @@ components:
   svcMatch: authn
   configKeys:
   - AUTHN_API_BASE_URL
+  # exposure.type=Gateway, gatewayMode=path: this component is routed through the agentgateway on the
+  # single platform listener at gatewayPath (compositions.yaml emits it into agentgateway-policies'
+  # spec.platformRoutes). gatewayRewrite strips the path prefix before forwarding to the backend
+  # (authn serves at /, so the /auth prefix must be rewritten away). gatewayAuth is the listener-route
+  # auth posture: public = no token required (login endpoints must be reachable unauthenticated).
+  gatewayPath: /auth
+  gatewayRewrite: true
+  gatewayAuth: public
 - name: snowplow
   kind: Snowplow
   chart: snowplow
@@ -52,6 +60,13 @@ components:
   svcMatch: snowplow
   configKeys:
   - SNOWPLOW_API_BASE_URL
+  # exposure.type=Gateway, gatewayMode=path: snowplow's content API is routed at /content and the
+  # prefix is rewritten away (snowplow serves at /). optional = a token is verified WHEN PRESENT but
+  # not required, so anonymous portal content reads still work while an authenticated caller is
+  # identified (matches snowplow's own optional-auth content posture).
+  gatewayPath: /content
+  gatewayRewrite: true
+  gatewayAuth: optional
   frontendConfigEnv: FRONTEND_CONFIG_CONFIGMAP
   # Internal (ClusterIP, server-to-server) URLs the snowplow chart hardcodes at the per-component
   # default ports (env.URL_SELF=snowplow:8081, env.URL_AUTHN=authn:8082) for the #57 seed->authn
@@ -77,6 +92,13 @@ components:
   nodePort: 31000   # pinned deterministic NodePort (host-mappable) for exposure.type=NodePort
   svcMatch: frontend
   consumer: true
+  # exposure.type=Gateway, gatewayMode=path: the frontend (the portal SPA) is served at the gateway
+  # ORIGIN, so its gatewayPath is `/` and there is nothing to rewrite (gatewayRewrite:false). public =
+  # the SPA and its static assets load with no token. The portal is the catch-all; the other routes
+  # (/auth, /content, /events) are more-specific prefixes the agentgateway matches first.
+  gatewayPath: /
+  gatewayRewrite: false
+  gatewayAuth: public
 - name: krateo-marketplace-catalog
   kind: KrateoMarketplaceCatalog
   version: 0.1.2
@@ -202,6 +224,14 @@ components:
   configKeys:
   - EVENTS_API_BASE_URL
   - EVENTS_PUSH_API_BASE_URL
+  # exposure.type=Gateway, gatewayMode=path: the events/notifications SSE stream is routed at /events
+  # with the prefix rewritten away (sse-proxy serves at /). optional mirrors sse-proxy's own MANDATORY-
+  # by-design token check happening in-app; the gateway passes the token through (a token is verified
+  # when present) rather than terminating auth at the edge. NB: an SSE stream needs listener-level
+  # long-lived-connection handling — the same single-replica/no-sticky-session caveat as host mode.
+  gatewayPath: /events
+  gatewayRewrite: true
+  gatewayAuth: optional
   # sse-proxy verifies authn JWTs MANDATORY/fail-closed, fetching the JWKS from <auth.urlAuthn>/
   # .well-known/jwks.json (chart-hardcoded authn:8082). exposure.port collapses authn to the shared
   # port, so recompute auth.urlAuthn on it (else the events bell can't verify tokens and breaks).
@@ -499,7 +529,7 @@ components:
   feature: agentGateway
 - name: agentgateway-policies
   kind: AgentgatewayPolicies
-  version: 0.1.14
+  version: 0.1.15
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
