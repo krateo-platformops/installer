@@ -392,7 +392,7 @@ components:
   agent: true
 - name: clickhouse-mcp-server
   kind: ClickhouseMcpServer
-  version: 0.1.9
+  version: 0.1.10
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - krateo-observability
@@ -541,7 +541,7 @@ components:
 # operator / tf-to-helm were RETIRED in #144; features.codegenAgents is kept hard-defaulted false.)
 - name: krateo-blueprint-agent
   kind: KrateoBlueprintAgent
-  version: 0.2.7
+  version: 0.2.8
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
