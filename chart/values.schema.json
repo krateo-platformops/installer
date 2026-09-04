@@ -11708,6 +11708,146 @@
                   }
                 }
               }
+            },
+            "extraMcpServers": {
+              "type": "array",
+              "description": "Additive: appended to the agentgateway-policies chart's mcpServers (extraMcpServers knob, chart>=0.1.17). In-cluster MCP servers to front. Each entry renders an AgentgatewayBackend + route (required once the kagent controller proxies agent egress) and its per-tool rules. External MCP servers are not proxied and must not be listed.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "port"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Service name, which is also the x-kagent-host value (<service>.<namespace>)."
+                  },
+                  "port": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "MCP endpoint path on the server. Default /mcp."
+                  },
+                  "protocol": {
+                    "type": "string",
+                    "enum": [
+                      "StreamableHTTP",
+                      "SSE"
+                    ],
+                    "description": "MCP transport. Default StreamableHTTP."
+                  },
+                  "toolRules": {
+                    "type": "array",
+                    "description": "Layer 2 — each entry restricts the named tools to the given subjects. Rules are AND'd into one expression, so a rule can only narrow access. Tools named nowhere stay open.",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "tools",
+                        "subjects"
+                      ],
+                      "properties": {
+                        "tools": {
+                          "type": "array",
+                          "minItems": 1,
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "subjects": {
+                          "type": "object",
+                          "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone. `anyAuthenticated` is IGNORED when `users` or `groups` is set: these blocks are deep-merged maps, so a caller narrowing a rule to a group never sees the default `anyAuthenticated: true` disappear, and OR'ing it back in would silently restore access to everyone. Widen again with `anyAuthenticated: true` and no users/groups.",
+                          "additionalProperties": false,
+                          "minProperties": 1,
+                          "properties": {
+                            "anyAuthenticated": {
+                              "type": "boolean",
+                              "description": "Any request carrying a token this gateway validated. Ignored when `users` or `groups` is set."
+                            },
+                            "users": {
+                              "type": "array",
+                              "description": "Values of the user claim (authn: the username in `sub`).",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "groups": {
+                              "type": "array",
+                              "description": "Values that must appear in the groups claim (authn: `groups`, a list of strings).",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "extraSubAgents": {
+              "type": "array",
+              "description": "Additive: appended to the agentgateway-policies chart's subAgents (extraSubAgents knob, chart>=0.1.17). Layer 3 — every agent that can be an A2A delegation target. Each entry renders the header-matched route, the token passthrough, the anonymous agent-card allowance and the delegation rule.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "subjects"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Agent name, which is also its Service name and the x-kagent-host value."
+                  },
+                  "port": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535,
+                    "description": "The agent's A2A port. Default 8080."
+                  },
+                  "subjects": {
+                    "type": "object",
+                    "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone. `anyAuthenticated` is IGNORED when `users` or `groups` is set: these blocks are deep-merged maps, so a caller narrowing a rule to a group never sees the default `anyAuthenticated: true` disappear, and OR'ing it back in would silently restore access to everyone. Widen again with `anyAuthenticated: true` and no users/groups.",
+                    "additionalProperties": false,
+                    "minProperties": 1,
+                    "properties": {
+                      "anyAuthenticated": {
+                        "type": "boolean",
+                        "description": "Any request carrying a token this gateway validated. Ignored when `users` or `groups` is set."
+                      },
+                      "users": {
+                        "type": "array",
+                        "description": "Values of the user claim (authn: the username in `sub`).",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "groups": {
+                        "type": "array",
+                        "description": "Values that must appear in the groups claim (authn: `groups`, a list of strings).",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         },
