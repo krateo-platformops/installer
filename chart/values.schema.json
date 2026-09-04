@@ -284,6 +284,14 @@
               "optional"
             ]
           },
+          "gatewayListener": {
+            "type": "string",
+            "description": "exposure.type=Gateway + gatewayMode=path only: the agentgateway listener this component's route attaches to. Defaults to the shared platform-http listener; a root-asset app that cannot be path-prefixed (HyperDX) sets its OWN listener (platform-hdx). Threaded into the platformRoutes entry as listener.name."
+          },
+          "gatewayPort": {
+            "type": "integer",
+            "description": "exposure.type=Gateway + gatewayMode=path only: the port of this component's gateway listener (and, when the component has no exposePort, its route backend port). Defaults to exposure.platformPort. Threaded into the platformRoutes entry as listener.port. HyperDX uses 3000."
+          },
           "serviceValuesPath": {
             "type": "string",
             "description": "Dotted path to the component chart's Service values block when it is NOT the chart top-level `service` (e.g. kagent's UI Service lives at `kagentapp.ui.service`). The exposure layer builds this nested path and sets `.type` = .Values.exposure.type, flipping the right Service to LoadBalancer/NodePort while the component chart keeps its default."
@@ -4173,6 +4181,14 @@
                   "properties": {
                     "enabled": {
                       "type": "boolean"
+                    },
+                    "config": {
+                      "type": "object",
+                      "title": "HyperDX config (clickstack-config ConfigMap passthrough)",
+                      "description": "Opaque passthrough into the upstream clickstack hyperdx.config map (rendered into the clickstack-config ConfigMap). In Gateway path mode the installer computes FRONTEND_URL from the gateway origin (fill-if-absent); an explicit value here wins. No schema default (schema-defaults rule).",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
                     },
                     "ingress": {
                       "type": "object",
