@@ -28,4 +28,4 @@ name: installer
 sources:
 - https://github.com/krateo-platformops/installer
 type: application
-version: 
+version: CHART_VERSION
