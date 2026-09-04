@@ -196,6 +196,22 @@ components:
   - mongodb-operator
   tier: observability
   feature: portal
+  # HyperDX behind the agentgateway in Gateway path mode (#100). Unlike the portal APIs
+  # (authn/snowplow/sse-proxy) which share the :80 platform-http listener under a /path, HyperDX is a
+  # Next.js root-asset app (hardcoded /_next, /assets) so it CANNOT live under a path prefix — it gets
+  # its OWN listener (platform-hdx:3000), a public route at /, no rewrite. svcMatch is the live HyperDX
+  # app Service (the clickstack chart's fullnameOverride krateo-clickstack), resolved by inst.svcname for
+  # the route backend. gatewayListener/gatewayPort are the FIRST use of a per-component listener: the four
+  # portal pins carry neither, so the platformRoutes generator's default-fallbacks keep them on
+  # platform-http:$platformPort byte-identically. No expose:true, so no service-flip / host HTTPRoute —
+  # HyperDX is reached only through the gateway route. FRONTEND_URL is computed from the gateway :3000
+  # origin into clickstack.hyperdx.config (compositions.yaml), replacing the interim 057 override.
+  svcMatch: krateo-clickstack
+  gatewayPath: /
+  gatewayRewrite: false
+  gatewayAuth: public
+  gatewayListener: platform-hdx
+  gatewayPort: 3000
 - name: otel-collector-deployment
   kind: OtelCollectorDeployment
   version: 0.3.7

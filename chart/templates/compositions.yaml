@@ -461,6 +461,21 @@
 {{- $a2a := printf "http://%s.%s.svc.cluster.local:%v/api/a2a/%s/incident-agent" $gwName $top.Values.namespaces.krateo $gwPort $top.Values.namespaces.krateo -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "config" "autopilotA2aUrl") "value" $a2a) -}}
 {{- end -}}
+{{- /* HyperDX FRONTEND_URL (#100): in Gateway path mode point HyperDX's own SPA at the gateway origin it
+     is served on (its platform-hdx listener at gatewayPort), so HyperDX's browser redirects/links
+     resolve through the single gateway IP instead of the now-removed dedicated HyperDX LB. Computed like
+     the AUTOPILOT origin — inst.peerurl on the gateway proxy Service at the HyperDX listener port — and
+     written fill-if-absent into the upstream clickstack passthrough
+     (componentValues.krateo-observability.clickstack.hyperdx.config.FRONTEND_URL), so an operator
+     override still wins and it stays unset until the gateway Service has an address (next reconcile
+     fills it — same eventual-consistency posture as AUTOPILOT). Gated on $gwPathMode + $gwComp.svcMatch:
+     host/LB/NodePort and gateway-off installs never enter here, so their render is byte-identical. */ -}}
+{{- if and (eq $c.name "krateo-observability") $gwPathMode $gwComp.svcMatch -}}
+{{- $hdxOrigin := include "inst.peerurl" (list $top $gwComp.svcMatch (int $c.gatewayPort)) -}}
+{{- if $hdxOrigin -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "clickstack" "hyperdx" "config" "FRONTEND_URL") "value" $hdxOrigin) -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 {{- /* Auto-orchestration: the ORCHESTRATOR (autopilot, `orchestrator: true`) attaches EVERY deployed
        agent as an A2A
@@ -514,12 +529,18 @@
 {{- if and $d.gatewayPath (eq (include "inst.featureEnabled" (list $top $d.feature)) "true") }}
 {{- $backendName := include "inst.svcname" (list $top $d.svcMatch) }}
 {{- if not $backendName }}{{- $backendName = $d.name }}{{- end }}
+{{/* Listener + ports: default to the shared platform-http:$gwPlatformPort listener and the peer's
+     exposePort backend — the four portal pins (authn/snowplow/frontend/sse-proxy) carry NO
+     gatewayListener/gatewayPort so these fallbacks reproduce today's route byte-identically. A
+     component that needs its OWN listener (HyperDX: platform-hdx:3000, a Next.js root-asset app that
+     can't be path-prefixed) sets gatewayListener + gatewayPort, and gatewayPort also becomes its
+     backend port (it has no exposePort pin). */}}
 {{- $route := dict
      "name" $d.name
-     "listener" (dict "name" "platform-http" "port" $gwPlatformPort)
+     "listener" (dict "name" (default "platform-http" $d.gatewayListener) "port" (int (default $gwPlatformPort $d.gatewayPort)))
      "pathPrefix" $d.gatewayPath
      "rewrite" (default false $d.gatewayRewrite)
-     "backend" (dict "name" $backendName "port" (int $d.exposePort))
+     "backend" (dict "name" $backendName "port" (int (default $d.exposePort $d.gatewayPort)))
      "auth" (dict "mode" (default "public" $d.gatewayAuth)) }}
 {{- $routes = append $routes $route }}
 {{- end }}
