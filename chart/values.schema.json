@@ -1326,6 +1326,13 @@
                 }
               },
               "type": "object"
+            },
+            "allowedHosts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extra Host headers accepted by mcp-clickhouse 0.5.0's DNS-rebinding guard, APPENDED to the chart's auto-derived service-DNS names. Required when the agent->MCP hop goes through the agentgateway (which forwards Host: krateo-agent-gateway.<ns>.svc.cluster.local), else the server returns 421 Invalid Host. Use the gateway service-DNS forms with an any-port :* suffix. No default (schema-defaults rule)."
             }
           }
         },
