@@ -438,7 +438,7 @@ components:
   agent: true
 - name: clickhouse-mcp-server
   kind: ClickhouseMcpServer
-  version: 0.1.11
+  version: 0.1.12
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - krateo-observability
