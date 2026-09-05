@@ -3252,6 +3252,37 @@
                   "title": "Enabled"
                 }
               }
+            },
+            "extraTools": {
+              "type": "array",
+              "description": "Extra McpServer tool blocks on the autopilot Agent only: each entry binds the named toolNames of an existing RemoteMCPServer CR this chart does not own (kind RemoteMCPServer, apiGroup kagent.dev). Built for the bench profile (e.g. an evidence server). The CR must exist before the Agent; kagent compiles the tool list once.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "toolNames"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "RemoteMCPServer CR name."
+                  },
+                  "toolNames": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "apiGroup": {
+                    "type": "string"
+                  }
+                }
+              }
             }
           }
         },
@@ -3676,6 +3707,37 @@
                 },
                 "imageRegistry": {
                   "type": "string"
+                }
+              }
+            },
+            "extraTools": {
+              "type": "array",
+              "description": "Extra McpServer tool blocks appended after the chart's own: each entry binds the named toolNames of an existing RemoteMCPServer CR this chart does not own (kind RemoteMCPServer, apiGroup kagent.dev). Built for the bench profile (e.g. an incident-evidence server). The CR must exist before the Agent; kagent compiles the tool list once.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "toolNames"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "RemoteMCPServer CR name."
+                  },
+                  "toolNames": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "apiGroup": {
+                    "type": "string"
+                  }
                 }
               }
             }
