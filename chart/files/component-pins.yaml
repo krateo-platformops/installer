@@ -404,7 +404,7 @@ components:
   feature: coreAgents
 - name: krateo-autopilot
   kind: KrateoAutopilot
-  version: 0.4.5
+  version: 0.4.7
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -426,7 +426,7 @@ components:
   orchestrator: true
 - name: incident-agent
   kind: IncidentAgent
-  version: 0.1.6
+  version: 0.1.8
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
