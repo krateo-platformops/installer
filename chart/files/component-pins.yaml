@@ -389,7 +389,16 @@ components:
   feature: structureGraph
 - name: config-refs-mcp-server
   kind: ConfigRefsMcpServer
-  version: 0.2.3
+  # 0.2.4 is the first release that SERVES the second tool, k8s_analyze — a deterministic,
+  # read-only namespace analyzer (live objects + Nodes, pure-function condition checks, typed
+  # findings). Nothing NAMES it yet: the k8s-agent and incident-agent bindings are unreleased, and
+  # kagent's toolNames is a client-side allowlist, so on this pin the server simply serves one tool
+  # more than anyone asks for and no agent behaviour changes. The pin has to lead the bindings
+  # anyway — a name the server does not serve is dropped SILENTLY (Agent still Accepted=True), so
+  # a binding released against 0.2.3 would be inert with no trace. Its only cluster-facing change
+  # is the ClusterRole: still read-only, widened from GET on a few kinds to GET+LIST (never watch,
+  # no writes) on the kinds k8s_analyze reads.
+  version: 0.2.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
