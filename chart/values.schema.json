@@ -3078,6 +3078,16 @@
                       }
                     }
                   },
+                  "k8sAnalyze": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "config-refs-mcp-server's second tool, k8s_analyze — a deterministic, read-only namespace analyzer: it lists a namespace's live objects plus Nodes, runs pure-function condition checks and returns typed findings instead of raw dumps, so the same cluster state always yields the same findings in the same order. Set on the configRefs alias; the autopilot chart binds it on the K8S-AGENT only, so it also needs agents.k8s.enabled (true in this chart's componentValues). Gated on the alias's own enabled too, since both tools come from one server. Default false — new and unmeasured, so it ships as the control arm of an A/B, like graph above. Needs config-refs-mcp-server 0.2.4 or later, the release that first serves the tool; on anything older kagent drops the unserved name silently and the binding is inert. Also inert until the krateo-autopilot pin carries the binding — that chart's mcpServers sub-schema tolerates unknown alias keys, so an older pin ignores this rather than failing.",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      }
+                    }
+                  },
                   "cacheSizeLimit": {
                     "type": "string"
                   },
@@ -3587,6 +3597,19 @@
                       "type": "boolean"
                     }
                   }
+                }
+              }
+            },
+            "k8sAnalyze": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Deterministic first pass — k8s_analyze, config-refs-mcp-server's second tool (CR owned by that chart, a coreAgents component): it lists a namespace's live objects plus Nodes, runs pure-function condition checks and returns typed findings instead of raw dumps, so the same cluster state always yields the same findings in the same order. Read-only. Default false — new and unmeasured, so it ships as the control arm of an A/B, like repoSearch.graph above. Needs config-refs-mcp-server 0.2.4 or later, the release that first serves the tool; on anything older kagent drops the unserved name silently and the binding is inert. Set it only once the incident-agent pin carries the binding: that chart's own values.schema.json is closed (additionalProperties: false), so an older pin rejects the key outright.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mcpServer": {
+                  "type": "string"
                 }
               }
             },
