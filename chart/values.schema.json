@@ -3177,6 +3177,36 @@
               },
               "description": "Prompts configuration."
             },
+            "knowledge": {
+              "type": "object",
+              "title": "Generic Kubernetes knowledge (k8s-agent)",
+              "description": "Generic Kubernetes knowledge the krateo-autopilot chart (0.4.8+) appends to the K8S-AGENT's system prompt, one section per enabled file, delivered as the krateo-knowledge ConfigMap. The chart defaults BOTH files to true and this chart sets agents.k8s.enabled=true, so the chart defaults would be LIVE here: ~9,000 words / ~11.7k input tokens on EVERY model call of that agent (the system message is resent per turn and is never compacted). The installer therefore turns both OFF, which is what makes the 0.4.7 -> 0.4.8 pin bump behaviour-neutral: that release is knowledge-only, so with knowledge off the rendered agents are byte-identical to 0.4.7. The object-level default keeps the key present in the schema-defaulted componentValues so a live-values override (playbook:true) durably merges through the self-bootstrap patch instead of being dropped (the previewSandbox mechanism); the per-file defaults keep the OTHER file explicitly off when only one is turned on. Turn them on deliberately, one file at a time, with a measurement either side. Inert on a pin older than 0.4.8: that chart's values.schema.json has no knowledge key, so the generated CRD prunes it silently — which is why the switch-off must land in the SAME change as the pin bump, never after it.",
+              "default": {
+                "kubernetes": {
+                  "playbook": false,
+                  "architecture": false
+                }
+              },
+              "additionalProperties": false,
+              "properties": {
+                "kubernetes": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "playbook": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Append files/knowledge/k8s-failure-playbook.md as \"## Kubernetes failure playbook\": per-symptom procedure, change-evidence rules and the cause-vs-symptom stop rule (~5,000 words, ~6.5k tokens per call)."
+                    },
+                    "architecture": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Append files/knowledge/k8s-architecture-for-investigators.md as \"## Kubernetes architecture for investigators\": the mechanism model the playbook assumes (~4,000 words, ~5.2k tokens per call)."
+                    }
+                  }
+                }
+              }
+            },
             "hitlApproval": {
               "type": "boolean",
               "description": "HITL approval gate for mutating k8s tools. true=pause for approval (safe); false=autonomous remediation."
@@ -3496,6 +3526,36 @@
               "properties": {
                 "language": {
                   "type": "string"
+                }
+              }
+            },
+            "knowledge": {
+              "type": "object",
+              "title": "Generic Kubernetes knowledge (incident-agent)",
+              "description": "The same generic Kubernetes knowledge as componentValues.krateo-autopilot.knowledge, here appended by the incident-agent chart (0.1.9+) to the incident-agent's OWN system prompt and delivered as the incident-agent-knowledge ConfigMap. No agents.* gate stands in front of it, so at the chart's true/true defaults it is unconditionally live: ~9,000 words / ~11.7k input tokens on every model call. Turned OFF here, which is what makes the 0.1.8 -> 0.1.9 pin bump behaviour-neutral — that release is knowledge-only, and with both files off the chart renders no knowledge ConfigMap and an Agent byte-identical to 0.1.8. Object-level default so the key survives the schema-defaulted componentValues expansion and a live-values override merges durably; per-file defaults so turning one file on leaves the other explicitly off. Inert on a pin older than 0.1.9 (no knowledge key in that chart's schema, so the generated CRD prunes it), which is why the switch-off ships in the SAME change as the pin bump.",
+              "default": {
+                "kubernetes": {
+                  "playbook": false,
+                  "architecture": false
+                }
+              },
+              "additionalProperties": false,
+              "properties": {
+                "kubernetes": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "playbook": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Append files/knowledge/k8s-failure-playbook.md as \"## Kubernetes failure playbook\": per-symptom procedure, change-evidence rules and the cause-vs-symptom stop rule (~5,000 words, ~6.5k tokens per call)."
+                    },
+                    "architecture": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Append files/knowledge/k8s-architecture-for-investigators.md as \"## Kubernetes architecture for investigators\": the mechanism model the playbook assumes (~4,000 words, ~5.2k tokens per call)."
+                    }
+                  }
                 }
               }
             },
