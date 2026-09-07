@@ -314,6 +314,21 @@ componentValues:
         enabled: true
       helm:
         enabled: true
+    # Generic Kubernetes knowledge (chart 0.4.8+): two markdown files the chart appends to the
+    # K8S-AGENT's system prompt — "## Kubernetes failure playbook" (~5,000 words, ~6.5k tokens) and
+    # "## Kubernetes architecture for investigators" (~4,000 words, ~5.2k tokens). The chart
+    # defaults BOTH to true and agents.k8s.enabled is true above, so they would be live here.
+    # OFF on purpose: ~11.7k input tokens ride EVERY model call of that agent (the system message is
+    # resent per turn and is never compacted), and the content is unmeasured. Off keeps the pin bump
+    # to 0.4.8 behaviour-neutral — the rendered agents are byte-identical to 0.4.7 — and leaves the
+    # knowledge as a flag to turn on deliberately, one file at a time, with a measurement either
+    # side. Mirrored as a values.schema.json default (componentValues.krateo-autopilot.knowledge) so
+    # the key is present in the schema-defaulted componentValues and a live-values override merges
+    # durably instead of being dropped.
+    knowledge:
+      kubernetes:
+        playbook: false
+        architecture: false
 
   # ---- Fleet model policy -------------------------------------------------
   # WHICH ModelConfig each agent runs on. The names are slots the model-configs component
@@ -339,6 +354,15 @@ componentValues:
   incident-agent:
     modelConfig:
       name: gemini-pro
+    # Same generic Kubernetes knowledge (chart 0.1.9+), here appended to the incident-agent's OWN
+    # system prompt with no agents.* gate in front of it — so at the chart's true/true defaults it
+    # is unconditionally live. OFF for the same reason and with the same schema-default mirror: the
+    # 0.1.8 -> 0.1.9 bump is knowledge-only, so off makes it behaviour-neutral, and the chart
+    # renders no knowledge ConfigMap at all when both are false.
+    knowledge:
+      kubernetes:
+        playbook: false
+        architecture: false
   # pro: an AUTHORING specialist — it composes RESTActions (+ widget apiRef wiring), the same
   # authoring role that runs frontend-agent on pro. Authoring valid CRs and reading apiserver
   # validation errors needs the stronger model.

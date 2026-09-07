@@ -389,7 +389,16 @@ components:
   feature: structureGraph
 - name: config-refs-mcp-server
   kind: ConfigRefsMcpServer
-  version: 0.2.3
+  # 0.2.4 is the first release that SERVES the second tool, k8s_analyze — a deterministic,
+  # read-only namespace analyzer (live objects + Nodes, pure-function condition checks, typed
+  # findings). Nothing NAMES it yet: the k8s-agent and incident-agent bindings are unreleased, and
+  # kagent's toolNames is a client-side allowlist, so on this pin the server simply serves one tool
+  # more than anyone asks for and no agent behaviour changes. The pin has to lead the bindings
+  # anyway — a name the server does not serve is dropped SILENTLY (Agent still Accepted=True), so
+  # a binding released against 0.2.3 would be inert with no trace. Its only cluster-facing change
+  # is the ClusterRole: still read-only, widened from GET on a few kinds to GET+LIST (never watch,
+  # no writes) on the kinds k8s_analyze reads.
+  version: 0.2.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -404,7 +413,16 @@ components:
   feature: coreAgents
 - name: krateo-autopilot
   kind: KrateoAutopilot
-  version: 0.4.7
+  # 0.4.8 adds ONE thing to the chart: generic Kubernetes knowledge (files/knowledge/*.md) appended
+  # to the K8S-AGENT's system prompt, gated on knowledge.kubernetes.playbook / .architecture — both
+  # defaulted TRUE by the chart, and this chart sets agents.k8s.enabled=true, so an as-is bump would
+  # append ~9,000 words (~11.7k input tokens, resent on every model call, never compacted) to that
+  # agent as a side effect of a version bump. componentValues.krateo-autopilot.knowledge turns BOTH
+  # off (values.yaml + a values.schema.json default so a live-values override still merges), which
+  # makes this pin behaviour-neutral: 0.4.7 -> 0.4.8 is knowledge-only, so with knowledge off the
+  # rendered k8s-agent, helm-agent and orchestrator are byte-identical to 0.4.7. Turn the knowledge
+  # on deliberately, one file at a time, and measure it.
+  version: 0.4.8
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -426,7 +444,13 @@ components:
   orchestrator: true
 - name: incident-agent
   kind: IncidentAgent
-  version: 0.1.8
+  # 0.1.9 adds ONE thing to the chart: the same generic Kubernetes knowledge, appended to the
+  # incident-agent's own system prompt and gated on knowledge.kubernetes.playbook / .architecture,
+  # both defaulted TRUE (and unconditional here — this agent has no agents.* gate in front of it).
+  # componentValues.incident-agent.knowledge turns BOTH off, so this pin is behaviour-neutral:
+  # 0.1.8 -> 0.1.9 is knowledge-only, and with knowledge off the chart renders no knowledge
+  # ConfigMap and an Agent byte-identical to 0.1.8 (the chart's own schema says as much).
+  version: 0.1.9
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
