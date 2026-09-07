@@ -2379,7 +2379,10 @@
               "title": "Frontend runtime config",
               "description": "Runtime configuration rendered into the frontend ConfigMap (API base URLs and loader routes).",
               "additionalProperties": {
-                "type": "string"
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "properties": {
                 "SNOWPLOW_API_BASE_URL": {
@@ -11733,7 +11736,10 @@
               "type": "object"
             },
             "platformRoutes": {
-              "type": "array",
+              "type": [
+                "array",
+                "null"
+              ],
               "description": "exposure.type=Gateway + exposure.gatewayMode=path only: the portal-stack route table the installer computes and injects onto this composition (one entry per exposed component with a gatewayPath — frontend/authn/snowplow/sse-proxy — all on the single platform-http listener at exposure.platformPort). The agentgateway-policies chart programs the listener + one route per entry from it. The installer fills this fill-if-absent, so an explicit override here WINS; leave it unset to let the installer compute it. Inert outside path mode.",
               "items": {
                 "type": "object",
