@@ -422,7 +422,10 @@ components:
   # makes this pin behaviour-neutral: 0.4.7 -> 0.4.8 is knowledge-only, so with knowledge off the
   # rendered k8s-agent, helm-agent and orchestrator are byte-identical to 0.4.7. Turn the knowledge
   # on deliberately, one file at a time, and measure it.
-  version: 0.4.8
+  # 0.4.9 adds the k8s_analyze binding on the k8s-agent and its prompt section, both behind
+  # mcpServers.configRefs.k8sAnalyze.enabled which defaults FALSE. With the switch off the render is
+  # byte-identical to 0.4.8. The chart refuses loudly if the switch is on while agents.k8s is off.
+  version: 0.4.9
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -450,7 +453,11 @@ components:
   # componentValues.incident-agent.knowledge turns BOTH off, so this pin is behaviour-neutral:
   # 0.1.8 -> 0.1.9 is knowledge-only, and with knowledge off the chart renders no knowledge
   # ConfigMap and an Agent byte-identical to 0.1.8 (the chart's own schema says as much).
-  version: 0.1.9
+  # 0.1.10 adds the k8s_analyze binding and its prompt section, both behind k8sAnalyze.enabled
+  # which defaults FALSE. With the switch off the chart renders an Agent byte-identical to 0.1.9,
+  # so this bump changes no agent behaviour on its own; it only makes the switch real. Setting the
+  # switch on a release older than this one is silently pruned by the apiserver, not rejected.
+  version: 0.1.10
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
