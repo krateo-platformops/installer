@@ -176,6 +176,12 @@ exposure:
   #                               #   Off (default) => everything stays http:// on platformPort, byte-identical.
   #                               #   Requires the certificateRef Secret + a DNS record for host → the gateway IP.
   #
+  # voice: true                   # AUTOPILOT DICTATION, one knob (needs exposure.tls, path mode). Derives the
+  #                               #   frontend's AUTOPILOT_VOICE_TRANSCRIBE_URL = https://<tls.host>/stt/v1/chat/
+  #                               #   completions (no hardcoded host) AND turns on the /stt/v1 route
+  #                               #   (agentgateway-policies stt.enabled). Fails if set without exposure.tls
+  #                               #   (getUserMedia needs a secure context). Off => no voice UI, no /stt/v1 route.
+  #
   # internalDataPlane: true       # CLOSE THE AGENT DATA PLANE (type=Gateway AND gatewayMode=path). By
   #                               #   default the single primary agentgateway (krateo-agent-gateway) exposes
   #                               #   EVERY listener on one LoadBalancer, so the agent listener (:8080 —

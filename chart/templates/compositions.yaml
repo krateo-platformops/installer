@@ -56,6 +56,16 @@
 {{- $gwTLS := and $gwPathMode (dig "tls" "enabled" false $top.Values.exposure) }}
 {{- $gwPortalHost := dig "tls" "host" "" $top.Values.exposure }}
 {{- $gwCertRef := dig "tls" "certificateRef" "" $top.Values.exposure }}
+{{/* exposure.voice (#118): ONE knob to enable Autopilot dictation end-to-end, standard/derived (no
+     hardcoded per-install URL). When on it (a) derives the frontend's AUTOPILOT_VOICE_TRANSCRIBE_URL
+     from the TLS host and (b) turns on the /stt/v1 route (agentgateway-policies stt.enabled) — voice
+     needs BOTH a secure context AND that route. Fails loudly if voice is on without exposure.tls (path-
+     mode HTTPS): getUserMedia requires a secure context and the URL has no host otherwise. Off =>
+     nothing derived, byte-identical. */}}
+{{- $voice := dig "voice" false $top.Values.exposure }}
+{{- if and $voice (not $gwTLS) }}{{- fail "installer: exposure.voice requires exposure.tls (path-mode HTTPS) — Autopilot dictation needs a secure context and the transcribe URL is derived from exposure.tls.host." }}{{- end }}
+{{- $voiceUrl := "" }}
+{{- if $voice }}{{- $voiceUrl = printf "https://%s/stt/v1/chat/completions" $gwPortalHost }}{{- end }}
 {{- $gwComp := dict }}
 {{- if $gwPathMode }}{{- range $gc := $components }}{{- if eq $gc.name "agentgateway-policies" }}{{- $gwComp = $gc }}{{- end }}{{- end }}{{- end }}
 {{/* TWO-GATEWAY design (#114): with exposure.internalDataPlane the primary agent gateway
@@ -478,6 +488,15 @@
      else has a reason to want CORS off here while the portal is calling the gateway directly. */ -}}
 {{- if eq $c.name "agentgateway-policies" -}}
 {{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "cors" "enabled") "value" true) -}}
+{{- end -}}
+{{- /* exposure.voice (#118): derive the frontend transcribe URL from the TLS host (no hardcoded host)
+     and enable the /stt/v1 route it points at. forcePath — voice is an authoritative exposure decision.
+     Off => neither is set (byte-identical). */ -}}
+{{- if and (eq $c.name "frontend") $voice -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "config" "AUTOPILOT_VOICE_TRANSCRIBE_URL") "value" $voiceUrl) -}}
+{{- end -}}
+{{- if and (eq $c.name "agentgateway-policies") $voice -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "stt" "enabled") "value" true) -}}
 {{- end -}}
 {{- /* features.ingress already installs the Gateway API CRDs, an agentgateway controller and a
      GatewayClass of the same name — all cluster-scoped, so a second owner collides. Stand down.
