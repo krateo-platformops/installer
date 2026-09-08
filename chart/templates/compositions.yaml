@@ -68,6 +68,20 @@
      else the primary Service unchanged (byte-identical when the knob is off). */}}
 {{- $portalSvc := $gwComp.svcMatch }}
 {{- if $top.Values.exposure.internalDataPlane }}{{- $portalSvc = printf "%s-platform" $gwComp.svcMatch }}{{- end }}
+{{/* MCP-backend roll-guard hash (#116). Rolling an MCP-server version in an installer roll rolls that
+     server's pod, but the agentgateway proxy pod does NOT cycle (its Service is flipped in place), so
+     the proxy pins a DEAD backend AND every consumer agent's MCP session (pinned through the proxy)
+     goes stale — a prod outage. Fix: hash every MCP-backend component's <name>:<version> and stamp the
+     SAME hash on BOTH the proxy pod template (agentgateway-policies gateway.mcpBackendHash) and every
+     agent pod (componentValues.<agent>.rollGuard env), so proxy + fleet roll together and re-resolve /
+     re-init. Backend set = pins carrying `mcpBackend: true` (kagent for kagent-tools; repo/config-refs/
+     clickhouse MCP servers; core-provider-agent which bundles the chart-gate MCP). sortAlpha keeps it
+     order-stable. Empty set (agent-less install) => "" => nothing stamped, byte-identical; a non-MCP
+     version bump leaves the hash unchanged (no needless roll). */}}
+{{- $mcpParts := list }}
+{{- range $m := $components }}{{- if $m.mcpBackend }}{{- $mcpParts = append $mcpParts (printf "%s:%s" $m.name (toString $m.version)) }}{{- end }}{{- end }}
+{{- $mcpHash := "" }}
+{{- if gt (len $mcpParts) 0 }}{{- $mcpHash = $mcpParts | sortAlpha | join "," | sha256sum | trunc 16 }}{{- end }}
 {{- range $c := $components }}
 {{/* registerOnly (catalog) blueprints are registered (definitions.yaml) but never auto-emitted —
      the operator/end-user instantiates them from the portal on demand. */}}
@@ -613,6 +627,19 @@
 {{- if $top.Values.exposure.internalDataPlane }}
 {{- include "inst.forcePath" (dict "target" $spec "path" (list "gateway" "internalDataPlane") "value" true) }}
 {{- end }}
+{{- end }}
+{{- /* Roll-guard stamps (#116) — $mcpHash is computed ONCE above (marker-based). The proxy carries it
+       as gateway.mcpBackendHash (agentgateway-policies stamps the proxy pod template); every agent
+       carries the SAME hash as `rollGuard` (its chart emits a KRATEO_ROLL_GUARD env that cache-busts
+       the pod). So an MCP-backend version bump rolls proxy + fleet in lockstep — the proxy re-resolves
+       and each agent re-inits its pinned MCP session (kagent doesn't auto-reinit on a backend roll).
+       NOT $gwPathMode-gated (backends exist in every exposure mode). Off (empty $mcpHash / agent-less)
+       => nothing stamped, byte-identical. */ -}}
+{{- if and (eq $c.name "agentgateway-policies") $mcpHash }}
+{{- include "inst.forcePath" (dict "target" $spec "path" (list "gateway" "mcpBackendHash") "value" $mcpHash) }}
+{{- end }}
+{{- if and $c.agent $mcpHash }}
+{{- include "inst.forcePath" (dict "target" $spec "path" (list "rollGuard") "value" $mcpHash) }}
 {{- end }}
 ---
 apiVersion: {{ include "inst.apiVersion" (list $c.version) }}
