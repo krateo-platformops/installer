@@ -80,7 +80,12 @@ components:
 - name: frontend
   kind: Frontend
   chart: frontend
-  version: 1.5.26
+  # 1.5.27 adds the Autopilot voice/dictation control to the composer, gated ENTIRELY on the config
+  # key AUTOPILOT_VOICE_TRANSCRIBE_URL: empty (chart default) => no microphone renders and the composer
+  # DOM is byte-identical to 1.5.26; set it (to the HTTPS /stt/v1 route) to turn it on. Dictation also
+  # needs a secure context, so on plain-HTTP it stays invisible regardless. Bumping the pin alone is
+  # inert; voice goes live only when the CR sets componentValues.frontend.config.AUTOPILOT_VOICE_TRANSCRIBE_URL.
+  version: 1.5.27
   deps:
   - frontend-crd
   - authn
