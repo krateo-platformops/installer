@@ -164,6 +164,17 @@ exposure:
   #   frontend peer URLs (http://<gateway-ip>:<platformPort><path>) and the platform-http listener the
   #   agentgateway-policies chart programs. Distinct from the gateway's OWN A2A listener port (8080),
   #   which the Autopilot URL keeps.
+  #
+  # tls:                          # PATH-MODE HTTPS (type=Gateway AND gatewayMode=path). Serve the whole
+  #   enabled: true               #   single-origin portal over HTTPS on ONE hostname. When on:
+  #   host: portal.example.com    #   - the gateway gains a platform-https:443 TLS-terminate listener bound
+  #   certificateRef: portal-tls  #     to the certificateRef Secret (a kubernetes.io/tls Secret, e.g. from
+  #                               #     cert-manager); the portal routes move onto it;
+  #                               #   - the four browser URLs become https://<host>/… (same origin, no
+  #                               #     mixed content) and AUTOPILOT_API_BASE_URL = https://<host> with an
+  #                               #     /api/a2a route served on :443 (the JWT/RBAC edge is preserved);
+  #                               #   Off (default) => everything stays http:// on platformPort, byte-identical.
+  #                               #   Requires the certificateRef Secret + a DNS record for host → the gateway IP.
 
 # Feature flags (carried over from the installer chart).
 #
@@ -181,6 +192,14 @@ features:
   structureGraph: false            # OPT-IN structure-graph-mcp-server (code-structure grounding); needs coreAgents.
                                   #   Its consumers reference it off by default — set their
                                   #   mcpServers.structureGraph.enabled too, or nothing names the server.
+  repoGraph: false                 # OPT-IN the repo-mcp-server DOMAIN-graph / OKF tools (graph_find, graph_map,
+                                  #   graph_neighbors, graph_path, knowledge_lookup) — multi-hop structural,
+                                  #   reverse-impact and curated-provenance answers grep cannot give. Deploys NO new
+                                  #   component: flips a config layer on 3 EXISTING coreAgents components in LOCKSTEP
+                                  #   (repo-mcp-server graph.enabled + krateo-autopilot & incident-agent toolNames, via
+                                  #   each pin's graphToggle) so it can never half-enable into the silent server/agent
+                                  #   mismatch. Needs coreAgents. Distinct from structureGraph (the code-STRUCTURE AST
+                                  #   server). Default off: more grounding tools is not always better — measure first.
   oasgenProvider: true            # oasgen-provider
   portal: true                    # the non-agent platform: authn -> snowplow -> frontend -> portal + portal-starter
                                   #   + the observability stack (clickhouse/mongo operators, krateo-observability,

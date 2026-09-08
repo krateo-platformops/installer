@@ -377,6 +377,9 @@ components:
   # go/core/internal/controller/watch_helpers.go:58-65.)
   tier: observability
   feature: coreAgents
+  # features.repoGraph flips graph.enabled -> GRAPH_ENABLED here (server side of the domain-graph
+  # lockstep); the consumer agents carry the matching graphToggle onto their repoSearch.graph.enabled.
+  graphToggle: graph.enabled
 - name: structure-graph-mcp-server
   kind: StructureGraphMcpServer
   version: 0.1.2
@@ -445,6 +448,9 @@ components:
   agent: true
   # orchestrator: auto-attaches every deployed, feature-enabled agent as an A2A sub-agent
   orchestrator: true
+  # features.repoGraph adds the 5 domain-graph toolNames to this agent's repo-mcp-server binding
+  # (consumer side of the lockstep; server side is repo-mcp-server's graphToggle).
+  graphToggle: mcpServers.repoSearch.graph.enabled
 - name: incident-agent
   kind: IncidentAgent
   # 0.1.9 adds ONE thing to the chart: the same generic Kubernetes knowledge, appended to the
@@ -467,6 +473,9 @@ components:
   tier: observability
   feature: coreAgents
   agent: true
+  # features.repoGraph adds the 5 domain-graph toolNames to this agent's repo-mcp-server binding
+  # (consumer side of the lockstep; server side is repo-mcp-server's graphToggle).
+  graphToggle: repoSearch.graph.enabled
 - name: clickhouse-mcp-server
   kind: ClickhouseMcpServer
   version: 0.1.12
@@ -576,7 +585,7 @@ components:
   feature: agentGateway
 - name: agentgateway-policies
   kind: AgentgatewayPolicies
-  version: 0.1.18
+  version: 0.1.19
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller

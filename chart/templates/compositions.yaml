@@ -48,6 +48,14 @@
          leaves $gwPathMode "" and every branch below is skipped, byte-identical to today. */}}
 {{- $gwPathMode := and (eq .Values.exposure.type "Gateway") (eq (.Values.exposure.gatewayMode | default "host") "path") }}
 {{- $gwPlatformPort := int (default 80 .Values.exposure.platformPort) }}
+{{/* Path-mode TLS (exposure.tls.enabled): serve the whole single-origin portal stack over HTTPS on ONE
+     hostname. When on, the browser URLs below become `https://<exposure.tls.host>…` (the gateway
+     terminates TLS on its platform-https listener with exposure.tls.certificateRef), and the
+     platformRoutes injection points those routes + a browser /api/a2a route at that HTTPS listener.
+     INERT unless gatewayMode=path AND tls.enabled — everything stays http:// byte-identical otherwise. */}}
+{{- $gwTLS := and $gwPathMode (dig "tls" "enabled" false $top.Values.exposure) }}
+{{- $gwPortalHost := dig "tls" "host" "" $top.Values.exposure }}
+{{- $gwCertRef := dig "tls" "certificateRef" "" $top.Values.exposure }}
 {{- $gwComp := dict }}
 {{- if $gwPathMode }}{{- range $gc := $components }}{{- if eq $gc.name "agentgateway-policies" }}{{- $gwComp = $gc }}{{- end }}{{- end }}{{- end }}
 {{- range $c := $components }}
@@ -150,6 +158,18 @@
 {{- include "inst.forcePath" (dict "target" $spec "path" (splitList "." $ip.path) "value" (int $top.Values.exposure.port)) }}
 {{- end }}
 {{- end }}
+{{/* Domain-graph / OKF tool layer (repo-mcp-server graph_find/graph_map/graph_neighbors/graph_path/
+     knowledge_lookup + their toolNames on the consumer agents). A component declares `graphToggle:
+     <dotted chart-values path>` for the boolean that turns the layer on in ITS chart — the server's
+     `graph.enabled`, an agent's `mcpServers.repoSearch.graph.enabled` / `repoSearch.graph.enabled`.
+     features.repoGraph forcePaths `true` onto every one of them in ONE render so the server and its
+     consumers' toolNames move in LOCKSTEP — a half-flip is the silent Accepted-but-empty mismatch the
+     repo-mcp-server chart warns about (a client-side toolNames allowlist naming graph_* the server
+     doesn't serve, or vice-versa). Same authority/placement as internalPorts (forcePath onto $spec).
+     Off => never written, byte-identical; needs coreAgents (the 3 components render only then). */}}
+{{- if and (eq (include "inst.featureEnabled" (list $top "repoGraph")) "true") $c.graphToggle }}
+{{- include "inst.forcePath" (dict "target" $spec "path" (splitList "." $c.graphToggle) "value" true) }}
+{{- end }}
 {{- if $c.consumer }}
 {{- $cfg := dict }}
 {{- range $d := $components }}
@@ -183,14 +203,26 @@
      $eport exception at the top of this loop already kept $eport = its exposePort (8080) for it, so
      inst.peerurl below returns the unchanged Autopilot origin. Peers with no gatewayPath (none today)
      fall through with $url "" and are simply omitted. */}}
+{{/* TLS path mode: the origin is the fixed HTTPS hostname (no Service lookup, no port — 443 is
+     implicit), for the AUTOPILOT peer (bare origin; the frontend appends /api/a2a/<ns>/autopilot,
+     which the platform-https listener routes to the agent backend) and every gatewayPath peer alike.
+     Falls back to the plain http:// origin resolution when tls is off. */}}
 {{- if eq $d.name "agentgateway-policies" }}
+{{- if and $gwTLS $gwPortalHost }}
+{{- $url = printf "https://%s" $gwPortalHost }}
+{{- else }}
 {{- $url = include "inst.peerurl" (list $top $d.svcMatch $eport) }}
+{{- end }}
 {{- else if and $d.gatewayPath $gwComp.svcMatch }}
+{{- if and $gwTLS $gwPortalHost }}
+{{- $url = printf "https://%s%s" $gwPortalHost (trimSuffix "/" $d.gatewayPath) }}
+{{- else }}
 {{/* Guard on $gwComp.svcMatch: path mode presupposes the agentgateway (features.agentGateway); with
      the gateway component absent $gwComp is empty and there is no origin to resolve, so leave $url ""
      (key omitted, frontend keeps its default) rather than resolve inst.peerurl on a nil svcMatch. */}}
 {{- $origin := include "inst.peerurl" (list $top $gwComp.svcMatch $gwPlatformPort) }}
 {{- if $origin }}{{- $url = printf "%s%s" $origin (trimSuffix "/" $d.gatewayPath) }}{{- end }}
+{{- end }}
 {{- end }}
 {{- else if eq $top.Values.exposure.type "Gateway" }}
 {{/* Gateway: the peer URL is https://<host> from the pins (no Service lookup), so it is written even
@@ -535,9 +567,19 @@
      component that needs its OWN listener (HyperDX: platform-hdx:3000, a Next.js root-asset app that
      can't be path-prefixed) sets gatewayListener + gatewayPort, and gatewayPort also becomes its
      backend port (it has no exposePort pin). */}}
+{{/* Listener spec — normally the shared platform-http:$gwPlatformPort (or the component's own, e.g.
+     HyperDX's platform-hdx:3000). Under path-mode TLS the DEFAULT (platform-http) routes move to the
+     platform-https:443 HTTPS listener (protocol + Terminate tls → exposure.tls.certificateRef), so the
+     whole single-origin portal is served over TLS; a component pinned to its OWN listener (HyperDX)
+     is left untouched. */}}
+{{- $lname := default "platform-http" $d.gatewayListener }}
+{{- $lspec := dict "name" $lname "port" (int (default $gwPlatformPort $d.gatewayPort)) }}
+{{- if and $gwTLS (eq $lname "platform-http") }}
+{{- $lspec = dict "name" "platform-https" "port" 443 "protocol" "HTTPS" "tls" (dict "certificateRef" $gwCertRef) }}
+{{- end }}
 {{- $route := dict
      "name" $d.name
-     "listener" (dict "name" (default "platform-http" $d.gatewayListener) "port" (int (default $gwPlatformPort $d.gatewayPort)))
+     "listener" $lspec
      "pathPrefix" $d.gatewayPath
      "rewrite" (default false $d.gatewayRewrite)
      "backend" (dict "name" $backendName "port" (int (default $d.exposePort $d.gatewayPort)))

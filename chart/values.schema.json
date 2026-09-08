@@ -161,6 +161,26 @@
           "minimum": 1,
           "maximum": 65535,
           "default": 80
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "title": "Path-mode portal TLS (type=Gateway, gatewayMode=path)",
+          "description": "Serve the whole single-origin portal stack over HTTPS on one hostname. Only used when type=Gateway AND gatewayMode=path AND tls.enabled. The agentgateway terminates TLS on a platform-https:443 listener (certificateRef Secret), the frontend peer URLs become https://<host>/…, and the Autopilot rail's /api/a2a is served over the same :443 listener (JWT edge preserved). Off (default) => everything stays http:// on the platform port, byte-identical.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Turn on path-mode HTTPS. Default false."
+            },
+            "host": {
+              "type": "string",
+              "description": "The single portal hostname (e.g. portal.krateo.dev). All four browser URLs become https://<host>/… and the gateway's platform-https listener terminates TLS for it."
+            },
+            "certificateRef": {
+              "type": "string",
+              "description": "Name of the kubernetes.io/tls Secret (in the gateway/platform namespace) holding the cert+key for host — e.g. one issued by cert-manager. Bound to the platform-https listener's tls.certificateRefs."
+            }
+          }
         }
       }
     },
@@ -210,6 +230,10 @@
         "structureGraph": {
           "type": "boolean",
           "description": "Deploy structure-graph-mcp-server, the code-STRUCTURE grounding layer (a Graphify tree-sitter AST graph of the engine repos: query_graph/shortest_path/get_neighbors/graph_stats). Both consumers — krateo-autopilot and core-provider-agent — reference it off by default, so turning this on without also setting their mcpServers.structureGraph.enabled deploys a server nothing names. Needs coreAgents. Default false."
+        },
+        "repoGraph": {
+          "type": "boolean",
+          "description": "Opt-in the repo-mcp-server DOMAIN-graph / OKF tools (graph_find, graph_map, graph_neighbors, graph_path, knowledge_lookup) — multi-hop structural, reverse-impact and curated-provenance answers grep cannot give. Unlike structureGraph this deploys NO new component: it flips a config layer on three EXISTING coreAgents components in LOCKSTEP — the server (repo-mcp-server graph.enabled) and its consumers' toolNames (krateo-autopilot, incident-agent, via each pin's graphToggle) — so it can never half-enable into the silent Accepted-but-empty server/agent mismatch the repo-mcp-server chart warns about. Distinct from structureGraph (the separate code-STRUCTURE AST server). Needs coreAgents. Default false: more grounding tools is not always better — measure (the repo-mcp-server grounding eval harnesses / a bench A/B) before defaulting on."
         }
       }
     },
@@ -327,6 +351,10 @@
                 }
               }
             }
+          },
+          "graphToggle": {
+            "type": "string",
+            "description": "Dotted path in this component's chart values to the boolean that turns on the repo-mcp-server domain-graph/OKF layer for it (server: graph.enabled; consumers: mcpServers.repoSearch.graph.enabled / repoSearch.graph.enabled). features.repoGraph forcePaths `true` here, in lockstep across every component that declares it. Off => never written."
           },
           "consumer": {
             "type": "boolean"
