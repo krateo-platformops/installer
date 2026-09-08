@@ -312,11 +312,12 @@ components:
   kind: ExternalDNS
   version: 0.10.0
   repo: oci://ghcr.io/krateo-blueprints/charts
-  deps:
-  - agentgateway
-  - cert-manager-issuers
+  # #115: external-dns is STANDALONE on its OWN feature (externalDns), NOT bundled under ingress — so it
+  # runs with the agentgateway-controller path (057) without dragging the gateway-api-crds + agentgateway +
+  # cert-manager stack. The old deps (agentgateway, cert-manager-issuers) were ingress-ordering, not real
+  # deps, and are dropped. A host-mode ingress install that also wants DNS enables BOTH ingress + externalDns.
   tier: platform
-  feature: ingress
+  feature: externalDns
 # ---- agents (PRIVATE krateo-agentiko registry) ----------------------------------------
 # Every agent chart lives in the private krateo-agentiko/charts OCI registry (repo override
 # below), so pulling them needs registryAuth.enabled=true + a read:packages credential
@@ -613,7 +614,10 @@ components:
   # proxy pod template so the proxy pod ROLLS whenever an MCP-server version changes. Fixes a prod
   # outage — rolling an MCP server rolls its own pod but the controller flips the proxy Service in
   # place, leaving the proxy on a STALE backend. Absent/empty hash => byte-identical.
-  version: 0.1.25
+  # 0.1.27 adds gateway.platformHostname (#115): when set (installer forcePaths exposure.tls.host), the
+  # platform Gateway's LoadBalancer Service is annotated external-dns.alpha.kubernetes.io/hostname, so a
+  # deployed external-dns keeps the portal's DNS record following the LB IP (DNS-follows-LB, no static IP).
+  version: 0.1.27
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller

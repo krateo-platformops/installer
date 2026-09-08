@@ -225,10 +225,16 @@ features:
   portal: true                    # the non-agent platform: authn -> snowplow -> frontend -> portal + portal-starter
                                   #   + the observability stack (clickhouse/mongo operators, krateo-observability,
                                   #   otel collectors, sse-proxy) — the portal's events bell consumes sse-proxy.
-  ingress: false                   # OPT-IN edge layer: external-dns + cert-manager-issuers (from krateo-blueprints).
-                                  #   default off — the base install pulls nothing from krateo-blueprints unless enabled.
-                                  #   Preconditions when on: external-dns needs its provider Secret out-of-band; the
-                                  #   cert-manager-issuers ACME HTTP-01 solver assumes the Gateway API edge is present.
+  ingress: false                   # OPT-IN edge layer: gateway-api-crds + agentgateway + cert-manager + cert-manager-issuers
+                                  #   (from krateo-blueprints). default off — the base install pulls nothing from krateo-blueprints
+                                  #   unless enabled. Precondition: the cert-manager-issuers ACME HTTP-01 solver assumes the
+                                  #   Gateway API edge is present. NOTE: external-dns moved to its own `externalDns` feature (#115),
+                                  #   so a host-mode ingress install that also wants DNS enables BOTH ingress and externalDns.
+  externalDns: false               # OPT-IN external-dns (#115): manage DNS records for the platform LoadBalancer + any annotated
+                                  #   Service/Gateway via a DNS provider — STANDALONE (does NOT need features.ingress, so it works
+                                  #   with the agentgateway-controller path). Configure the `externalDns` block below (provider +
+                                  #   credentials env + domainFilters); pairs with exposure.tls.host (the platform gateway is annotated
+                                  #   with that host so external-dns publishes a record following the LB IP — DNS-follows-LB, no static IP).
   agentGateway: false              # OPT-IN: agentgateway in front of the kagent fleet — JWT auth + per-user RBAC over
                                   #   agents, MCP tools and A2A delegation, PLUS guardrails on their LLM traffic (PII
                                   #   and secret masking, prompt-injection blocking, and optional OpenAI moderation /
@@ -246,6 +252,27 @@ features:
                                   #   ModelConfigs are pointed straight back at the provider (componentValues.
                                   #   model-configs.agentgateway.modelRoute.enabled=false, fill-if-absent, so an explicit
                                   #   override still wins).
+
+# external-dns configuration (#115), applied when features.externalDns is on. A straight passthrough
+# to the external-dns blueprint's curated surface. The platform gateway is annotated with
+# exposure.tls.host automatically (compositions.yaml forcePaths gateway.platformHostname), so external-dns
+# publishes/updates the DNS record for the portal following the LoadBalancer IP — no static IP, no manual
+# record. Provider credentials go in `env` as a secretKeyRef (the operator creates the Secret out-of-band).
+externalDns:
+  provider:
+    name: cloudflare              # cloudflare | aws | google | azure | ... (whatever the upstream chart supports)
+  domainFilters: []               # zones external-dns may manage, e.g. [krateo.dev]. Empty => none (scope it).
+  policy: upsert-only             # upsert-only (SAFE: never deletes records) | sync
+  sources:                        # what external-dns watches for hostnames
+    - service
+    - gateway-httproute
+  txtOwnerId: ""                  # ownership id for the TXT registry (records external-dns manages)
+  env: []                         # provider credentials + tuning, e.g.:
+                                  #   - name: CF_API_TOKEN
+                                  #     valueFrom:
+                                  #       secretKeyRef:
+                                  #         name: cloudflare-api-token
+                                  #         key: api-token
 
 # HITL approval gate for the autopilot's mutating Kubernetes tools. true (default)=
 # pause for human approval before any cluster change; false=autonomous remediation.

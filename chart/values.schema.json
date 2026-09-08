@@ -226,7 +226,12 @@
         "ingress": {
           "type": "boolean",
           "default": false,
-          "description": "Opt-in edge layer: ExternalDNS (DNS record publication) + cert-manager-issuers (ACME certificate issuance) from oci://ghcr.io/krateo-blueprints/charts. Default false — the base install is unchanged and pulls nothing from krateo-blueprints unless enabled. Turn off if you run behind your own ingress controller / cloud LB / mesh, or manage DNS+certs yourself. Preconditions when enabled: ExternalDNS needs its provider-credential Secret placed out-of-band (referenced by the component's secretRef); cert-manager-issuers' ACME HTTP-01 solver assumes the Gateway API edge is present."
+          "description": "Opt-in edge layer: gateway-api-crds + agentgateway + cert-manager + cert-manager-issuers (ACME certificate issuance) from oci://ghcr.io/krateo-blueprints/charts. Default false — the base install is unchanged and pulls nothing from krateo-blueprints unless enabled. Turn off if you run behind your own ingress controller / cloud LB / mesh, or manage DNS+certs yourself. Precondition when enabled: cert-manager-issuers' ACME HTTP-01 solver assumes the Gateway API edge is present. NOTE: external-dns moved to its own `externalDns` feature (#115); a host-mode ingress install that also wants DNS enables BOTH ingress and externalDns."
+        },
+        "externalDns": {
+          "type": "boolean",
+          "default": false,
+          "description": "#115: opt-in external-dns (DNS record publication) STANDALONE — does NOT require features.ingress, so it works with the agentgateway-controller path. Configure the top-level `externalDns` block (provider + credentials env + domainFilters). Pairs with exposure.tls.host: the platform gateway is annotated with that host so external-dns publishes/updates the portal's DNS record following the LoadBalancer IP (DNS-follows-LB, no static IP, no manual record). Default false."
         },
         "codegenAgents": {
           "type": "boolean",
@@ -484,6 +489,77 @@
           "type": "string",
           "title": "Key file inside the Secret",
           "description": "File name inside secretName; GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/gcp/<secretKey>. Default key.json."
+        }
+      }
+    },
+    "externalDns": {
+      "type": "object",
+      "additionalProperties": false,
+      "title": "external-dns configuration (features.externalDns)",
+      "description": "#115: passthrough to the external-dns blueprint's curated surface, applied when features.externalDns is on. The platform gateway is annotated with exposure.tls.host automatically (compositions.yaml forcePaths gateway.platformHostname), so external-dns keeps the portal's DNS record following the LoadBalancer IP.",
+      "properties": {
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "DNS provider (cloudflare, aws, google, azure, ...) — whatever the upstream sigs/external-dns chart supports."
+            }
+          }
+        },
+        "domainFilters": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Zones external-dns may manage, e.g. [\"krateo.dev\"]. Empty => none; scope it to your zone."
+        },
+        "policy": {
+          "type": "string",
+          "enum": ["upsert-only", "sync", "create-only"],
+          "description": "upsert-only (SAFE: create/update, never delete) | sync (also deletes records external-dns owns) | create-only."
+        },
+        "sources": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Resource kinds external-dns watches for hostnames, e.g. service, gateway-httproute, ingress."
+        },
+        "txtOwnerId": {
+          "type": "string",
+          "description": "Ownership id for the TXT registry so external-dns only touches records it created."
+        },
+        "env": {
+          "type": "array",
+          "description": "Provider credentials + tuning as container env, e.g. CF_API_TOKEN via a secretKeyRef (the operator creates the Secret out-of-band).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "value": { "type": "string" },
+              "valueFrom": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "secretKeyRef": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": { "type": "string" },
+                      "key": { "type": "string" }
+                    }
+                  },
+                  "configMapKeyRef": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": { "type": "string" },
+                      "key": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
