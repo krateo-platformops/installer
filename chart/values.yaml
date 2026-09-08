@@ -176,18 +176,20 @@ exposure:
   #                               #   Off (default) => everything stays http:// on platformPort, byte-identical.
   #                               #   Requires the certificateRef Secret + a DNS record for host → the gateway IP.
   #
-  # internalDataPlane: true       # CLOSE THE AGENT DATA PLANE (type=Gateway AND gatewayMode=path). The
-  #                               #   agentgateway controller exposes EVERY listener on one LoadBalancer, so
-  #                               #   the agent listener (:8080 — /llm/v1, /mcp, A2A) is internet-reachable
-  #                               #   next to the portal. When on, the proxy Service is flipped to ClusterIP
-  #                               #   (all listeners in-cluster only; the Service name/DNS the fleet + kagent
-  #                               #   proxy.url use is unchanged) and ONLY the platform listeners (portal
-  #                               #   :443/:80 + HyperDX :3000) are re-exposed on a dedicated LoadBalancer.
-  #                               #   /llm/v1 becomes in-cluster-only — closes the open Vertex proxy at the
-  #                               #   source. Off (default) => byte-identical.
-  # loadBalancerIP: 34.x.x.x      # Optional. The ClusterIP flip RELEASES the proxy Service's cloud IP, so to
-  #                               #   keep an existing external address, promote it to a static/reserved IP
-  #                               #   first, then set it here — the platform LoadBalancer re-attaches it.
+  # internalDataPlane: true       # CLOSE THE AGENT DATA PLANE (type=Gateway AND gatewayMode=path). By
+  #                               #   default the single primary agentgateway (krateo-agent-gateway) exposes
+  #                               #   EVERY listener on one LoadBalancer, so the agent listener (:8080 —
+  #                               #   /llm/v1, /mcp, A2A) is internet-reachable next to the portal. When on,
+  #                               #   the platform moves to a TWO-GATEWAY design: the primary agent gateway
+  #                               #   (krateo-agent-gateway) is flipped to ClusterIP (all agent listeners
+  #                               #   in-cluster only; the Service name/DNS the fleet + kagent proxy.url use is
+  #                               #   unchanged) and a SEPARATE platform Gateway (krateo-agent-gateway-platform)
+  #                               #   is provisioned as a LoadBalancer carrying ONLY the platform listeners
+  #                               #   (portal :443/:80 + HyperDX :3000). The portal/HyperDX browser origins
+  #                               #   resolve to that -platform LoadBalancer Service. /llm/v1 becomes
+  #                               #   in-cluster-only — closes the open Vertex proxy at the source. No static
+  #                               #   IP is ever required (the platform LoadBalancer takes a cloud-assigned
+  #                               #   address). Off (default) => byte-identical.
 
 # Feature flags (carried over from the installer chart).
 #
