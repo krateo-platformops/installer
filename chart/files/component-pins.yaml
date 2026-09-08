@@ -401,7 +401,11 @@ components:
   # a binding released against 0.2.3 would be inert with no trace. Its only cluster-facing change
   # is the ClusterRole: still read-only, widened from GET on a few kinds to GET+LIST (never watch,
   # no writes) on the kinds k8s_analyze reads.
-  version: 0.2.4
+  # 0.2.6 adds a structured stderr log line per tool invocation (event/tool/clipped-args/latency_ms/
+  # ok/error/ts, wrapped so it can never break a tool response) — observability only, no change to
+  # tool outputs or RBAC, so the render and behaviour are identical to 0.2.4. Gives the bench
+  # unambiguous per-invocation proof of which config-refs tools fire during an investigation.
+  version: 0.2.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -585,7 +589,12 @@ components:
   feature: agentGateway
 - name: agentgateway-policies
   kind: AgentgatewayPolicies
-  version: 0.1.22
+  # 0.1.23 adds gateway.internalDataPlane (default false, off => byte-identical): flips the
+  # controller-provisioned proxy Service to ClusterIP (all listeners in-cluster only) and re-exposes
+  # ONLY the platform listeners on a dedicated LoadBalancer, so the agent data plane (:8080 —
+  # /llm/v1, /mcp, A2A) has no external path. Driven by exposure.internalDataPlane (+ .loadBalancerIP)
+  # via compositions.yaml. Inert unless that knob is set.
+  version: 0.1.23
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
