@@ -11759,6 +11759,37 @@
                     }
                   }
                 },
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Abuse bounds on the fleet LLM route (agentgateway-policies llm.limits): rate limit (requests + tokens/min), request body cap, per-request timeout. The chart defaults these ON; override here only to tune per install (e.g. raise tokensPerMinute on a bench cluster).",
+                  "properties": {
+                    "requestsPerMinute": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "HTTP requests/min (429 over). 0 = off."
+                    },
+                    "burst": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Short-burst allowance above requestsPerMinute."
+                    },
+                    "tokensPerMinute": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "LLM tokens/min — the bound on provider spend (429 over). 0 = off."
+                    },
+                    "maxRequestBytes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Request body cap in bytes; over => 413. 0 = off."
+                    },
+                    "timeout": {
+                      "type": "string",
+                      "description": "Per-request timeout (Gateway API duration). \"\" = off."
+                    }
+                  }
+                },
                 "modelAliases": {
                   "type": "object",
                   "additionalProperties": {
@@ -11845,6 +11876,52 @@
                 }
               },
               "type": "object"
+            },
+            "stt": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Speech-to-text transcription route (agentgateway-policies stt): /stt/v1 on the TLS platform listener, guardrail-free + Strict-JWT + metered. Set enabled:true to turn on voice input — requires exposure.tls (a TLS platform listener). Off by default in the chart.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Emit the /stt/v1 transcription route + gate + limits. Requires a TLS platform listener."
+                },
+                "routePrefix": {
+                  "type": "string",
+                  "description": "Path prefix for the transcription route."
+                },
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Volume/size bounds on the transcription route (audio bodies are large). Each disables with 0/\"\".",
+                  "properties": {
+                    "requestsPerMinute": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Transcription requests/min (429 over). 0 = off."
+                    },
+                    "burst": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Short-burst allowance above requestsPerMinute."
+                    },
+                    "tokensPerMinute": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Model tokens/min (429 over). 0 = off."
+                    },
+                    "maxRequestBytes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Request body cap in bytes for audio; over => 413. 0 = off."
+                    },
+                    "timeout": {
+                      "type": "string",
+                      "description": "Per-request timeout (Gateway API duration). \"\" = off."
+                    }
+                  }
+                }
+              }
             },
             "platformRoutes": {
               "type": [
