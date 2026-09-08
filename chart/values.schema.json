@@ -165,12 +165,7 @@
         "internalDataPlane": {
           "type": "boolean",
           "title": "Close the agent data plane to the internet (type=Gateway, gatewayMode=path)",
-          "description": "When true (path mode only), the agentgateway proxy Service is flipped to ClusterIP so the agent data-plane listener (:8080, carrying /llm/v1, /mcp and A2A) has no external path, and ONLY the platform listeners (the portal on :443/:80 and HyperDX on :3000) are re-exposed on a dedicated LoadBalancer. In-cluster consumers are unaffected (the Service name/DNS is unchanged). Closes the open /llm/v1 Vertex proxy at the source. Off/absent => nothing changes."
-        },
-        "loadBalancerIP": {
-          "type": "string",
-          "title": "Pre-reserved address for the platform LoadBalancer (internalDataPlane)",
-          "description": "Optional. Flipping the proxy Service to ClusterIP releases its cloud IP, so to keep an existing external address, promote it to a static/reserved IP first and set it here — the platform LoadBalancer re-attaches it. Empty => cloud-assigned."
+          "description": "When true (path mode only), the primary agentgateway proxy Service (krateo-agent-gateway) is flipped to ClusterIP so the agent data-plane listener (:8080, carrying /llm/v1, /mcp and A2A) has no external path, and a SEPARATE platform Gateway (krateo-agent-gateway-platform) is provisioned as a LoadBalancer carrying ONLY the platform listeners (the portal on :443/:80 and HyperDX on :3000). In-cluster consumers are unaffected (the primary Service name/DNS is unchanged). Closes the open /llm/v1 Vertex proxy at the source. Off/absent => nothing changes."
         },
         "tls": {
           "type": "object",

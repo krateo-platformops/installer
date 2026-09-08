@@ -589,12 +589,16 @@ components:
   feature: agentGateway
 - name: agentgateway-policies
   kind: AgentgatewayPolicies
-  # 0.1.23 adds gateway.internalDataPlane (default false, off => byte-identical): flips the
-  # controller-provisioned proxy Service to ClusterIP (all listeners in-cluster only) and re-exposes
-  # ONLY the platform listeners on a dedicated LoadBalancer, so the agent data plane (:8080 —
-  # /llm/v1, /mcp, A2A) has no external path. Driven by exposure.internalDataPlane (+ .loadBalancerIP)
-  # via compositions.yaml. Inert unless that knob is set.
-  version: 0.1.23
+  # 0.1.23 added gateway.internalDataPlane (default false, off => byte-identical). 0.1.24 moves it to a
+  # TWO-GATEWAY design (#114): when gateway.internalDataPlane is set the chart flips the PRIMARY
+  # controller-provisioned proxy Service (krateo-agent-gateway) to ClusterIP — so the agent data plane
+  # (:8080 — /llm/v1, /mcp, A2A) has no external path — and renders a SEPARATE platform Gateway
+  # (krateo-agent-gateway-platform) as a LoadBalancer carrying ONLY the platform listeners
+  # (portal :443/:80 + HyperDX :3000). No static IP anywhere: the platform LoadBalancer takes a
+  # cloud-assigned address (loadBalancerIP dropped). Driven by exposure.internalDataPlane via
+  # compositions.yaml (which also points the portal/HyperDX browser origins at the -platform Service).
+  # Inert unless that knob is set.
+  version: 0.1.24
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller

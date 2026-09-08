@@ -58,6 +58,16 @@
 {{- $gwCertRef := dig "tls" "certificateRef" "" $top.Values.exposure }}
 {{- $gwComp := dict }}
 {{- if $gwPathMode }}{{- range $gc := $components }}{{- if eq $gc.name "agentgateway-policies" }}{{- $gwComp = $gc }}{{- end }}{{- end }}{{- end }}
+{{/* TWO-GATEWAY design (#114): with exposure.internalDataPlane the primary agent gateway
+     ($gwComp.svcMatch, krateo-agent-gateway) is flipped to ClusterIP and the browser-facing platform
+     listeners (portal/HyperDX) move onto a SEPARATE platform Gateway whose Service is
+     `<svcMatch>-platform` (a LoadBalancer). So the BROWSER-origin resolutions for the portal stack and
+     HyperDX must target that -platform Service, while every IN-CLUSTER URL that talks to the agent
+     gateway :8080 (kagentapp.proxy.url, the model route, the incident-agent A2A URL) stays on
+     $gwComp.svcMatch. $portalSvc = the browser-origin Service name: -platform when internalDataPlane,
+     else the primary Service unchanged (byte-identical when the knob is off). */}}
+{{- $portalSvc := $gwComp.svcMatch }}
+{{- if $top.Values.exposure.internalDataPlane }}{{- $portalSvc = printf "%s-platform" $gwComp.svcMatch }}{{- end }}
 {{- range $c := $components }}
 {{/* registerOnly (catalog) blueprints are registered (definitions.yaml) but never auto-emitted —
      the operator/end-user instantiates them from the portal on demand. */}}
@@ -220,7 +230,7 @@
 {{/* Guard on $gwComp.svcMatch: path mode presupposes the agentgateway (features.agentGateway); with
      the gateway component absent $gwComp is empty and there is no origin to resolve, so leave $url ""
      (key omitted, frontend keeps its default) rather than resolve inst.peerurl on a nil svcMatch. */}}
-{{- $origin := include "inst.peerurl" (list $top $gwComp.svcMatch $gwPlatformPort) }}
+{{- $origin := include "inst.peerurl" (list $top $portalSvc $gwPlatformPort) }}
 {{- if $origin }}{{- $url = printf "%s%s" $origin (trimSuffix "/" $d.gatewayPath) }}{{- end }}
 {{- end }}
 {{- end }}
@@ -503,7 +513,7 @@
      fills it — same eventual-consistency posture as AUTOPILOT). Gated on $gwPathMode + $gwComp.svcMatch:
      host/LB/NodePort and gateway-off installs never enter here, so their render is byte-identical. */ -}}
 {{- if and (eq $c.name "krateo-observability") $gwPathMode $gwComp.svcMatch -}}
-{{- $hdxOrigin := include "inst.peerurl" (list $top $gwComp.svcMatch (int $c.gatewayPort)) -}}
+{{- $hdxOrigin := include "inst.peerurl" (list $top $portalSvc (int $c.gatewayPort)) -}}
 {{- if $hdxOrigin -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "clickstack" "hyperdx" "config" "FRONTEND_URL") "value" $hdxOrigin) -}}
 {{- end -}}
@@ -589,19 +599,19 @@
 {{- end }}
 {{- include "inst.fillPath" (dict "target" $spec "path" (list "platformRoutes") "value" $routes) }}
 {{- /* internalDataPlane (exposure.internalDataPlane): close the agent data-plane listener (the
-       :8080 that carries /llm/v1, /mcp, A2A) to the internet. The agentgateway-policies chart flips
-       its controller-provisioned proxy Service to ClusterIP (all listeners in-cluster only, name/DNS
-       unchanged) and re-exposes ONLY the platform listeners (the platformRoutes ports just built
-       above) on a dedicated LoadBalancer. Path-mode only — it presupposes the platformRoutes that
-       give the portal an external home; the chart itself fails render if enabled without them.
-       forcePath: the exposure decision is authoritative over a componentValues override.
-       exposure.loadBalancerIP preserves a pre-reserved address the ClusterIP flip would otherwise
-       release. Off/absent => nothing set on the gateway spec, byte-identical. */ -}}
+       :8080 that carries /llm/v1, /mcp, A2A) to the internet via the TWO-GATEWAY design (#114). The
+       agentgateway-policies chart flips its controller-provisioned PRIMARY proxy Service
+       (krateo-agent-gateway) to ClusterIP (all agent listeners in-cluster only, name/DNS unchanged)
+       and provisions a SEPARATE platform Gateway (krateo-agent-gateway-platform) as a LoadBalancer
+       carrying ONLY the platform listeners (the platformRoutes ports just built above). The portal
+       and HyperDX browser origins resolve to that -platform Service (see $portalSvc at the top of
+       this file). Path-mode only — it presupposes the platformRoutes that give the portal an external
+       home; the chart itself fails render if enabled without them. No static loadBalancerIP is ever
+       set — the platform LoadBalancer takes a cloud-assigned address (never depend on a static IP).
+       forcePath: the exposure decision is authoritative over a componentValues override. Off/absent
+       => nothing set on the gateway spec, byte-identical. */ -}}
 {{- if $top.Values.exposure.internalDataPlane }}
 {{- include "inst.forcePath" (dict "target" $spec "path" (list "gateway" "internalDataPlane") "value" true) }}
-{{- with $top.Values.exposure.loadBalancerIP }}
-{{- include "inst.forcePath" (dict "target" $spec "path" (list "gateway" "loadBalancerIP") "value" .) }}
-{{- end }}
 {{- end }}
 {{- end }}
 ---
