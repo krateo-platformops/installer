@@ -167,6 +167,11 @@
           "title": "Close the agent data plane to the internet (type=Gateway, gatewayMode=path)",
           "description": "When true (path mode only), the primary agentgateway proxy Service (krateo-agent-gateway) is flipped to ClusterIP so the agent data-plane listener (:8080, carrying /llm/v1, /mcp and A2A) has no external path, and a SEPARATE platform Gateway (krateo-agent-gateway-platform) is provisioned as a LoadBalancer carrying ONLY the platform listeners (the portal on :443/:80 and HyperDX on :3000). In-cluster consumers are unaffected (the primary Service name/DNS is unchanged). Closes the open /llm/v1 Vertex proxy at the source. Off/absent => nothing changes."
         },
+        "voice": {
+          "type": "boolean",
+          "title": "Enable Autopilot voice/dictation (requires exposure.tls, path mode)",
+          "description": "One knob for the Autopilot dictation feature. When true it (a) derives the frontend's AUTOPILOT_VOICE_TRANSCRIBE_URL as https://<exposure.tls.host>/stt/v1/chat/completions (no hardcoded per-install host) and (b) turns on the /stt/v1 transcription route (agentgateway-policies stt.enabled) — voice needs both a secure context and that route. REQUIRES exposure.tls (path-mode HTTPS): dictation's getUserMedia needs a secure context, and the render fails loudly if voice is set without it. Off/absent => no voice UI (frontend DOM byte-identical), no /stt/v1 route."
+        },
         "tls": {
           "type": "object",
           "additionalProperties": false,
