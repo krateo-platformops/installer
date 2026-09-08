@@ -498,6 +498,19 @@
 {{- if and (eq $c.name "agentgateway-policies") $voice -}}
 {{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "stt" "enabled") "value" true) -}}
 {{- end -}}
+{{- /* external-dns (#115, features.externalDns). (a) Pass the top-level externalDns block straight
+     through to the external-dns component's curated `external-dns` values (helm deep-merges it over the
+     chart defaults, so unset keys keep their defaults). (b) Annotate the platform gateway with the portal
+     host (exposure.tls.host) so external-dns publishes/updates the record following the LB IP — only in
+     the two-gateway split (internalDataPlane), where the platform LoadBalancer exists. Off => nothing. */ -}}
+{{- if eq (include "inst.featureEnabled" (list $top "externalDns")) "true" -}}
+{{- if eq $c.name "external-dns" -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "external-dns") "value" $top.Values.externalDns) -}}
+{{- end -}}
+{{- if and (eq $c.name "agentgateway-policies") $top.Values.exposure.internalDataPlane $gwPortalHost -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "gateway" "platformHostname") "value" $gwPortalHost) -}}
+{{- end -}}
+{{- end -}}
 {{- /* features.ingress already installs the Gateway API CRDs, an agentgateway controller and a
      GatewayClass of the same name — all cluster-scoped, so a second owner collides. Stand down.
      FORCED, not fill-if-absent: these three leaves are also user-facing componentValues, so an
