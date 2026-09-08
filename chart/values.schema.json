@@ -11905,10 +11905,10 @@
                       "minimum": 0,
                       "description": "Short-burst allowance above requestsPerMinute."
                     },
-                    "tokensPerMinute": {
+                    "tokensPerHour": {
                       "type": "integer",
                       "minimum": 0,
-                      "description": "Model tokens/min (429 over). 0 = off."
+                      "description": "Model tokens/HOUR (429 over) — per-hour budget so a long dictation can burst. 0 = off."
                     },
                     "maxRequestBytes": {
                       "type": "integer",
