@@ -338,6 +338,7 @@ components:
 - name: kagent
   kind: Kagent
   version: 0.1.16
+  mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent-crds
@@ -358,7 +359,7 @@ components:
   modelOwner: true
 - name: installer-agent
   kind: InstallerAgent
-  version: 0.2.2
+  version: 0.2.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -370,6 +371,7 @@ components:
 - name: repo-mcp-server
   kind: RepoMcpServer
   version: 0.1.2
+  mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -411,6 +413,7 @@ components:
   # tool outputs or RBAC, so the render and behaviour are identical to 0.2.4. Gives the bench
   # unambiguous per-invocation proof of which config-refs tools fire during an investigation.
   version: 0.2.6
+  mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -437,7 +440,7 @@ components:
   # 0.4.9 adds the k8s_analyze binding on the k8s-agent and its prompt section, both behind
   # mcpServers.configRefs.k8sAnalyze.enabled which defaults FALSE. With the switch off the render is
   # byte-identical to 0.4.8. The chart refuses loudly if the switch is on while agents.k8s is off.
-  version: 0.4.9
+  version: 0.4.10
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -472,7 +475,7 @@ components:
   # which defaults FALSE. With the switch off the chart renders an Agent byte-identical to 0.1.9,
   # so this bump changes no agent behaviour on its own; it only makes the switch real. Setting the
   # switch on a release older than this one is silently pruned by the apiserver, not rejected.
-  version: 0.1.10
+  version: 0.1.11
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -488,6 +491,7 @@ components:
 - name: clickhouse-mcp-server
   kind: ClickhouseMcpServer
   version: 0.1.12
+  mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - krateo-observability
@@ -495,7 +499,7 @@ components:
   feature: specialistAgents
 - name: authn-agent
   kind: AuthnAgent
-  version: 0.23.2
+  version: 0.23.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -506,7 +510,7 @@ components:
   agent: true
 - name: snowplow-agent
   kind: SnowplowAgent
-  version: 1.1.2
+  version: 1.1.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -517,7 +521,7 @@ components:
   agent: true
 - name: frontend-agent
   kind: FrontendAgent
-  version: 1.4.2
+  version: 1.4.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -530,7 +534,7 @@ components:
   requireApproval: []
 - name: clickstack-agent
   kind: ClickstackAgent
-  version: 3.1.3
+  version: 3.1.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -542,7 +546,8 @@ components:
   agent: true
 - name: core-provider-agent
   kind: CoreProviderAgent
-  version: 0.55.4
+  version: 0.55.5
+  mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -603,7 +608,12 @@ components:
   # cloud-assigned address (loadBalancerIP dropped). Driven by exposure.internalDataPlane via
   # compositions.yaml (which also points the portal/HyperDX browser origins at the -platform Service).
   # Inert unless that knob is set.
-  version: 0.1.24
+  # 0.1.25 consumes gateway.mcpBackendHash: the installer computes a hash of every MCP-backend
+  # component's <name>:<version> (compositions.yaml) and forcePaths it here; the chart stamps it on the
+  # proxy pod template so the proxy pod ROLLS whenever an MCP-server version changes. Fixes a prod
+  # outage — rolling an MCP server rolls its own pod but the controller flips the proxy Service in
+  # place, leaving the proxy on a STALE backend. Absent/empty hash => byte-identical.
+  version: 0.1.25
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
@@ -645,7 +655,7 @@ components:
 # operator / tf-to-helm were RETIRED in #144; features.codegenAgents is kept hard-defaulted false.)
 - name: krateo-blueprint-agent
   kind: KrateoBlueprintAgent
-  version: 0.2.8
+  version: 0.2.9
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent

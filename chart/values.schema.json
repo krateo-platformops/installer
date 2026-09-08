@@ -378,6 +378,10 @@
             "type": "boolean",
             "description": "This component DEPLOYS a kagent Agent. Drives four things at once: the .vertexAI injection (the pod's ADC env / SA-key mount), the HITL approval gate, agentgateway.enabled, and membership of the orchestrator's auto-derived extraAgents fleet. Not set on model-configs, which renders ModelConfigs but no Agent — see modelOwner."
           },
+          "mcpBackend": {
+            "type": "boolean",
+            "description": "#116 roll-guard marker: this component's pod is an MCP backend routed through the agentgateway proxy (kagent for kagent-tools; the repo/config-refs/clickhouse MCP servers; core-provider-agent which bundles the chart-gate MCP). compositions.yaml hashes the <name>:<version> of every mcpBackend component and stamps that hash on BOTH the proxy pod template (agentgateway-policies gateway.mcpBackendHash) and every agent pod (rollGuard env), so a version bump rolls proxy + fleet together and they re-resolve / re-init their pinned MCP sessions."
+          },
           "modelOwner": {
             "type": "boolean",
             "description": "This component OWNS the shared ModelConfigs the rest of the fleet references (model-configs). It is NOT an `agent` (it deploys no Agent), but takes the same .vertexAI injection and agentgateway.enabled, plus the .localModel injection and the agentgateway LLM-route wiring that are its alone. Distinct from `orchestrator` — owning the fleet's models and orchestrating the fleet are different jobs on different components."
@@ -8460,6 +8464,10 @@
                     "Selector"
                   ],
                   "description": "Which namespaces may attach routes to this Gateway."
+                },
+                "mcpBackendHash": {
+                  "type": "string",
+                  "description": "MCP-backend roll-guard. The installer forcePaths a hash of every MCP-server component's <name>:<version> here (compositions.yaml); the chart stamps it on the proxy pod template so the proxy pod rolls whenever an MCP-server version changes. Installer-managed — do not set by hand."
                 }
               }
             },
