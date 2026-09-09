@@ -607,10 +607,6 @@ components:
 # componentValues.agentgateway-policies.
 - name: agentgateway-controller
   kind: AgentgatewayController
-  # 0.2.0 pins the agentgateway controller AND proxy images to v1.5.0. Must move in lockstep with
-  # agentgateway-policies 0.2.0: at controller v1.4.1 the control plane mounts the cost-catalog ConfigMap
-  # but never writes the line telling the proxy to read it, so every lookup answers status="NoCatalog",
-  # cost_usd never appears, and nothing logs an error anywhere. The agentgateway CRDs stay at v1.4.1.
   version: 0.2.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   tier: platform
@@ -634,14 +630,6 @@ components:
   # 0.1.27 adds gateway.platformHostname (#115): when set (installer forcePaths exposure.tls.host), the
   # platform Gateway's LoadBalancer Service is annotated external-dns.alpha.kubernetes.io/hostname, so a
   # deployed external-dns keeps the portal's DNS record following the LB IP (DNS-follows-LB, no static IP).
-  # 0.2.0 adds the cost/limits layer: costCatalog (vendored pricing -> AgentgatewayParameters.modelCatalog),
-  # budgets (fleet-wide + per-user/group token ceilings), llm.tiers/llm.health (ordered provider failover with
-  # health-based eviction), resiliency (per-hop retries/timeouts), loadShedding and observability (per-team
-  # metric labels, one OTLP access-log row per request, budget-breach Alert CRs). Metering, pricing, the
-  # access log, retries and provider health are ON by default; budgets, tracing, load shedding, failover
-  # tiers, per-user metric labels and prompt logging are OFF. REQUIRES agentgateway-controller 0.2.0 (above)
-  # for the catalog to price anything, and the ClickStack daemonset's logs pipeline to declare an otlp
-  # receiver or the access-log rows are dropped silently at :4317.
   version: 0.2.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
