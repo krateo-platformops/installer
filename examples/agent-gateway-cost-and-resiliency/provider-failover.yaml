@@ -1,0 +1,67 @@
+# Scenario 4 — falling back to another provider when one breaks.
+#
+#   helm upgrade -i installer … -f values.yaml -f provider-failover.yaml
+#
+# `llm.tiers` is EMPTY by default: one upstream, no failover. Non-empty renders ordered priority
+# groups instead — the first tier is preferred, and traffic falls to the next only when every
+# provider in the current tier has been EVICTED by the health policy below.
+#
+# Failover happens BETWEEN requests, not inside one: eviction is state the proxy remembers, so the
+# request that discovers a failure still fails, and each broken tier costs `consecutiveFailures`
+# requests before it is skipped.
+
+componentValues:
+  agentgateway-policies:
+    llm:
+      # A TIER MUST PIN ITS OWN MODEL. Agents ask for the id in their ModelConfig
+      # (gemini-3.7-flash); that id does not exist on OpenAI or Anthropic, so an unpinned fallback
+      # 404s on arrival instead of serving the turn. A render guard requires it.
+      #
+      # Each tier also carries its OWN CREDENTIAL from the per-provider block below — the gateway
+      # holds all of them, the agents hold none — and a render guard rejects a tier whose provider
+      # has no Secret rather than producing a tier that 401s the first time it is needed.
+      #
+      # Up to 8 tiers. `custom` cannot be one (it is single-upstream only).
+      tiers:
+        - provider: vertexai        # projectId/region come from the installer's vertexAI block
+          model: gemini-3.7-flash
+        - provider: openai
+          model: gpt-5.1
+        - provider: anthropic
+          model: claude-sonnet-4-5
+
+      openai:
+        auth:
+          secretRef:
+            name: openai-api-key
+            key: apiKey
+      anthropic:
+        auth:
+          secretRef:
+            name: anthropic-api-key
+            key: apiKey
+
+      # WITHOUT A HEALTH POLICY NOTHING IS EVER EVICTED AND FAILOVER NEVER HAPPENS, however many
+      # tiers are configured — the groups render, validate, report Accepted, and never fail over.
+      # So this is on by DEFAULT even though tiers are not: with one provider it is a no-op, and it
+      # is already correct the day a second tier is added. A render guard rejects tiers with it off.
+      health:
+        enabled: true
+        # THE TRAP: the default condition does NOT include 401, so a WRONG API KEY is never
+        # unhealthy, never evicted, and failover never happens — every request just fails. 429 must
+        # stay listed explicitly or a throttled provider is never evicted either (and agentgateway
+        # honours that response's Retry-After as the eviction duration). Connection-level failures
+        # count as unhealthy whatever this says.
+        unhealthyCondition: 'response.code >= 500 || response.code == 429'
+        eviction:
+          consecutiveFailures: 3   # 0 = evict on the health score alone
+          duration: 30s            # BASE duration; repeated evictions back off multiplicatively
+          healthThreshold: 40      # EWMA score below which a merely flaky provider is evicted
+          restoreHealth: 50        # score on return from eviction; below healthThreshold would
+                                   # re-evict immediately, and a render guard rejects that
+
+    # Every tier provider must be in the catalog or its turns price at 0 SILENTLY. The default list
+    # already covers all four; a render guard checks it against the tiers above. Remember the ids
+    # follow the ENDPOINT: Claude served by Vertex prices under gcp.vertex_ai, not anthropic.
+    costCatalog:
+      providers: [gcp.gemini, gcp.vertex_ai, openai, anthropic]

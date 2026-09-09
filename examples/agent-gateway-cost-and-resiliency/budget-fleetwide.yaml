@@ -1,0 +1,49 @@
+# Scenario 2 — one token ceiling shared by every caller, and the breach alerts.
+#
+#   helm upgrade -i installer … -f values.yaml -f budget-fleetwide.yaml
+#
+# OFF by default: every agent's model call crosses this route, so a ceiling picked without data
+# takes the whole fleet mute rather than capping anything. Pick one from a week of access-log rows.
+#
+# Three agentgateway behaviours to size against, none of them chart choices:
+#   * POST-HOC. Usage is known only after the response and a stream cannot be cut mid-sentence, so
+#     the request that busts the budget COMPLETES and the NEXT one gets 429.
+#   * Guard rejections still spend — rate limiting runs before the prompt guards.
+#   * Buckets are per proxy REPLICA, which is why a render guard rejects budgets + hpa.
+
+componentValues:
+  agentgateway-policies:
+    budgets:
+      enabled: true            # false = nothing is capped (the default)
+
+      gateway:
+        enabled: true          # false = no fleet-wide bucket; use budget-tiers.yaml instead
+        tokens: 2000000        # LLM tokens per `unit`, across everyone. 0 = no token cap
+        unit: Hours            # Seconds | Minutes | Hours — ONE HOUR IS THE LONGEST WINDOW
+                               # local rate limiting can express (no daily or monthly budgets)
+        requests: 0            # independent cap on request COUNT — a backstop against a runaway
+                               # agent loop making thousands of cheap calls. 0 = none
+        burst: 0
+        inheritance: Override   # no route-level policy may relax this ceiling. `Default` (the
+                                # chart default) lets one, so an install carrying its own route
+                                # policy is not surprised on upgrade
+
+    # Budget breaches as INCIDENTS: an Alert CR becomes a HyperDX alert whose webhook fires
+    # incident-agent, which runs RCA and writes a TroubleshootingReport the portal shows under
+    # /incidents. Off by default; needs accessLog.enabled (a render guard checks) AND the
+    # alert-troubleshooter CRDs, which features.coreAgents brings.
+    observability:
+      alerts:
+        enabled: true
+        # Already 429ing: turns are failing. An incident.
+        exhausted:
+          enabled: true
+          interval: 5m
+        # Still allowed, but nearly out — `x-ratelimit-remaining` rides SUCCESSFUL responses too,
+        # so the tail of a budget is observable before the first 429. Absolute tokens, not a
+        # fraction: the buckets are per-replica and per-tier, so there is no single "the limit" to
+        # take a percentage of. Roughly a tenth of the smallest budget above.
+        nearlyExhausted:
+          enabled: true
+          interval: 15m
+          remainingBelow: 200000

@@ -1,0 +1,40 @@
+# Scenario 6 — span export, and the export filter.
+#
+#   helm upgrade -i installer … -f values.yaml -f tracing.yaml
+#
+# OFF by default: spans are the most expensive of the three observability signals, and the access
+# log already carries the token and dollar figures. Turn this on to answer the one question the
+# other two cannot — WHICH HOP made a turn slow. Policy calls appear as child spans tagged
+# `agentgateway.outbound.subtype` (guardrail, rate_limit, …) for free, which is how guard latency
+# gets attributed.
+
+componentValues:
+  agentgateway-policies:
+    tracing:
+      enabled: true
+      # KEEP THIS AT "100" AND NARROW WITH `filter` INSTEAD. Lowering it drops spans at RANDOM, and
+      # a randomly-sampled span set loses the LLM token accounting that is the reason to export
+      # spans at all. Sample broad, export narrow.
+      randomSampling: "100"
+      # CEL gate on whether a SAMPLED span is EXPORTED — the point of the whole block. The default
+      # keeps model calls and failures and nothing else: `backend.type` is "ai" only on the LLM
+      # route, so kubelet probes, anonymous agent-card fetches and the chatty MCP hop are dropped.
+      # Add `|| backend.type == "mcp"` for tool hops; empty = every sampled span.
+      filter: 'backend.type == "ai" || response.code >= 400'
+      # Dimensions, not payloads — on top of agentgateway's own defaults, which already carry the
+      # gen_ai.* token attributes.
+      attributes:
+        team: 'has(jwt.groups) ? jwt.groups.join(",") : ""'
+        agent: 'request.headers["x-kagent-host"]'
+        model: 'llm.responseModel'
+        cost_usd: 'llm.cost.total'
+      includeUser: false        # HIGH-CARDINALITY on every span; the access log has it cheaper
+      includeToolCalls: false   # payload-bearing, and the access log already carries it once
+      # Must be a collector that INGESTS OTLP — on a stock Krateo install the ClickStack DAEMONSET
+      # collector. The DEPLOYMENT collector has no OTLP receiver, so pointing there yields
+      # `BatchSpanProcessor.ExportError: Connection refused` and no spans land.
+      backendRef:
+        kind: Service
+        name: otel-collector-daemonset-opentelemetry-collector
+        namespace: krateo-system
+        port: 4317

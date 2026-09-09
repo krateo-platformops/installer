@@ -1,0 +1,36 @@
+# Base install for every overlay in this folder: the agent fleet behind the agent gateway, with the
+# cost, audit, retry and provider-health layers at their SHIPPED defaults.
+#
+#   helm upgrade -i installer oci://ghcr.io/krateo-platformops/charts/installer \
+#     -n krateo-system -f values.yaml [-f <feature>.yaml]
+#
+# NOTHING HERE TURNS A FEATURE ON. That is the point of the file: token metering, dollar pricing,
+# one audit row per request, per-hop retries and provider health-checking are already on the moment
+# `features.agentGateway` is — README.md has the full on/off table. Each overlay beside this file
+# turns on exactly one thing that is off, or narrows one thing that is on.
+#
+# RBAC (who may reach which agent, run which tool, delegate to whom) and the content guardrails are
+# the subject of ../agent-gateway and are left at their defaults here.
+
+features:
+  portal: true            # authn — the issuer whose JWKS the gateway validates every token against
+  coreAgents: true        # also brings the Alert/TroubleshootingReport CRDs budget-alerts.yaml needs
+  specialistAgents: true
+  ingress: false          # agentGateway installs its own Gateway API CRDs and agentgateway controller
+  agentGateway: true
+
+# The agent and gateway charts live in the private krateo-agentiko registry.
+registryAuth:
+  enabled: true
+  username: <github-user>
+  passwordRef:
+    name: agentiko-registry-pull
+    key: token
+
+# `llm.provider: auto` resolves to vertexai as soon as a project id is present, and the installer
+# injects this block into the gateway for you. For the no-GCP path (a Google AI Studio key held at
+# the gateway) use ../agent-gateway-apikey as the base instead — every overlay here layers onto
+# either one.
+vertexAI:
+  enabled: true
+  projectID: <your-gcp-project>

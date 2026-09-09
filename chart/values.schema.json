@@ -510,17 +510,25 @@
         },
         "domainFilters": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Zones external-dns may manage, e.g. [\"krateo.dev\"]. Empty => none; scope it to your zone."
         },
         "policy": {
           "type": "string",
-          "enum": ["upsert-only", "sync", "create-only"],
+          "enum": [
+            "upsert-only",
+            "sync",
+            "create-only"
+          ],
           "description": "upsert-only (SAFE: create/update, never delete) | sync (also deletes records external-dns owns) | create-only."
         },
         "sources": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Resource kinds external-dns watches for hostnames, e.g. service, gateway-httproute, ingress."
         },
         "txtOwnerId": {
@@ -534,8 +542,12 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "name": { "type": "string" },
-              "value": { "type": "string" },
+              "name": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
               "valueFrom": {
                 "type": "object",
                 "additionalProperties": false,
@@ -544,16 +556,24 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
-                      "name": { "type": "string" },
-                      "key": { "type": "string" }
+                      "name": {
+                        "type": "string"
+                      },
+                      "key": {
+                        "type": "string"
+                      }
                     }
                   },
                   "configMapKeyRef": {
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
-                      "name": { "type": "string" },
-                      "key": { "type": "string" }
+                      "name": {
+                        "type": "string"
+                      },
+                      "key": {
+                        "type": "string"
+                      }
                     }
                   }
                 }
@@ -8549,6 +8569,118 @@
                 "mcpBackendHash": {
                   "type": "string",
                   "description": "MCP-backend roll-guard. The installer forcePaths a hash of every MCP-server component's <name>:<version> here (compositions.yaml); the chart stamps it on the proxy pod template so the proxy pod rolls whenever an MCP-server version changes. Installer-managed — do not set by hand."
+                },
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "The proxy Deployment the agentgateway controller provisions from this Gateway, rendered as an AgentgatewayParameters the Gateway names in infrastructure.parametersRef. That placement is what makes the model cost catalog work at all: a GatewayClass-level AgentgatewayParameters resolves ConfigMap references from the wrong namespace. Ignored when gateway.create is false.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "false = none of the typed fields below and no cost catalog: the proxy takes the controller chart's defaults, llm.cost is unset and every request prices at 0. It does not always remove the object — internalDataPlane and mcpBackendHash ride the same AgentgatewayParameters (a parametersRef holds one name), so with either on it still renders with only their fields."
+                    },
+                    "resources": {
+                      "type": "object",
+                      "description": "Proxy container resources. Every A2A, MCP and LLM call in the fleet crosses this one pod.",
+                      "properties": {
+                        "requests": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
+                        "limits": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "hpa": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "HorizontalPodAutoscaler for the proxy. Safe for throughput and NOT safe for local budgets: a local rate-limit bucket lives in the proxy PROCESS, so N replicas enforce N times every budget. A render guard rejects enabling this alongside budgets.",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "minReplicas": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "maxReplicas": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "targetCPUUtilizationPercentage": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        }
+                      }
+                    },
+                    "pdb": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "PodDisruptionBudget for the proxy. minAvailable:1 with a single replica forbids voluntary eviction of the only pod, which is right for a fleet-wide chokepoint and WILL stall a node drain.",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "minAvailable": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      }
+                    },
+                    "env": {
+                      "type": "array",
+                      "description": "Appended verbatim to the proxy container's env; the controller merges these over its own.",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "logging": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "Proxy logging. Empty level = the controller's default (info).",
+                      "properties": {
+                        "level": {
+                          "type": "string",
+                          "description": "RUST_LOG syntax, e.g. info or a comma-separated per-module setting."
+                        },
+                        "format": {
+                          "type": "string",
+                          "enum": [
+                            "",
+                            "json",
+                            "text"
+                          ]
+                        }
+                      }
+                    },
+                    "deployment": {
+                      "type": "object",
+                      "description": "Strategic-merge overlay on the proxy Deployment spec the controller generates, applied after every typed field. The escape hatch for anything this block does not model."
+                    },
+                    "service": {
+                      "type": "object",
+                      "description": "Strategic-merge overlay on the proxy Service spec."
+                    }
+                  }
+                },
+                "internalDataPlane": {
+                  "type": "boolean",
+                  "description": "Close the agent data-plane listener (port) to the internet using the standard two-Gateway split: flip THIS (agent) Gateway's controller-provisioned proxy Service to ClusterIP (all its listeners in-cluster only, Service name/DNS unchanged) via an AgentgatewayParameters, and move the platform listeners to a SECOND, real Gateway (platformGatewayName) whose own controller-provisioned Service keeps the controller's default LoadBalancer type. Requires platformRoutes. Off => byte-identical."
+                },
+                "platformGatewayName": {
+                  "type": "string",
+                  "description": "Name of the second Gateway that carries the platform listeners (and gets the platform LoadBalancer) when internalDataPlane is on. Empty => derived as `<gateway.name>-platform`."
+                },
+                "platformHostname": {
+                  "type": "string",
+                  "description": "#115: DNS hostname for the platform LoadBalancer. When set (installer passes exposure.tls.host), the platform Gateway's Service is annotated external-dns.alpha.kubernetes.io/hostname, so a deployed external-dns publishes/updates a DNS record following the LB IP (DNS-follows-LB). Only meaningful in the two-gateway split (internalDataPlane). Empty => no annotation, byte-identical."
                 }
               }
             },
@@ -9975,6 +10107,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10004,6 +10158,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10084,6 +10260,28 @@
                                 "maximum": 599,
                                 "minimum": 0,
                                 "type": "integer"
+                              },
+                              "matches": {
+                                "type": "array",
+                                "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "builtins": {
+                                "type": "array",
+                                "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "CreditCard",
+                                    "Ssn",
+                                    "Email",
+                                    "PhoneNumber",
+                                    "CaSin"
+                                  ]
+                                }
                               }
                             },
                             "type": "object"
@@ -10113,6 +10311,28 @@
                                 "maximum": 599,
                                 "minimum": 0,
                                 "type": "integer"
+                              },
+                              "matches": {
+                                "type": "array",
+                                "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "builtins": {
+                                "type": "array",
+                                "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "CreditCard",
+                                    "Ssn",
+                                    "Email",
+                                    "PhoneNumber",
+                                    "CaSin"
+                                  ]
+                                }
                               }
                             },
                             "type": "object"
@@ -10198,6 +10418,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10227,6 +10469,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10303,6 +10567,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10332,6 +10618,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10408,6 +10716,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10437,6 +10767,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10513,6 +10865,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10542,6 +10916,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10618,6 +11014,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10647,6 +11065,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10723,6 +11163,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10752,6 +11214,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10828,6 +11312,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10857,6 +11363,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10933,6 +11461,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -10962,6 +11512,28 @@
                               "maximum": 599,
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "matches": {
+                              "type": "array",
+                              "description": "Extra Rust regex patterns for THIS direction only, appended to the class's own `matches`. The two directions rarely deserve the same list: a false positive on the request costs one redaction inside a prompt, while the same pattern on the response costs the whole answer. Put the shape-based patterns on the class and the keyword heuristics here, under `request`.",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "builtins": {
+                              "type": "array",
+                              "description": "Extra PII recognizers for this direction only, appended to the class's own `builtins`.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "CreditCard",
+                                  "Ssn",
+                                  "Email",
+                                  "PhoneNumber",
+                                  "CaSin"
+                                ]
+                              }
                             }
                           },
                           "type": "object"
@@ -11196,6 +11768,52 @@
                       }
                     }
                   }
+                },
+                "clientconfigNamespace": {
+                  "type": "string",
+                  "default": ""
+                },
+                "apiserverURLOverride": {
+                  "type": "string",
+                  "default": ""
+                },
+                "jwksURL": {
+                  "type": "string",
+                  "default": ""
+                },
+                "service": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "port": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535
+                    }
+                  },
+                  "default": {
+                    "port": 8443
+                  }
+                },
+                "resources": {
+                  "type": "object",
+                  "default": {}
+                },
+                "env": {
+                  "type": "array",
+                  "default": []
+                },
+                "nodeSelector": {
+                  "type": "object",
+                  "default": {}
+                },
+                "tolerations": {
+                  "type": "array",
+                  "default": []
+                },
+                "affinity": {
+                  "type": "object",
+                  "default": {}
                 }
               }
             },
@@ -11890,6 +12508,73 @@
                     "type": "string"
                   },
                   "description": "Friendly model names resolved at the gateway to provider model ids (agentgateway-policies llm.modelAliases). Empty = unchanged."
+                },
+                "tiers": {
+                  "type": "array",
+                  "description": "Ordered failover tiers. Empty = one upstream from llm.provider and no failover (spec.ai.provider). Non-empty = spec.ai.groups[], one group per entry in order: the first tier is preferred and traffic falls to the next only when every provider in the current tier has been EVICTED by llm.health. Max 8. A TIER MUST PIN ITS OWN MODEL - agents ask for the id in their ModelConfig and that id does not exist on another vendor's API, so an unpinned fallback 404s on arrival. Each tier reuses the per-provider auth above, so tiers need one credential Secret per provider used. Load balancing within a tier is automatic and needs no configuration.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "provider": {
+                        "type": "string",
+                        "enum": [
+                          "gemini",
+                          "vertexai",
+                          "openai",
+                          "anthropic",
+                          "bedrock"
+                        ],
+                        "description": "Which provider serves this tier. `custom` is single-upstream only and cannot be a tier."
+                      },
+                      "model": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Model id on THAT provider. Required - see the block description."
+                      }
+                    }
+                  }
+                },
+                "health": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Passive health checking on the AI backend. WITHOUT THIS NOTHING IS EVER EVICTED AND FAILOVER NEVER HAPPENS, however many llm.tiers are configured - which is why it defaults on even though tiers do not: with one provider it is a no-op and it is already correct the day a second tier is added.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "unhealthyCondition": {
+                      "type": "string",
+                      "description": "CEL over the response. 429 MUST be listed explicitly or a THROTTLED provider is never evicted - and agentgateway uses that response's Retry-After as the eviction duration when present, so listing it is also what honours the provider's own backoff. Connection-level failures count as unhealthy regardless."
+                    },
+                    "eviction": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "consecutiveFailures": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "Failures in a row before eviction. 0 = score-based eviction only."
+                        },
+                        "duration": {
+                          "type": "string",
+                          "description": "BASE eviction duration; repeated evictions of the same provider back off multiplicatively."
+                        },
+                        "healthThreshold": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100,
+                          "description": "EWMA health score below which a provider is evicted even without a run of consecutive failures - the lever that catches a merely flaky provider."
+                        },
+                        "restoreHealth": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100,
+                          "description": "Score a provider returns from eviction with. Below healthThreshold would re-evict it before it is ever tried; a render guard rejects that."
+                        }
+                      }
+                    }
+                  }
                 }
               },
               "type": "object"
@@ -11967,6 +12652,46 @@
                     }
                   },
                   "type": "object"
+                },
+                "attributes": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "description": "Extra span fields as name -> CEL expression, on top of agentgateway's own defaults (which already carry the gen_ai.* token attributes). Kept to low-cardinality dimensions rather than payloads: a span attribute rides every span. Guard every claim read with has(): an unauthenticated request has no jwt object at all and an unguarded expression throws."
+                },
+                "clientSampling": {
+                  "type": "string",
+                  "description": "Whether to honour a trace decision the CALLER already made. Empty by default: nothing upstream of this gateway propagates a trace context worth honouring, and honouring one would let a caller decide our span volume."
+                },
+                "filter": {
+                  "type": "string",
+                  "description": "CEL gate on whether a SAMPLED span is exported. The default keeps model calls and failures and nothing else: backend.type is 'ai' only on the LLM route, so kubelet probes, anonymous agent-card fetches and the chatty MCP hop are all dropped. Empty = export every sampled span. This is the lever to narrow with - randomSampling drops spans at RANDOM and a randomly-sampled set loses LLM token accounting."
+                },
+                "includeToolCalls": {
+                  "type": "boolean",
+                  "description": "PAYLOAD-BEARING. llm.toolCalls is on for ACCESS LOGS because a log row is one row per request; a span attribute rides every span and carries the same payload again. Off here so it is not paid for twice."
+                },
+                "includeUser": {
+                  "type": "boolean",
+                  "description": "HIGH-CARDINALITY: one distinct value per person, on every span. Off - the same attribution is in the access log, which is cheaper per unit of information."
+                },
+                "removeAttributes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "description": "Default span field names to drop. Empty = keep them all."
+                },
+                "resources": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "description": "Attributes describing the ENTITY that produced the span, as name -> CEL expression. Minimal by default: the collector's k8sattributes processor already adds pod, namespace and node."
                 }
               },
               "type": "object"
@@ -12041,6 +12766,37 @@
                       },
                       "port": {
                         "type": "integer"
+                      },
+                      "protocol": {
+                        "type": "string",
+                        "enum": [
+                          "HTTP",
+                          "HTTPS"
+                        ],
+                        "description": "Listener protocol. Defaults to HTTP when unset. Set HTTPS together with tls to terminate TLS on this listener."
+                      },
+                      "tls": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "certificateRef"
+                        ],
+                        "description": "TLS termination for an HTTPS listener. When set, the listener emits tls.mode + certificateRefs to the named Secret.",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "Terminate",
+                              "Passthrough"
+                            ],
+                            "description": "Gateway-API TLS mode. Defaults to Terminate."
+                          },
+                          "certificateRef": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Name of the kubernetes.io/tls Secret (same namespace as the Gateway) holding the listener certificate + key."
+                          }
+                        }
                       }
                     }
                   },
@@ -12215,6 +12971,510 @@
                         "items": {
                           "type": "string",
                           "minLength": 1
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "costCatalog": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Model cost catalog. agentgateway meters tokens on its own but prices nothing without one: llm.cost.* stays unset and agentgateway_gen_ai_client_cost_usd_total stays 0, and the pinned proxy ships no built-in catalog. The pricing data is a vendored artefact in the chart, rendered into a ConfigMap and named from gateway.parameters. THE CATALOG IS KEYED BY GATEWAY PROVIDER ID AND THE ID FOLLOWS THE ENDPOINT, NOT THE MODEL VENDOR: gemini by API key is gcp.gemini, the same model via Vertex is gcp.vertex_ai, and Claude served by Vertex prices under gcp.vertex_ai rather than anthropic.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "false = no ConfigMap and no modelCatalog source. Token metering and budgets are unaffected; only the dollar figures disappear."
+                },
+                "providers": {
+                  "type": "array",
+                  "description": "Provider blocks to keep from the vendored catalog, by gateway provider id. A PROVIDER THAT IS ABSENT PRICES AT 0 SILENTLY - a model missing the catalog is not an error, and the only signal is agentgateway_cost_catalog_lookups_total broken down by its status label. A render guard checks the provider in use is listed.",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "gcp.gemini",
+                      "gcp.vertex_ai",
+                      "openai",
+                      "anthropic",
+                      "aws.bedrock"
+                    ]
+                  }
+                },
+                "key": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Data key inside the ConfigMap. agentgateway defaults to catalog.json."
+                },
+                "overrides": {
+                  "type": "object",
+                  "description": "Rates merged over the vendored catalog, in the same {<provider id>: {models: {<model id>: {rates: {...}}}}} shape - for a model the vendored file does not price yet. Rates are USD per 1M tokens AS STRINGS: the parser reads them as decimals and rejects JSON numbers."
+                }
+              }
+            },
+            "budgets": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "LLM TOKEN budgets on the LLM route. On a route whose backend declares an AI provider, traffic.rateLimit.local[].tokens counts LLM tokens rather than requests, so this is a spend cap. FOUR AGENTGATEWAY BEHAVIOURS TO SIZE AGAINST: usage is post-hoc so the request that busts the budget COMPLETES and the next gets 429; rate limiting runs BEFORE the prompt guards so a guard-rejected request has already spent its tokens; ONE HOUR is the longest window local rate limiting can express; and buckets are PER PROXY REPLICA, so gateway.parameters.hpa multiplies every number here. Cached input counts too.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Off by default: a budget that is too small takes the whole fleet mute, since every agent's model call crosses this route, and there is no fleet-wide number that is right by default."
+                },
+                "gateway": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "The fleet-wide ceiling: ONE bucket shared by every caller on the LLM route.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "tokens": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "LLM tokens per unit across everyone. 0 = no token cap."
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "Seconds",
+                        "Minutes",
+                        "Hours"
+                      ],
+                      "description": "Hours is the longest window local rate limiting can express."
+                    },
+                    "burst": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Extra allowance above the steady rate. 0 = none."
+                    },
+                    "requests": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "A second, independent cap on request COUNT - a backstop against a runaway agent loop making thousands of cheap calls. 0 = no request cap."
+                    },
+                    "inheritance": {
+                      "type": "string",
+                      "enum": [
+                        "Default",
+                        "Override"
+                      ],
+                      "description": "Override = no route-level rate-limit policy may relax this ceiling. Default so an install carrying its own route policy is not surprised on upgrade."
+                    }
+                  }
+                },
+                "tiers": {
+                  "type": "array",
+                  "description": "Tiered budgets, each entry its OWN independent bucket, FIRST MATCH WINS. A users entry is a genuine per-that-user budget; a groups entry is ONE bucket the whole group shares. Max 16 entries, at most ONE entry with no subjects and it must be LAST (the unconditional fallback). A per-user budget exists only for users NAMED HERE - there is no automatic bucket-per-caller with local rate limiting.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "users": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "groups": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "anyAuthenticated": {
+                        "type": "boolean"
+                      },
+                      "tokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "requests": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "unit": {
+                        "type": "string",
+                        "enum": [
+                          "Seconds",
+                          "Minutes",
+                          "Hours"
+                        ]
+                      },
+                      "burst": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "resiliency": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Retries and timeouts, one policy per hop. The split is the point: a model call is slow by nature and safe to retry, while a tool call is fast and not necessarily idempotent, so retrying one that already reached the tool runs it twice. Retries surface as agentgateway_retries_total.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "false = no retry or timeout policy on any hop; each takes agentgateway's defaults of no retries and no request timeout."
+                },
+                "llm": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "The LLM hop. A transient provider 503 currently fails a whole Autopilot turn, which is the case this exists for.",
+                  "properties": {
+                    "retry": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "Retry policy for one hop. attempts:0 renders no retry at all.",
+                      "properties": {
+                        "attempts": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "Extra attempts after the first, so 2 means up to three calls. 0 = no retries."
+                        },
+                        "backoff": {
+                          "type": "string",
+                          "description": "Base backoff between attempts, e.g. 1s or 500ms."
+                        },
+                        "codes": {
+                          "type": "array",
+                          "description": "Response codes that are retried. 4xx/5xx only. 429 is deliberately absent from the defaults: it is the upstream telling us to stop.",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 400,
+                            "maximum": 599
+                          }
+                        },
+                        "condition": {
+                          "type": "string",
+                          "description": "Raw CEL over the RESPONSE deciding retryability, on top of codes. Empty = unused."
+                        },
+                        "precondition": {
+                          "type": "string",
+                          "description": "Raw CEL over the REQUEST, evaluated before any attempt, so an expensive request can be made non-retryable. Empty = unused."
+                        }
+                      }
+                    },
+                    "timeout": {
+                      "type": "string",
+                      "description": "Empty = NO TIMEOUT, deliberately: a model call is slow by nature and a short timeout turns a long generation into a 504 the user reads as a broken agent. Mutually exclusive with llm.http.requestTimeout, which bounds a single provider call rather than the whole route - a render guard rejects setting both."
+                    }
+                  }
+                },
+                "mcp": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "The proxied MCP hop. Conservative: retry only what plausibly never reached the tool, which is why 504 is absent from the default codes.",
+                  "properties": {
+                    "retry": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "Retry policy for one hop. attempts:0 renders no retry at all.",
+                      "properties": {
+                        "attempts": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "Extra attempts after the first, so 2 means up to three calls. 0 = no retries."
+                        },
+                        "backoff": {
+                          "type": "string",
+                          "description": "Base backoff between attempts, e.g. 1s or 500ms."
+                        },
+                        "codes": {
+                          "type": "array",
+                          "description": "Response codes that are retried. 4xx/5xx only. 429 is deliberately absent from the defaults: it is the upstream telling us to stop.",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 400,
+                            "maximum": 599
+                          }
+                        },
+                        "condition": {
+                          "type": "string",
+                          "description": "Raw CEL over the RESPONSE deciding retryability, on top of codes. Empty = unused."
+                        },
+                        "precondition": {
+                          "type": "string",
+                          "description": "Raw CEL over the REQUEST, evaluated before any attempt, so an expensive request can be made non-retryable. Empty = unused."
+                        }
+                      }
+                    },
+                    "timeout": {
+                      "type": "string",
+                      "description": "A tool call that has not answered in this long is not going to. Bounded, unlike the LLM hop, because a hung tool call holds an agent turn open behind it."
+                    }
+                  }
+                },
+                "a2a": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "The A2A hop - the catch-all agent route and every sub-agent route, since a delegated hop is an A2A hop with the same posture.",
+                  "properties": {
+                    "retry": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "Retry policy for one hop. attempts:0 renders no retry at all.",
+                      "properties": {
+                        "attempts": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "Extra attempts after the first, so 2 means up to three calls. 0 = no retries."
+                        },
+                        "backoff": {
+                          "type": "string",
+                          "description": "Base backoff between attempts, e.g. 1s or 500ms."
+                        },
+                        "codes": {
+                          "type": "array",
+                          "description": "Response codes that are retried. 4xx/5xx only. 429 is deliberately absent from the defaults: it is the upstream telling us to stop.",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 400,
+                            "maximum": 599
+                          }
+                        },
+                        "condition": {
+                          "type": "string",
+                          "description": "Raw CEL over the RESPONSE deciding retryability, on top of codes. Empty = unused."
+                        },
+                        "precondition": {
+                          "type": "string",
+                          "description": "Raw CEL over the REQUEST, evaluated before any attempt, so an expensive request can be made non-retryable. Empty = unused."
+                        }
+                      }
+                    },
+                    "timeout": {
+                      "type": "string",
+                      "description": "Empty = no timeout. An A2A call is a whole delegated agent turn, model and tool calls included, so any ceiling here is a ceiling on how long a specialist may think."
+                    }
+                  }
+                }
+              }
+            },
+            "loadShedding": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Hard caps on how much work the proxy holds at once. Past a cap it REJECTS immediately instead of queueing, so a runaway agent loop cannot take the proxy - and with it every A2A, MCP and LLM call in the fleet - down by exhausting it. A room-capacity limit, not a rate limit: budgets says 'you have had enough', this says 'the proxy is full'. Shed traffic lands in agentgateway_requests_shed_total and agentgateway_downstream_connections_shed_total. REQUIRES THE v1.5.0 agentgateway CRDs for the two counts - frontend.http.maxConcurrentRequests and frontend.tcp.maxConnections do not exist in v1.4.1 and the API server rejects the policy there. maxConnectionDuration works on either.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Off by default: a cap chosen without load data is as likely to shed real traffic as to protect anything, and the numbers have to be picked against gateway.parameters.resources - a cap far above what the memory limit can serve is a slower way to OOM, not protection."
+                },
+                "maxConcurrentRequests": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Concurrent in-flight requests. 0 = unlimited. Needs v1.5.0 CRDs."
+                },
+                "maxConnections": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Active downstream connections on the listener; over the limit they are closed immediately. 0 = unlimited. Higher than maxConcurrentRequests because kagent holds keepalive connections open between turns. Needs v1.5.0 CRDs."
+                },
+                "maxConnectionDuration": {
+                  "type": "string",
+                  "description": "Force a connection closed after this long however busy it is, so a long-lived client rebalances onto a new proxy replica instead of pinning to one. Empty = never. Works on the v1.4.1 CRDs."
+                }
+              }
+            },
+            "observability": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Three signals with three different costs, hence three switches: metrics are free Prometheus labels on the proxy's own :15020, accessLog is one OTLP row per request in ClickHouse (the chargeback record), and tracing (a sibling top-level key) is the expensive one. Every reading of these numbers carries agentgateway's own caveats: a 429 is post-hoc so a budget row can exceed its limit, rate limiting runs before the prompt guards so guard-rejected requests still appear as spend, and cached input counts toward both tokens and cost.",
+              "properties": {
+                "metrics": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Custom metric fields are flattened into EVERY metric label set, the gen_ai ones included, so this one policy turns agentgateway_gen_ai_client_token_usage and agentgateway_gen_ai_client_cost_usd_total into per-team series. NOTHING IN A STOCK KRATEO INSTALL SCRAPES THIS: agentgateway exports metrics by Prometheus scrape only (there is no OTLP metrics exporter) and the ClickStack tier brings no Prometheus - accessLog is the path that reaches ClickHouse. The labels cost nothing and are correct for anything that scrapes later.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "false = no metrics policy. The metrics keep being served, just without these labels."
+                    },
+                    "includeTeam": {
+                      "type": "boolean",
+                      "description": "The chargeback dimension. One series per team per model, bounded by the number of teams, which is what makes it the safe default."
+                    },
+                    "includeUser": {
+                      "type": "boolean",
+                      "description": "HIGH-CARDINALITY: one series per person per model per metric, paid for forever. Off by default - the same attribution is in the access log, which is a row per request instead of a series per user."
+                    },
+                    "attributes": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "description": "Extra entries as name -> CEL expression. Guard every claim read with has(): an unauthenticated request has no jwt object at all and an unguarded expression throws. agentgateway allows at most 16 metric labels in total."
+                    }
+                  }
+                },
+                "accessLog": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "One OTLP row per request: who called, which agent served it, which tool ran, which model answered, how many tokens, how many dollars, how much budget is left and which guard intervened. THE ROWS ARRIVE AS LogAttributes MAP ENTRIES WITH AN EMPTY Body - agentgateway builds each LogRecord out of attributes and never sets a body - so SQL over default.otel_logs must read LogAttributes['...'] (a String, so cast it) and never Body. ServiceName is the GATEWAY's name.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "false = no access log policy. The three RBAC layers still ENFORCE; they just leave no record, and observability.alerts has nothing to count."
+                    },
+                    "otlp": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "Where the rows go. MUST be a collector whose `logs` pipeline declares an otlp receiver. On a stock Krateo install that is the ClickStack DAEMONSET collector, whose stock logs pipeline is receivers:[filelog] only - so the clickstack-chart change adding otlp there is a PREREQUISITE. Without it the rows reach a port with no consumer and are dropped with no error at either end.",
+                      "properties": {
+                        "protocol": {
+                          "type": "string",
+                          "enum": [
+                            "GRPC",
+                            "HTTP"
+                          ]
+                        },
+                        "backendRef": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "type": "string"
+                            },
+                            "port": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 65535
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "filter": {
+                      "type": "string",
+                      "description": "CEL gate on whether a row is emitted at all. Empty = every request, which is the point of an audit record."
+                    },
+                    "includeUser": {
+                      "type": "boolean",
+                      "description": "On here, unlike metrics and tracing, because a log row is one row per request rather than a permanent series - so per-user attribution is cheap in exactly this one place."
+                    },
+                    "includeTeam": {
+                      "type": "boolean"
+                    },
+                    "guardrails": {
+                      "type": "boolean",
+                      "description": "WHICH GUARD FIRED. guardrails[] carries one entry per INTERVENTION with the guard kind, phase, action and reason; content-bearing fields are never included, so it is safe to store. A CLEAN PASS EMITS NOTHING - the attribute is absent, not empty - so it complements agentgateway_guardrail_checks_total rather than replacing it."
+                    },
+                    "toolCalls": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "Which tools the model asked for. REFERENCING llm.toolCalls IS WHAT TURNS EXTRACTION ON - it is not collected otherwise - and it has a documented cost on large responses.",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "includeArguments": {
+                          "type": "boolean",
+                          "description": "Tool ARGUMENTS are user content, so this is the same privacy question as promptLogging. UNSET follows promptLogging.enabled; set it explicitly to decouple them."
+                        }
+                      }
+                    },
+                    "promptLogging": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "Prompt and completion TEXT. Its own switch, off, and it should stay off unless someone has decided the retention question: turning it on writes every prompt a user types, and every answer the model returns, into ClickHouse - where the otel_logs TTL, not this chart, decides how long it lives.",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "attributes": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "description": "Extra entries as name -> CEL expression. Guard every claim read with has(): an unauthenticated request has no jwt object at all and an unguarded expression throws."
+                    },
+                    "removeAttributes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "description": "Default attribute names to drop from the row."
+                    }
+                  }
+                },
+                "alerts": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Budget breaches as INCIDENTS. An Alert CR (observability.krateo.io) is reconciled into a HyperDX alert whose webhook fires incident-agent, which runs RCA and writes a TroubleshootingReport the portal shows under /incidents. These count the accessLog rows, so they need accessLog.enabled AND the alert-troubleshooter CRD (features.coreAgents). spec.where edits DO NOT PROPAGATE to the live HyperDX alert - change one by deleting and recreating the CR.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "false = no Alert CRs. Budgets still return 429 and access logs still record it; there is simply no incident raised."
+                    },
+                    "exhausted": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "Fires when the LLM route starts returning 429 - a budget is exhausted and turns are already failing. An incident, not a warning.",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "interval": {
+                          "type": "string",
+                          "enum": [
+                            "1m",
+                            "5m",
+                            "15m",
+                            "30m",
+                            "1h",
+                            "6h",
+                            "12h",
+                            "1d"
+                          ]
+                        },
+                        "threshold": {
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "nearlyExhausted": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "The WARNING, and the whole reason budget_remaining is an access-log attribute: x-ratelimit-remaining rides ALLOWED responses too, so the tail of a budget is visible before the first 429.",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "interval": {
+                          "type": "string",
+                          "enum": [
+                            "1m",
+                            "5m",
+                            "15m",
+                            "30m",
+                            "1h",
+                            "6h",
+                            "12h",
+                            "1d"
+                          ]
+                        },
+                        "threshold": {
+                          "type": "number"
+                        },
+                        "remainingBelow": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "description": "Absolute token allowance, not a fraction: local buckets are per-replica and per-tier, so there is no single 'the limit' to take a percentage of. Roughly a tenth of the smallest budget."
                         }
                       }
                     }
