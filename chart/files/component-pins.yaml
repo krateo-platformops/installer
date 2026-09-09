@@ -85,7 +85,11 @@ components:
   # DOM is byte-identical to 1.5.26; set it (to the HTTPS /stt/v1 route) to turn it on. Dictation also
   # needs a secure context, so on plain-HTTP it stays invisible regardless. Bumping the pin alone is
   # inert; voice goes live only when the CR sets componentValues.frontend.config.AUTOPILOT_VOICE_TRANSCRIBE_URL.
-  version: 1.5.27
+  # 1.5.28 (#119): the publish destination form documents that the target repo must ALREADY EXIST
+  # (git-provider clones, it never creates it), and a claim publish now shows a live per-file
+  # LocalResource status in the rail (✓/✗ + the git error) instead of a silent hang; also activates
+  # the #163 per-artifact blueprint targeting (krateo-blueprints/<chart>). All UI-only, default-inert.
+  version: 1.5.28
   deps:
   - frontend-crd
   - authn
