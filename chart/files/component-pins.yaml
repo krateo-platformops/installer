@@ -8,7 +8,11 @@ components:
 - name: oasgen-provider-crd
   kind: OasgenProviderCrds
   chart: oasgen-provider-crds
-  version: 0.21.1
+  # 0.23.0 (bumped in lockstep with oasgen-provider): additive RestDefinition schema only — the
+  # compareScope `updatable` enum (CEL-guarded to an update verb) + a corrected oasPath/JQ ref
+  # pattern. RestDefinition stays v1alpha1 served+storage (no conversion webhook); crds MUST match
+  # the provider or the apiserver rejects compareScope:updatable at admission.
+  version: 0.23.0
   tier: platform
   feature: oasgenProvider
 - name: frontend-crd
@@ -177,7 +181,12 @@ components:
 - name: oasgen-provider
   kind: OasgenProvider
   chart: oasgen-provider
-  version: 0.21.1
+  # 0.23.0 (0.21.1 -> 0.23.0, lockstep with oasgen-provider-crds): resolves the delete-finalizer
+  # saga, fixes read-only/findBy resources, and the #113 GitHub-contents double-escape (%252F) 404.
+  # Big-version wrapper-CRD jump (OasgenProvider v0-21-1 -> v0-23-0 CDC controllers) — may need a
+  # cdc restart + CRD helm-ownership nudge on the live roll. oasgen is idle on 057 (0 RestDefinition
+  # CRs), so data-plane blast radius is just this deployment's restart.
+  version: 0.23.0
   deps:
   - oasgen-provider-crd
   tier: platform
