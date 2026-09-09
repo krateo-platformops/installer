@@ -152,7 +152,7 @@ components:
   feature: portal
 - name: github-provider-kog
   kind: GithubProviderKog
-  version: 0.2.1
+  version: 0.2.2
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: portal
