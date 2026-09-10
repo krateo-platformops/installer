@@ -647,7 +647,10 @@ components:
   # 0.1.27 adds gateway.platformHostname (#115): when set (installer forcePaths exposure.tls.host), the
   # platform Gateway's LoadBalancer Service is annotated external-dns.alpha.kubernetes.io/hostname, so a
   # deployed external-dns keeps the portal's DNS record following the LB IP (DNS-follows-LB, no static IP).
-  version: 0.2.1
+  # 0.2.2 (#44): cert-replay-hop JWKS_URL now includes authn's :8082 port — without it the JWKS fetch hit
+  # :80, timed out, and every per-user-RBAC hop request 503'd (ErrKeyUnavailable), breaking all Autopilot
+  # k8s tool calls the moment perUserRbac was activated on 057; also logs that 503 (was silent).
+  version: 0.2.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
