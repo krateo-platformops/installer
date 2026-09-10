@@ -150,9 +150,26 @@ components:
   - git-provider-crd
   tier: platform
   feature: portal
+- name: github-provider-kog
+  kind: GithubProviderKog
+  version: 0.2.2
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  tier: platform
+  feature: portal
+  # 28 GitHub RestDefinitions (incl. Repository) — REQUIRED by builder-publish >= 1.8.0 (registered by
+  # the portal chart): builder-publish creates the destination repo as a github.krateo.io/Repository CR
+  # and gates file-commits on its status.default_branch. Deliberately NOT a portal dep (mirrors
+  # krateo-marketplace-catalog): the installer Ready-gates deps (compositions.yaml -> inst.depsReady ->
+  # inst.ready requires Ready=True, no existence-only mode), and this composition's aggregate Ready is a
+  # FALSE-NEGATIVE while the `team` RestDefinition is stuck in the external-create handshake
+  # (oasgen-provider#122, repository kind itself is Ready) — so a portal dep would wedge portal FOREVER
+  # on a fresh install. No deps of its own => converges independently; its github.krateo.io CRDs are
+  # served before a BuilderPublish claim (publish-time) needs them. Private krateo-blueprints chart =>
+  # inherits the default registryAuth creds like marketplace-catalog (no registries[] entry needed).
+  # spec.resourceGroup defaults to github.krateo.io in the chart's own values (installer emits spec: {}).
 - name: portal
   kind: Portal
-  version: 1.7.19
+  version: 1.8.1
   deps:
   - frontend
   - git-provider
@@ -630,7 +647,7 @@ components:
   # 0.1.27 adds gateway.platformHostname (#115): when set (installer forcePaths exposure.tls.host), the
   # platform Gateway's LoadBalancer Service is annotated external-dns.alpha.kubernetes.io/hostname, so a
   # deployed external-dns keeps the portal's DNS record following the LB IP (DNS-follows-LB, no static IP).
-  version: 0.2.0
+  version: 0.2.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
