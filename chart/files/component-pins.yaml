@@ -169,7 +169,7 @@ components:
   # spec.resourceGroup defaults to github.krateo.io in the chart's own values (installer emits spec: {}).
 - name: portal
   kind: Portal
-  version: 1.8.0
+  version: 1.8.1
   deps:
   - frontend
   - git-provider
