@@ -260,7 +260,10 @@ components:
   feature: portal
 - name: otel-collector-daemonset
   kind: OtelCollectorDaemonset
-  version: 0.1.8
+  # 0.1.9 (#122): traces pipeline redacts caller JWTs before ClickHouse — drops the
+  # http.header.Authorization span attr + strips eyJ… tokens from exception/error/status
+  # messages (backstop for the upstream kagent-tools JWT-in-span leak, amplified by per-user RBAC).
+  version: 0.1.9
   deps:
   - otel-collector-deployment
   tier: observability
