@@ -97,7 +97,13 @@ components:
   # (git-provider clones, it never creates it), and a claim publish now shows a live per-file
   # LocalResource status in the rail (✓/✗ + the git error) instead of a silent hang; also activates
   # the #163 per-artifact blueprint targeting (krateo-blueprints/<chart>). All UI-only, default-inert.
-  version: 1.5.28
+  # 1.5.30 (#185/#186): #185 fixes the Autopilot publish-destination form opening BEHIND the preview
+  # drawer (antd 6 z-index tie → "Confirm destination" unreachable, publish uncompletable) + the
+  # remembered-destination global-slot bug (a page publish inheriting the KOG repo). #186 makes voice
+  # input conversational (spoken turn + spoken answer, both in the transcript) + fixes Escape. SPA-only,
+  # no CRD/widget-schema change → frontend-crd pin stays (1.5.30 frontend-crds published only because one
+  # tag publishes all of helm/). Schema image.* defaults verified krateo-platformops/frontend (no braghettos trap).
+  version: 1.5.30
   deps:
   - frontend-crd
   - authn
