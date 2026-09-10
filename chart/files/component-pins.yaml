@@ -143,13 +143,19 @@ components:
 - name: git-provider-crd
   kind: GitProviderCrds
   chart: git-provider-crds
-  version: 0.14.2
+  # 0.15.0 adds status.templatingErrors to LocalResource+Repo — must move in lockstep with the
+  # provider (was skewed 0.14.2 vs provider 0.14.1 for 10 days).
+  version: 0.15.0
   tier: platform
   feature: portal
 - name: git-provider
   kind: GitProvider
   chart: git-provider
-  version: 0.14.1
+  # 0.15.0: #6 bearer auth no longer requires usernameRef (the real fix for the wedged publish
+  # LocalResources); #8 BREAKING default templating delims {{ }}->{% %} (fixes {{ toYaml }} in
+  # published charts; no-op on 057 — 0/13 LocalResources use placeholdersToOverride, 0 Repo CRs);
+  # #9 Repo sync fails on unloadable template values (no Repo CRs on 057). Closes the CRD skew above.
+  version: 0.15.0
   deps:
   - git-provider-crd
   tier: platform
