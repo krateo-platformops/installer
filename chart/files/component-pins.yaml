@@ -30,7 +30,11 @@ components:
 - name: authn
   kind: Authn
   chart: authn
-  version: 0.27.2
+  # 0.27.3 (#29): AUTHN_KUBECONFIG_SERVER_URL default kube-apiserver:6443 -> kubernetes.default.svc.
+  # The old kubeadm-style placeholder was written verbatim into every <user>-clientconfig server-url
+  # (unreachable NXDOMAIN on GKE, wrong port), breaking the cert-replay per-user RBAC hop. Users must
+  # re-login after this rolls so authn re-issues the clientconfig with the corrected server-url.
+  version: 0.27.3
   deps:
   - authn-crd
   tier: platform
