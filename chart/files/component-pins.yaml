@@ -150,8 +150,9 @@ components:
   kind: GitProviderCrds
   chart: git-provider-crds
   # 0.15.0 adds status.templatingErrors to LocalResource+Repo — must move in lockstep with the
-  # provider (was skewed 0.14.2 vs provider 0.14.1 for 10 days).
-  version: 0.15.0
+  # provider (was skewed 0.14.2 vs provider 0.14.1 for 10 days). 0.15.1 = security-only (no CRD
+  # change); kept in lockstep with the provider to preserve the no-skew invariant.
+  version: 0.15.1
   tier: platform
   feature: portal
 - name: git-provider
@@ -161,7 +162,11 @@ components:
   # LocalResources); #8 BREAKING default templating delims {{ }}->{% %} (fixes {{ toYaml }} in
   # published charts; no-op on 057 — 0/13 LocalResources use placeholdersToOverride, 0 Repo CRs);
   # #9 Repo sync fails on unloadable template values (no Repo CRs on 057). Closes the CRD skew above.
-  version: 0.15.0
+  # 0.15.1: SECURITY-ONLY, no behaviour change from 0.15.0 — x/crypto 0.52.0 (4 CRITICAL x/crypto/ssh
+  # advisories: agent-constraint drop, key-constraint enforcement, VerifiedPublicKeyCallback skew,
+  # @revoked auth bypass), go-git 5.19.2, moby/spdystream 0.5.1 (HIGH CRI DoS). git-provider speaks
+  # SSH/git to forges so these matter here; 0.15.0 (running on 057) has them unpatched.
+  version: 0.15.1
   deps:
   - git-provider-crd
   tier: platform
