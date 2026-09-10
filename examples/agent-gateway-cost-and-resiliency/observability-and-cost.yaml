@@ -1,0 +1,82 @@
+# Scenario 1 — who spent what, which guard fired, and how the proxy is sized.
+#
+#   helm upgrade -i installer … -f values.yaml -f observability-and-cost.yaml
+#
+# Every switch in this file is already at the value shown unless the comment says otherwise, so
+# applying it changes nothing on its own: it is here to be edited. The two opt-ins are
+# `metrics.includeUser` and `accessLog.promptLogging`, both off, both for a reason.
+
+componentValues:
+  agentgateway-policies:
+
+    # ---- the proxy Deployment -------------------------------------------------------------
+    # Every A2A, MCP and LLM call in the fleet crosses this one pod, and it is also the ONLY way
+    # the cost catalog reaches the proxy (AgentgatewayParameters.modelCatalog is honoured only on
+    # a Gateway-level parameters object). `enabled: false` therefore silently un-prices the fleet.
+    gateway:
+      parameters:
+        enabled: true
+        resources:
+          requests: {cpu: 100m, memory: 128Mi}
+          limits:   {cpu: "1", memory: 512Mi}   # quantities are STRINGS through the Installer CR
+        # Voluntary-disruption floor. With one replica this forbids evicting the only pod, which is
+        # right for a fleet-wide chokepoint and WILL stall a node drain. Turn it off on a cluster
+        # you drain routinely.
+        pdb:
+          enabled: true
+          minAvailable: 1
+        # `true` scales the proxy on CPU. Safe for throughput and NOT safe with budgets: a local
+        # rate-limit bucket lives in the proxy PROCESS, so N replicas enforce N times every budget.
+        # A render guard rejects hpa + budgets together.
+        hpa:
+          enabled: false
+          minReplicas: 1
+          maxReplicas: 3
+
+    # ---- dollars --------------------------------------------------------------------------
+    # agentgateway meters tokens on its own but prices nothing without a catalog. `enabled: false`
+    # keeps the token counts and drops `cost_usd`.
+    #
+    # The catalog is keyed by GATEWAY PROVIDER ID, and the id follows the ENDPOINT, not the model
+    # vendor: Gemini by API key is `gcp.gemini`, the same model via Vertex is `gcp.vertex_ai`, and
+    # Claude served by Vertex prices under `gcp.vertex_ai` — not `anthropic`. A provider missing
+    # from this list prices at 0 SILENTLY; a render guard catches the mismatch, but not a catalog
+    # that has merely gone stale.
+    costCatalog:
+      enabled: true
+      providers: [gcp.gemini, gcp.vertex_ai, openai, anthropic]   # trim to what you actually use
+
+    observability:
+      # ---- metric labels on the proxy's own :15020 ----------------------------------------
+      # Nothing in a stock Krateo install scrapes this — agentgateway exports metrics by Prometheus
+      # scrape only and the ClickStack tier brings no Prometheus. The labels cost nothing and are
+      # correct for whatever scrapes later; the access log below is the path that reaches ClickHouse.
+      metrics:
+        enabled: true
+        includeTeam: true    # one series per team per model — bounded, hence the safe default
+        includeUser: false   # HIGH-CARDINALITY: one series per person per model, forever. The same
+                             # attribution is a row (not a series) in the access log below.
+
+      # ---- one OTLP row per request, in ClickHouse ----------------------------------------
+      # The cost and audit record. `enabled: false` leaves the three RBAC layers ENFORCING and
+      # simply stops recording, which also leaves budget-alerts.yaml nothing to count.
+      accessLog:
+        enabled: true
+        includeUser: true
+        includeTeam: true
+        # WHICH GUARD FIRED — one entry per intervention, metadata only, never the matched text.
+        # This is the fix for "Model Armor isn't working": it has repeatedly turned out to be a
+        # cheap regex class shadowing it, with nothing recording which guard actually intervened.
+        guardrails: true
+        # Which tools the model asked for. Referencing `llm.toolCalls` is what turns extraction on.
+        toolCalls:
+          enabled: true
+        # PROMPT AND ANSWER TEXT. `true` writes every prompt a user types, and every answer the
+        # model returns, into ClickHouse — where the otel_logs TTL, not this chart, decides how long
+        # it lives. Turn it on for a diagnosis, then turn it back off.
+        promptLogging:
+          enabled: false
+        # CEL gate on whether a row is emitted at all. Empty = every request, which is the point of
+        # an audit record. Narrow it if kubelet probes and agent-card fetches are not worth storing:
+        #   filter: 'backend.type == "ai" || backend.type == "mcp" || response.code >= 400'
+        filter: ""

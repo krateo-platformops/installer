@@ -1,0 +1,31 @@
+# Scenario 7 — a hard ceiling on how much work the proxy holds at once.
+#
+#   helm upgrade -i installer … -f values.yaml -f load-shedding.yaml
+#
+# OFF by default. Past a cap the proxy REJECTS immediately instead of queueing, so a runaway agent
+# loop cannot exhaust it and take every A2A, MCP and LLM call in the fleet down with it. A
+# room-capacity limit, not a rate limit: budgets say "you have had enough", this says "the proxy is
+# full". Shed traffic lands in `agentgateway_requests_shed_total` and
+# `agentgateway_downstream_connections_shed_total`.
+#
+# THE TWO COUNTS NEED THE v1.5.0 agentgateway CRDs. `frontend.http.maxConcurrentRequests` and
+# `frontend.tcp.maxConnections` do not exist in the v1.4.1 CRDs the agentgateway-controller chart
+# pins, and there the API server rejects the WHOLE policy — the helm upgrade fails naming the field.
+# `maxConnectionDuration` works on either, so it is the only cap available before that bump. Leave
+# the two counts at 0 until the CRDs move.
+
+componentValues:
+  agentgateway-policies:
+    loadShedding:
+      enabled: true
+      maxConcurrentRequests: 0        # v1.5.0 CRDs only — leave 0 today. Then: concurrent in-flight
+                                      # requests, picked against gateway.parameters.resources (a cap
+                                      # above what the memory limit can serve is not protection,
+                                      # just a slower way to OOM). 0 = unlimited
+      maxConnections: 0               # v1.5.0 CRDs only — leave 0 today. Then: active downstream
+                                      # connections, higher than the request cap because kagent
+                                      # holds keepalive connections open between turns
+      # Works on v1.4.1: forces a connection closed after this long however busy it is, so a
+      # long-lived client rebalances onto a new proxy replica instead of pinning to one.
+      # Empty = never. A render guard rejects `enabled` with every cap at 0 or empty.
+      maxConnectionDuration: 3600s

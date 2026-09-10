@@ -1,0 +1,50 @@
+# Scenario 5 — retries and timeouts, one policy per hop.
+#
+#   helm upgrade -i installer … -f values.yaml -f retries-and-timeouts.yaml
+#
+# ON by default, with the values shown. A DIFFERENT POSTURE PER HOP IS THE POINT, not an
+# optimisation: a model call is slow by nature and safe to retry, while a tool call is fast and not
+# necessarily idempotent — retrying one that already reached the tool runs it twice.
+#
+# `429` is deliberately absent everywhere: it is the upstream telling us to stop, and on the LLM
+# route it is also how budgets say no. Retries surface as `agentgateway_retries_total`.
+
+componentValues:
+  agentgateway-policies:
+    resiliency:
+      enabled: true          # false = no retries and no timeouts on ANY hop
+
+      # The LLM hop. A transient provider 503 currently fails a whole Autopilot turn, which is the
+      # case this exists for.
+      llm:
+        retry:
+          attempts: 2        # extra attempts after the first, so up to three calls in total
+          backoff: 1s
+          codes: [502, 503, 504]
+        # Empty = NO TIMEOUT, deliberately: a model call is slow by nature and a short ceiling turns
+        # a long generation into a 504 the user reads as a broken agent. This and
+        # `llm.http.requestTimeout` are two ceilings on one hop — set one, not both (a render guard
+        # rejects both). This one bounds the whole route including retries; that one bounds a single
+        # call to the provider, so it fires first and turns a slow generation into a retried failure.
+        timeout: ""
+
+      # The MCP (tool) hop. Conservative on purpose: 504 is absent from the codes because a gateway
+      # timeout means the tool may well have run.
+      mcp:
+        retry:
+          attempts: 1
+          backoff: 500ms
+          codes: [502, 503]
+        # Bounded, unlike the LLM hop, because a hung tool call holds an agent turn open behind it.
+        # Lowering this is the quickest way to break every slow tool call in the fleet.
+        timeout: 120s
+
+      # The A2A hop — the catch-all agent route AND every sub-agent route, so a delegated turn gets
+      # the same posture. Empty timeout, because any ceiling here is a ceiling on how long a
+      # specialist may think.
+      a2a:
+        retry:
+          attempts: 1
+          backoff: 500ms
+          codes: [502, 503]
+        timeout: ""

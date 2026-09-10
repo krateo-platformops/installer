@@ -1,0 +1,33 @@
+# Scenario 3 — a budget for a group, and one for a single user.
+#
+#   helm upgrade -i installer … -f values.yaml -f budget-tiers.yaml
+#
+# Each entry gets its OWN INDEPENDENT BUCKET and the FIRST MATCHING entry wins, so a `users` entry
+# is a genuine per-that-user budget while a `groups` entry is ONE bucket the whole group shares.
+# Ordering matters: narrow rules first.
+#
+# A PER-USER BUDGET EXISTS ONLY FOR USERS NAMED HERE. There is no automatic bucket-per-caller
+# with local rate limiting; that needs a rate limit service and Redis, written up as deferred in
+# the policies chart's docs/global-budgets.md.
+
+componentValues:
+  agentgateway-policies:
+    budgets:
+      enabled: true
+
+      # The fleet-wide ceiling and the tiers are independent — keep both if you want a hard total
+      # above the per-tier allowances. Off here so the tiers are the only thing capping.
+      gateway:
+        enabled: false
+
+      # At most 16 entries; at most ONE entry with no subjects, and it must be LAST. Render guards
+      # enforce all three at install time rather than letting the API server reject the policy.
+      tiers:
+        - users: [batch-runner]     # a dedicated bucket for that one user
+          tokens: 10000000
+          unit: Hours
+        - groups: [admins]          # ONE bucket the whole group shares
+          tokens: 5000000
+          unit: Hours
+        - tokens: 200000            # no subjects = the unconditional fallback. Without it, callers
+          unit: Hours               # the entries above did not match get no tier budget at all

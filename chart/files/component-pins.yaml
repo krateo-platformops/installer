@@ -624,7 +624,7 @@ components:
 # componentValues.agentgateway-policies.
 - name: agentgateway-controller
   kind: AgentgatewayController
-  version: 0.1.4
+  version: 0.2.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   tier: platform
   feature: agentGateway
