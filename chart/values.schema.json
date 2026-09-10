@@ -2917,6 +2917,21 @@
                 }
               }
             },
+            "perUserRbac": {
+              "type": "object",
+              "additionalProperties": false,
+              "title": "Per-user RBAC (cert-replay hop)",
+              "description": "When enabled, kagent-tools runs under the CALLING USER's Kubernetes RBAC via the agentgateway cert-replay hop instead of a cluster-admin service account. MUST be paired with kagentapp.kagent-tools.enabled=false (the kagent chart hard-fails at template time if only one is set). Declared WITH a default so the installer's componentValues schema-default expansion keeps the key — an undeclared nested key is dropped from the expansion and the override never reaches the release.",
+              "default": {
+                "enabled": false
+              },
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Turn on per-user RBAC. Pair with kagentapp.kagent-tools.enabled=false."
+                }
+              }
+            },
             "kagentapp": {
               "type": "object",
               "additionalProperties": false,
@@ -2927,6 +2942,21 @@
                   "type": "object",
                   "additionalProperties": false,
                   "properties": {}
+                },
+                "kagent-tools": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "Upstream kagent-tools sub-chart gate",
+                  "description": "Gate for upstream kagent's kagent-tools sub-chart (the cluster-admin tool server). Set {enabled:false} together with perUserRbac.enabled=true to run tools under per-user RBAC instead; setting one alone is a hard template-time failure in the kagent chart. Declared WITH a default so the installer's componentValues schema-default expansion keeps the key — an undeclared nested key is dropped and the override never reaches the release.",
+                  "default": {
+                    "enabled": true
+                  },
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "Render upstream's kagent-tools sub-chart. Leave true unless perUserRbac.enabled is also true."
+                    }
+                  }
                 },
                 "fullnameOverride": {
                   "type": "string"
