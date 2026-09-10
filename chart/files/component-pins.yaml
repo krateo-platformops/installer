@@ -179,7 +179,11 @@ components:
   # spec.resourceGroup defaults to github.krateo.io in the chart's own values (installer emits spec: {}).
 - name: portal
   kind: Portal
-  version: 1.8.1
+  # 1.8.2 (#135): fixes the alert detail page — the alert-detail/alert-editdef RESTActions built the
+  # apiserver path with a brace placeholder `{name}` but snowplow only substitutes `${ }` jq exprs, so
+  # `/alerts/{namespace}/{name}` was sent literally (empty MANIFEST, "Pending" pill vs real status.state).
+  # One portal tag also republishes builder-publish at the same version (charts/builder-publish:1.8.2).
+  version: 1.8.2
   deps:
   - frontend
   - git-provider
@@ -663,7 +667,14 @@ components:
   # 0.2.2 (#44): cert-replay-hop JWKS_URL now includes authn's :8082 port — without it the JWKS fetch hit
   # :80, timed out, and every per-user-RBAC hop request 503'd (ErrKeyUnavailable), breaking all Autopilot
   # k8s tool calls the moment perUserRbac was activated on 057; also logs that 503 (was silent).
-  version: 0.2.2
+  # 0.2.3 (#46): ADDITIVE — registers krateo-blueprint-agent + its chart gate at the gateway (was missing
+  # entirely: 0 of 31 HTTPRoutes / 29 policies referenced it). Renders 8 new objects (subagent HTTPRoute +
+  # authz Allow/passthrough/resiliency-a2a; chart-gate Backend/HTTPRoute/NetworkPolicy/resiliency-mcp) so
+  # autopilot's delegation to krateo-blueprint-agent stops 403ing at the agent-card hop + the agent enters
+  # NetworkPolicy containment. Nothing existing modified. NOTE: bumping this proxy chart rolls the
+  # krateo-agent-gateway proxy pod → strands gateway-routed agents' MCP sessions → rollout restart the
+  # fleet after (roll-guard mcpHash does NOT cover agentgateway-policies itself).
+  version: 0.2.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
