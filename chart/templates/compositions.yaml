@@ -674,6 +674,40 @@
 {{- include "inst.forcePath" (dict "target" $spec "path" (list "gateway" "internalDataPlane") "value" true) }}
 {{- end }}
 {{- end }}
+{{- /* subAgents (agentgateway-policies#51) — DERIVE the gateway's A2A delegation-target list from the
+       DEPLOYED FLEET (every feature-enabled `agent: true` pin) instead of the chart's hand-kept default,
+       which drifts: krateo-blueprint-agent was promoted 2026-09-03 but sat unrouted for a week (no
+       subagent HTTPRoute / authz Allow / passthrough / resiliency-a2a → every autopilot delegation to it
+       403'd at the agent-card hop) until #46 added it to the curated list by hand. Deriving it means a
+       new agent is routed by EXISTENCE. Honor an explicit componentValues.agentgateway-policies.subAgents
+       override (same escape-hatch shape as extraAgents above); extraSubAgents (the -bench append) is a
+       SEPARATE key the chart concats on top, untouched here. The orchestrator (krateo-autopilot,
+       orchestrator:true) is NOT one Service named after its pin — its chart always ships `autopilot`
+       plus `k8s-agent`/`helm-agent` gated on componentValues.krateo-autopilot.agents.{k8s,helm}.enabled
+       (the installer enables both) — so it is expanded here. Feature-gated exactly like extraAgents, so a
+       coreAgents/specialistAgents-disabled agent isn't routed to a nonexistent Service. Empty fleet
+       (agent-less install) => nothing set, byte-identical. Each entry {name, port 8080,
+       subjects.anyAuthenticated} — the exact shape of all 11 curated entries. */ -}}
+{{- if (eq $c.name "agentgateway-policies") }}
+{{- if not (hasKey $spec "subAgents") }}
+{{- $subAgents := list }}
+{{- range $comp := $components }}
+{{- if and $comp.agent (eq (include "inst.featureEnabled" (list $top $comp.feature)) "true") }}
+{{- if $comp.orchestrator }}
+{{- $ap := dig $comp.name dict (default dict $top.Values.componentValues) }}
+{{- $subAgents = append $subAgents (dict "name" "autopilot" "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}
+{{- if dig "agents" "k8s" "enabled" false $ap }}{{- $subAgents = append $subAgents (dict "name" "k8s-agent" "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}{{- end }}
+{{- if dig "agents" "helm" "enabled" false $ap }}{{- $subAgents = append $subAgents (dict "name" "helm-agent" "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}{{- end }}
+{{- else }}
+{{- $subAgents = append $subAgents (dict "name" (default $comp.name $comp.chart) "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if gt (len $subAgents) 0 }}
+{{- $_ := set $spec "subAgents" $subAgents }}
+{{- end }}
+{{- end }}
+{{- end }}
 {{- /* Roll-guard stamps (#116) — $mcpHash is computed ONCE above (marker-based). The proxy carries it
        as gateway.mcpBackendHash (agentgateway-policies stamps the proxy pod template); every agent
        carries the SAME hash as `rollGuard` (its chart emits a KRATEO_ROLL_GUARD env that cache-busts
