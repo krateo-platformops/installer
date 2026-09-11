@@ -103,7 +103,14 @@ components:
   # input conversational (spoken turn + spoken answer, both in the transcript) + fixes Escape. SPA-only,
   # no CRD/widget-schema change → frontend-crd pin stays (1.5.30 frontend-crds published only because one
   # tag publishes all of helm/). Schema image.* defaults verified krateo-platformops/frontend (no braghettos trap).
-  version: 1.5.30
+  # 1.5.31: voice endpoint-timing fix ONLY — turn-end silence 8s->1.2s (conversational endpoint), with a
+  # split so the 1.2s applies only AFTER speech is heard (lead-in stays 8s, so a think-pause before the
+  # first word doesn't end the turn). Fixes "I talk and nothing happens" (~10s lag, not broken). NOTE:
+  # 1.5.31 also ships an inert Cloud TTS speak-back path gated on AUTOPILOT_VOICE_TTS_URL — that key is
+  # DELIBERATELY NOT set (Diego's call: move speak-back to Gemini Live native audio, frontend#190; Cloud
+  # TTS demoted to fallback). The installer voice knob derives only *_TRANSCRIBE_URL, never *_TTS_URL, so
+  # this stays inert by construction. frontend-crd stays 1.5.21 (no widget-schema change).
+  version: 1.5.31
   deps:
   - frontend-crd
   - authn
