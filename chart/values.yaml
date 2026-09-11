@@ -334,13 +334,13 @@ componentValues:
   agentgateway-policies:
     # The kagent dashboard's auth hop. On because kagent-ui is otherwise unusable behind the
     # gateway: the controller reads identity only from a bearer and kagent-ui sends none.
+    # Here rather than as a values.schema.json default: structural defaulting never creates an
+    # absent parent object, so a default under uiTokenHop would never materialise.
     uiTokenHop:
       enabled: true
     networkPolicy:
       # Containment for kagent-ui is OPT-IN even with the hop on: it cuts the portal's /autopilot/
-      # proxy, which the rail still uses whenever AUTOPILOT_API_BASE_URL could not be computed
-      # (the key is omitted until the gateway address is known). Turn on once the rail is on the
-      # gateway.
+      # proxy, which the rail still uses whenever AUTOPILOT_API_BASE_URL could not be computed.
       ui:
         enabled: false
   # Pin the kagent composition's resource names to a fixed "kagent" prefix (instead of the

@@ -9638,7 +9638,7 @@
                   "properties": {
                     "enabled": {
                       "type": "boolean",
-                      "description": "Default true, but inert unless uiTokenHop.enabled is also true."
+                      "description": "OFF by default even with uiTokenHop on. It makes the hop the only ingress to kagent-ui, which cuts the portal's /autopilot/ proxy — and the rail still uses that proxy whenever AUTOPILOT_API_BASE_URL could not be computed (compositions.yaml omits the key until the gateway address is known). Turn on once the rail is confirmed on the gateway."
                     },
                     "namespace": {
                       "type": "string",
@@ -13684,7 +13684,8 @@
               "additionalProperties": false,
               "properties": {
                 "enabled": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "ON by default: kagent-ui is unusable behind the gateway without it — the controller reads identity only from a bearer and kagent-ui sends none. Set false to drop the hop and its pod."
                 },
                 "identity": {
                   "type": "string",
