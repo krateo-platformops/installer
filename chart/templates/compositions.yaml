@@ -427,6 +427,20 @@
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "kagentapp" "controller" "auth" "userIdClaim") "value" $userClaim) -}}
 {{- /* The proxy Service the controller provisions for a Gateway carries the GATEWAY's name. */ -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "kagentapp" "proxy" "url") "value" (printf "http://%s.%s.svc.cluster.local:%v" $gwName $top.Values.namespaces.krateo $gwPort)) -}}
+{{- /* THE DASHBOARD'S OWN BACKEND, when agentgateway-policies' ui-token-hop fronts it. The kagent
+     dashboard does not fetch its data from the browser: it uses Next.js SERVER ACTIONS that run
+     INSIDE the kagent-ui pod and dial `ui.backendInternalUrl` — upstream-defaulted to the
+     controller, which the policies chart's containment blocks. Left alone, the dashboard renders
+     (the pages are prerendered) and then fails every action with "fetch failed", which reads as a
+     kagent bug rather than a missing value. So point it at the same gateway everything else here
+     uses; the server action forwards the caller's Authorization (upstream always does), which is
+     the token the hop stamped, and the gateway verifies it.
+     Paired with the hop rather than with features.agentGateway: with the gateway on but the hop
+     off, nothing supplies a token and repointing the UI would turn "fetch failed" into a 403.
+     Fill-if-absent, so an explicit componentValues override still wins; off => never written. */ -}}
+{{- if dig "agentgateway-policies" "uiTokenHop" "enabled" false (default dict $top.Values.componentValues) -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "kagentapp" "ui" "backendInternalUrl") "value" (printf "http://%s.%s.svc.cluster.local:%v/api" $gwName $top.Values.namespaces.krateo $gwPort)) -}}
+{{- end -}}
 {{- end -}}
 {{- $agwLlm := dig "agentgateway-policies" "llm" dict (default dict $top.Values.componentValues) -}}
 {{- /* THE LLM HOP — the agent half. The policies chart renders the AI backend and its route, but

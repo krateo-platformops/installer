@@ -3029,6 +3029,23 @@
                       "type": "object"
                     }
                   }
+                },
+                "ui": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "kagent dashboard (kagent-ui)",
+                  "description": "The kagent dashboard, a DEVELOPMENT tool: a real install normally turns it off. NOTE the knob is `replicas: 0`, not an `enabled` flag — upstream kagent renders the UI Deployment/Service/ServiceAccount/ConfigMap unconditionally and ships NO ui.enabled gate (checked in 0.9.12 and in the latest 0.10.1), so an `enabled` key here would validate and then be silently ignored. `replicas: 0` removes the pod — no memory, no attack surface — and leaves the inert Service/ConfigMap behind. Default 1 (the UI is on). Turning it off also makes agentgateway-policies' uiTokenHop pointless: disable both together.",
+                  "properties": {
+                    "replicas": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "0 = the dashboard is off (Deployment scaled to zero). Upstream default 1."
+                    },
+                    "backendInternalUrl": {
+                      "type": "string",
+                      "description": "What the kagent-ui pod's Next.js server dials for its SERVER ACTIONS — how the dashboard actually fetches data (POST / with a next-action header), as opposed to the browser's own /api calls. Upstream defaults it to the controller, which agentgateway-policies' containment blocks, so with uiTokenHop on the dashboard loads and then fails every action with \"fetch failed\". Point it at the gateway: http://<gateway>.<ns>.svc.cluster.local:<port>/api. The server action forwards the caller's Authorization (upstream always does), which is the token the hop stamped, and the gateway verifies it. Injected fill-if-absent when componentValues.agentgateway-policies.uiTokenHop.enabled is true."
+                    }
+                  }
                 }
               }
             }
@@ -9141,7 +9158,7 @@
                     },
                     "allowUi": {
                       "type": "boolean",
-                      "description": "Admit kagent-ui, which dials the controller directly with no token and so already 401s under trusted-proxy. A documented bypass that does not fix the UI; repoint it at the gateway instead. Default false."
+                      "description": "Admit kagent-ui, which dials the controller directly with no token and so already 401s under trusted-proxy. A documented bypass that does NOT restore the dashboard — the missing piece is the token, not the route. Use uiTokenHop instead, which leaves this false. Default false."
                     },
                     "uiPodLabels": {
                       "type": "object",
@@ -9611,6 +9628,155 @@
                           }
                         }
                       }
+                    }
+                  }
+                },
+                "ui": {
+                  "description": "Make ui-token-hop the only way into kagent-ui. Rendered ONLY when uiTokenHop.enabled is also true — the containment and the authenticating front door that replaces the tokenless path ship together. Nothing else protects kagent-ui (verified-live: an unprivileged pod gets 200 on kagent-ui:8080), and the frontend image bakes an unconditional /autopilot/ proxy from the portal's PUBLIC port to it.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "Default true, but inert unless uiTokenHop.enabled is also true."
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "description": "Namespace kagent-ui runs in, and where the policy is created. Empty = networkPolicy.controller.namespace, then the release namespace."
+                    },
+                    "podLabels": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "kagent-ui pod labels. Empty = networkPolicy.controller.uiPodLabels, so an upstream relabel is corrected in one place. A selector matching nothing fails OPEN in silence, so the render fails if both resolve empty."
+                    },
+                    "extraAllowedFrom": {
+                      "type": "array",
+                      "items": {
+                        "description": "A Kubernetes NetworkPolicyPeer. Set podSelector and/or namespaceSelector, OR ipBlock — ipBlock is mutually exclusive with the selectors.",
+                        "type": "object",
+                        "additionalProperties": false,
+                        "minProperties": 1,
+                        "properties": {
+                          "podSelector": {
+                            "description": "Selects pods. Without namespaceSelector it means pods in the policy's OWN namespace.",
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "matchLabels": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                },
+                                "description": "Label key/value pairs; all must match."
+                              },
+                              "matchExpressions": {
+                                "type": "array",
+                                "description": "Set-based label requirements; all must match.",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "key",
+                                    "operator"
+                                  ],
+                                  "properties": {
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "operator": {
+                                      "type": "string",
+                                      "enum": [
+                                        "In",
+                                        "NotIn",
+                                        "Exists",
+                                        "DoesNotExist"
+                                      ]
+                                    },
+                                    "values": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "description": "Required for In/NotIn; must be empty for Exists/DoesNotExist."
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "namespaceSelector": {
+                            "description": "Selects namespaces. kubernetes.io/metadata.name is set on every namespace by the apiserver.",
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "matchLabels": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                },
+                                "description": "Label key/value pairs; all must match."
+                              },
+                              "matchExpressions": {
+                                "type": "array",
+                                "description": "Set-based label requirements; all must match.",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "key",
+                                    "operator"
+                                  ],
+                                  "properties": {
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "operator": {
+                                      "type": "string",
+                                      "enum": [
+                                        "In",
+                                        "NotIn",
+                                        "Exists",
+                                        "DoesNotExist"
+                                      ]
+                                    },
+                                    "values": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "description": "Required for In/NotIn; must be empty for Exists/DoesNotExist."
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "ipBlock": {
+                            "description": "A CIDR range, e.g. the node CIDR when the CNI does not exempt kubelet probes.",
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "cidr"
+                            ],
+                            "properties": {
+                              "cidr": {
+                                "type": "string",
+                                "description": "CIDR, e.g. 10.244.0.0/16."
+                              },
+                              "except": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "description": "CIDRs excluded from `cidr`; each must be within it."
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "description": "Extra ingress NetworkPolicyPeer entries, appended verbatim. The frontend pod goes here on an install still serving Autopilot through the portal's /autopilot/ proxy — which re-opens the tokenless path this policy closes."
                     }
                   }
                 }
@@ -13509,6 +13675,182 @@
                       }
                     }
                   }
+                }
+              }
+            },
+            "uiTokenHop": {
+              "description": "The kagent dashboard's authenticating front door. The kagent controller runs AUTH_MODE=trusted-proxy — it identifies a caller only from a bearer and DECODES it without verifying the signature (an alg:none token with any sub returns 200) — while kagent-ui sends no bearer at all. This hop exchanges its own projected ServiceAccount token (audience-bound to authn) for a real RS256 Krateo JWT at authn's intra-service strategy, drops whatever Authorization the client sent, stamps its own, and sends /api through the Gateway so the signature is actually verified. One shared SERVICE identity, not the dashboard user's: it makes the dashboard's identity unforgeable, it does not make the dashboard multi-user. Default OFF — it needs authn, and enabling it also activates networkPolicy.ui.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "identity": {
+                  "type": "string",
+                  "minLength": 1,
+                  "default": "krateo-kagent-dashboard",
+                  "description": "The authn allowlist entry's name, which becomes `sub` on every minted token AND the subject the Gateway Allow clause admits. One value drives both so they cannot drift."
+                },
+                "groups": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The issued token's `groups` claim. Bind RBAC to the group rather than the username."
+                },
+                "apiPathPrefix": {
+                  "type": "string",
+                  "minLength": 1,
+                  "default": "/api/",
+                  "description": "Prefix the hop sends to the Gateway rather than to kagent-ui, and identically the path the Allow clause admits for `identity`. /api/ is the whole controller API, which is what a dashboard needs — including /api/a2a/, which is the chat itself."
+                },
+                "gatewayUrl": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Gateway origin for that traffic. Empty = this chart's own Gateway Service, already the catch-all A2A route onto the controller, so no extra HTTPRoute is needed."
+                },
+                "authn": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "loginUrl": {
+                      "type": "string",
+                      "description": "Empty = derived from the jwt.jwks block, so authn's location is configured once."
+                    },
+                    "loginPath": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "audience": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Enforced by authn via TokenReview; what stops the projected token being replayed elsewhere. Must match authn's AUTHN_SERVICEACCOUNT_AUDIENCE."
+                    },
+                    "tokenExpirationSeconds": {
+                      "type": "integer",
+                      "minimum": 600,
+                      "description": "Kubelet rotation period for the projected token — NOT the minted JWT's lifetime."
+                    },
+                    "timeout": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "default": {
+                    "loginUrl": "",
+                    "loginPath": "/serviceaccount/login",
+                    "audience": "authn",
+                    "tokenExpirationSeconds": 3600,
+                    "timeout": "10s"
+                  }
+                },
+                "token": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "skew": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Re-mint this long before the minted JWT's exp."
+                    },
+                    "minRefresh": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Floor between exchange attempts, so a failing authn is not hammered once per request."
+                    }
+                  },
+                  "default": {
+                    "skew": "5m",
+                    "minRefresh": "30s"
+                  }
+                },
+                "replicas": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1
+                },
+                "service": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "port": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535
+                    }
+                  },
+                  "default": {
+                    "port": 8080
+                  }
+                },
+                "image": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "repository": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "tag": {
+                      "type": "string"
+                    },
+                    "pullPolicy": {
+                      "type": "string"
+                    },
+                    "pullSecrets": {
+                      "type": "array"
+                    }
+                  },
+                  "default": {
+                    "repository": "ghcr.io/krateo-agentiko/ui-token-hop",
+                    "tag": "",
+                    "pullPolicy": "IfNotPresent",
+                    "pullSecrets": []
+                  }
+                },
+                "authnMapping": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "create": {
+                      "type": "boolean",
+                      "description": "The serviceaccount.authn.krateo.io/ServiceAccount allowlist entry. Without it the exchange 403s. False when managed elsewhere."
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "description": "authn reads these only from its own operator namespace. Empty = the JWKS Service's namespace."
+                    },
+                    "displayName": {
+                      "type": "string"
+                    }
+                  },
+                  "default": {
+                    "create": true,
+                    "namespace": "",
+                    "displayName": "kagent dashboard (intra-service auth)"
+                  }
+                },
+                "resources": {
+                  "type": "object",
+                  "default": {}
+                },
+                "env": {
+                  "type": "array",
+                  "default": []
+                },
+                "nodeSelector": {
+                  "type": "object",
+                  "default": {}
+                },
+                "tolerations": {
+                  "type": "array",
+                  "default": []
+                },
+                "affinity": {
+                  "type": "object",
+                  "default": {}
                 }
               }
             }

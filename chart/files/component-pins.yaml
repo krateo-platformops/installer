@@ -680,7 +680,7 @@ components:
   # NetworkPolicy containment. Nothing existing modified. NOTE: bumping this proxy chart rolls the
   # krateo-agent-gateway proxy pod → strands gateway-routed agents' MCP sessions → rollout restart the
   # fleet after (roll-guard mcpHash does NOT cover agentgateway-policies itself).
-  version: 0.2.3
+  version: 0.2.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
