@@ -680,19 +680,6 @@ components:
   # NetworkPolicy containment. Nothing existing modified. NOTE: bumping this proxy chart rolls the
   # krateo-agent-gateway proxy pod → strands gateway-routed agents' MCP sessions → rollout restart the
   # fleet after (roll-guard mcpHash does NOT cover agentgateway-policies itself).
-  # 0.2.4 (#49) adds uiTokenHop — the kagent dashboard's authenticating front door — and its paired
-  # networkPolicy.ui. BOTH DEFAULT OFF, so this bump is byte-identical until one is switched on.
-  # kagent-controller runs trusted-proxy (it only DECODES the bearer; an alg:none token with any sub
-  # is accepted) and kagent-ui sends no bearer at all, so the dashboard 401s with or WITHOUT the
-  # containment policies — allowUi was therefore a bypass that did not fix it. The hop exchanges its
-  # own audience-bound projected SA token at authn for a real RS256 Krateo JWT, drops whatever the
-  # client sent, and routes /api through the gateway where the signature is actually verified;
-  # networkPolicy.ui then makes the hop the ONLY way into kagent-ui, which also closes the frontend
-  # IMAGE's unconditional /autopilot/ proxy as a tokenless route to the controller. allowUi stays false.
-  # Enabling uiTokenHop also makes compositions.yaml inject componentValues.kagent.kagentapp.ui
-  # .backendInternalUrl (the gateway): the dashboard fetches through Next.js SERVER ACTIONS that run
-  # inside the UI pod and dial that URL, so without it the UI loads and then fails every action with
-  # "fetch failed". Same proxy-pod roll caveat as 0.2.3.
   version: 0.2.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:

@@ -339,18 +339,6 @@ componentValues:
   kagent:
     kagentapp:
       fullnameOverride: kagent
-      # The kagent DASHBOARD (kagent-ui) is a development tool; a real install normally turns it
-      # off. The knob is `replicas: 0`, NOT an `enabled` flag: upstream kagent renders the UI
-      # Deployment/Service/ServiceAccount/ConfigMap unconditionally and ships no ui.enabled gate
-      # (checked in 0.9.12 and in the latest 0.10.1), so an `enabled` key would be accepted here
-      # and then silently ignored. Zero replicas removes the pod — no memory, no attack surface —
-      # and leaves the inert Service/ConfigMap. Left ON by default.
-      #   ui:
-      #     replicas: 0
-      # Note the dashboard does not work on its own behind the gateway: the kagent controller
-      # identifies callers only from a bearer and kagent-ui sends none. Turning it on for real
-      # means agentgateway-policies' uiTokenHop (its authenticating front door); turning the UI
-      # off means turning that off too.
       # OTel export for the agents is OFF by default (omitted => byte-identical install). The
       # kagent controller forwards its OTEL_* env to every agent pod it deploys, so to stream agent
       # traces + GenAI token metrics to the observability stack, uncomment and point at the collector:
