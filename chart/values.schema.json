@@ -12938,6 +12938,66 @@
                 }
               }
             },
+            "tts": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Text-to-speech speak-back route (agentgateway-policies tts): /tts/v1 on the TLS platform listener, static backend to Google Cloud TTS (EU multi-region, keeps answer text in-region), guardrail-exempt + Strict-JWT + bounded. Set enabled:true to upgrade Autopilot speak-back from the browser voice to Cloud TTS — requires exposure.tls (a TLS platform listener). Off by default in the chart. Pair with the frontend AUTOPILOT_VOICE_TTS_URL (https://<host>/tts/v1/text:synthesize).",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Emit the /tts/v1 speak-back route + backend + gate + limits. Requires a TLS platform listener."
+                },
+                "routePrefix": {
+                  "type": "string",
+                  "description": "Path prefix for the speak-back route (default /tts/v1)."
+                },
+                "host": {
+                  "type": "string",
+                  "description": "Cloud TTS endpoint host (default the EU multi-region eu-texttospeech.googleapis.com)."
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535,
+                  "description": "Cloud TTS endpoint port (default 443)."
+                },
+                "upstreamPrefix": {
+                  "type": "string",
+                  "description": "Path the routePrefix is rewritten to upstream (default /v1, so /tts/v1/text:synthesize -> /v1/text:synthesize)."
+                },
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Volume/size bounds on the speak-back route (the request is small answer text; the response carries the audio). Each disables with 0/\"\".",
+                  "properties": {
+                    "requestsPerMinute": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Speak-back requests/min (429 over). 0 = off."
+                    },
+                    "burst": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Short-burst allowance above requestsPerMinute."
+                    },
+                    "charactersPerHour": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Reserved per-character budget. 0 = off."
+                    },
+                    "maxRequestBytes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Request body cap in bytes (answer text is small); over => 413. 0 = off."
+                    },
+                    "timeout": {
+                      "type": "string",
+                      "description": "Per-request timeout (Gateway API duration). \"\" = off."
+                    }
+                  }
+                }
+              }
+            },
             "platformRoutes": {
               "type": [
                 "array",

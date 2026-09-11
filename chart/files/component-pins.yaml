@@ -711,7 +711,13 @@ components:
   # NetworkPolicy containment. Nothing existing modified. NOTE: bumping this proxy chart rolls the
   # krateo-agent-gateway proxy pod → strands gateway-routed agents' MCP sessions → rollout restart the
   # fleet after (roll-guard mcpHash does NOT cover agentgateway-policies itself).
-  version: 0.2.4
+  # 0.2.5 (#52): ADDITIVE — a /tts/v1 route (gated tts.enabled, default off) so Autopilot speak-back can
+  # use Google Cloud Text-to-Speech instead of the browser's voice. Rides its own static backend to the
+  # EU TTS endpoint (eu-texttospeech.googleapis.com, keeps answer text in-region) with its own JWT gate +
+  # bounds; rewrites /tts/v1/text:synthesize -> /v1/text:synthesize upstream. Requires a TLS platform
+  # listener (fails render otherwise). Enabled via exposure.voice (compositions.yaml), which also derives
+  # the frontend AUTOPILOT_VOICE_TTS_URL that points at it — same knob as the /stt/v1 dictation route.
+  version: 0.2.5
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
