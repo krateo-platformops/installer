@@ -13684,13 +13684,11 @@
               "additionalProperties": false,
               "properties": {
                 "enabled": {
-                  "type": "boolean",
-                  "default": false
+                  "type": "boolean"
                 },
                 "identity": {
                   "type": "string",
                   "minLength": 1,
-                  "default": "krateo-kagent-dashboard",
                   "description": "The authn allowlist entry's name, which becomes `sub` on every minted token AND the subject the Gateway Allow clause admits. One value drives both so they cannot drift."
                 },
                 "groups": {
@@ -13703,12 +13701,10 @@
                 "apiPathPrefix": {
                   "type": "string",
                   "minLength": 1,
-                  "default": "/api/",
                   "description": "Prefix the hop sends to the Gateway rather than to kagent-ui, and identically the path the Allow clause admits for `identity`. /api/ is the whole controller API, which is what a dashboard needs — including /api/a2a/, which is the chat itself."
                 },
                 "gatewayUrl": {
                   "type": "string",
-                  "default": "",
                   "description": "Gateway origin for that traffic. Empty = this chart's own Gateway Service, already the catch-all A2A route onto the controller, so no extra HTTPRoute is needed."
                 },
                 "authn": {
@@ -13737,13 +13733,6 @@
                       "type": "string",
                       "minLength": 1
                     }
-                  },
-                  "default": {
-                    "loginUrl": "",
-                    "loginPath": "/serviceaccount/login",
-                    "audience": "authn",
-                    "tokenExpirationSeconds": 3600,
-                    "timeout": "10s"
                   }
                 },
                 "token": {
@@ -13760,16 +13749,11 @@
                       "minLength": 1,
                       "description": "Floor between exchange attempts, so a failing authn is not hammered once per request."
                     }
-                  },
-                  "default": {
-                    "skew": "5m",
-                    "minRefresh": "30s"
                   }
                 },
                 "replicas": {
                   "type": "integer",
-                  "minimum": 1,
-                  "default": 1
+                  "minimum": 1
                 },
                 "service": {
                   "type": "object",
@@ -13780,9 +13764,6 @@
                       "minimum": 1,
                       "maximum": 65535
                     }
-                  },
-                  "default": {
-                    "port": 8080
                   }
                 },
                 "image": {
@@ -13800,14 +13781,18 @@
                       "type": "string"
                     },
                     "pullSecrets": {
-                      "type": "array"
+                      "type": "array",
+                      "description": "IMAGE-pull secrets for the private ui-token-hop image. Auto-wired by the installer from registryAuth (the derived krateo-registry-image-pull dockerconfigjson); set explicitly to override, or [] to opt out. Declaring a schema default here would defeat that: helm materializes it onto the Installer CR and the injection's hasKey test then skips it.",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      }
                     }
-                  },
-                  "default": {
-                    "repository": "ghcr.io/krateo-agentiko/ui-token-hop",
-                    "tag": "",
-                    "pullPolicy": "IfNotPresent",
-                    "pullSecrets": []
                   }
                 },
                 "authnMapping": {
@@ -13825,32 +13810,22 @@
                     "displayName": {
                       "type": "string"
                     }
-                  },
-                  "default": {
-                    "create": true,
-                    "namespace": "",
-                    "displayName": "kagent dashboard (intra-service auth)"
                   }
                 },
                 "resources": {
-                  "type": "object",
-                  "default": {}
+                  "type": "object"
                 },
                 "env": {
-                  "type": "array",
-                  "default": []
+                  "type": "array"
                 },
                 "nodeSelector": {
-                  "type": "object",
-                  "default": {}
+                  "type": "object"
                 },
                 "tolerations": {
-                  "type": "array",
-                  "default": []
+                  "type": "array"
                 },
                 "affinity": {
-                  "type": "object",
-                  "default": {}
+                  "type": "object"
                 }
               }
             }
