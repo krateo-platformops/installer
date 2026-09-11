@@ -533,7 +533,11 @@ components:
   # the repo name AND says never emit a path (the host derives helm/portal/... itself). MUST roll WITH
   # frontend 1.5.32 (frontend=paths, prompt=repo). CRD note: KrateoAutopilot served version migrates
   # v0-4-10 -> v0-4-11 (tracks the chart); patch/prompt-only so schema is unchanged — clean version rename.
-  version: 0.4.11
+  # 0.4.12 (#118): agents.autopilot.modelConfig gemini-pro -> gemini-flash — the LABEL correction closing
+  # the fleet flash-repoint (both slots resolve to gemini-3.8-flash on this project's Vertex; naming pro
+  # was a silent lever). Chart-default only; the autopilot pod rolls but autopilot is NOT an mcpBackend so
+  # no roll-guard fleet bounce. Served version migrates v0-4-11 -> v0-4-12 (schema unchanged, clean rename).
+  version: 0.4.12
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -772,7 +776,11 @@ components:
 # operator / tf-to-helm were RETIRED in #144; features.codegenAgents is kept hard-defaulted false.)
 - name: krateo-blueprint-agent
   kind: KrateoBlueprintAgent
-  version: 0.2.9
+  # 0.2.10 (#12): modelConfig.name gemini-pro -> gemini-flash (+ the create=true branch's modelConfig.model
+  # 2.5-pro -> 3.8-flash) — closes the fleet flash-repoint (label correction; both slots resolve to
+  # gemini-3.8-flash on Vertex). Chart-default only; the agent pod rolls, NOT an mcpBackend so no fleet
+  # bounce. Served version migrates v0-2-9 -> v0-2-10 (schema unchanged, clean rename).
+  version: 0.2.10
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
