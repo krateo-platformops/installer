@@ -660,7 +660,12 @@ components:
   feature: specialistAgents
 - name: alert-troubleshooter
   kind: AlertTroubleshooter
-  version: 0.2.35
+  # 0.2.36 (#28): additive ClusterRole+ClusterRoleBinding for the observer thread, which reads
+  # auditrecords + troubleshootingreports CLUSTER-WIDE (a remediation write can target any namespace)
+  # and patches report status — the namespaced Role couldn't authorize the all-namespaces list, so
+  # every observe pass 403'd on GET /apis/audit.krateo.io/v1alpha1/auditrecords. App-only fix (RBAC in
+  # the app chart, CRDs unchanged) so the alert-troubleshooter-crd pin stays 0.2.35 per the decoupling.
+  version: 0.2.36
   deps:
   - alert-troubleshooter-crd
   - incident-agent
