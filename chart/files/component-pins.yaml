@@ -115,7 +115,11 @@ components:
   # a directory the portal repo dropped 2026-08-03, so page publishes merged clean but the page never
   # rendered). The prompt half (0.4.11) stops the model naming the dead repo/emitting a path. frontend-crd
   # stays 1.5.21 (no widget-schema change).
-  version: 1.5.32
+  # 1.5.33: per-fenced-code-block copy buttons in the Markdown widget — previously allowCopy copied the
+  # WHOLE step (eyebrow+prose+JSON+both shell commands) as one unpasteable blob. Roll BEFORE portal 1.8.6
+  # (intended order); portal 1.8.6 keeps the old whole-step copy button on purpose so there's no window
+  # with no copy affordance, so bundling is safe. SPA-only, frontend-crd stays 1.5.21.
+  version: 1.5.33
   deps:
   - frontend-crd
   - authn
@@ -221,7 +225,14 @@ components:
   # any install setting tiers.admin. Widget CRs only (new Form widget), NO widget-schema field added,
   # so frontend/frontend-crd pins stay. Validated kubectl apply --dry-run=server vs live 057 CRDs
   # (99/99 widgets, 0 errors, 0 residue). Republishes builder-publish 1.8.4 (one portal tag).
-  version: 1.8.4
+  # 1.8.6 (#140/#141/#142; supersedes 1.8.5): fixes 4 defects the first live agents-page render exposed —
+  # the Add-policy form never rendered (snowplow's gojq has no keys_unsorted, so the filter failed to
+  # COMPILE), the tool-server matrix rendered as a grid of dashes, matrix column headers were truncated,
+  # the policy subtitle autolinked a nonexistent domain (#140); the incident page now shows the provider
+  # error VERBATIM + an "Involved resources" section (every CR the incident is made of as a v1 List) (#141);
+  # a verify step no longer prints its own title as body line 1 nor asks to run the same command twice (#142).
+  # Widget CRs only, no widget-schema field — frontend/frontend-crd pins stay. Republishes builder-publish 1.8.6.
+  version: 1.8.6
   deps:
   - frontend
   - git-provider
@@ -572,7 +583,13 @@ components:
   # which defaults FALSE. With the switch off the chart renders an Agent byte-identical to 0.1.9,
   # so this bump changes no agent behaviour on its own; it only makes the switch real. Setting the
   # switch on a release older than this one is silently pruned by the apiserver, not rejected.
-  version: 0.1.11
+  # 0.1.12 (#15): OUTAGE FIX — unbinds list_tables. mcp-clickhouse 0.5.0 declares
+  # list_tables.page_size with exclusiveMinimum, which Gemini's FunctionDeclaration schema rejects,
+  # so Vertex 400s the WHOLE request — one bound tool took down every model call, writing 400s into
+  # status.report instead of reports (alert->RCA loop dead). Matches clickstack-agent (already unbound).
+  # Live toolNames should become ["list_databases","run_select_query","run_query"]. Not an mcpBackend
+  # (no fleet bounce); served version migrates v0-1-11 -> v0-1-12.
+  version: 0.1.12
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
