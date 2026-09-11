@@ -3044,6 +3044,13 @@
                     "backendInternalUrl": {
                       "type": "string",
                       "description": "What the kagent-ui pod's Next.js server dials for its SERVER ACTIONS — how the dashboard actually fetches data (POST / with a next-action header), as opposed to the browser's own /api calls. Upstream defaults it to the controller, which agentgateway-policies' containment blocks, so with uiTokenHop on the dashboard loads and then fails every action with \"fetch failed\". Point it at the gateway: http://<gateway>.<ns>.svc.cluster.local:<port>/api. The server action forwards the caller's Authorization (upstream always does), which is the token the hop stamped, and the gateway verifies it. Injected fill-if-absent when componentValues.agentgateway-policies.uiTokenHop.enabled is true."
+                    },
+                    "additionalForwardedHeaders": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Extra request headers the kagent-ui pod forwards to its backend, on TOP of the always-forwarded Authorization. Upstream reads this as KAGENT_ADDITIONAL_FORWARDED_HEADERS. Needed by agentgateway-policies' uiTokenHop.impersonation: the hop stamps X-User-Id and X-Agent-Name on the request, but the dashboard's real data path is a Next.js SERVER ACTION running inside this pod, which re-creates the upstream request and copies only allowlisted headers — so without [x-user-id, x-agent-name] here the switch covers direct browser /api calls only and silently does nothing for the session list. Hop-by-hop headers are dropped by kagent-ui regardless of what is listed."
                     }
                   }
                 }
@@ -13870,6 +13877,32 @@
                     },
                     "displayName": {
                       "type": "string"
+                    }
+                  }
+                },
+                "impersonation": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "DEVELOPMENT ONLY. View the kagent dashboard as another user. kagent scopes every session listing to the authenticated principal and exposes no all-users view, so the dashboard lists only what the hop's own shared service identity created; history written under a human login stays invisible. This overrides the user id kagent sees, via the X-User-Id/X-Agent-Name pair its trusted-proxy authenticator prefers over the token's `sub`. The bearer stays the hop's real token, so the Gateway still verifies a genuine signature — only the application-level user id changes. NOT authentication: the viewed user has no relation to whoever is at the keyboard, and anyone who can reach the hop can view as anyone. Needs componentValues.kagent.kagentapp.ui.additionalForwardedHeaders to carry x-user-id and x-agent-name, or it covers direct /api calls only and silently misses the dashboard's Next.js server-action data path.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "defaultUser": {
+                      "type": "string",
+                      "description": "Who to view as when no cookie is set. Empty = the hop's own identity, so enabling the switch alone changes nothing until a user is picked. Flip it per-browser at /_hop/user?set=<id>."
+                    },
+                    "agentName": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Fills X-Agent-Name, which kagent requires before it honours X-User-Id at all. Its only other use is a guard on POST /api/sessions/{id}/events, called exclusively by the ADK agent runtime against the controller directly — never through this hop."
+                    },
+                    "allowedUsers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Restricts which user ids may be selected. Empty = any."
                     }
                   }
                 },

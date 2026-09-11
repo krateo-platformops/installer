@@ -722,7 +722,7 @@ components:
   # bounds; rewrites /tts/v1/text:synthesize -> /v1/text:synthesize upstream. Requires a TLS platform
   # listener (fails render otherwise). Enabled via exposure.voice (compositions.yaml), which also derives
   # the frontend AUTOPILOT_VOICE_TTS_URL that points at it — same knob as the /stt/v1 dictation route.
-  version: 0.2.5
+  version: 0.2.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
