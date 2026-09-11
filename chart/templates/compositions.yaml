@@ -56,16 +56,22 @@
 {{- $gwTLS := and $gwPathMode (dig "tls" "enabled" false $top.Values.exposure) }}
 {{- $gwPortalHost := dig "tls" "host" "" $top.Values.exposure }}
 {{- $gwCertRef := dig "tls" "certificateRef" "" $top.Values.exposure }}
-{{/* exposure.voice (#118): ONE knob to enable Autopilot dictation end-to-end, standard/derived (no
-     hardcoded per-install URL). When on it (a) derives the frontend's AUTOPILOT_VOICE_TRANSCRIBE_URL
-     from the TLS host and (b) turns on the /stt/v1 route (agentgateway-policies stt.enabled) — voice
-     needs BOTH a secure context AND that route. Fails loudly if voice is on without exposure.tls (path-
-     mode HTTPS): getUserMedia requires a secure context and the URL has no host otherwise. Off =>
-     nothing derived, byte-identical. */}}
+{{/* exposure.voice (#118 dictation, #52 speak-back): ONE knob to enable Autopilot voice end-to-end,
+     standard/derived (no hardcoded per-install URL). When on it derives BOTH browser-facing endpoints
+     from the TLS host and turns on BOTH gateway routes they point at:
+       - dictation (mic -> text): frontend AUTOPILOT_VOICE_TRANSCRIBE_URL = <host>/stt/v1/chat/completions
+         + agentgateway-policies stt.enabled (the /stt/v1 route);
+       - speak-back (answer text -> Cloud TTS audio): frontend AUTOPILOT_VOICE_TTS_URL =
+         <host>/tts/v1/text:synthesize + agentgateway-policies tts.enabled (the /tts/v1 route). Only
+         consulted by the frontend when AUTOPILOT_VOICE_SPEAK_BACK is on, so it's a safe superset of the
+         browser speaker: absent URL keeps the browser voice, present URL upgrades it to Cloud TTS.
+     Both need a secure context, so fail loudly if voice is on without exposure.tls (path-mode HTTPS):
+     getUserMedia requires it and the URLs have no host otherwise. Off => nothing derived, byte-identical. */}}
 {{- $voice := dig "voice" false $top.Values.exposure }}
-{{- if and $voice (not $gwTLS) }}{{- fail "installer: exposure.voice requires exposure.tls (path-mode HTTPS) — Autopilot dictation needs a secure context and the transcribe URL is derived from exposure.tls.host." }}{{- end }}
+{{- if and $voice (not $gwTLS) }}{{- fail "installer: exposure.voice requires exposure.tls (path-mode HTTPS) — Autopilot voice needs a secure context and the transcribe/tts URLs are derived from exposure.tls.host." }}{{- end }}
 {{- $voiceUrl := "" }}
-{{- if $voice }}{{- $voiceUrl = printf "https://%s/stt/v1/chat/completions" $gwPortalHost }}{{- end }}
+{{- $ttsUrl := "" }}
+{{- if $voice }}{{- $voiceUrl = printf "https://%s/stt/v1/chat/completions" $gwPortalHost }}{{- $ttsUrl = printf "https://%s/tts/v1/text:synthesize" $gwPortalHost }}{{- end }}
 {{- $gwComp := dict }}
 {{- if $gwPathMode }}{{- range $gc := $components }}{{- if eq $gc.name "agentgateway-policies" }}{{- $gwComp = $gc }}{{- end }}{{- end }}{{- end }}
 {{/* TWO-GATEWAY design (#114): with exposure.internalDataPlane the primary agent gateway
@@ -503,14 +509,16 @@
 {{- if eq $c.name "agentgateway-policies" -}}
 {{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "cors" "enabled") "value" true) -}}
 {{- end -}}
-{{- /* exposure.voice (#118): derive the frontend transcribe URL from the TLS host (no hardcoded host)
-     and enable the /stt/v1 route it points at. forcePath — voice is an authoritative exposure decision.
-     Off => neither is set (byte-identical). */ -}}
+{{- /* exposure.voice (#118 dictation, #52 speak-back): derive the frontend transcribe + tts URLs from
+     the TLS host (no hardcoded host) and enable the two gateway routes they point at (/stt/v1, /tts/v1).
+     forcePath — voice is an authoritative exposure decision. Off => none are set (byte-identical). */ -}}
 {{- if and (eq $c.name "frontend") $voice -}}
 {{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "config" "AUTOPILOT_VOICE_TRANSCRIBE_URL") "value" $voiceUrl) -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "config" "AUTOPILOT_VOICE_TTS_URL") "value" $ttsUrl) -}}
 {{- end -}}
 {{- if and (eq $c.name "agentgateway-policies") $voice -}}
 {{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "stt" "enabled") "value" true) -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "tts" "enabled") "value" true) -}}
 {{- end -}}
 {{- /* external-dns (#115, features.externalDns). (a) Pass the top-level externalDns block straight
      through to the external-dns component's curated `external-dns` values (helm deep-merges it over the
@@ -545,13 +553,17 @@
      THAT on its A2A call to incident-agent, so incident-agent can propagate it to its now-gated MCP
      tools. So under the gateway we point config.authnUrl at authn's in-cluster Service (chart default
      "" = disabled, which is exactly right when the gateway is OFF and nothing downstream is gated).
-     Port follows the shared exposure.port when set, else authn's per-component default — the same rule
-     the peer-url/internalUrls wiring uses. Fill-if-absent so a componentValues override still wins.
+     Port follows authn's own exposePort by default, and the shared exposure.port ONLY in LB/NodePort
+     modes ($isLB) — the SAME gate the peer-url/internalUrls wiring uses, because that shared port is a
+     real listener only when the whole stack sits behind one LB. Under Gateway mode $isLB is false and
+     the services keep their own ports, so authn stays on its exposePort (8082); without the $isLB guard
+     exposure.port (80 in path mode) clobbered it, pointing this URL at a dead :80 → authn token-exchange
+     failed → tokenless A2A → incident-agent 403. Fill-if-absent so a componentValues override still wins.
      Requires authn's serviceaccount strategy, always present under specialistAgents (needs portal→authn). */ -}}
 {{- if eq $c.name "alert-troubleshooter" -}}
 {{- $authnPort := 8082 -}}
 {{- range $d := $components -}}{{- if eq $d.name "authn" -}}{{- $authnPort = $d.exposePort -}}{{- end -}}{{- end -}}
-{{- if $top.Values.exposure.port -}}{{- $authnPort = $top.Values.exposure.port -}}{{- end -}}
+{{- if and $isLB $top.Values.exposure.port -}}{{- $authnPort = $top.Values.exposure.port -}}{{- end -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "config" "authnUrl") "value" (printf "http://authn.%s.svc.cluster.local:%v" $top.Values.namespaces.krateo (int $authnPort))) -}}
 {{- /* And route its A2A call to incident-agent THROUGH the gateway so the minted JWT is gateway-
      validated and per-agent RBAC is enforced on that hop — not merely presented to a directly-dialed
