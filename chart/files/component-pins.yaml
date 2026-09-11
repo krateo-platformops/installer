@@ -110,7 +110,12 @@ components:
   # DELIBERATELY NOT set (Diego's call: move speak-back to Gemini Live native audio, frontend#190; Cloud
   # TTS demoted to fallback). The installer voice knob derives only *_TRANSCRIBE_URL, never *_TTS_URL, so
   # this stays inert by construction. frontend-crd stays 1.5.21 (no widget-schema change).
-  version: 1.5.31
+  # 1.5.32: the page-publish PATH half (paired with krateo-autopilot 0.4.11) — the host now writes widget
+  # CRs to helm/portal/templates/ + the nav fragment to helm/portal/files/nav-fragments/ (was chart/…,
+  # a directory the portal repo dropped 2026-08-03, so page publishes merged clean but the page never
+  # rendered). The prompt half (0.4.11) stops the model naming the dead repo/emitting a path. frontend-crd
+  # stays 1.5.21 (no widget-schema change).
+  version: 1.5.32
   deps:
   - frontend-crd
   - authn
@@ -513,7 +518,14 @@ components:
   # 0.4.9 adds the k8s_analyze binding on the k8s-agent and its prompt section, both behind
   # mcpServers.configRefs.k8sAnalyze.enabled which defaults FALSE. With the switch off the render is
   # byte-identical to 0.4.8. The chart refuses loudly if the switch is on while agents.k8s is off.
-  version: 0.4.10
+  # 0.4.11: PROMPT-ONLY (files/prompts-eng.yaml, one commit) — the page-publish half of the fix paired
+  # with frontend 1.5.32. The prompt named the dead repo `krateo-portal-chart` + documented the removed
+  # `chart/templates/` contract, and a model-emitted repo OVERRIDES install config (publishTargetForm.tsx:86),
+  # so page publishes silently wrote to a directory no chart renders (dead since 2026-08-03). 0.4.11 fixes
+  # the repo name AND says never emit a path (the host derives helm/portal/... itself). MUST roll WITH
+  # frontend 1.5.32 (frontend=paths, prompt=repo). CRD note: KrateoAutopilot served version migrates
+  # v0-4-10 -> v0-4-11 (tracks the chart); patch/prompt-only so schema is unchanged — clean version rename.
+  version: 0.4.11
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
