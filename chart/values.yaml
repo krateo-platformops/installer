@@ -423,16 +423,24 @@ componentValues:
   # The agent charts themselves default to kagent's inert default-model-config, a reference that
   # always resolves — so a slot rename can never leave an agent pointing at nothing.
 
-  # pro: the heavy/reasoning agent of the fleet — it reads the installer's own values surface and
-  # schema and reasons about a multi-component DAG.
+  # NOTE (2026-09-11): every fleet agent below NAMES the gemini-flash slot. On this project's Vertex
+  # both slots resolve to the SAME model (gemini-flash -> gemini-3.8-flash, gemini-pro -> gemini-3.8-flash;
+  # no current-generation pro is served), so naming `gemini-pro` was a silent lever — a change to
+  # models.pro.model would have relocated the whole fleet with no signal. The `gemini-pro` slot stays
+  # DEFINED but UNREFERENCED (do NOT retire it) — reserved so a real reasoning tier has somewhere to
+  # land. The `pro-tier candidate:` lines below record which agents would benefit from that stronger
+  # model (reasoning/authoring work) — i.e. the ones to move back when such a tier exists.
+
+  # pro-tier candidate: the heavy/reasoning agent of the fleet — it reads the installer's own values
+  # surface and schema and reasons about a multi-component DAG.
   installer-agent:
     modelConfig:
-      name: gemini-pro
-  # pro: root-cause analysis is judgment work (rank competing causes, notice a missing piece of
+      name: gemini-flash
+  # pro-tier candidate: root-cause analysis is judgment work (rank competing causes, notice a missing piece of
   # evidence, refuse to guess) where the flash tier fabricates.
   incident-agent:
     modelConfig:
-      name: gemini-pro
+      name: gemini-flash
     # Same generic Kubernetes knowledge (chart 0.1.9+), here appended to the incident-agent's OWN
     # system prompt with no agents.* gate in front of it — so at the chart's true/true defaults it
     # is unconditionally live. OFF for the same reason and with the same schema-default mirror: the
@@ -442,25 +450,25 @@ componentValues:
       kubernetes:
         playbook: false
         architecture: false
-  # pro: an AUTHORING specialist — it composes RESTActions (+ widget apiRef wiring), the same
+  # pro-tier candidate: an AUTHORING specialist — it composes RESTActions (+ widget apiRef wiring), the same
   # authoring role that runs frontend-agent on pro. Authoring valid CRs and reading apiserver
   # validation errors needs the stronger model.
   snowplow-agent:
     modelConfig:
-      name: gemini-pro
-  # pro: this agent AUTHORS + self-validates widget CRs. Authoring valid CRs and reading dry-run
+      name: gemini-flash
+  # pro-tier candidate: this agent AUTHORS + self-validates widget CRs. Authoring valid CRs and reading dry-run
   # errors needs the stronger model; the author->dry-run->fix loop in its prompt is the
   # correctness backstop.
   frontend-agent:
     modelConfig:
-      name: gemini-pro
-  # pro: an AUTHORING specialist. It composes multi-resource charts and then reads structured
+      name: gemini-flash
+  # pro-tier candidate: an AUTHORING specialist. It composes multi-resource charts and then reads structured
   # validator output — JSON pointers, CEL messages — and edits the right template in response.
   # That read-diagnose-fix loop is what the stronger tier buys; on flash the loop burns
   # iterations re-fixing the same file.
   core-provider-agent:
     modelConfig:
-      name: gemini-pro
+      name: gemini-flash
   authn-agent:
     modelConfig:
       name: gemini-flash

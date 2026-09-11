@@ -213,7 +213,15 @@ components:
   # route validated (lint-keyextras: /agents/{namespace}/{name}->page-agent-detail, 19 widgets 0 viol).
   # Republishes builder-publish 1.8.3 (one portal tag). Empty-list panels intentionally say "none OR
   # not-in-your-grant" (snowplow userAccessFilter makes the two indistinguishable at the RESTAction layer).
-  version: 1.8.3
+  # 1.8.4 (#138/#139): completes the /agents control plane to mockup parity — inventory gains
+  # Owner/Pattern/Gateway columns, a gateway-topology FlowChart, an exception roll-up, a seven-hop
+  # request walk, an agent x tool-server binding matrix, and a NEW route /agents/policies/new (order
+  # 939) with a create Form for standalone AgentgatewayPolicies. Also fixes flex.page-agents-policies
+  # living in the admin tier while reached by `page:` (resolves in FRONTEND_NAMESPACE) — would 404 on
+  # any install setting tiers.admin. Widget CRs only (new Form widget), NO widget-schema field added,
+  # so frontend/frontend-crd pins stay. Validated kubectl apply --dry-run=server vs live 057 CRDs
+  # (99/99 widgets, 0 errors, 0 residue). Republishes builder-publish 1.8.4 (one portal tag).
+  version: 1.8.4
   deps:
   - frontend
   - git-provider
