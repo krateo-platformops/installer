@@ -189,7 +189,14 @@ components:
   # apiserver path with a brace placeholder `{name}` but snowplow only substitutes `${ }` jq exprs, so
   # `/alerts/{namespace}/{name}` was sent literally (empty MANIFEST, "Pending" pill vs real status.state).
   # One portal tag also republishes builder-publish at the same version (charts/builder-publish:1.8.2).
-  version: 1.8.2
+  # 1.8.3 (#136/#138): adds the /agents control-plane page — one "Agents" sidebar entry (order 14) with
+  # the kagent fleet inventory (/agents), per-agent detail (/agents/{namespace}/{name}), fleet gateway
+  # policies (/agents/policies) and a spawn form (/agents/new); tool servers are an in-page section.
+  # Widget CRs only — NO widget-schema field added, so frontend/frontend-crd pins stay. Parameterized
+  # route validated (lint-keyextras: /agents/{namespace}/{name}->page-agent-detail, 19 widgets 0 viol).
+  # Republishes builder-publish 1.8.3 (one portal tag). Empty-list panels intentionally say "none OR
+  # not-in-your-grant" (snowplow userAccessFilter makes the two indistinguishable at the RESTAction layer).
+  version: 1.8.3
   deps:
   - frontend
   - git-provider
