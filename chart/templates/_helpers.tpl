@@ -105,6 +105,11 @@ components:
   - certReplayHop
   - image
   - pullSecrets
+- name: agentgateway-policies
+  path:
+  - uiTokenHop
+  - image
+  - pullSecrets
 - name: krateo-blueprint-agent
   path:
   - chartGate
