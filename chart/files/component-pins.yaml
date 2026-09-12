@@ -18,7 +18,15 @@ components:
 - name: frontend-crd
   kind: FrontendCrds
   chart: frontend-crds
-  version: 1.5.21
+  # 1.6.0: MINOR — adds the new widget kind PageHeader (pageheaders.widgets.templates.krateo.io) + additive
+  # allowedResources enum entries (pageheaders/dividers on Flex/Row/Col/Tabs, a `page` context value on every
+  # widget CRD). Bumped ahead of the frontend IMAGE (still 1.5.33) to unblock the portal work that replaces
+  # ~46 hand-rolled page-header CRs with ~14 kind:PageHeader ones — those CRs fail validation until this CRD
+  # is on the cluster (the portal lint validates the chart, not the cluster). Verified purely additive vs 1.5.21
+  # (new CRD + widened enums, Table.minWidth added, Paragraph enum loosened; NO removed allowedResources values,
+  # no tightened constraints) so the v1-5-21->v1-6-0 served-version migration strands no stored widget CRs.
+  # The frontend IMAGE 1.6.0 (PageHeader renderer + a11y fixes) follows later WITH the portal PageHeader CRs.
+  version: 1.6.0
   tier: platform
   feature: portal
 - name: snowplow-crd
