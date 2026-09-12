@@ -236,7 +236,12 @@ components:
   # frontend 1.5.33 (live) puts a copy control on each fenced code block. Keeping both left two buttons per
   # step, one copying the whole step (eyebrow+prose+JSON+commands) as an unpasteable blob. Portal-only content,
   # depends on the already-live frontend; no ordering constraint. Widget CRs only, frontend/frontend-crd stay.
-  version: 1.8.7
+  # 1.8.8 (#144): HOTFIX for the #141 Involved-resources card — it templated a description STRING into the
+  # Card `legend` field, which is an ARRAY of {color,label} swatches, so snowplow rejected the whole widget
+  # at resolve time ("legend: Invalid value: string ... must be of type array") → "Widget fetch failed: 400"
+  # on the live incident page. Moves the caption to a Paragraph sibling. NOTE: apply --dry-run=server CANNOT
+  # catch this class — it validates static widgetData, never what widgetDataTemplate resolves to. Portal content.
+  version: 1.8.8
   deps:
   - frontend
   - git-provider
