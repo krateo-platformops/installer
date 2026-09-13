@@ -26,7 +26,13 @@ components:
   # (new CRD + widened enums, Table.minWidth added, Paragraph enum loosened; NO removed allowedResources values,
   # no tightened constraints) so the v1-5-21->v1-6-0 served-version migration strands no stored widget CRs.
   # The frontend IMAGE 1.6.0 (PageHeader renderer + a11y fixes) follows later WITH the portal PageHeader CRs.
-  version: 1.6.0
+  # 1.6.1 (#212): PURE RELAXATION of the PageHeader CRD — drops `allowedResources` + `items` from the
+  # required list (title stays required), so an action-less header (most of them) no longer has to carry
+  # stub actions it doesn't have. Runtime never read either field. Verified: ONLY PageHeader.crd.yaml
+  # changed vs 1.6.0, and only the two required entries removed — relaxing required invalidates NO stored
+  # CR (the live alerts PageHeader stays valid). Unblocks portal #157 (blueprints) + #159 (incidents),
+  # action-less headers the live CRD was rejecting. Image still 1.5.33 (1.6.1 image behaviour-unchanged).
+  version: 1.6.1
   tier: platform
   feature: portal
 - name: snowplow-crd
