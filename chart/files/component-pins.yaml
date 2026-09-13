@@ -32,7 +32,11 @@ components:
   # changed vs 1.6.0, and only the two required entries removed — relaxing required invalidates NO stored
   # CR (the live alerts PageHeader stays valid). Unblocks portal #157 (blueprints) + #159 (incidents),
   # action-less headers the live CRD was rejecting. Image still 1.5.33 (1.6.1 image behaviour-unchanged).
-  version: 1.6.1
+  # 1.6.2 (#218/#220): additive — adds optional widgetData.counterLabel to the PageHeader CRD (StatusPill
+  # is an image-side render change, no CRD field). widgetData.required stays [title]; verified only
+  # PageHeader.crd.yaml changed vs 1.6.1, +3 lines/-0. Bumped in lockstep with the frontend IMAGE 1.6.2
+  # (below) which is the REAL reason for this roll — see the frontend pin.
+  version: 1.6.2
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -133,7 +137,15 @@ components:
   # WHOLE step (eyebrow+prose+JSON+both shell commands) as one unpasteable blob. Roll BEFORE portal 1.8.6
   # (intended order); portal 1.8.6 keeps the old whole-step copy button on purpose so there's no window
   # with no copy affordance, so bundling is safe. SPA-only, frontend-crd stays 1.5.21.
-  version: 1.5.33
+  # 1.6.2: the IMAGE catches up to the widget CRDs. 1.5.33 did NOT contain the PageHeader widget at all
+  # (first appears in the SPA at 1.6.0; widgets self-register via an eager glob over ui/src/widgets/), so
+  # a PageHeader CR renders "Unknown widget kind" — and 1.5.33 has NO error boundary, so in React 19 that
+  # uncaught throw unmounts the WHOLE page (white-screen), not just the header. 1.6.2 both KNOWS PageHeader
+  # AND carries the error boundary (landed later in the 1.6.x line), plus StatusPill (#218, dot on tags) +
+  # counterLabel (#220). REQUIRED before portal 1.8.9's twelve PageHeader migrations render — rolled FIRST,
+  # standalone (portal stays 1.8.8 which uses no PageHeader), so no PageHeader CR is ever live against a
+  # renderer that can't handle it. Additive/backward-compatible; frontend-crd bumped in lockstep to 1.6.2.
+  version: 1.6.2
   deps:
   - frontend-crd
   - authn
