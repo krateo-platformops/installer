@@ -36,7 +36,15 @@ components:
   # is an image-side render change, no CRD field). widgetData.required stays [title]; verified only
   # PageHeader.crd.yaml changed vs 1.6.1, +3 lines/-0. Bumped in lockstep with the frontend IMAGE 1.6.2
   # (below) which is the REAL reason for this roll — see the frontend pin.
-  version: 1.6.2
+  # 1.6.4: LOCKSTEP with the frontend image 1.6.4 (Diego's rule: always bump the -crds pin with its main
+  # chart — the single frontend tag publishes both, and a stale crds pin ships the new SPA against old CRDs).
+  # NOT image-only as first assumed: 14 widget CRDs changed 1.6.2->1.6.4. Verified backward-compatible —
+  # the only "removals" are the `allowedResources.items` ENUM being DROPPED on 8 CRDs (Flex/Row/Col/Tabs/
+  # Table/ButtonGroup/Menu/PageHeader → now unconstrained `type:string`), a LOOSENING (every enumerated
+  # value stays valid, and new widget kinds no longer need every parent's enum updated); everything else is
+  # additive. So 1.6.4 CRDs are a superset of 1.6.2 → no stored widget CR strands, and portal 1.8.14's CRs
+  # (dry-run-validated vs the live 1.6.2 CRD) stay valid. Served version migrates v1-6-2 -> v1-6-4.
+  version: 1.6.4
   tier: platform
   feature: portal
 - name: snowplow-crd
