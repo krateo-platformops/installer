@@ -145,7 +145,15 @@ components:
   # counterLabel (#220). REQUIRED before portal 1.8.9's twelve PageHeader migrations render — rolled FIRST,
   # standalone (portal stays 1.8.8 which uses no PageHeader), so no PageHeader CR is ever live against a
   # renderer that can't handle it. Additive/backward-compatible; frontend-crd bumped in lockstep to 1.6.2.
-  version: 1.6.2
+  # 1.6.4 (#239 + #240): (#239, RBAC) /settings/access/{username} rendered the LOGGED-IN USER for every
+  # persona URL — the identity-extras builder overwrote the `username` route param with the caller, so
+  # grants/revokes silently targeted the caller while the URL said otherwise; fixed by skipping a key a
+  # route param already set (query-param anti-spoof preserved; written as a skip so the extras cache-key
+  # ORDER is unchanged). Applies to 057's path (SNOWPLOW_IDENTITY_INJECTION=""). (#240, CSS) 20 font-sizes
+  # named role tokens WITHOUT the `--krateo-` prefix (invalid → silent parent-inherit); now resolve — a
+  # DELIBERATE small type-size shift in the Autopilot rail/Select/ListView/Descriptions/FlowChart/Form.
+  # Image-only (SPA); frontend-crd stays 1.6.2. Supersedes 1.6.3 (carries it).
+  version: 1.6.4
   deps:
   - frontend-crd
   - authn
@@ -282,7 +290,16 @@ components:
   # The last eyebrow Paragraph CR disappears here (a Paragraph.tsx eyebrow-enum cleanup can follow ONLY once
   # `kubectl get paragraphs -A ... variant==eyebrow` reads 0). Bridge verified: lint 0, 25 PageHeader CRs
   # dry-run-accepted, all 523 rendered widgets' resourcesRefs resolve (0 dangling). Portal content, no bounce.
-  version: 1.8.10
+  # 1.8.14 (supersedes 1.8.11/1.8.12/1.8.13; those were never rolled): the PageHeader migration finished +
+  # hardened. Carries: the /alerts/{ns}/{name} + /agents/{ns}/{name} detail headers (1.8.12); the 41-CR
+  # unreachable-widget cleanup (1.8.13 — 26 orphans DELETED, 15 tracing-only widgets GUARDED behind
+  # observability.reconcileTracing; net chart 594->553; provably safe on 057 where reconcileTracing is OFF,
+  # so all 41 were unreachable here); and (1.8.14) a keyExtras cache-efficiency fix on 19 widgets (they
+  # omitted a URL/RESTAction key so snowplow's F6 quarantine skipped caching them — no behaviour change,
+  # better first-nav hit rates on /dashboard,/blueprints,/incidents,/settings/access). Bridge-verified:
+  # 553 CRs render, 10 lint rules clean, 0 orphans in default + tracing-on renders, no hardcoded-name SPA
+  # mounts. Portal content, no fleet bounce. WATCH: cdc prunes ~41 widget CRs in one reconcile (live ~523->482).
+  version: 1.8.14
   deps:
   - frontend
   - git-provider
