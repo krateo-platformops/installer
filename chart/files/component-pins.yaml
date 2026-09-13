@@ -267,7 +267,14 @@ components:
   # at resolve time ("legend: Invalid value: string ... must be of type array") → "Widget fetch failed: 400"
   # on the live incident page. Moves the caption to a Paragraph sibling. NOTE: apply --dry-run=server CANNOT
   # catch this class — it validates static widgetData, never what widgetDataTemplate resolves to. Portal content.
-  version: 1.8.8
+  # 1.8.9: twelve pages build their header from a single PageHeader CR instead of a Flex/Row+Paragraph nest
+  # (~45 CRs -> 12), plus two days of backlog (alerts summary band + pipeline walk, agents-page architecture,
+  # Autopilot CTA fixes, design-system composition lint). REQUIRES frontend >= 1.6.2 (PageHeader widget +
+  # error boundary) — rolled FIRST in 0.3.182, verified live (pod on :1.6.2). Bridge dry-ran all 12 PageHeader
+  # CRs vs the live CRD (accepted) + design lint X13=0 (no dangling refs to the deleted header CRs); the 12
+  # migrations are individually revertible commits. Portal content, no fleet bounce. Rendering is the browser
+  # check (bridge's) — dry-run proves schema-valid + no dangling, NOT that a header resolves (cf. 1.8.6 legend).
+  version: 1.8.9
   deps:
   - frontend
   - git-provider
