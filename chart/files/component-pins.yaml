@@ -274,7 +274,15 @@ components:
   # CRs vs the live CRD (accepted) + design lint X13=0 (no dangling refs to the deleted header CRs); the 12
   # migrations are individually revertible commits. Portal content, no fleet bounce. Rendering is the browser
   # check (bridge's) — dry-run proves schema-valid + no dangling, NOT that a header resolves (cf. 1.8.6 legend).
-  version: 1.8.9
+  # 1.8.10: the remaining thirteen page headers migrate to PageHeader (dashboard, marketplace, search,
+  # compositions, agents, agents-policies, blueprint-create, resource-detail, incident-detail + the four
+  # detail pages) — completes the migration at 25/26 (chart 597->533 CR files). Also restaction.agents-list
+  # gains failedCount (two exception-only pills on /agents). NO frontend change: 1.6.2 (live) already carries
+  # StatusPill (#218, the detail-page pill dot) + counterLabel (#220, /marketplace) — bridge verified live.
+  # The last eyebrow Paragraph CR disappears here (a Paragraph.tsx eyebrow-enum cleanup can follow ONLY once
+  # `kubectl get paragraphs -A ... variant==eyebrow` reads 0). Bridge verified: lint 0, 25 PageHeader CRs
+  # dry-run-accepted, all 523 rendered widgets' resourcesRefs resolve (0 dangling). Portal content, no bounce.
+  version: 1.8.10
   deps:
   - frontend
   - git-provider
