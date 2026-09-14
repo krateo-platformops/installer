@@ -112,14 +112,14 @@
         "port": {
           "type": "integer",
           "title": "Exposure port",
-          "description": "Optional. Overrides the single port browser-facing (expose:true, top-level Service) components are exposed on — sets both their Service port and the frontend config.json peer URLs (http://<lb-ip>:<port>). Unset => each component keeps its per-component exposePort default. Nested-Service (kagent) and own-LB (hyperdx) components are set via componentValues. Ignored when type=Gateway (routing is by hostname).",
+          "description": "Optional. Overrides the single port browser-facing (expose:true, top-level Service) components are exposed on \u2014 sets both their Service port and the frontend config.json peer URLs (http://<lb-ip>:<port>). Unset => each component keeps its per-component exposePort default. Nested-Service (kagent) and own-LB (hyperdx) components are set via componentValues. Ignored when type=Gateway (routing is by hostname).",
           "minimum": 1,
           "maximum": 65535
         },
         "gatewayRef": {
           "type": "object",
           "title": "Gateway reference (type=Gateway)",
-          "description": "The Gateway API Gateway the emitted HTTPRoutes attach to (parentRef). BYO / agentgateway — the installer does NOT create the Gateway or its CRDs. Required when type=Gateway.",
+          "description": "The Gateway API Gateway the emitted HTTPRoutes attach to (parentRef). BYO / agentgateway \u2014 the installer does NOT create the Gateway or its CRDs. Required when type=Gateway.",
           "additionalProperties": false,
           "properties": {
             "name": {
@@ -170,13 +170,13 @@
         "voice": {
           "type": "boolean",
           "title": "Enable Autopilot voice/dictation (requires exposure.tls, path mode)",
-          "description": "One knob for the Autopilot dictation feature. When true it (a) derives the frontend's AUTOPILOT_VOICE_TRANSCRIBE_URL as https://<exposure.tls.host>/stt/v1/chat/completions (no hardcoded per-install host) and (b) turns on the /stt/v1 transcription route (agentgateway-policies stt.enabled) — voice needs both a secure context and that route. REQUIRES exposure.tls (path-mode HTTPS): dictation's getUserMedia needs a secure context, and the render fails loudly if voice is set without it. Off/absent => no voice UI (frontend DOM byte-identical), no /stt/v1 route."
+          "description": "One knob for the Autopilot dictation feature. When true it (a) derives the frontend's AUTOPILOT_VOICE_TRANSCRIBE_URL as https://<exposure.tls.host>/stt/v1/chat/completions (no hardcoded per-install host) and (b) turns on the /stt/v1 transcription route (agentgateway-policies stt.enabled) \u2014 voice needs both a secure context and that route. REQUIRES exposure.tls (path-mode HTTPS): dictation's getUserMedia needs a secure context, and the render fails loudly if voice is set without it. Off/absent => no voice UI (frontend DOM byte-identical), no /stt/v1 route."
         },
         "tls": {
           "type": "object",
           "additionalProperties": false,
           "title": "Path-mode portal TLS (type=Gateway, gatewayMode=path)",
-          "description": "Serve the whole single-origin portal stack over HTTPS on one hostname. Only used when type=Gateway AND gatewayMode=path AND tls.enabled. The agentgateway terminates TLS on a platform-https:443 listener (certificateRef Secret), the frontend peer URLs become https://<host>/…, and the Autopilot rail's /api/a2a is served over the same :443 listener (JWT edge preserved). Off (default) => everything stays http:// on the platform port, byte-identical.",
+          "description": "Serve the whole single-origin portal stack over HTTPS on one hostname. Only used when type=Gateway AND gatewayMode=path AND tls.enabled. The agentgateway terminates TLS on a platform-https:443 listener (certificateRef Secret), the frontend peer URLs become https://<host>/\u2026, and the Autopilot rail's /api/a2a is served over the same :443 listener (JWT edge preserved). Off (default) => everything stays http:// on the platform port, byte-identical.",
           "properties": {
             "enabled": {
               "type": "boolean",
@@ -184,11 +184,11 @@
             },
             "host": {
               "type": "string",
-              "description": "The single portal hostname (e.g. portal.krateo.dev). All four browser URLs become https://<host>/… and the gateway's platform-https listener terminates TLS for it."
+              "description": "The single portal hostname (e.g. portal.krateo.dev). All four browser URLs become https://<host>/\u2026 and the gateway's platform-https listener terminates TLS for it."
             },
             "certificateRef": {
               "type": "string",
-              "description": "Name of the kubernetes.io/tls Secret (in the gateway/platform namespace) holding the cert+key for host — e.g. one issued by cert-manager. Bound to the platform-https listener's tls.certificateRefs."
+              "description": "Name of the kubernetes.io/tls Secret (in the gateway/platform namespace) holding the cert+key for host \u2014 e.g. one issued by cert-manager. Bound to the platform-https listener's tls.certificateRefs."
             }
           }
         }
@@ -226,12 +226,12 @@
         "ingress": {
           "type": "boolean",
           "default": false,
-          "description": "Opt-in edge layer: gateway-api-crds + agentgateway + cert-manager + cert-manager-issuers (ACME certificate issuance) from oci://ghcr.io/krateo-blueprints/charts. Default false — the base install is unchanged and pulls nothing from krateo-blueprints unless enabled. Turn off if you run behind your own ingress controller / cloud LB / mesh, or manage DNS+certs yourself. Precondition when enabled: cert-manager-issuers' ACME HTTP-01 solver assumes the Gateway API edge is present. NOTE: external-dns moved to its own `externalDns` feature (#115); a host-mode ingress install that also wants DNS enables BOTH ingress and externalDns."
+          "description": "Opt-in edge layer: gateway-api-crds + agentgateway + cert-manager + cert-manager-issuers (ACME certificate issuance) from oci://ghcr.io/krateo-blueprints/charts. Default false \u2014 the base install is unchanged and pulls nothing from krateo-blueprints unless enabled. Turn off if you run behind your own ingress controller / cloud LB / mesh, or manage DNS+certs yourself. Precondition when enabled: cert-manager-issuers' ACME HTTP-01 solver assumes the Gateway API edge is present. NOTE: external-dns moved to its own `externalDns` feature (#115); a host-mode ingress install that also wants DNS enables BOTH ingress and externalDns."
         },
         "externalDns": {
           "type": "boolean",
           "default": false,
-          "description": "#115: opt-in external-dns (DNS record publication) STANDALONE — does NOT require features.ingress, so it works with the agentgateway-controller path. Configure the top-level `externalDns` block (provider + credentials env + domainFilters). Pairs with exposure.tls.host: the platform gateway is annotated with that host so external-dns publishes/updates the portal's DNS record following the LoadBalancer IP (DNS-follows-LB, no static IP, no manual record). Default false."
+          "description": "#115: opt-in external-dns (DNS record publication) STANDALONE \u2014 does NOT require features.ingress, so it works with the agentgateway-controller path. Configure the top-level `externalDns` block (provider + credentials env + domainFilters). Pairs with exposure.tls.host: the platform gateway is annotated with that host so external-dns publishes/updates the portal's DNS record following the LoadBalancer IP (DNS-follows-LB, no static IP, no manual record). Default false."
         },
         "codegenAgents": {
           "type": "boolean",
@@ -244,18 +244,18 @@
         },
         "structureGraph": {
           "type": "boolean",
-          "description": "Deploy structure-graph-mcp-server, the code-STRUCTURE grounding layer (a Graphify tree-sitter AST graph of the engine repos: query_graph/shortest_path/get_neighbors/graph_stats). Both consumers — krateo-autopilot and core-provider-agent — reference it off by default, so turning this on without also setting their mcpServers.structureGraph.enabled deploys a server nothing names. Needs coreAgents. Default false."
+          "description": "Deploy structure-graph-mcp-server, the code-STRUCTURE grounding layer (a Graphify tree-sitter AST graph of the engine repos: query_graph/shortest_path/get_neighbors/graph_stats). Both consumers \u2014 krateo-autopilot and core-provider-agent \u2014 reference it off by default, so turning this on without also setting their mcpServers.structureGraph.enabled deploys a server nothing names. Needs coreAgents. Default false."
         },
         "repoGraph": {
           "type": "boolean",
-          "description": "Opt-in the repo-mcp-server DOMAIN-graph / OKF tools (graph_find, graph_map, graph_neighbors, graph_path, knowledge_lookup) — multi-hop structural, reverse-impact and curated-provenance answers grep cannot give. Unlike structureGraph this deploys NO new component: it flips a config layer on three EXISTING coreAgents components in LOCKSTEP — the server (repo-mcp-server graph.enabled) and its consumers' toolNames (krateo-autopilot, incident-agent, via each pin's graphToggle) — so it can never half-enable into the silent Accepted-but-empty server/agent mismatch the repo-mcp-server chart warns about. Distinct from structureGraph (the separate code-STRUCTURE AST server). Needs coreAgents. Default false: more grounding tools is not always better — measure (the repo-mcp-server grounding eval harnesses / a bench A/B) before defaulting on."
+          "description": "Opt-in the repo-mcp-server DOMAIN-graph / OKF tools (graph_find, graph_map, graph_neighbors, graph_path, knowledge_lookup) \u2014 multi-hop structural, reverse-impact and curated-provenance answers grep cannot give. Unlike structureGraph this deploys NO new component: it flips a config layer on three EXISTING coreAgents components in LOCKSTEP \u2014 the server (repo-mcp-server graph.enabled) and its consumers' toolNames (krateo-autopilot, incident-agent, via each pin's graphToggle) \u2014 so it can never half-enable into the silent Accepted-but-empty server/agent mismatch the repo-mcp-server chart warns about. Distinct from structureGraph (the separate code-STRUCTURE AST server). Needs coreAgents. Default false: more grounding tools is not always better \u2014 measure (the repo-mcp-server grounding eval harnesses / a bench A/B) before defaulting on."
         }
       }
     },
     "components": {
       "type": "array",
       "title": "Component DAG (advanced override)",
-      "description": "Advanced. Each entry, matched by `name`, either OVERRIDES a pinned component (whitelisted fields: version / repo / chart / registerOnly / tier — e.g. registerOnly:true to demote a pinned component to registered-but-not-installed, installer#38; or `repo` (+ `chart` for a differing artifact name) to pull that component's chart from a DIFFERENT registry so the source need not be equal for all components, installer#84 — for a re-source to a different registry use registryAuth.registries[] mode so the override gets its OWN pull credential, not the global one) or APPENDS a new registerOnly catalog blueprint. Only `name` is required — an override needs just the field it changes; an append needs kind+version (enforced at render).",
+      "description": "Advanced. Each entry, matched by `name`, either OVERRIDES a pinned component (whitelisted fields: version / repo / chart / registerOnly / tier \u2014 e.g. registerOnly:true to demote a pinned component to registered-but-not-installed, installer#38; or `repo` (+ `chart` for a differing artifact name) to pull that component's chart from a DIFFERENT registry so the source need not be equal for all components, installer#84 \u2014 for a re-source to a different registry use registryAuth.registries[] mode so the override gets its OWN pull credential, not the global one) or APPENDS a new registerOnly catalog blueprint. Only `name` is required \u2014 an override needs just the field it changes; an append needs kind+version (enforced at render).",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -296,7 +296,7 @@
           },
           "chartRepo": {
             "type": "string",
-            "description": "CompositionDefinition spec.chart.repo — classic helm repo NAME (only for non-OCI helm-repo charts; OCI components don't need it)."
+            "description": "CompositionDefinition spec.chart.repo \u2014 classic helm repo NAME (only for non-OCI helm-repo charts; OCI components don't need it)."
           },
           "expose": {
             "type": "boolean"
@@ -313,11 +313,11 @@
           },
           "gatewayRewrite": {
             "type": "boolean",
-            "description": "exposure.type=Gateway + gatewayMode=path only: whether the agentgateway strips gatewayPath before forwarding to the backend Service (true when the backend serves at / — authn/snowplow/sse-proxy; false for the frontend whose gatewayPath is / already). Threaded into the platformRoutes entry as `rewrite`."
+            "description": "exposure.type=Gateway + gatewayMode=path only: whether the agentgateway strips gatewayPath before forwarding to the backend Service (true when the backend serves at / \u2014 authn/snowplow/sse-proxy; false for the frontend whose gatewayPath is / already). Threaded into the platformRoutes entry as `rewrite`."
           },
           "gatewayAuth": {
             "type": "string",
-            "description": "exposure.type=Gateway + gatewayMode=path only: the listener-route auth posture in the platformRoutes entry — public (no token required; login and static portal assets) or optional (a token is verified when present but not required; snowplow content + sse-proxy events). Threaded into the platformRoutes entry as auth.mode.",
+            "description": "exposure.type=Gateway + gatewayMode=path only: the listener-route auth posture in the platformRoutes entry \u2014 public (no token required; login and static portal assets) or optional (a token is verified when present but not required; snowplow content + sse-proxy events). Threaded into the platformRoutes entry as auth.mode.",
             "enum": [
               "public",
               "optional"
@@ -337,7 +337,7 @@
           },
           "internalUrls": {
             "type": "array",
-            "description": "Internal (ClusterIP) URLs this component's chart hardcodes at a peer's per-component default port — e.g. snowplow's env.URL_AUTHN, sse-proxy's auth.urlAuthn. When exposure.port collapses the browser-facing Services onto one shared port those hardcoded ports go dead, so compositions.yaml recomputes each URL on the shared port.",
+            "description": "Internal (ClusterIP) URLs this component's chart hardcodes at a peer's per-component default port \u2014 e.g. snowplow's env.URL_AUTHN, sse-proxy's auth.urlAuthn. When exposure.port collapses the browser-facing Services onto one shared port those hardcoded ports go dead, so compositions.yaml recomputes each URL on the shared port.",
             "items": {
               "type": "object",
               "additionalProperties": false,
@@ -355,7 +355,7 @@
           },
           "internalPorts": {
             "type": "array",
-            "description": "Port-only sibling of internalUrls: an INTEGER port the chart hardcodes at an exposed peer's default — e.g. agentgateway-policies' jwt.jwks.port. Recomputed to exposure.port under the same gate.",
+            "description": "Port-only sibling of internalUrls: an INTEGER port the chart hardcodes at an exposed peer's default \u2014 e.g. agentgateway-policies' jwt.jwks.port. Recomputed to exposure.port under the same gate.",
             "items": {
               "type": "object",
               "additionalProperties": false,
@@ -386,7 +386,7 @@
           },
           "agent": {
             "type": "boolean",
-            "description": "This component DEPLOYS a kagent Agent. Drives four things at once: the .vertexAI injection (the pod's ADC env / SA-key mount), the HITL approval gate, agentgateway.enabled, and membership of the orchestrator's auto-derived extraAgents fleet. Not set on model-configs, which renders ModelConfigs but no Agent — see modelOwner."
+            "description": "This component DEPLOYS a kagent Agent. Drives four things at once: the .vertexAI injection (the pod's ADC env / SA-key mount), the HITL approval gate, agentgateway.enabled, and membership of the orchestrator's auto-derived extraAgents fleet. Not set on model-configs, which renders ModelConfigs but no Agent \u2014 see modelOwner."
           },
           "mcpBackend": {
             "type": "boolean",
@@ -394,24 +394,24 @@
           },
           "modelOwner": {
             "type": "boolean",
-            "description": "This component OWNS the shared ModelConfigs the rest of the fleet references (model-configs). It is NOT an `agent` (it deploys no Agent), but takes the same .vertexAI injection and agentgateway.enabled, plus the .localModel injection and the agentgateway LLM-route wiring that are its alone. Distinct from `orchestrator` — owning the fleet's models and orchestrating the fleet are different jobs on different components."
+            "description": "This component OWNS the shared ModelConfigs the rest of the fleet references (model-configs). It is NOT an `agent` (it deploys no Agent), but takes the same .vertexAI injection and agentgateway.enabled, plus the .localModel injection and the agentgateway LLM-route wiring that are its alone. Distinct from `orchestrator` \u2014 owning the fleet's models and orchestrating the fleet are different jobs on different components."
           },
           "requireApproval": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "GRANULAR kagent HITL override (compositions.yaml): the exact list of this agent's tool names that pause for human approval. When present it is threaded onto the agent's spec verbatim and the coarse global .hitlApproval boolean is NOT applied to this agent. Use [] for an agent whose only mutating-shaped tool is a NON-mutating validator (e.g. frontend-agent's k8s_apply_manifest server dry-run) so its authoring loop is not gated — the real write gate stays downstream (publishPage blast-radius). Omit the key entirely for agents that should inherit the coarse global gate on their own mutating tools."
+            "description": "GRANULAR kagent HITL override (compositions.yaml): the exact list of this agent's tool names that pause for human approval. When present it is threaded onto the agent's spec verbatim and the coarse global .hitlApproval boolean is NOT applied to this agent. Use [] for an agent whose only mutating-shaped tool is a NON-mutating validator (e.g. frontend-agent's k8s_apply_manifest server dry-run) so its authoring loop is not gated \u2014 the real write gate stays downstream (publishPage blast-radius). Omit the key entirely for agents that should inherit the coarse global gate on their own mutating tools."
           },
           "registerOnly": {
             "type": "boolean",
-            "description": "Catalog blueprint: Pass A registers this component's CompositionDefinition (making the blueprint available in the portal) but Pass B never emits a Composition for it — the operator/end-user instantiates it on demand. Use for tenant workload blueprints (e.g. openstack) that ship in the catalog rather than being auto-installed. Typically paired with tier: catalog."
+            "description": "Catalog blueprint: Pass A registers this component's CompositionDefinition (making the blueprint available in the portal) but Pass B never emits a Composition for it \u2014 the operator/end-user instantiates it on demand. Use for tenant workload blueprints (e.g. openstack) that ship in the catalog rather than being auto-installed. Typically paired with tier: catalog."
           },
           "nodePort": {
             "type": "integer",
             "minimum": 30000,
             "maximum": 32767,
-            "description": "Pinned NodePort for a browser-facing (expose:true) component when exposure.type=NodePort — deterministic + host-mappable. Wired to spec.service.nodePort in composition mode."
+            "description": "Pinned NodePort for a browser-facing (expose:true) component when exposure.type=NodePort \u2014 deterministic + host-mappable. Wired to spec.service.nodePort in composition mode."
           },
           "resources": {
             "type": "object",
@@ -504,7 +504,7 @@
           "properties": {
             "name": {
               "type": "string",
-              "description": "DNS provider (cloudflare, aws, google, azure, ...) — whatever the upstream sigs/external-dns chart supports."
+              "description": "DNS provider (cloudflare, aws, google, azure, ...) \u2014 whatever the upstream sigs/external-dns chart supports."
             }
           }
         },
@@ -591,7 +591,7 @@
     "componentValues": {
       "type": "object",
       "title": "Per-component spec overrides",
-      "description": "Per-component Composition spec overrides, STRICTLY TYPED against each pinned component's chart schema. This is a HAND-CURATED, deliberate override surface: every leaf is explicitly typed and unknown keys are REJECTED (additionalProperties is false on every object). No free-form escapes remain anywhere in this schema (neither an open additionalProperties nor the k8s preserve-unknown extension) — enforced in CI by .github/workflows/check-no-unknowns.yaml. Invariants: each component's `global` is the fixed engine-injected block (plumbing InjectGlobalValues) plus imageRegistry; `resources` is k8s ResourceRequirements (limits/requests each with cpu/memory); label, annotation and nodeSelector maps are typed string maps. To expose a NEW override knob for a component, add it here explicitly and typed — do not reintroduce a free-form object. Deep-merged into the rendered Composition spec; the installer-computed wiring (service.type/config/vertexAI/hitlApproval) stays authoritative and wins on any leaf conflict.",
+      "description": "Per-component Composition spec overrides, STRICTLY TYPED against each pinned component's chart schema. This is a HAND-CURATED, deliberate override surface: every leaf is explicitly typed and unknown keys are REJECTED (additionalProperties is false on every object). No free-form escapes remain anywhere in this schema (neither an open additionalProperties nor the k8s preserve-unknown extension) \u2014 enforced in CI by .github/workflows/check-no-unknowns.yaml. Invariants: each component's `global` is the fixed engine-injected block (plumbing InjectGlobalValues) plus imageRegistry; `resources` is k8s ResourceRequirements (limits/requests each with cpu/memory); label, annotation and nodeSelector maps are typed string maps. To expose a NEW override knob for a component, add it here explicitly and typed \u2014 do not reintroduce a free-form object. Deep-merged into the rendered Composition spec; the installer-computed wiring (service.type/config/vertexAI/hitlApproval) stays authoritative and wins on any leaf conflict.",
       "additionalProperties": false,
       "properties": {
         "authn": {
@@ -1025,7 +1025,7 @@
             "modelConfig": {
               "type": "object",
               "additionalProperties": false,
-              "description": "ModelConfig the agent REFERENCES by name — a slot the model-configs component renders (gemini-flash, gemini-pro). The chart default (this repo's values.yaml) sets the fleet's model policy; override it here for this one agent.",
+              "description": "ModelConfig the agent REFERENCES by name \u2014 a slot the model-configs component renders (gemini-flash, gemini-pro). The chart default (this repo's values.yaml) sets the fleet's model policy; override it here for this one agent.",
               "properties": {
                 "name": {
                   "type": "string"
@@ -1167,7 +1167,7 @@
             "agentgateway": {
               "type": "object",
               "title": "Agent gateway",
-              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) — what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
+              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) \u2014 what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
               "additionalProperties": false,
               "properties": {
                 "enabled": {
@@ -1633,7 +1633,7 @@
             "modelConfig": {
               "type": "object",
               "additionalProperties": false,
-              "description": "ModelConfig the agent REFERENCES by name — a slot the model-configs component renders (gemini-flash, gemini-pro). The chart default (this repo's values.yaml) sets the fleet's model policy; override it here for this one agent.",
+              "description": "ModelConfig the agent REFERENCES by name \u2014 a slot the model-configs component renders (gemini-flash, gemini-pro). The chart default (this repo's values.yaml) sets the fleet's model policy; override it here for this one agent.",
               "properties": {
                 "name": {
                   "type": "string"
@@ -1775,7 +1775,7 @@
             "agentgateway": {
               "type": "object",
               "title": "Agent gateway",
-              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) — what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
+              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) \u2014 what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
               "additionalProperties": false,
               "properties": {
                 "enabled": {
@@ -1797,7 +1797,7 @@
             "modelConfig": {
               "type": "object",
               "additionalProperties": false,
-              "description": "ModelConfig the agent REFERENCES by name — a slot the model-configs component renders (gemini-flash, gemini-pro). The chart default (this repo's values.yaml) sets the fleet's model policy; override it here for this one agent.",
+              "description": "ModelConfig the agent REFERENCES by name \u2014 a slot the model-configs component renders (gemini-flash, gemini-pro). The chart default (this repo's values.yaml) sets the fleet's model policy; override it here for this one agent.",
               "properties": {
                 "name": {
                   "type": "string"
@@ -2149,7 +2149,7 @@
             "agentgateway": {
               "type": "object",
               "title": "Agent gateway",
-              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) — what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
+              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) \u2014 what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
               "additionalProperties": false,
               "properties": {
                 "enabled": {
@@ -2163,7 +2163,7 @@
         "frontend": {
           "type": "object",
           "title": "Frontend",
-          "description": "Krateo Frontend blueprint — full-coverage schema (chart 1.0.10).",
+          "description": "Krateo Frontend blueprint \u2014 full-coverage schema (chart 1.0.10).",
           "additionalProperties": false,
           "properties": {
             "replicaCount": {
@@ -2563,7 +2563,7 @@
             "previewSandbox": {
               "type": "object",
               "title": "Preview sandbox",
-              "description": "Wave-4 live-preview sandbox provisioning (krateo-preview namespace + author RBAC + ResourceQuota + TTL janitor). Passed through to the frontend chart; PREVIEW_SANDBOX_NAMESPACE is auto-forced from previewSandbox.namespace when enabled. The default {enabled:false} keeps the key in the schema-defaulted componentValues so a live-values override (enabled:true) durably merges through the self-bootstrap patch — matching how the config-object keys propagate. The frontend chart supplies namespace/ttl/quota defaults.",
+              "description": "Wave-4 live-preview sandbox provisioning (krateo-preview namespace + author RBAC + ResourceQuota + TTL janitor). Passed through to the frontend chart; PREVIEW_SANDBOX_NAMESPACE is auto-forced from previewSandbox.namespace when enabled. The default {enabled:false} keeps the key in the schema-defaulted componentValues so a live-values override (enabled:true) durably merges through the self-bootstrap patch \u2014 matching how the config-object keys propagate. The frontend chart supplies namespace/ttl/quota defaults.",
               "default": {
                 "enabled": false
               },
@@ -2660,7 +2660,7 @@
             "modelConfig": {
               "type": "object",
               "additionalProperties": false,
-              "description": "ModelConfig the agent REFERENCES by name — a slot the model-configs component renders (gemini-flash, gemini-pro). The chart default (this repo's values.yaml) sets the fleet's model policy; override it here for this one agent.",
+              "description": "ModelConfig the agent REFERENCES by name \u2014 a slot the model-configs component renders (gemini-flash, gemini-pro). The chart default (this repo's values.yaml) sets the fleet's model policy; override it here for this one agent.",
               "properties": {
                 "name": {
                   "type": "string"
@@ -2802,7 +2802,7 @@
             "agentgateway": {
               "type": "object",
               "title": "Agent gateway",
-              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) — what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
+              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) \u2014 what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
               "additionalProperties": false,
               "properties": {
                 "enabled": {
@@ -2921,7 +2921,7 @@
               "type": "object",
               "additionalProperties": false,
               "title": "Per-user RBAC (cert-replay hop)",
-              "description": "When enabled, kagent-tools runs under the CALLING USER's Kubernetes RBAC via the agentgateway cert-replay hop instead of a cluster-admin service account. MUST be paired with kagentapp.kagent-tools.enabled=false (the kagent chart hard-fails at template time if only one is set). Declared WITH a default so the installer's componentValues schema-default expansion keeps the key — an undeclared nested key is dropped from the expansion and the override never reaches the release.",
+              "description": "When enabled, kagent-tools runs under the CALLING USER's Kubernetes RBAC via the agentgateway cert-replay hop instead of a cluster-admin service account. MUST be paired with kagentapp.kagent-tools.enabled=false (the kagent chart hard-fails at template time if only one is set). Declared WITH a default so the installer's componentValues schema-default expansion keeps the key \u2014 an undeclared nested key is dropped from the expansion and the override never reaches the release.",
               "default": {
                 "enabled": false
               },
@@ -2947,7 +2947,7 @@
                   "type": "object",
                   "additionalProperties": false,
                   "title": "Upstream kagent-tools sub-chart gate",
-                  "description": "Gate for upstream kagent's kagent-tools sub-chart (the cluster-admin tool server). Set {enabled:false} together with perUserRbac.enabled=true to run tools under per-user RBAC instead; setting one alone is a hard template-time failure in the kagent chart. Declared WITH a default so the installer's componentValues schema-default expansion keeps the key — an undeclared nested key is dropped and the override never reaches the release.",
+                  "description": "Gate for upstream kagent's kagent-tools sub-chart (the cluster-admin tool server). Set {enabled:false} together with perUserRbac.enabled=true to run tools under per-user RBAC instead; setting one alone is a hard template-time failure in the kagent chart. Declared WITH a default so the installer's componentValues schema-default expansion keeps the key \u2014 an undeclared nested key is dropped and the override never reaches the release.",
                   "default": {
                     "enabled": true
                   },
@@ -3034,7 +3034,7 @@
                   "type": "object",
                   "additionalProperties": false,
                   "title": "kagent dashboard (kagent-ui)",
-                  "description": "The kagent dashboard, a DEVELOPMENT tool: a real install normally turns it off. NOTE the knob is `replicas: 0`, not an `enabled` flag — upstream kagent renders the UI Deployment/Service/ServiceAccount/ConfigMap unconditionally and ships NO ui.enabled gate (checked in 0.9.12 and in the latest 0.10.1), so an `enabled` key here would validate and then be silently ignored. `replicas: 0` removes the pod — no memory, no attack surface — and leaves the inert Service/ConfigMap behind. Default 1 (the UI is on). Turning it off also makes agentgateway-policies' uiTokenHop pointless: disable both together.",
+                  "description": "The kagent dashboard, a DEVELOPMENT tool: a real install normally turns it off. NOTE the knob is `replicas: 0`, not an `enabled` flag \u2014 upstream kagent renders the UI Deployment/Service/ServiceAccount/ConfigMap unconditionally and ships NO ui.enabled gate (checked in 0.9.12 and in the latest 0.10.1), so an `enabled` key here would validate and then be silently ignored. `replicas: 0` removes the pod \u2014 no memory, no attack surface \u2014 and leaves the inert Service/ConfigMap behind. Default 1 (the UI is on). Turning it off also makes agentgateway-policies' uiTokenHop pointless: disable both together.",
                   "properties": {
                     "replicas": {
                       "type": "integer",
@@ -3043,14 +3043,14 @@
                     },
                     "backendInternalUrl": {
                       "type": "string",
-                      "description": "What the kagent-ui pod's Next.js server dials for its SERVER ACTIONS — how the dashboard actually fetches data (POST / with a next-action header), as opposed to the browser's own /api calls. Upstream defaults it to the controller, which agentgateway-policies' containment blocks, so with uiTokenHop on the dashboard loads and then fails every action with \"fetch failed\". Point it at the gateway: http://<gateway>.<ns>.svc.cluster.local:<port>/api. The server action forwards the caller's Authorization (upstream always does), which is the token the hop stamped, and the gateway verifies it. Injected fill-if-absent when componentValues.agentgateway-policies.uiTokenHop.enabled is true."
+                      "description": "What the kagent-ui pod's Next.js server dials for its SERVER ACTIONS \u2014 how the dashboard actually fetches data (POST / with a next-action header), as opposed to the browser's own /api calls. Upstream defaults it to the controller, which agentgateway-policies' containment blocks, so with uiTokenHop on the dashboard loads and then fails every action with \"fetch failed\". Point it at the gateway: http://<gateway>.<ns>.svc.cluster.local:<port>/api. The server action forwards the caller's Authorization (upstream always does), which is the token the hop stamped, and the gateway verifies it. Injected fill-if-absent when componentValues.agentgateway-policies.uiTokenHop.enabled is true."
                     },
                     "additionalForwardedHeaders": {
                       "type": "array",
                       "items": {
                         "type": "string"
                       },
-                      "description": "Extra request headers the kagent-ui pod forwards to its backend, on TOP of the always-forwarded Authorization. Upstream reads this as KAGENT_ADDITIONAL_FORWARDED_HEADERS. Needed by agentgateway-policies' uiTokenHop.impersonation: the hop stamps X-User-Id and X-Agent-Name on the request, but the dashboard's real data path is a Next.js SERVER ACTION running inside this pod, which re-creates the upstream request and copies only allowlisted headers — so without [x-user-id, x-agent-name] here the switch covers direct browser /api calls only and silently does nothing for the session list. Hop-by-hop headers are dropped by kagent-ui regardless of what is listed."
+                      "description": "Extra request headers the kagent-ui pod forwards to its backend, on TOP of the always-forwarded Authorization. Upstream reads this as KAGENT_ADDITIONAL_FORWARDED_HEADERS. Needed by agentgateway-policies' uiTokenHop.impersonation: the hop stamps X-User-Id and X-Agent-Name on the request, but the dashboard's real data path is a Next.js SERVER ACTION running inside this pod, which re-creates the upstream request and copies only allowlisted headers \u2014 so without [x-user-id, x-agent-name] here the switch covers direct browser /api calls only and silently does nothing for the session list. Hop-by-hop headers are dropped by kagent-ui regardless of what is listed."
                     }
                   }
                 }
@@ -3162,7 +3162,7 @@
                 },
                 "location": {
                   "type": "string",
-                  "description": "Vertex AI location — defaults to `global` (recommended for Gemini 2.5); set a region (e.g. us-central1) for data residency."
+                  "description": "Vertex AI location \u2014 defaults to `global` (recommended for Gemini 2.5); set a region (e.g. us-central1) for data residency."
                 },
                 "secretName": {
                   "type": "string"
@@ -3172,7 +3172,7 @@
                   "description": "File name (key) inside secretName; GOOGLE_APPLICATION_CREDENTIALS points at /var/secrets/gcp/<secretKey>. Defaults to key.json."
                 }
               },
-              "description": "Gemini Vertex AI for the autopilot's agent PODS: Application Default Credentials (GOOGLE_GENAI_USE_VERTEXAI + project/location env, and the SA-key mount when secretName is set). Does NOT choose the ModelConfig provider — the ModelConfigs these agents reference are owned by the model-configs component, which carries its own copy of this block; the installer sets both from one .vertexAI."
+              "description": "Gemini Vertex AI for the autopilot's agent PODS: Application Default Credentials (GOOGLE_GENAI_USE_VERTEXAI + project/location env, and the SA-key mount when secretName is set). Does NOT choose the ModelConfig provider \u2014 the ModelConfigs these agents reference are owned by the model-configs component, which carries its own copy of this block; the installer sets both from one .vertexAI."
             },
             "mcpServers": {
               "type": "object",
@@ -3263,7 +3263,7 @@
                   "graph": {
                     "type": "object",
                     "additionalProperties": false,
-                    "description": "repo-mcp-server's own Graphify DOMAIN graph tools — a different flag from mcpServers.structureGraph, which is a separate server.",
+                    "description": "repo-mcp-server's own Graphify DOMAIN graph tools \u2014 a different flag from mcpServers.structureGraph, which is a separate server.",
                     "properties": {
                       "enabled": {
                         "type": "boolean"
@@ -3273,7 +3273,7 @@
                   "k8sAnalyze": {
                     "type": "object",
                     "additionalProperties": false,
-                    "description": "config-refs-mcp-server's second tool, k8s_analyze — a deterministic, read-only namespace analyzer: it lists a namespace's live objects plus Nodes, runs pure-function condition checks and returns typed findings instead of raw dumps, so the same cluster state always yields the same findings in the same order. Set on the configRefs alias; the autopilot chart binds it on the K8S-AGENT only, so it also needs agents.k8s.enabled (true in this chart's componentValues). Gated on the alias's own enabled too, since both tools come from one server. Default false — new and unmeasured, so it ships as the control arm of an A/B, like graph above. Needs config-refs-mcp-server 0.2.4 or later, the release that first serves the tool; on anything older kagent drops the unserved name silently and the binding is inert. Also inert until the krateo-autopilot pin carries the binding — that chart's mcpServers sub-schema tolerates unknown alias keys, so an older pin ignores this rather than failing.",
+                    "description": "config-refs-mcp-server's second tool, k8s_analyze \u2014 a deterministic, read-only namespace analyzer: it lists a namespace's live objects plus Nodes, runs pure-function condition checks and returns typed findings instead of raw dumps, so the same cluster state always yields the same findings in the same order. Set on the configRefs alias; the autopilot chart binds it on the K8S-AGENT only, so it also needs agents.k8s.enabled (true in this chart's componentValues). Gated on the alias's own enabled too, since both tools come from one server. Default false \u2014 new and unmeasured, so it ships as the control arm of an A/B, like graph above. Needs config-refs-mcp-server 0.2.4 or later, the release that first serves the tool; on anything older kagent drops the unserved name silently and the binding is inert. Also inert until the krateo-autopilot pin carries the binding \u2014 that chart's mcpServers sub-schema tolerates unknown alias keys, so an older pin ignores this rather than failing.",
                     "properties": {
                       "enabled": {
                         "type": "boolean"
@@ -3366,7 +3366,7 @@
                   }
                 }
               },
-              "description": "Agents to deploy, keyed by agent name. modelConfig is a plain ModelConfig NAME the autopilot chart does not own — the slots come from the model-configs component (gemini-flash, gemini-pro)."
+              "description": "Agents to deploy, keyed by agent name. modelConfig is a plain ModelConfig NAME the autopilot chart does not own \u2014 the slots come from the model-configs component (gemini-flash, gemini-pro)."
             },
             "prompts": {
               "type": "object",
@@ -3385,7 +3385,7 @@
             "knowledge": {
               "type": "object",
               "title": "Generic Kubernetes knowledge (k8s-agent)",
-              "description": "Generic Kubernetes knowledge the krateo-autopilot chart (0.4.8+) appends to the K8S-AGENT's system prompt, one section per enabled file, delivered as the krateo-knowledge ConfigMap. The chart defaults BOTH files to true and this chart sets agents.k8s.enabled=true, so the chart defaults would be LIVE here: ~9,000 words / ~11.7k input tokens on EVERY model call of that agent (the system message is resent per turn and is never compacted). The installer therefore turns both OFF, which is what makes the 0.4.7 -> 0.4.8 pin bump behaviour-neutral: that release is knowledge-only, so with knowledge off the rendered agents are byte-identical to 0.4.7. The object-level default keeps the key present in the schema-defaulted componentValues so a live-values override (playbook:true) durably merges through the self-bootstrap patch instead of being dropped (the previewSandbox mechanism); the per-file defaults keep the OTHER file explicitly off when only one is turned on. Turn them on deliberately, one file at a time, with a measurement either side. Inert on a pin older than 0.4.8: that chart's values.schema.json has no knowledge key, so the generated CRD prunes it silently — which is why the switch-off must land in the SAME change as the pin bump, never after it.",
+              "description": "Generic Kubernetes knowledge the krateo-autopilot chart (0.4.8+) appends to the K8S-AGENT's system prompt, one section per enabled file, delivered as the krateo-knowledge ConfigMap. The chart defaults BOTH files to true and this chart sets agents.k8s.enabled=true, so the chart defaults would be LIVE here: ~9,000 words / ~11.7k input tokens on EVERY model call of that agent (the system message is resent per turn and is never compacted). The installer therefore turns both OFF, which is what makes the 0.4.7 -> 0.4.8 pin bump behaviour-neutral: that release is knowledge-only, so with knowledge off the rendered agents are byte-identical to 0.4.7. The object-level default keeps the key present in the schema-defaulted componentValues so a live-values override (playbook:true) durably merges through the self-bootstrap patch instead of being dropped (the previewSandbox mechanism); the per-file defaults keep the OTHER file explicitly off when only one is turned on. Turn them on deliberately, one file at a time, with a measurement either side. Inert on a pin older than 0.4.8: that chart's values.schema.json has no knowledge key, so the generated CRD prunes it silently \u2014 which is why the switch-off must land in the SAME change as the pin bump, never after it.",
               "default": {
                 "kubernetes": {
                   "playbook": false,
@@ -3486,7 +3486,7 @@
             "agentgateway": {
               "type": "object",
               "title": "Agent gateway",
-              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) — what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
+              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) \u2014 what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
               "additionalProperties": false,
               "properties": {
                 "enabled": {
@@ -3540,7 +3540,7 @@
             "modelConfig": {
               "type": "object",
               "additionalProperties": false,
-              "description": "ModelConfig the agent REFERENCES by name — a slot the model-configs component renders (gemini-flash, gemini-pro). The chart default (this repo's values.yaml) sets the fleet's model policy; override it here for this one agent.",
+              "description": "ModelConfig the agent REFERENCES by name \u2014 a slot the model-configs component renders (gemini-flash, gemini-pro). The chart default (this repo's values.yaml) sets the fleet's model policy; override it here for this one agent.",
               "properties": {
                 "name": {
                   "type": "string"
@@ -3685,7 +3685,7 @@
             "agentgateway": {
               "type": "object",
               "title": "Agent gateway",
-              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) — what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
+              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) \u2014 what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
               "additionalProperties": false,
               "properties": {
                 "enabled": {
@@ -3718,7 +3718,7 @@
             "modelConfig": {
               "type": "object",
               "additionalProperties": false,
-              "description": "ModelConfig the agent REFERENCES by name — a slot the model-configs component renders (gemini-flash, gemini-pro). The chart default (this repo's values.yaml) sets the fleet's model policy; override it here for this one agent.",
+              "description": "ModelConfig the agent REFERENCES by name \u2014 a slot the model-configs component renders (gemini-flash, gemini-pro). The chart default (this repo's values.yaml) sets the fleet's model policy; override it here for this one agent.",
               "properties": {
                 "name": {
                   "type": "string"
@@ -3737,7 +3737,7 @@
             "knowledge": {
               "type": "object",
               "title": "Generic Kubernetes knowledge (incident-agent)",
-              "description": "The same generic Kubernetes knowledge as componentValues.krateo-autopilot.knowledge, here appended by the incident-agent chart (0.1.9+) to the incident-agent's OWN system prompt and delivered as the incident-agent-knowledge ConfigMap. No agents.* gate stands in front of it, so at the chart's true/true defaults it is unconditionally live: ~9,000 words / ~11.7k input tokens on every model call. Turned OFF here, which is what makes the 0.1.8 -> 0.1.9 pin bump behaviour-neutral — that release is knowledge-only, and with both files off the chart renders no knowledge ConfigMap and an Agent byte-identical to 0.1.8. Object-level default so the key survives the schema-defaulted componentValues expansion and a live-values override merges durably; per-file defaults so turning one file on leaves the other explicitly off. Inert on a pin older than 0.1.9 (no knowledge key in that chart's schema, so the generated CRD prunes it), which is why the switch-off ships in the SAME change as the pin bump.",
+              "description": "The same generic Kubernetes knowledge as componentValues.krateo-autopilot.knowledge, here appended by the incident-agent chart (0.1.9+) to the incident-agent's OWN system prompt and delivered as the incident-agent-knowledge ConfigMap. No agents.* gate stands in front of it, so at the chart's true/true defaults it is unconditionally live: ~9,000 words / ~11.7k input tokens on every model call. Turned OFF here, which is what makes the 0.1.8 -> 0.1.9 pin bump behaviour-neutral \u2014 that release is knowledge-only, and with both files off the chart renders no knowledge ConfigMap and an Agent byte-identical to 0.1.8. Object-level default so the key survives the schema-defaulted componentValues expansion and a live-values override merges durably; per-file defaults so turning one file on leaves the other explicitly off. Inert on a pin older than 0.1.9 (no knowledge key in that chart's schema, so the generated CRD prunes it), which is why the switch-off ships in the SAME change as the pin bump.",
               "default": {
                 "kubernetes": {
                   "playbook": false,
@@ -3833,7 +3833,7 @@
             "repoSearch": {
               "type": "object",
               "additionalProperties": false,
-              "description": "Grounding path — repo-mcp-server (CR owned by the autopilot chart).",
+              "description": "Grounding path \u2014 repo-mcp-server (CR owned by the autopilot chart).",
               "properties": {
                 "enabled": {
                   "type": "boolean"
@@ -3855,7 +3855,7 @@
             "k8sAnalyze": {
               "type": "object",
               "additionalProperties": false,
-              "description": "Deterministic first pass — k8s_analyze, config-refs-mcp-server's second tool (CR owned by that chart, a coreAgents component): it lists a namespace's live objects plus Nodes, runs pure-function condition checks and returns typed findings instead of raw dumps, so the same cluster state always yields the same findings in the same order. Read-only. Default false — new and unmeasured, so it ships as the control arm of an A/B, like repoSearch.graph above. Needs config-refs-mcp-server 0.2.4 or later, the release that first serves the tool; on anything older kagent drops the unserved name silently and the binding is inert. Set it only once the incident-agent pin carries the binding: that chart's own values.schema.json is closed (additionalProperties: false), so an older pin rejects the key outright.",
+              "description": "Deterministic first pass \u2014 k8s_analyze, config-refs-mcp-server's second tool (CR owned by that chart, a coreAgents component): it lists a namespace's live objects plus Nodes, runs pure-function condition checks and returns typed findings instead of raw dumps, so the same cluster state always yields the same findings in the same order. Read-only. Default false \u2014 new and unmeasured, so it ships as the control arm of an A/B, like repoSearch.graph above. Needs config-refs-mcp-server 0.2.4 or later, the release that first serves the tool; on anything older kagent drops the unserved name silently and the binding is inert. Set it only once the incident-agent pin carries the binding: that chart's own values.schema.json is closed (additionalProperties: false), so an older pin rejects the key outright.",
               "properties": {
                 "enabled": {
                   "type": "boolean"
@@ -7066,6 +7066,23 @@
               "description": "enabling the demo creates the demo-system namespace, deploys two Route resources within it, and grants permissions to the cyberjoker user if that user is enabled",
               "title": "enableDemoSystemNamespace",
               "type": "boolean"
+            },
+            "agents": {
+              "type": "object",
+              "title": "agents",
+              "default": {
+                "enabled": true
+              },
+              "description": "Show the Agents sidebar entry and its /agents routes. The pages themselves live in the separate portal-agents composition, which this installer pins alongside the portal \u2014 so this defaults TRUE here while the portal CHART defaults it false for a standalone install. Fully typed (additionalProperties: false) per check-no-unknowns. A DEFAULT IS REQUIRED, not just schema-allow: a new nested componentValues key with no default is dropped from the schema-expansion and never reaches the component release (installer #173/#174).",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true,
+                  "title": "enabled",
+                  "description": "Show the Agents sidebar entry. Requires the portal-agents composition."
+                }
+              }
             }
           },
           "type": "object"
@@ -7760,7 +7777,7 @@
               }
             }
           },
-          "description": "Krateo PlatformOps Snowplow blueprint — full-coverage schema (chart 0.30.249)."
+          "description": "Krateo PlatformOps Snowplow blueprint \u2014 full-coverage schema (chart 0.30.249)."
         },
         "snowplow-agent": {
           "title": "krateo-snowplow-agent values",
@@ -7773,7 +7790,7 @@
             "modelConfig": {
               "type": "object",
               "additionalProperties": false,
-              "description": "ModelConfig the agent REFERENCES by name — a slot the model-configs component renders (gemini-flash, gemini-pro). The chart default (this repo's values.yaml) sets the fleet's model policy; override it here for this one agent.",
+              "description": "ModelConfig the agent REFERENCES by name \u2014 a slot the model-configs component renders (gemini-flash, gemini-pro). The chart default (this repo's values.yaml) sets the fleet's model policy; override it here for this one agent.",
               "properties": {
                 "name": {
                   "type": "string"
@@ -7915,7 +7932,7 @@
             "agentgateway": {
               "type": "object",
               "title": "Agent gateway",
-              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) — what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
+              "description": "Re-attach the caller's JWT to this agent's own outbound MCP/A2A calls (KAGENT_PROPAGATE_TOKEN) \u2014 what lets per-user tool and delegation RBAC be enforced at the gateway. Set for you on every agent when features.agentGateway is on.",
               "additionalProperties": false,
               "properties": {
                 "enabled": {
@@ -7982,7 +7999,7 @@
         "external-dns": {
           "type": "object",
           "title": "external-dns (edge / ingress)",
-          "description": "Spec for the external-dns edge component (feature: ingress), deep-merged into its Composition. Mirrors oci://ghcr.io/krateo-blueprints/charts/external-dns 0.3.x: config lives under the `external-dns` subchart-passthrough key (0.2.0 exposed these at the top level where they never reached the workload — a breaking-shape fix). The provider API token is referenced via `env[]` from an out-of-band Secret, never part of the blueprint.",
+          "description": "Spec for the external-dns edge component (feature: ingress), deep-merged into its Composition. Mirrors oci://ghcr.io/krateo-blueprints/charts/external-dns 0.3.x: config lives under the `external-dns` subchart-passthrough key (0.2.0 exposed these at the top level where they never reached the workload \u2014 a breaking-shape fix). The provider API token is referenced via `env[]` from an out-of-band Secret, never part of the blueprint.",
           "additionalProperties": false,
           "properties": {
             "external-dns": {
@@ -8105,7 +8122,7 @@
         "cert-manager": {
           "type": "object",
           "title": "cert-manager operator (edge / ingress)",
-          "description": "Optional spec for the cert-manager edge component (feature: ingress) — the upstream cert-manager operator + CRDs, split out from cert-manager-issuers in blueprint 0.4.0 (installer#34) so its CRDs are established before the Issuers apply. No required fields (installs with upstream defaults); override the operator via the `cert-manager` subchart passthrough.",
+          "description": "Optional spec for the cert-manager edge component (feature: ingress) \u2014 the upstream cert-manager operator + CRDs, split out from cert-manager-issuers in blueprint 0.4.0 (installer#34) so its CRDs are established before the Issuers apply. No required fields (installs with upstream defaults); override the operator via the `cert-manager` subchart passthrough.",
           "additionalProperties": false,
           "properties": {
             "cert-manager": {
@@ -8622,7 +8639,7 @@
                 },
                 "mcpBackendHash": {
                   "type": "string",
-                  "description": "MCP-backend roll-guard. The installer forcePaths a hash of every MCP-server component's <name>:<version> here (compositions.yaml); the chart stamps it on the proxy pod template so the proxy pod rolls whenever an MCP-server version changes. Installer-managed — do not set by hand."
+                  "description": "MCP-backend roll-guard. The installer forcePaths a hash of every MCP-server component's <name>:<version> here (compositions.yaml); the chart stamps it on the proxy pod template so the proxy pod rolls whenever an MCP-server version changes. Installer-managed \u2014 do not set by hand."
                 },
                 "parameters": {
                   "type": "object",
@@ -8631,7 +8648,7 @@
                   "properties": {
                     "enabled": {
                       "type": "boolean",
-                      "description": "false = none of the typed fields below and no cost catalog: the proxy takes the controller chart's defaults, llm.cost is unset and every request prices at 0. It does not always remove the object — internalDataPlane and mcpBackendHash ride the same AgentgatewayParameters (a parametersRef holds one name), so with either on it still renders with only their fields."
+                      "description": "false = none of the typed fields below and no cost catalog: the proxy takes the controller chart's defaults, llm.cost is unset and every request prices at 0. It does not always remove the object \u2014 internalDataPlane and mcpBackendHash ride the same AgentgatewayParameters (a parametersRef holds one name), so with either on it still renders with only their fields."
                     },
                     "resources": {
                       "type": "object",
@@ -8744,7 +8761,7 @@
               "properties": {
                 "agentNamespace": {
                   "type": "string",
-                  "description": "Namespace of the Agent CRs — the <namespace> segment of /api/a2a/<namespace>/<agent>/. Empty = release namespace."
+                  "description": "Namespace of the Agent CRs \u2014 the <namespace> segment of /api/a2a/<namespace>/<agent>/. Empty = release namespace."
                 },
                 "controller": {
                   "type": "object",
@@ -8839,7 +8856,7 @@
             "cors": {
               "type": "object",
               "additionalProperties": false,
-              "description": "CORS for the gateway. Only needed when a BROWSER calls it directly (the Krateo portal's Autopilot rail does): the browser sends an unauthenticated OPTIONS preflight first, which the authorization policy would 403, and refuses the real request unless the answer carries Access-Control-Allow-*. Short-circuits the preflight ONLY — a real request with no/bad token is still 403/401. Server-to-server callers are unaffected. The Krateo installer enables it with features.agentGateway.",
+              "description": "CORS for the gateway. Only needed when a BROWSER calls it directly (the Krateo portal's Autopilot rail does): the browser sends an unauthenticated OPTIONS preflight first, which the authorization policy would 403, and refuses the real request unless the answer carries Access-Control-Allow-*. Short-circuits the preflight ONLY \u2014 a real request with no/bad token is still 403/401. Server-to-server callers are unaffected. The Krateo installer enables it with features.agentGateway.",
               "properties": {
                 "enabled": {
                   "type": "boolean",
@@ -8847,7 +8864,7 @@
                 },
                 "allowOrigins": {
                   "type": "array",
-                  "description": "Origins allowed to call the gateway from a browser. Defaults to '*' because the portal's browser-facing origin is not knowable in-cluster; pin it to the real portal origin when you know it. Safe by default only while allowCredentials is false — the credential is a Bearer header the page must set itself, not a cookie.",
+                  "description": "Origins allowed to call the gateway from a browser. Defaults to '*' because the portal's browser-facing origin is not knowable in-cluster; pin it to the real portal origin when you know it. Safe by default only while allowCredentials is false \u2014 the credential is a Bearer header the page must set itself, not a cookie.",
                   "items": {
                     "type": "string"
                   },
@@ -8900,7 +8917,7 @@
             },
             "endpointRules": {
               "type": "array",
-              "description": "Layer 1 — which subjects may reach which agent's A2A endpoint directly.",
+              "description": "Layer 1 \u2014 which subjects may reach which agent's A2A endpoint directly.",
               "items": {
                 "type": "object",
                 "additionalProperties": false,
@@ -9020,7 +9037,7 @@
                   },
                   "toolRules": {
                     "type": "array",
-                    "description": "Layer 2 — each entry restricts the named tools to the given subjects. Rules are AND'd into one expression, so a rule can only narrow access. Tools named nowhere stay open.",
+                    "description": "Layer 2 \u2014 each entry restricts the named tools to the given subjects. Rules are AND'd into one expression, so a rule can only narrow access. Tools named nowhere stay open.",
                     "items": {
                       "type": "object",
                       "additionalProperties": false,
@@ -9073,7 +9090,7 @@
             },
             "subAgents": {
               "type": "array",
-              "description": "Layer 3 — every agent that can be an A2A delegation target. Each entry renders the header-matched route, the token passthrough, the anonymous agent-card allowance and the delegation rule.",
+              "description": "Layer 3 \u2014 every agent that can be an A2A delegation target. Each entry renders the header-matched route, the token passthrough, the anonymous agent-card allowance and the delegation rule.",
               "items": {
                 "type": "object",
                 "additionalProperties": false,
@@ -9135,7 +9152,7 @@
                 },
                 "gatewayNamespace": {
                   "type": "string",
-                  "description": "Namespace of the agentgateway data-plane pods — the allowed source on both policies. Empty = release namespace."
+                  "description": "Namespace of the agentgateway data-plane pods \u2014 the allowed source on both policies. Empty = release namespace."
                 },
                 "gatewayPodLabels": {
                   "type": "object",
@@ -9154,7 +9171,7 @@
                     },
                     "namespace": {
                       "type": "string",
-                      "description": "Namespace the controller runs in, and where the policy is created — a NetworkPolicy governs only its own namespace's pods. Empty = release namespace."
+                      "description": "Namespace the controller runs in, and where the policy is created \u2014 a NetworkPolicy governs only its own namespace's pods. Empty = release namespace."
                     },
                     "podLabels": {
                       "type": "object",
@@ -9165,7 +9182,7 @@
                     },
                     "allowUi": {
                       "type": "boolean",
-                      "description": "Admit kagent-ui, which dials the controller directly with no token and so already 401s under trusted-proxy. A documented bypass that does NOT restore the dashboard — the missing piece is the token, not the route. Use uiTokenHop instead, which leaves this false. Default false."
+                      "description": "Admit kagent-ui, which dials the controller directly with no token and so already 401s under trusted-proxy. A documented bypass that does NOT restore the dashboard \u2014 the missing piece is the token, not the route. Use uiTokenHop instead, which leaves this false. Default false."
                     },
                     "uiPodLabels": {
                       "type": "object",
@@ -9178,7 +9195,7 @@
                       "type": "array",
                       "description": "Extra ingress NetworkPolicyPeer entries, appended verbatim.",
                       "items": {
-                        "description": "A Kubernetes NetworkPolicyPeer. Set podSelector and/or namespaceSelector, OR ipBlock — ipBlock is mutually exclusive with the selectors.",
+                        "description": "A Kubernetes NetworkPolicyPeer. Set podSelector and/or namespaceSelector, OR ipBlock \u2014 ipBlock is mutually exclusive with the selectors.",
                         "type": "object",
                         "additionalProperties": false,
                         "minProperties": 1,
@@ -9332,7 +9349,7 @@
                       "type": "array",
                       "description": "Extra ingress NetworkPolicyPeer entries. Needed on an install without proxy.url, where agent-to-agent delegation is a direct pod-to-pod call this policy blocks.",
                       "items": {
-                        "description": "A Kubernetes NetworkPolicyPeer. Set podSelector and/or namespaceSelector, OR ipBlock — ipBlock is mutually exclusive with the selectors.",
+                        "description": "A Kubernetes NetworkPolicyPeer. Set podSelector and/or namespaceSelector, OR ipBlock \u2014 ipBlock is mutually exclusive with the selectors.",
                         "type": "object",
                         "additionalProperties": false,
                         "minProperties": 1,
@@ -9513,7 +9530,7 @@
                       "type": "array",
                       "description": "Extra ingress NetworkPolicyPeer entries, appended to EVERY MCP server's policy.",
                       "items": {
-                        "description": "A Kubernetes NetworkPolicyPeer. Set podSelector and/or namespaceSelector, OR ipBlock — ipBlock is mutually exclusive with the selectors.",
+                        "description": "A Kubernetes NetworkPolicyPeer. Set podSelector and/or namespaceSelector, OR ipBlock \u2014 ipBlock is mutually exclusive with the selectors.",
                         "type": "object",
                         "additionalProperties": false,
                         "minProperties": 1,
@@ -9639,13 +9656,13 @@
                   }
                 },
                 "ui": {
-                  "description": "Make ui-token-hop the only way into kagent-ui. Rendered ONLY when uiTokenHop.enabled is also true — the containment and the authenticating front door that replaces the tokenless path ship together. Nothing else protects kagent-ui (verified-live: an unprivileged pod gets 200 on kagent-ui:8080), and the frontend image bakes an unconditional /autopilot/ proxy from the portal's PUBLIC port to it.",
+                  "description": "Make ui-token-hop the only way into kagent-ui. Rendered ONLY when uiTokenHop.enabled is also true \u2014 the containment and the authenticating front door that replaces the tokenless path ship together. Nothing else protects kagent-ui (verified-live: an unprivileged pod gets 200 on kagent-ui:8080), and the frontend image bakes an unconditional /autopilot/ proxy from the portal's PUBLIC port to it.",
                   "type": "object",
                   "additionalProperties": false,
                   "properties": {
                     "enabled": {
                       "type": "boolean",
-                      "description": "OFF by default even with uiTokenHop on. It makes the hop the only ingress to kagent-ui, which cuts the portal's /autopilot/ proxy — and the rail still uses that proxy whenever AUTOPILOT_API_BASE_URL could not be computed (compositions.yaml omits the key until the gateway address is known). Turn on once the rail is confirmed on the gateway."
+                      "description": "OFF by default even with uiTokenHop on. It makes the hop the only ingress to kagent-ui, which cuts the portal's /autopilot/ proxy \u2014 and the rail still uses that proxy whenever AUTOPILOT_API_BASE_URL could not be computed (compositions.yaml omits the key until the gateway address is known). Turn on once the rail is confirmed on the gateway."
                     },
                     "namespace": {
                       "type": "string",
@@ -9661,7 +9678,7 @@
                     "extraAllowedFrom": {
                       "type": "array",
                       "items": {
-                        "description": "A Kubernetes NetworkPolicyPeer. Set podSelector and/or namespaceSelector, OR ipBlock — ipBlock is mutually exclusive with the selectors.",
+                        "description": "A Kubernetes NetworkPolicyPeer. Set podSelector and/or namespaceSelector, OR ipBlock \u2014 ipBlock is mutually exclusive with the selectors.",
                         "type": "object",
                         "additionalProperties": false,
                         "minProperties": 1,
@@ -9783,7 +9800,7 @@
                           }
                         }
                       },
-                      "description": "Extra ingress NetworkPolicyPeer entries, appended verbatim. The frontend pod goes here on an install still serving Autopilot through the portal's /autopilot/ proxy — which re-opens the tokenless path this policy closes."
+                      "description": "Extra ingress NetworkPolicyPeer entries, appended verbatim. The frontend pod goes here on an install still serving Autopilot through the portal's /autopilot/ proxy \u2014 which re-opens the tokenless path this policy closes."
                     }
                   }
                 }
@@ -9799,11 +9816,11 @@
             },
             "guardrails": {
               "additionalProperties": false,
-              "description": "Content guardrails on the LLM traffic: PII and secret masking, company-data redaction, prompt-injection blocking, and the external moderation services. An agentgateway prompt guard is a `backend.ai` policy and only runs on a route whose backend declares `spec.ai.provider` — that route is the top-level `llm` block; these policies attach to it. Disabling this removes every guard and leaves the route in place, so the traffic keeps flowing through the gateway, just unguarded.",
+              "description": "Content guardrails on the LLM traffic: PII and secret masking, company-data redaction, prompt-injection blocking, and the external moderation services. An agentgateway prompt guard is a `backend.ai` policy and only runs on a route whose backend declares `spec.ai.provider` \u2014 that route is the top-level `llm` block; these policies attach to it. Disabling this removes every guard and leaves the route in place, so the traffic keeps flowing through the gateway, just unguarded.",
               "properties": {
                 "bedrockGuardrails": {
                   "additionalProperties": false,
-                  "description": "Layer 2 — AWS Bedrock Guardrails, usable in front of any provider (not only a Bedrock model). The one external layer that also honours `scope`, so it can inspect tool arguments and tool results as well as the prompt.",
+                  "description": "Layer 2 \u2014 AWS Bedrock Guardrails, usable in front of any provider (not only a Bedrock model). The one external layer that also honours `scope`, so it can inspect tool arguments and tool results as well as the prompt.",
                   "properties": {
                     "apply": {
                       "additionalProperties": false,
@@ -9972,7 +9989,7 @@
                       "type": "object"
                     },
                     "scope": {
-                      "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results — valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                      "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
                       "items": {
                         "enum": [
                           "SystemPrompt",
@@ -9986,7 +10003,7 @@
                       "type": "array"
                     },
                     "version": {
-                      "description": "Published guardrail version, or DRAFT. A string, not a number — the API takes it as one.",
+                      "description": "Published guardrail version, or DRAFT. A string, not a number \u2014 the API takes it as one.",
                       "type": "string"
                     }
                   },
@@ -10012,7 +10029,7 @@
                 },
                 "googleModelArmor": {
                   "additionalProperties": false,
-                  "description": "Layer 2 — Google Cloud Model Armor. Sanitizes against a template you manage in GCP, so the policy itself lives outside this chart: security owns the template, the platform owns the wiring.",
+                  "description": "Layer 2 \u2014 Google Cloud Model Armor. Sanitizes against a template you manage in GCP, so the policy itself lives outside this chart: security owns the template, the platform owns the wiring.",
                   "properties": {
                     "apply": {
                       "additionalProperties": false,
@@ -10031,7 +10048,7 @@
                     },
                     "auth": {
                       "additionalProperties": false,
-                      "description": "Google Cloud credentials. All fields empty = ambient discovery (on GKE, the proxy pod's node SA — the same path the agents use for Vertex today).",
+                      "description": "Google Cloud credentials. All fields empty = ambient discovery (on GKE, the proxy pod's node SA \u2014 the same path the agents use for Vertex today).",
                       "properties": {
                         "gcp": {
                           "additionalProperties": false,
@@ -10135,14 +10152,14 @@
                 },
                 "openAIModeration": {
                   "additionalProperties": false,
-                  "description": "Layer 2 — the OpenAI Moderations endpoint: ML judgement of intent across hate, harassment, self-harm, sexual and violent content, which regex cannot do. REQUEST path only; the response-side guard type has no moderation form. Costs a network round trip (50-200ms) on every LLM call.",
+                  "description": "Layer 2 \u2014 the OpenAI Moderations endpoint: ML judgement of intent across hate, harassment, self-harm, sexual and violent content, which regex cannot do. REQUEST path only; the response-side guard type has no moderation form. Costs a network round trip (50-200ms) on every LLM call.",
                   "properties": {
                     "auth": {
                       "additionalProperties": false,
                       "description": "An API-key credential. Set `secretRef` (preferred) or `key`; `secretRef` wins if both are given.",
                       "properties": {
                         "key": {
-                          "description": "Inline key. Least secure — it lands in the Composition spec and in helm's release Secret in cleartext.",
+                          "description": "Inline key. Least secure \u2014 it lands in the Composition spec and in helm's release Secret in cleartext.",
                           "type": "string"
                         },
                         "location": {
@@ -10244,10 +10261,10 @@
                 },
                 "regex": {
                   "additionalProperties": false,
-                  "description": "Layer 1 — deterministic, sub-millisecond, no external dependency. Each class renders at most two guard entries (one per direction), evaluated in the order listed here.",
+                  "description": "Layer 1 \u2014 deterministic, sub-millisecond, no external dependency. Each class renders at most two guard entries (one per direction), evaluated in the order listed here.",
                   "properties": {
                     "combine": {
-                      "description": "agentgateway allows at most 8 guards per direction, and the full set here (7 default regex classes + moderation + Model Armor + Bedrock + webhook) is 11. WhenNeeded (the default) keeps one entry per class while the total fits and folds every same-action, same-scope class into one entry once it would exceed 8. Never always keeps them separate and fails the render with an actionable message instead. Always folds unconditionally — cheapest on slots, and the rejection message stops naming which class fired.",
+                      "description": "agentgateway allows at most 8 guards per direction, and the full set here (7 default regex classes + moderation + Model Armor + Bedrock + webhook) is 11. WhenNeeded (the default) keeps one entry per class while the total fits and folds every same-action, same-scope class into one entry once it would exceed 8. Never always keeps them separate and fails the render with an actionable message instead. Always folds unconditionally \u2014 cheapest on slots, and the rejection message stops naming which class fired.",
                       "enum": [
                         "WhenNeeded",
                         "Never",
@@ -10290,7 +10307,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -10341,7 +10358,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -10388,7 +10405,7 @@
                           "type": "object"
                         },
                         "scope": {
-                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results — valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
                           "items": {
                             "enum": [
                               "SystemPrompt",
@@ -10405,7 +10422,7 @@
                       "type": "object"
                     },
                     "custom": {
-                      "description": "Your own classes. A LIST, so an override replaces it wholesale rather than deep-merging — which is what you want for \"these are my organisation's patterns\".",
+                      "description": "Your own classes. A LIST, so an override replaces it wholesale rather than deep-merging \u2014 which is what you want for \"these are my organisation's patterns\".",
                       "items": {
                         "additionalProperties": false,
                         "description": "A class of your own, in the same shape as the built-in ones.",
@@ -10443,7 +10460,7 @@
                             "description": "How this class behaves in one direction.",
                             "properties": {
                               "action": {
-                                "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                                "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                                 "enum": [
                                   "Mask",
                                   "Reject"
@@ -10494,7 +10511,7 @@
                             "description": "How this class behaves in one direction.",
                             "properties": {
                               "action": {
-                                "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                                "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                                 "enum": [
                                   "Mask",
                                   "Reject"
@@ -10541,7 +10558,7 @@
                             "type": "object"
                           },
                           "scope": {
-                            "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results — valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                            "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
                             "items": {
                               "enum": [
                                 "SystemPrompt",
@@ -10568,7 +10585,7 @@
                     },
                     "encodingEvasion": {
                       "additionalProperties": false,
-                      "description": "Encoded payloads and injected chat-template delimiters — the standard way past a pattern-matching filter, which is exactly what this layer is.",
+                      "description": "Encoded payloads and injected chat-template delimiters \u2014 the standard way past a pattern-matching filter, which is exactly what this layer is.",
                       "properties": {
                         "builtins": {
                           "description": "agentgateway's own PII recognizers, which validate by pattern AND checksum rather than by keyword.",
@@ -10601,7 +10618,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -10652,7 +10669,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -10699,7 +10716,7 @@
                           "type": "object"
                         },
                         "scope": {
-                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results — valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
                           "items": {
                             "enum": [
                               "SystemPrompt",
@@ -10717,7 +10734,7 @@
                     },
                     "harmfulContent": {
                       "additionalProperties": false,
-                      "description": "Weapons, drug synthesis, malware, phishing. OFF by default, and not because it does not matter: these patterns match the vocabulary of legitimate platform engineering (\"how to exploit CVE-…\", \"generate a payload\", \"hack into the test cluster\"). Turn it on for a tenant-facing deployment, or use moderation / Model Armor, which judge intent instead of words.",
+                      "description": "Weapons, drug synthesis, malware, phishing. OFF by default, and not because it does not matter: these patterns match the vocabulary of legitimate platform engineering (\"how to exploit CVE-\u2026\", \"generate a payload\", \"hack into the test cluster\"). Turn it on for a tenant-facing deployment, or use moderation / Model Armor, which judge intent instead of words.",
                       "properties": {
                         "builtins": {
                           "description": "agentgateway's own PII recognizers, which validate by pattern AND checksum rather than by keyword.",
@@ -10750,7 +10767,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -10801,7 +10818,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -10848,7 +10865,7 @@
                           "type": "object"
                         },
                         "scope": {
-                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results — valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
                           "items": {
                             "enum": [
                               "SystemPrompt",
@@ -10866,7 +10883,7 @@
                     },
                     "jailbreak": {
                       "additionalProperties": false,
-                      "description": "Persona jailbreaks — DAN, \"developer mode\", role hijacking. Worth its own class on this fleet: the agents hold real cluster credentials, so an unconstrained persona is a privilege problem, not just a content one.",
+                      "description": "Persona jailbreaks \u2014 DAN, \"developer mode\", role hijacking. Worth its own class on this fleet: the agents hold real cluster credentials, so an unconstrained persona is a privilege problem, not just a content one.",
                       "properties": {
                         "builtins": {
                           "description": "agentgateway's own PII recognizers, which validate by pattern AND checksum rather than by keyword.",
@@ -10899,7 +10916,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -10950,7 +10967,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -10997,7 +11014,7 @@
                           "type": "object"
                         },
                         "scope": {
-                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results — valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
                           "items": {
                             "enum": [
                               "SystemPrompt",
@@ -11015,7 +11032,7 @@
                     },
                     "pii": {
                       "additionalProperties": false,
-                      "description": "Actual PII values — not the words for them. Masked rather than rejected on purpose: an operator pasting a log line with a customer email should get an answer with the email redacted, not a 403 they work around by retyping.",
+                      "description": "Actual PII values \u2014 not the words for them. Masked rather than rejected on purpose: an operator pasting a log line with a customer email should get an answer with the email redacted, not a 403 they work around by retyping.",
                       "properties": {
                         "builtins": {
                           "description": "agentgateway's own PII recognizers, which validate by pattern AND checksum rather than by keyword.",
@@ -11048,7 +11065,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -11099,7 +11116,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -11146,7 +11163,7 @@
                           "type": "object"
                         },
                         "scope": {
-                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results — valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
                           "items": {
                             "enum": [
                               "SystemPrompt",
@@ -11197,7 +11214,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -11248,7 +11265,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -11295,7 +11312,7 @@
                           "type": "object"
                         },
                         "scope": {
-                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results — valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
                           "items": {
                             "enum": [
                               "SystemPrompt",
@@ -11313,7 +11330,7 @@
                     },
                     "secrets": {
                       "additionalProperties": false,
-                      "description": "Credentials heading out of the platform. Masked on the request (a pasted manifest with a token still gets a useful answer) and rejected on the response, because a model echoing a live credential back is a leak worth surfacing — and on a streamed response Reject is the only action that bites.",
+                      "description": "Credentials heading out of the platform. Masked on the request (a pasted manifest with a token still gets a useful answer) and rejected on the response, because a model echoing a live credential back is a leak worth surfacing \u2014 and on a streamed response Reject is the only action that bites.",
                       "properties": {
                         "builtins": {
                           "description": "agentgateway's own PII recognizers, which validate by pattern AND checksum rather than by keyword.",
@@ -11346,7 +11363,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -11397,7 +11414,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -11444,7 +11461,7 @@
                           "type": "object"
                         },
                         "scope": {
-                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results — valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
                           "items": {
                             "enum": [
                               "SystemPrompt",
@@ -11495,7 +11512,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -11546,7 +11563,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -11593,7 +11610,7 @@
                           "type": "object"
                         },
                         "scope": {
-                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results — valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
                           "items": {
                             "enum": [
                               "SystemPrompt",
@@ -11644,7 +11661,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -11695,7 +11712,7 @@
                           "description": "How this class behaves in one direction.",
                           "properties": {
                             "action": {
-                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response — matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
+                              "description": "Mask redacts the match and lets the exchange continue; Reject ends it with the message below. `Mask` is NOT applied to a streamed response \u2014 matched content already in flight passes through unmodified and nothing is recorded, so use Reject to protect a stream.",
                               "enum": [
                                 "Mask",
                                 "Reject"
@@ -11742,7 +11759,7 @@
                           "type": "object"
                         },
                         "scope": {
-                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results — valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                          "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results \u2014 valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
                           "items": {
                             "enum": [
                               "SystemPrompt",
@@ -11762,7 +11779,7 @@
                   "type": "object"
                 },
                 "streaming": {
-                  "description": "Run the guards on STREAMED responses too. Disabled upstream by default to protect streaming throughput; Enabled here because kagent streams and response guards would otherwise never run. Note the asymmetry: a streamed response can be REJECTED but not MASKED — matched content is already in flight, so a Mask response guard passes it through unmodified and records nothing. Request guards are unaffected (a request is always buffered).",
+                  "description": "Run the guards on STREAMED responses too. Disabled upstream by default to protect streaming throughput; Enabled here because kagent streams and response guards would otherwise never run. Note the asymmetry: a streamed response can be REJECTED but not MASKED \u2014 matched content is already in flight, so a Mask response guard passes it through unmodified and records nothing. Request guards are unaffected (a request is always buffered).",
                   "enum": [
                     "",
                     "Disabled",
@@ -11808,7 +11825,7 @@
                 },
                 "webhook": {
                   "additionalProperties": false,
-                  "description": "Layer 3 — your own guardrail server. This chart ships none on purpose: the point of the layer is that the logic is yours (a DLP tool you already run, an NER model, a compliance service). Deploy a server that speaks the Guardrail Webhook API — POST /request and POST /response, answering pass, mask or reject — and name it here.",
+                  "description": "Layer 3 \u2014 your own guardrail server. This chart ships none on purpose: the point of the layer is that the logic is yours (a DLP tool you already run, an NER model, a compliance service). Deploy a server that speaks the Guardrail Webhook API \u2014 POST /request and POST /response, answering pass, mask or reject \u2014 and name it here.",
                   "properties": {
                     "apply": {
                       "additionalProperties": false,
@@ -11874,7 +11891,7 @@
                       "additionalProperties": {
                         "type": "string"
                       },
-                      "description": "CEL-computed headers on the outgoing webhook call, evaluated against the ORIGINAL client request — so `jwt.sub` carries the caller's identity through to your server. The `:path` pseudo-header overrides the default /request and /response paths, and its value is a CEL expression, so a literal path needs inner quotes: '\"/api/guardrails/request\"'.",
+                      "description": "CEL-computed headers on the outgoing webhook call, evaluated against the ORIGINAL client request \u2014 so `jwt.sub` carries the caller's identity through to your server. The `:path` pseudo-header overrides the default /request and /response paths, and its value is a CEL expression, so a literal path needs inner quotes: '\"/api/guardrails/request\"'.",
                       "type": "object"
                     },
                     "request": {
@@ -12022,7 +12039,7 @@
             },
             "llm": {
               "additionalProperties": false,
-              "description": "The LLM hop: the AI backend the agents' model calls resolve to, and the OpenAI-compatible route they arrive on. INFRASTRUCTURE rather than a guardrail detail — once the calls arrive here every `backend.ai` policy agentgateway has becomes available on them, and guardrails are only the first consumer (rate limits and token budgets, cost controls, model aliases, failover across providers, prompt enrichment and per-model RBAC all attach to this same route). Disabling it hands the hop back: the route disappears and the agents go straight to the provider.",
+              "description": "The LLM hop: the AI backend the agents' model calls resolve to, and the OpenAI-compatible route they arrive on. INFRASTRUCTURE rather than a guardrail detail \u2014 once the calls arrive here every `backend.ai` policy agentgateway has becomes available on them, and guardrails are only the first consumer (rate limits and token budgets, cost controls, model aliases, failover across providers, prompt enrichment and per-model RBAC all attach to this same route). Disabling it hands the hop back: the route disappears and the agents go straight to the provider.",
               "properties": {
                 "anthropic": {
                   "additionalProperties": false,
@@ -12033,7 +12050,7 @@
                       "description": "An API-key credential. Set `secretRef` (preferred) or `key`; `secretRef` wins if both are given.",
                       "properties": {
                         "key": {
-                          "description": "Inline key. Least secure — it lands in the Composition spec and in helm's release Secret in cleartext.",
+                          "description": "Inline key. Least secure \u2014 it lands in the Composition spec and in helm's release Secret in cleartext.",
                           "type": "string"
                         },
                         "location": {
@@ -12155,11 +12172,11 @@
                 "benchRoute": {
                   "type": "object",
                   "additionalProperties": false,
-                  "description": "Guardrail-EXEMPT second HTTPRoute onto the SAME AI backend (same provider/credential), for benchmark measurement ONLY — OFF by default; keep it off in production. The fleet guardrails MASK identifiers in flight (e.g. checkout-db.otel-demo.internal -> checkout-db.<masked>), which is right for the fleet and fatal for an RCA benchmark scored on whether the answer NAMES the failing entity; the guard policy targets the LLM route by name, so this differently-named route is outside it and the fleet keeps every guard while the benchmark runs. While on, the cluster has an unmasked, credentialed path to the provider, so its identity rules are the narrowest in this chart: route-scoped jwtAuthentication:Strict (a tokenless call is 401 even where the gateway JWT mode is Optional) and an authorization Require rule that REFUSES anyAuthenticated — subjects.users/groups must name someone or the render fails. It also fails render unless llm.enabled, authorization.enabled and jwt.enabled are all true and routePrefix is a non-nested, '/'-prefixed path. Mirrors agentgateway-policies llm.benchRoute (PR#27).",
+                  "description": "Guardrail-EXEMPT second HTTPRoute onto the SAME AI backend (same provider/credential), for benchmark measurement ONLY \u2014 OFF by default; keep it off in production. The fleet guardrails MASK identifiers in flight (e.g. checkout-db.otel-demo.internal -> checkout-db.<masked>), which is right for the fleet and fatal for an RCA benchmark scored on whether the answer NAMES the failing entity; the guard policy targets the LLM route by name, so this differently-named route is outside it and the fleet keeps every guard while the benchmark runs. While on, the cluster has an unmasked, credentialed path to the provider, so its identity rules are the narrowest in this chart: route-scoped jwtAuthentication:Strict (a tokenless call is 401 even where the gateway JWT mode is Optional) and an authorization Require rule that REFUSES anyAuthenticated \u2014 subjects.users/groups must name someone or the render fails. It also fails render unless llm.enabled, authorization.enabled and jwt.enabled are all true and routePrefix is a non-nested, '/'-prefixed path. Mirrors agentgateway-policies llm.benchRoute (PR#27).",
                   "properties": {
                     "enabled": {
                       "type": "boolean",
-                      "description": "false (default) renders not one bench object. Set true, for a named window, only on the cluster you are benchmarking — and only together with subjects, or the render fails."
+                      "description": "false (default) renders not one bench object. Set true, for a named window, only on the cluster you are benchmarking \u2014 and only together with subjects, or the render fails."
                     },
                     "routePrefix": {
                       "type": "string",
@@ -12190,7 +12207,7 @@
                 },
                 "callerAuth": {
                   "additionalProperties": false,
-                  "description": "Who may use the LLM route — the traffic-layer gate for this hop, the analogue of `mcpTraffic` for the MCP hop. It matters more than it looks: the gateway is browser-reachable in the Krateo portal's exposure model, so an ungated LLM route is an open, credentialed proxy to your provider account.",
+                  "description": "Who may use the LLM route \u2014 the traffic-layer gate for this hop, the analogue of `mcpTraffic` for the MCP hop. It matters more than it looks: the gateway is browser-reachable in the Krateo portal's exposure model, so an ungated LLM route is an open, credentialed proxy to your provider account.",
                   "properties": {
                     "apiKey": {
                       "additionalProperties": false,
@@ -12219,7 +12236,7 @@
                       "type": "object"
                     },
                     "mode": {
-                      "description": "Jwt — kagent's `apiKeyPassthrough` forwards the CALLER's authn token as the LLM credential, the Gateway JWT policy validates it, and `subjects` decides who may spend tokens; a turn with no caller token (an unauthenticated webhook trigger, a cron) has nothing to forward and is denied. ApiKey — a shared key from a Secret, validated on the route; pick this for callers that are not user-driven. Anonymous — path-only allow, safe ONLY when this Gateway is unreachable from outside the cluster.",
+                      "description": "Jwt \u2014 kagent's `apiKeyPassthrough` forwards the CALLER's authn token as the LLM credential, the Gateway JWT policy validates it, and `subjects` decides who may spend tokens; a turn with no caller token (an unauthenticated webhook trigger, a cron) has nothing to forward and is denied. ApiKey \u2014 a shared key from a Secret, validated on the route; pick this for callers that are not user-driven. Anonymous \u2014 path-only allow, safe ONLY when this Gateway is unreachable from outside the cluster.",
                       "enum": [
                         "Jwt",
                         "ApiKey",
@@ -12260,14 +12277,14 @@
                 },
                 "custom": {
                   "additionalProperties": false,
-                  "description": "A self-hosted or non-managed OpenAI-compatible upstream (vLLM, Ollama behind a Service, a corporate LLM proxy). Give it EITHER `backendRef` OR `host`+`port` — agentgateway rejects both together — and at least one format.",
+                  "description": "A self-hosted or non-managed OpenAI-compatible upstream (vLLM, Ollama behind a Service, a corporate LLM proxy). Give it EITHER `backendRef` OR `host`+`port` \u2014 agentgateway rejects both together \u2014 and at least one format.",
                   "properties": {
                     "auth": {
                       "additionalProperties": false,
                       "description": "An API-key credential. Set `secretRef` (preferred) or `key`; `secretRef` wins if both are given.",
                       "properties": {
                         "key": {
-                          "description": "Inline key. Least secure — it lands in the Composition spec and in helm's release Secret in cleartext.",
+                          "description": "Inline key. Least secure \u2014 it lands in the Composition spec and in helm's release Secret in cleartext.",
                           "type": "string"
                         },
                         "location": {
@@ -12404,14 +12421,14 @@
                 },
                 "gemini": {
                   "additionalProperties": false,
-                  "description": "Gemini API key path. The secret is the same one the agents use today (autopilot: geminiApiKey.secretName/secretKey) — the gateway simply becomes the thing that holds it.",
+                  "description": "Gemini API key path. The secret is the same one the agents use today (autopilot: geminiApiKey.secretName/secretKey) \u2014 the gateway simply becomes the thing that holds it.",
                   "properties": {
                     "auth": {
                       "additionalProperties": false,
                       "description": "An API-key credential. Set `secretRef` (preferred) or `key`; `secretRef` wins if both are given.",
                       "properties": {
                         "key": {
-                          "description": "Inline key. Least secure — it lands in the Composition spec and in helm's release Secret in cleartext.",
+                          "description": "Inline key. Least secure \u2014 it lands in the Composition spec and in helm's release Secret in cleartext.",
                           "type": "string"
                         },
                         "location": {
@@ -12482,7 +12499,7 @@
                 },
                 "http": {
                   "additionalProperties": false,
-                  "description": "Connection tuning for the hop from the gateway to the provider. A model call is slow by nature — leave requestTimeout empty unless you have a reason.",
+                  "description": "Connection tuning for the hop from the gateway to the provider. A model call is slow by nature \u2014 leave requestTimeout empty unless you have a reason.",
                   "properties": {
                     "requestTimeout": {
                       "description": "Response deadline, e.g. `5s`. Empty = no chart-set deadline. A short one on the MODEL hop turns a long generation into a 504; on a guardrail hop it is protection against a hung dependency.",
@@ -12500,7 +12517,7 @@
                       "description": "An API-key credential. Set `secretRef` (preferred) or `key`; `secretRef` wins if both are given.",
                       "properties": {
                         "key": {
-                          "description": "Inline key. Least secure — it lands in the Composition spec and in helm's release Secret in cleartext.",
+                          "description": "Inline key. Least secure \u2014 it lands in the Composition spec and in helm's release Secret in cleartext.",
                           "type": "string"
                         },
                         "location": {
@@ -12570,7 +12587,7 @@
                   "type": "object"
                 },
                 "provider": {
-                  "description": "Which upstream the backend talks to. `auto` resolves to `vertexai` when vertexai.projectId is set, else `gemini` — mirroring how every agent chart already chooses (the installer fills projectId/region from its own vertexAI block).",
+                  "description": "Which upstream the backend talks to. `auto` resolves to `vertexai` when vertexai.projectId is set, else `gemini` \u2014 mirroring how every agent chart already chooses (the installer fills projectId/region from its own vertexAI block).",
                   "enum": [
                     "auto",
                     "gemini",
@@ -12583,7 +12600,7 @@
                   "type": "string"
                 },
                 "routePrefix": {
-                  "description": "Path prefix of the rendered route, and therefore the `openAI.baseUrl` every agent gets: http://<gateway.name>.<namespace>.svc.cluster.local:<gateway.port><routePrefix>. Deliberately not a bare `/v1`: this Gateway also carries /api/a2a/…, /mcp and the header-matched `/` sub-agent routes. kagent appends `/chat/completions`, so the full path still ends in `/v1/chat/completions` and agentgateway's route-type detection matches it.",
+                  "description": "Path prefix of the rendered route, and therefore the `openAI.baseUrl` every agent gets: http://<gateway.name>.<namespace>.svc.cluster.local:<gateway.port><routePrefix>. Deliberately not a bare `/v1`: this Gateway also carries /api/a2a/\u2026, /mcp and the header-matched `/` sub-agent routes. kagent appends `/chat/completions`, so the full path still ends in `/v1/chat/completions` and agentgateway's route-type detection matches it.",
                   "minLength": 1,
                   "pattern": "^/.*",
                   "type": "string"
@@ -12594,7 +12611,7 @@
                   "properties": {
                     "auth": {
                       "additionalProperties": false,
-                      "description": "Google Cloud credentials. All fields empty = ambient discovery (on GKE, the proxy pod's node SA — the same path the agents use for Vertex today).",
+                      "description": "Google Cloud credentials. All fields empty = ambient discovery (on GKE, the proxy pod's node SA \u2014 the same path the agents use for Vertex today).",
                       "properties": {
                         "gcp": {
                           "additionalProperties": false,
@@ -12692,7 +12709,7 @@
                     "tokensPerMinute": {
                       "type": "integer",
                       "minimum": 0,
-                      "description": "LLM tokens/min — the bound on provider spend (429 over). 0 = off."
+                      "description": "LLM tokens/min \u2014 the bound on provider spend (429 over). 0 = off."
                     },
                     "maxRequestBytes": {
                       "type": "integer",
@@ -12902,7 +12919,7 @@
             "stt": {
               "type": "object",
               "additionalProperties": false,
-              "description": "Speech-to-text transcription route (agentgateway-policies stt): /stt/v1 on the TLS platform listener, guardrail-free + Strict-JWT + metered. Set enabled:true to turn on voice input — requires exposure.tls (a TLS platform listener). Off by default in the chart.",
+              "description": "Speech-to-text transcription route (agentgateway-policies stt): /stt/v1 on the TLS platform listener, guardrail-free + Strict-JWT + metered. Set enabled:true to turn on voice input \u2014 requires exposure.tls (a TLS platform listener). Off by default in the chart.",
               "properties": {
                 "enabled": {
                   "type": "boolean",
@@ -12930,7 +12947,7 @@
                     "tokensPerHour": {
                       "type": "integer",
                       "minimum": 0,
-                      "description": "Model tokens/HOUR (429 over) — per-hour budget so a long dictation can burst. 0 = off."
+                      "description": "Model tokens/HOUR (429 over) \u2014 per-hour budget so a long dictation can burst. 0 = off."
                     },
                     "maxRequestBytes": {
                       "type": "integer",
@@ -12948,7 +12965,7 @@
             "tts": {
               "type": "object",
               "additionalProperties": false,
-              "description": "Text-to-speech speak-back route (agentgateway-policies tts): /tts/v1 on the TLS platform listener, static backend to Google Cloud TTS (EU multi-region, keeps answer text in-region), guardrail-exempt + Strict-JWT + bounded. Set enabled:true to upgrade Autopilot speak-back from the browser voice to Cloud TTS — requires exposure.tls (a TLS platform listener). Off by default in the chart. Pair with the frontend AUTOPILOT_VOICE_TTS_URL (https://<host>/tts/v1/text:synthesize).",
+              "description": "Text-to-speech speak-back route (agentgateway-policies tts): /tts/v1 on the TLS platform listener, static backend to Google Cloud TTS (EU multi-region, keeps answer text in-region), guardrail-exempt + Strict-JWT + bounded. Set enabled:true to upgrade Autopilot speak-back from the browser voice to Cloud TTS \u2014 requires exposure.tls (a TLS platform listener). Off by default in the chart. Pair with the frontend AUTOPILOT_VOICE_TTS_URL (https://<host>/tts/v1/text:synthesize).",
               "properties": {
                 "enabled": {
                   "type": "boolean",
@@ -13010,7 +13027,7 @@
                 "array",
                 "null"
               ],
-              "description": "exposure.type=Gateway + exposure.gatewayMode=path only: the portal-stack route table the installer computes and injects onto this composition (one entry per exposed component with a gatewayPath — frontend/authn/snowplow/sse-proxy — all on the single platform-http listener at exposure.platformPort). The agentgateway-policies chart programs the listener + one route per entry from it. The installer fills this fill-if-absent, so an explicit override here WINS; leave it unset to let the installer compute it. Inert outside path mode.",
+              "description": "exposure.type=Gateway + exposure.gatewayMode=path only: the portal-stack route table the installer computes and injects onto this composition (one entry per exposed component with a gatewayPath \u2014 frontend/authn/snowplow/sse-proxy \u2014 all on the single platform-http listener at exposure.platformPort). The agentgateway-policies chart programs the listener + one route per entry from it. The installer fills this fill-if-absent, so an explicit override here WINS; leave it unset to let the installer compute it. Inert outside path mode.",
               "items": {
                 "type": "object",
                 "additionalProperties": false,
@@ -13137,7 +13154,7 @@
                   },
                   "toolRules": {
                     "type": "array",
-                    "description": "Layer 2 — each entry restricts the named tools to the given subjects. Rules are AND'd into one expression, so a rule can only narrow access. Tools named nowhere stay open.",
+                    "description": "Layer 2 \u2014 each entry restricts the named tools to the given subjects. Rules are AND'd into one expression, so a rule can only narrow access. Tools named nowhere stay open.",
                     "items": {
                       "type": "object",
                       "additionalProperties": false,
@@ -13190,7 +13207,7 @@
             },
             "extraSubAgents": {
               "type": "array",
-              "description": "Additive: appended to the agentgateway-policies chart's subAgents (extraSubAgents knob, chart>=0.1.17). Layer 3 — every agent that can be an A2A delegation target. Each entry renders the header-matched route, the token passthrough, the anonymous agent-card allowance and the delegation rule.",
+              "description": "Additive: appended to the agentgateway-policies chart's subAgents (extraSubAgents knob, chart>=0.1.17). Layer 3 \u2014 every agent that can be an A2A delegation target. Each entry renders the header-matched route, the token passthrough, the anonymous agent-card allowance and the delegation rule.",
               "items": {
                 "type": "object",
                 "additionalProperties": false,
@@ -13746,13 +13763,13 @@
               }
             },
             "uiTokenHop": {
-              "description": "The kagent dashboard's authenticating front door. The kagent controller runs AUTH_MODE=trusted-proxy — it identifies a caller only from a bearer and DECODES it without verifying the signature (an alg:none token with any sub returns 200) — while kagent-ui sends no bearer at all. This hop exchanges its own projected ServiceAccount token (audience-bound to authn) for a real RS256 Krateo JWT at authn's intra-service strategy, drops whatever Authorization the client sent, stamps its own, and sends /api through the Gateway so the signature is actually verified. One shared SERVICE identity, not the dashboard user's: it makes the dashboard's identity unforgeable, it does not make the dashboard multi-user. Default OFF — it needs authn, and enabling it also activates networkPolicy.ui.",
+              "description": "The kagent dashboard's authenticating front door. The kagent controller runs AUTH_MODE=trusted-proxy \u2014 it identifies a caller only from a bearer and DECODES it without verifying the signature (an alg:none token with any sub returns 200) \u2014 while kagent-ui sends no bearer at all. This hop exchanges its own projected ServiceAccount token (audience-bound to authn) for a real RS256 Krateo JWT at authn's intra-service strategy, drops whatever Authorization the client sent, stamps its own, and sends /api through the Gateway so the signature is actually verified. One shared SERVICE identity, not the dashboard user's: it makes the dashboard's identity unforgeable, it does not make the dashboard multi-user. Default OFF \u2014 it needs authn, and enabling it also activates networkPolicy.ui.",
               "type": "object",
               "additionalProperties": false,
               "properties": {
                 "enabled": {
                   "type": "boolean",
-                  "description": "ON by default: kagent-ui is unusable behind the gateway without it — the controller reads identity only from a bearer and kagent-ui sends none. Set false to drop the hop and its pod."
+                  "description": "ON by default: kagent-ui is unusable behind the gateway without it \u2014 the controller reads identity only from a bearer and kagent-ui sends none. Set false to drop the hop and its pod."
                 },
                 "identity": {
                   "type": "string",
@@ -13769,7 +13786,7 @@
                 "apiPathPrefix": {
                   "type": "string",
                   "minLength": 1,
-                  "description": "Prefix the hop sends to the Gateway rather than to kagent-ui, and identically the path the Allow clause admits for `identity`. /api/ is the whole controller API, which is what a dashboard needs — including /api/a2a/, which is the chat itself."
+                  "description": "Prefix the hop sends to the Gateway rather than to kagent-ui, and identically the path the Allow clause admits for `identity`. /api/ is the whole controller API, which is what a dashboard needs \u2014 including /api/a2a/, which is the chat itself."
                 },
                 "gatewayUrl": {
                   "type": "string",
@@ -13795,7 +13812,7 @@
                     "tokenExpirationSeconds": {
                       "type": "integer",
                       "minimum": 600,
-                      "description": "Kubelet rotation period for the projected token — NOT the minted JWT's lifetime."
+                      "description": "Kubelet rotation period for the projected token \u2014 NOT the minted JWT's lifetime."
                     },
                     "timeout": {
                       "type": "string",
@@ -13883,7 +13900,7 @@
                 "impersonation": {
                   "type": "object",
                   "additionalProperties": false,
-                  "description": "DEVELOPMENT ONLY. View the kagent dashboard as another user. kagent scopes every session listing to the authenticated principal and exposes no all-users view, so the dashboard lists only what the hop's own shared service identity created; history written under a human login stays invisible. This overrides the user id kagent sees, via the X-User-Id/X-Agent-Name pair its trusted-proxy authenticator prefers over the token's `sub`. The bearer stays the hop's real token, so the Gateway still verifies a genuine signature — only the application-level user id changes. NOT authentication: the viewed user has no relation to whoever is at the keyboard, and anyone who can reach the hop can view as anyone. Needs componentValues.kagent.kagentapp.ui.additionalForwardedHeaders to carry x-user-id and x-agent-name, or it covers direct /api calls only and silently misses the dashboard's Next.js server-action data path.",
+                  "description": "DEVELOPMENT ONLY. View the kagent dashboard as another user. kagent scopes every session listing to the authenticated principal and exposes no all-users view, so the dashboard lists only what the hop's own shared service identity created; history written under a human login stays invisible. This overrides the user id kagent sees, via the X-User-Id/X-Agent-Name pair its trusted-proxy authenticator prefers over the token's `sub`. The bearer stays the hop's real token, so the Gateway still verifies a genuine signature \u2014 only the application-level user id changes. NOT authentication: the viewed user has no relation to whoever is at the keyboard, and anyone who can reach the hop can view as anyone. Needs componentValues.kagent.kagentapp.ui.additionalForwardedHeaders to carry x-user-id and x-agent-name, or it covers direct /api calls only and silently misses the dashboard's Next.js server-action data path.",
                   "properties": {
                     "enabled": {
                       "type": "boolean"
@@ -13895,7 +13912,7 @@
                     "agentName": {
                       "type": "string",
                       "minLength": 1,
-                      "description": "Fills X-Agent-Name, which kagent requires before it honours X-User-Id at all. Its only other use is a guard on POST /api/sessions/{id}/events, called exclusively by the ADK agent runtime against the controller directly — never through this hop."
+                      "description": "Fills X-Agent-Name, which kagent requires before it honours X-User-Id at all. Its only other use is a guard on POST /api/sessions/{id}/events, called exclusively by the ADK agent runtime against the controller directly \u2014 never through this hop."
                     },
                     "allowedUsers": {
                       "type": "array",
@@ -13942,7 +13959,7 @@
                 "properties": {
                   "name": {
                     "type": "string",
-                    "description": "ModelConfig object name — what the agents reference. Renaming it means also updating the componentValues.<agent>.modelConfig.name entries that point at it; the names are literals, not aliases resolved for you."
+                    "description": "ModelConfig object name \u2014 what the agents reference. Renaming it means also updating the componentValues.<agent>.modelConfig.name entries that point at it; the names are literals, not aliases resolved for you."
                   },
                   "model": {
                     "type": "string"
@@ -13963,7 +13980,7 @@
                   }
                 }
               },
-              "description": "Model slots this component owns, keyed by an arbitrary alias — one ModelConfig each. The component pins' `model:` field names an alias here."
+              "description": "Model slots this component owns, keyed by an arbitrary alias \u2014 one ModelConfig each. The component pins' `model:` field names an alias here."
             },
             "geminiApiKey": {
               "type": "object",
@@ -13976,7 +13993,7 @@
                   "type": "string"
                 }
               },
-              "description": "Reference to an existing Secret holding the Gemini API key — the default path (no gateway route, no localModel, vertexAI off)."
+              "description": "Reference to an existing Secret holding the Gemini API key \u2014 the default path (no gateway route, no localModel, vertexAI off)."
             },
             "vertexAI": {
               "type": "object",
@@ -14030,7 +14047,7 @@
                   "properties": {
                     "enabled": {
                       "type": "boolean",
-                      "description": "Tri-state — LEAVE UNSET unless you mean to override the derivation (on when agentgateway.enabled, off on a localModel install). true forces the route on for a localModel install, which needs the policies chart's llm.custom provider pointed at that same Ollama. false forces it off, which is REQUIRED when you set componentValues.agentgateway-policies.llm.enabled=false — that Gateway carries no LLM route, so routing there 404s every model call."
+                      "description": "Tri-state \u2014 LEAVE UNSET unless you mean to override the derivation (on when agentgateway.enabled, off on a localModel install). true forces the route on for a localModel install, which needs the policies chart's llm.custom provider pointed at that same Ollama. false forces it off, which is REQUIRED when you set componentValues.agentgateway-policies.llm.enabled=false \u2014 that Gateway carries no LLM route, so routing there 404s every model call."
                     },
                     "url": {
                       "type": "string",
@@ -14038,10 +14055,10 @@
                     },
                     "apiKeySecret": {
                       "type": "string",
-                      "description": "Empty = Passthrough: the caller's own token becomes the LLM credential (apiKeyPassthrough), so no provider key lives in any agent. Set to a Secret holding a shared key — matching componentValues.agentgateway-policies.llm.callerAuth.apiKey.secretRef — for callers that are not user-driven (cron, webhooks) and have no token to forward."
+                      "description": "Empty = Passthrough: the caller's own token becomes the LLM credential (apiKeyPassthrough), so no provider key lives in any agent. Set to a Secret holding a shared key \u2014 matching componentValues.agentgateway-policies.llm.callerAuth.apiKey.secretRef \u2014 for callers that are not user-driven (cron, webhooks) and have no token to forward."
                     }
                   },
-                  "description": "Point the fleet's ModelConfigs at the gateway's LLM route instead of straight at the provider (provider OpenAI + openAI.baseUrl). This is what makes anything attached to that route act at all — guardrails, rate limits, token budgets, cost controls. TAKES PRECEDENCE over vertexAI and localModel."
+                  "description": "Point the fleet's ModelConfigs at the gateway's LLM route instead of straight at the provider (provider OpenAI + openAI.baseUrl). This is what makes anything attached to that route act at all \u2014 guardrails, rate limits, token budgets, cost controls. TAKES PRECEDENCE over vertexAI and localModel."
                 }
               },
               "description": "The agentgateway in front of the fleet, as it concerns the fleet's models."
@@ -14096,7 +14113,7 @@
         "repo-mcp-server": {
           "type": "object",
           "additionalProperties": false,
-          "description": "The fleet's grounding MCP server (krateo-agentiko/repo-mcp-server) — greps and reads the Krateo chart/source corpus at pinned versions, returning citable repo/path:line. Installed ahead of its consumers so the fleet converges in one pass. Ordering is a convergence concern, not a correctness one: an agent reconciled before this server's RemoteMCPServer CR exists fails its compile visibly (Accepted=False, ReconcileFailed) and self-heals when the kagent Agent controller re-reconciles it on the CR's creation.",
+          "description": "The fleet's grounding MCP server (krateo-agentiko/repo-mcp-server) \u2014 greps and reads the Krateo chart/source corpus at pinned versions, returning citable repo/path:line. Installed ahead of its consumers so the fleet converges in one pass. Ordering is a convergence concern, not a correctness one: an agent reconciled before this server's RemoteMCPServer CR exists fails its compile visibly (Accepted=False, ReconcileFailed) and self-heals when the kagent Agent controller re-reconciles it on the CR's creation.",
           "properties": {
             "global": {
               "type": "object",
@@ -14308,7 +14325,7 @@
             "graph": {
               "type": "object",
               "additionalProperties": false,
-              "description": "The server's Graphify DOMAIN graph tools (graph_find/graph_map/graph_neighbors/graph_path/knowledge_lookup). MUST match componentValues.krateo-autopilot.mcpServers.repoSearch.graph.enabled. kagent does NOT enforce this: toolNames is a client-side allowlist filtered against the server's tools/list, so a name the server does not serve is silently dropped — the Agent still reports Accepted=True and the tool is simply absent. Keeping these two flags in sync is the only protection.",
+              "description": "The server's Graphify DOMAIN graph tools (graph_find/graph_map/graph_neighbors/graph_path/knowledge_lookup). MUST match componentValues.krateo-autopilot.mcpServers.repoSearch.graph.enabled. kagent does NOT enforce this: toolNames is a client-side allowlist filtered against the server's tools/list, so a name the server does not serve is silently dropped \u2014 the Agent still reports Accepted=True and the tool is simply absent. Keeping these two flags in sync is the only protection.",
               "properties": {
                 "enabled": {
                   "type": "boolean"
@@ -14320,7 +14337,7 @@
         "structure-graph-mcp-server": {
           "type": "object",
           "additionalProperties": false,
-          "description": "The code-STRUCTURE grounding layer (krateo-agentiko/structure-graph-mcp-server) — a Graphify tree-sitter AST graph of the engine repos. Gated by features.structureGraph; its consumers reference it off by default.",
+          "description": "The code-STRUCTURE grounding layer (krateo-agentiko/structure-graph-mcp-server) \u2014 a Graphify tree-sitter AST graph of the engine repos. Gated by features.structureGraph; its consumers reference it off by default.",
           "properties": {
             "global": {
               "type": "object",
@@ -14517,7 +14534,7 @@
         "config-refs-mcp-server": {
           "type": "object",
           "additionalProperties": false,
-          "description": "The config_refs RCA MCP server (krateo-agentiko/config-refs-mcp-server) — resolves which ConfigMaps/Secrets a workload references and whether the referenced key is present (incl. optional:true refs the runtime hides). Read-only; reads secret KEY NAMES only, never values. Served over streamable-HTTP as a Deployment+Service+RemoteMCPServer (like repo-mcp-server); gated by coreAgents.",
+          "description": "The config_refs RCA MCP server (krateo-agentiko/config-refs-mcp-server) \u2014 resolves which ConfigMaps/Secrets a workload references and whether the referenced key is present (incl. optional:true refs the runtime hides). Read-only; reads secret KEY NAMES only, never values. Served over streamable-HTTP as a Deployment+Service+RemoteMCPServer (like repo-mcp-server); gated by coreAgents.",
           "properties": {
             "global": {
               "type": "object",
@@ -14696,7 +14713,7 @@
             "mcpServer": {
               "type": "object",
               "additionalProperties": false,
-              "description": "The server itself: a Deployment + Service registered with kagent as a RemoteMCPServer (STREAMABLE_HTTP) that the agents name. NOT a kagent-managed MCPServer — kagent 0.9.12 does not materialize a pod from spec.deployment, it only tries to connect, so nothing would run (issue #3). Installed ahead of its consumers so the fleet converges in one pass. Ordering is a convergence concern, not a correctness one: an agent reconciled before this server's RemoteMCPServer CR exists fails its compile visibly (Accepted=False, ReconcileFailed) and self-heals when the kagent Agent controller re-reconciles it on the CR's creation. Set create:false on a cluster with no kagent CRDs.",
+              "description": "The server itself: a Deployment + Service registered with kagent as a RemoteMCPServer (STREAMABLE_HTTP) that the agents name. NOT a kagent-managed MCPServer \u2014 kagent 0.9.12 does not materialize a pod from spec.deployment, it only tries to connect, so nothing would run (issue #3). Installed ahead of its consumers so the fleet converges in one pass. Ordering is a convergence concern, not a correctness one: an agent reconciled before this server's RemoteMCPServer CR exists fails its compile visibly (Accepted=False, ReconcileFailed) and self-heals when the kagent Agent controller re-reconciles it on the CR's creation. Set create:false on a cluster with no kagent CRDs.",
               "properties": {
                 "create": {
                   "type": "boolean",

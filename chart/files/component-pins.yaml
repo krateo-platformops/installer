@@ -351,6 +351,33 @@ components:
     limits:
       cpu: 500m
       memory: 512Mi
+
+# The agent control plane — /agents, agent detail, agent policies — as its own composition.
+# SPLIT OUT FOR A HARD REASON, not tidiness: a Helm release record is ONE Kubernetes Secret and a
+# Secret's data is capped at 1 MiB by a compiled-in constant. The portal crossed it on 2026-09-11
+# and silently stopped recording releases for three days — CDC applies content BEFORE writing the
+# record, so the cluster stayed correct while helm history froze and every rollback target aged out.
+# Comment conversion (portal 1.8.15) recovered headroom only to 91.5%, and one feature section has
+# historically cost ~18% of the cap. Splitting changes the SLOPE: each composition gets its own
+# budget, so one section can no longer spend the whole portal's. Measured: portal 91.5% -> 61.9%,
+# portal-agents 30.9%.
+#
+# deps: [portal] is the ordering, and it matters. Those 108 CRs belong to the PORTAL release today;
+# the portal chart that drops them must land FIRST so Helm deletes them, and portal-agents then
+# recreates them under its own release. The reverse order leaves the same objects claimed by two
+# releases. The portal's agents.enabled flag (below, componentValues) defaults FALSE in the chart,
+# so during the gap the sidebar entry is HIDDEN rather than pointing at pages that 404 — a clean
+# disappearance instead of a broken link.
+- name: portal-agents
+  kind: PortalAgents
+  # MUST equal the portal tag that ships the split: release-oci versions every chart under helm/
+  # from the same tag, so portal and portal-agents always carry the SAME version. 1.8.19 is the
+  # next tag; if the split lands on a different one, this and the portal pin move together.
+  version: 1.8.19
+  deps: ['portal']
+  tier: platform
+  feature: portal
+  chart: portal-agents
 - name: krateo-helm-render-service
   kind: KrateoHelmRenderService
   version: 0.3.2
