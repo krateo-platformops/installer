@@ -331,6 +331,20 @@ localModel:
 #     snowplow:
 #       replicaCount: 2
 componentValues:
+  # The portal's Agents sidebar entry and its /agents routes, which live in the SEPARATE
+  # portal-agents chart this installer pins beside it. The portal CHART defaults this false so a
+  # standalone install cannot show a nav entry whose pages are absent; this installer always
+  # ships both, so here it is true.
+  #
+  # IT HAS TO BE SEEDED HERE, not left to the schema default. A `default` on
+  # componentValues.portal.agents does not reach the component when componentValues.portal itself
+  # is absent from these values — the expansion never descends into a parent that is not there.
+  # Verified the hard way on krateo-057: with only the schema default, the portal release rendered
+  # config.agents={enabled:false} (the PORTAL chart's own default) and /agents 404'd while
+  # portal-agents was installed and its five page CRs were live.
+  portal:
+    agents:
+      enabled: true
   agentgateway-policies:
     # The kagent dashboard's auth hop. On because kagent-ui is otherwise unusable behind the
     # gateway: the controller reads identity only from a bearer and kagent-ui sends none.
