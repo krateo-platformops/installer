@@ -331,7 +331,12 @@ components:
   # CDC's three-way merge → an upgrade every reconcile. Worse than "harmless": at HELM_MAX_HISTORY=3 a write every
   # 2 min rotated out every rollback target within ~6 min. 1.8.18 renders `data` with b64enc → rendered==stored
   # key-for-key → merge converges → helm history goes QUIET between real chart changes (the confirmation).
-  version: 1.8.18
+  # 1.8.19 DROPS the 108 agents CRs into the portal-agents chart. It MUST move in lockstep with
+  # the portal-agents pin below: on 1.8.18 the portal still CONTAINS those CRs, so pairing it with
+  # portal-agents 1.8.19 leaves the same objects claimed by two Helm releases — the exact failure
+  # the deps ordering exists to prevent. Both charts version from the same tag, so the two pins
+  # always carry the same number.
+  version: 1.8.19
   deps:
   - frontend
   - git-provider
