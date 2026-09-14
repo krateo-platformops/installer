@@ -7073,8 +7073,8 @@
               "default": {
                 "enabled": true
               },
-              "description": "Show the Agents sidebar entry and its /agents routes. The pages themselves live in the separate portal-agents composition, which this installer pins alongside the portal \u2014 so this defaults TRUE here while the portal CHART defaults it false for a standalone install. A DEFAULT IS REQUIRED, not just schema-allow: a new nested componentValues key with no default is dropped from the schema-expansion and never reaches the component release (installer #173/#174).",
-              "additionalProperties": true,
+              "description": "Show the Agents sidebar entry and its /agents routes. The pages themselves live in the separate portal-agents composition, which this installer pins alongside the portal \u2014 so this defaults TRUE here while the portal CHART defaults it false for a standalone install. Fully typed (additionalProperties: false) per check-no-unknowns. A DEFAULT IS REQUIRED, not just schema-allow: a new nested componentValues key with no default is dropped from the schema-expansion and never reaches the component release (installer #173/#174).",
+              "additionalProperties": false,
               "properties": {
                 "enabled": {
                   "type": "boolean",
