@@ -345,6 +345,22 @@ componentValues:
   portal:
     agents:
       enabled: true
+  frontend:
+    config:
+      # THE SPEAK-BACK VOICE. A Cloud TTS voice serves exactly ONE language, and the code takes the
+      # languageCode from the voice name's own leading <lang>-<REGION> — so the name decides what
+      # language the synthesiser thinks it is reading.
+      #
+      # This was en-US-Chirp3-HD-Achernar (the chart default) on an install whose agent answers in
+      # Italian, which is why speak-back sounded like an English speaker reading Italian: English
+      # phonetics applied to Italian words. Naming the Italian voice of the same character fixes
+      # the PROSE.
+      #
+      # It does NOT fix the jargon: an it-IT voice Italianises `Deployment` and `namespace`. No
+      # locale-pinned Chirp voice can get both halves — that needs Gemini-TTS, whose input.prompt
+      # can ask for Italian delivery with English pronunciation of the technical terms
+      # (krateo-platformops/frontend#246 adds the fields; it is not deployed yet).
+      AUTOPILOT_VOICE_NAME: it-IT-Chirp3-HD-Achernar
   agentgateway-policies:
     # The kagent dashboard's auth hop. On because kagent-ui is otherwise unusable behind the
     # gateway: the controller reads identity only from a bearer and kagent-ui sends none.
