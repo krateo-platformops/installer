@@ -44,7 +44,9 @@ components:
   # So 1.6.5 CRDs are a superset of live 1.6.2 → no stored widget CR strands, portal 1.8.14 CRs stay valid.
   # 1.6.6/1.6.7: LOCKSTEP with the frontend image (Diego's rule). CRDs byte-identical to 1.6.5 (1.6.6=font
   # change, 1.6.7=A17 provenance stamp — both SPA/portal, no new CRD), so this is a clean re-serve.
-  version: 1.6.9
+  # 1.6.10: LOAD-BEARING lockstep — the image changes widget rendering + the WidgetProps contract, so a
+  # widget CR carrying a new field is SILENTLY PRUNED if the live CRD lags. Not byte-identical; moves with image.
+  version: 1.6.10
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -172,7 +174,10 @@ components:
   # (a LABEL, so `kubectl get -l` works) on objects the agent CREATES (create-only — PUT/PATCH would falsely
   # claim authorship). The stamp lands BEFORE the blast-radius gate, so it shows in agent-create HITL diffs
   # (deliberate). SPA-only, no CRD change. Pairs with portal 1.8.17 (the violet "Created by autopilot" pill).
-  version: 1.6.9
+  # 1.6.10: X4 (one visible id-naming error for a dangling resourceRefId, RBAC-denied ids passed alongside so
+  # navModel.isNavEntryAllowed still filters), A18 (verbs no longer return bare null), notifications deep-link
+  # asks snowplow /api-info/names for the real plural (kind.toLowerCase()+'s' was wrong for 45 057 CRD kinds).
+  version: 1.6.10
   deps:
   - frontend-crd
   - authn
@@ -336,7 +341,11 @@ components:
   # portal-agents 1.8.19 leaves the same objects claimed by two Helm releases — the exact failure
   # the deps ordering exists to prevent. Both charts version from the same tag, so the two pins
   # always carry the same number.
-  version: 1.8.19
+  # 1.8.20: P9 (six remaining `large` page roots -> `middle`, all 31 nav roots share one section step; visible
+  # spacing change on blueprint-create/detail/install, marketplace-detail, component-detail, access-detail) +
+  # obs-error-log-digest filters TimestampTime not Timestamp (otel_logs PARTITION BY toDate(TimestampTime), so
+  # the old predicate pruned nothing = full-table scan -> `context deadline exceeded` on the digest/tot steps).
+  version: 1.8.20
   deps:
   - frontend
   - git-provider
@@ -378,7 +387,7 @@ components:
   # MUST equal the portal tag that ships the split: release-oci versions every chart under helm/
   # from the same tag, so portal and portal-agents always carry the SAME version. 1.8.19 is the
   # next tag; if the split lands on a different one, this and the portal pin move together.
-  version: 1.8.19
+  version: 1.8.20
   deps: ['portal']
   tier: platform
   feature: portal
