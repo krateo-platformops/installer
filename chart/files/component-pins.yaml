@@ -325,7 +325,13 @@ components:
   # (9 page roots, purely spacing, 1.8.16) + the A17 violet "Created by autopilot" pill on composition-detail
   # (exception-only; reads the krateo.io/created-by label frontend 1.6.7 stamps). No new CRD, no RESTAction
   # change. CI now has scripts/lint-release-size.py (fails at 95%). Structural headroom = split agents out (scoped).
-  version: 1.8.17
+  # 1.8.18 (#194/#195): stops the ~2-min portal write-loop. Cause was NOT the randAlphaNum passwords (v36/v37
+  # manifests were byte-identical) — the password was declared in `stringData`, which the apiserver converts to
+  # `data` and DROPS, so the rendered object ([stringData]) and the stored object ([data]) can NEVER converge in
+  # CDC's three-way merge → an upgrade every reconcile. Worse than "harmless": at HELM_MAX_HISTORY=3 a write every
+  # 2 min rotated out every rollback target within ~6 min. 1.8.18 renders `data` with b64enc → rendered==stored
+  # key-for-key → merge converges → helm history goes QUIET between real chart changes (the confirmation).
+  version: 1.8.18
   deps:
   - frontend
   - git-provider
