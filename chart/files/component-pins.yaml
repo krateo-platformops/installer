@@ -42,7 +42,9 @@ components:
   # Row/Col/Tabs/Table/ButtonGroup/Menu/PageHeader → unconstrained `type:string`), a LOOSENING (every
   # enumerated value stays valid; new widget kinds no longer need every parent's enum updated); rest additive.
   # So 1.6.5 CRDs are a superset of live 1.6.2 → no stored widget CR strands, portal 1.8.14 CRs stay valid.
-  version: 1.6.5
+  # 1.6.6/1.6.7: LOCKSTEP with the frontend image (Diego's rule). CRDs byte-identical to 1.6.5 (1.6.6=font
+  # change, 1.6.7=A17 provenance stamp — both SPA/portal, no new CRD), so this is a clean re-serve.
+  version: 1.6.7
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -163,7 +165,14 @@ components:
   # file (a Helm template, or a widget-CR file with >1 CR) was falsely reported "not valid YAML"; now loadAll()
   # and the CR-shape branch validates every document. Rest lint-only, no runtime. frontend-crd bumped in
   # LOCKSTEP to 1.6.5 (Diego's rule); its CRDs are byte-identical to 1.6.4, so the CRD delta vs live is unchanged.
-  version: 1.6.5
+  # 1.6.6: retires Barlow Condensed — the display role (page titles + stat numerals) moves to Inter (body's
+  # family), title line-height 1.1->1.2 (1.1 was tuned for the condensed box), one fewer @import/page load.
+  # A DELIBERATE type change (#86 cross-font drift had been patched per-component 4x; Diego's call = drop the
+  # second family, removing the mechanism). 1.6.7 (#243, A17 provenance): stamps krateo.io/created-by:autopilot
+  # (a LABEL, so `kubectl get -l` works) on objects the agent CREATES (create-only — PUT/PATCH would falsely
+  # claim authorship). The stamp lands BEFORE the blast-radius gate, so it shows in agent-create HITL diffs
+  # (deliberate). SPA-only, no CRD change. Pairs with portal 1.8.17 (the violet "Created by autopilot" pill).
+  version: 1.6.7
   deps:
   - frontend-crd
   - authn
@@ -309,7 +318,14 @@ components:
   # better first-nav hit rates on /dashboard,/blueprints,/incidents,/settings/access). Bridge-verified:
   # 553 CRs render, 10 lint rules clean, 0 orphans in default + tracing-on renders, no hardcoded-name SPA
   # mounts. Portal content, no fleet bounce. WATCH: cdc prunes ~41 widget CRs in one reconcile (live ~523->482).
-  version: 1.8.14
+  # 1.8.17 (supersedes 1.8.15/1.8.16): carries THE RELEASE-RECORD FIX (1.8.15: 6,760 YAML `#` comments -> Helm
+  # {{/* */}}, record 111.5%->87.6% of MaxSecretSize — the record-write has failed silently since 1.8.4/#139,
+  # freezing `helm history portal` at 1.8.3 while content still applied; watch for helm history to ADVANCE past
+  # 1.8.3 + a new sh.helm.release.v1.portal.v36 as the load-bearing confirmation) + P9 vertical-rhythm spacing
+  # (9 page roots, purely spacing, 1.8.16) + the A17 violet "Created by autopilot" pill on composition-detail
+  # (exception-only; reads the krateo.io/created-by label frontend 1.6.7 stamps). No new CRD, no RESTAction
+  # change. CI now has scripts/lint-release-size.py (fails at 95%). Structural headroom = split agents out (scoped).
+  version: 1.8.17
   deps:
   - frontend
   - git-provider
