@@ -7083,6 +7083,23 @@
                   "description": "Show the Agents sidebar entry. Requires the portal-agents composition."
                 }
               }
+            },
+            "observability": {
+              "type": "object",
+              "title": "observability",
+              "default": {
+                "snowplowSli": false
+              },
+              "description": "Observability-page feature gates for the portal. Fully typed (additionalProperties: false) per check-no-unknowns. A DEFAULT IS REQUIRED, not just schema-allow: a new nested componentValues key with no default is dropped from the schema-expansion and never reaches the component release (installer #173/#174). NOTE the default here is FALSE, unlike `agents`: the snowplow SLI panels are ClickHouse-backed and an install WITHOUT the snowplow metrics pipeline would render four tabs of empty charts (an empty panel reads as a broken one), so this stays opt-in per install (portal#201). Clusters that have the pipeline (e.g. krateo-057) set it true in their own installer release values.",
+              "additionalProperties": false,
+              "properties": {
+                "snowplowSli": {
+                  "type": "boolean",
+                  "default": false,
+                  "title": "snowplowSli",
+                  "description": "Show the snowplow SLI dashboard on the portal observability page (20 ClickHouse-backed panels across four tabs, portal >= 1.8.22). Requires the snowplow metrics pipeline to be present, otherwise the tabs render empty."
+                }
+              }
             }
           },
           "type": "object"
