@@ -247,7 +247,15 @@ components:
   feature: portal
 - name: github-provider-kog
   kind: GithubProviderKog
-  version: 0.2.2
+  # 0.3.0: restores github.krateo.io/PullRequest (served v2022-11-28) + PullRequestConfiguration (v1alpha1)
+  # natively -> 29 kinds (was 28) and adds a rest-dynamic-controller Deployment for PullRequest (first
+  # runtime component here). REQUIRED-BEFORE portal 1.8.21: builder-publish 1.8.21 defaults
+  # pullRequest.create=true and references PullRequest; a CRD-presence guard degrades to branch-only if
+  # absent (no damage, self-heals next reconcile), but this is rolled FIRST (staged) so the CRD+controller
+  # are served+Ready before portal 1.8.21. PullRequest has NEVER reconciled against GitHub -> first real
+  # BuilderPublish is the live test (watch the PullRequest CR reach Available with NO PATCH on the 2nd
+  # reconcile; a PATCH every pass = drift, the failure its jq transform exists to prevent).
+  version: 0.3.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: portal
