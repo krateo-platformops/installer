@@ -610,7 +610,7 @@ components:
   modelOwner: true
 - name: installer-agent
   kind: InstallerAgent
-  version: 0.2.3
+  version: 0.3.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -663,7 +663,7 @@ components:
   # ok/error/ts, wrapped so it can never break a tool response) — observability only, no change to
   # tool outputs or RBAC, so the render and behaviour are identical to 0.2.4. Gives the bench
   # unambiguous per-invocation proof of which config-refs tools fire during an investigation.
-  version: 0.2.6
+  version: 0.3.0
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
@@ -702,7 +702,7 @@ components:
   # the fleet flash-repoint (both slots resolve to gemini-3.8-flash on this project's Vertex; naming pro
   # was a silent lever). Chart-default only; the autopilot pod rolls but autopilot is NOT an mcpBackend so
   # no roll-guard fleet bounce. Served version migrates v0-4-11 -> v0-4-12 (schema unchanged, clean rename).
-  version: 0.4.12
+  version: 0.5.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -743,7 +743,7 @@ components:
   # status.report instead of reports (alert->RCA loop dead). Matches clickstack-agent (already unbound).
   # Live toolNames should become ["list_databases","run_select_query","run_query"]. Not an mcpBackend
   # (no fleet bounce); served version migrates v0-1-11 -> v0-1-12.
-  version: 0.1.12
+  version: 0.2.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -767,7 +767,7 @@ components:
   feature: specialistAgents
 - name: authn-agent
   kind: AuthnAgent
-  version: 0.23.3
+  version: 0.24.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -778,7 +778,7 @@ components:
   agent: true
 - name: snowplow-agent
   kind: SnowplowAgent
-  version: 1.1.3
+  version: 1.2.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -789,7 +789,7 @@ components:
   agent: true
 - name: frontend-agent
   kind: FrontendAgent
-  version: 1.4.3
+  version: 1.5.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -814,7 +814,7 @@ components:
   agent: true
 - name: core-provider-agent
   kind: CoreProviderAgent
-  version: 0.55.5
+  version: 0.56.0
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
