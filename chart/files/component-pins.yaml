@@ -359,7 +359,7 @@ components:
   # (staged, 0.3.196). #206: the 3 builder RESTActions read PRs at github.krateo.io/v2022-11-28 (was v1alpha1
   # -> silent 404/empty) + fixes dead syncReason "Publishing" pill + dead blueprint row link. #207: builder
   # forms can set an optional source (template) repo. Also 20 snowplow SLI panels on the observability page.
-  version: 1.8.26
+  version: 1.8.27
   deps:
   - frontend
   - git-provider
@@ -401,7 +401,7 @@ components:
   # MUST equal the portal tag that ships the split: release-oci versions every chart under helm/
   # from the same tag, so portal and portal-agents always carry the SAME version. 1.8.19 is the
   # next tag; if the split lands on a different one, this and the portal pin move together.
-  version: 1.8.26
+  version: 1.8.27
   deps: ['portal']
   tier: platform
   feature: portal
