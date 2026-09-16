@@ -46,7 +46,7 @@ components:
   # change, 1.6.7=A17 provenance stamp — both SPA/portal, no new CRD), so this is a clean re-serve.
   # 1.6.10: LOAD-BEARING lockstep — the image changes widget rendering + the WidgetProps contract, so a
   # widget CR carrying a new field is SILENTLY PRUNED if the live CRD lags. Not byte-identical; moves with image.
-  version: 1.6.17
+  version: 1.6.18
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -177,7 +177,7 @@ components:
   # 1.6.10: X4 (one visible id-naming error for a dangling resourceRefId, RBAC-denied ids passed alongside so
   # navModel.isNavEntryAllowed still filters), A18 (verbs no longer return bare null), notifications deep-link
   # asks snowplow /api-info/names for the real plural (kind.toLowerCase()+'s' was wrong for 45 057 CRD kinds).
-  version: 1.6.17
+  version: 1.6.18
   deps:
   - frontend-crd
   - authn
@@ -702,7 +702,7 @@ components:
   # the fleet flash-repoint (both slots resolve to gemini-3.8-flash on this project's Vertex; naming pro
   # was a silent lever). Chart-default only; the autopilot pod rolls but autopilot is NOT an mcpBackend so
   # no roll-guard fleet bounce. Served version migrates v0-4-11 -> v0-4-12 (schema unchanged, clean rename).
-  version: 0.5.0
+  version: 0.5.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
