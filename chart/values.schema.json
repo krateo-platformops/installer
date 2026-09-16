@@ -3053,6 +3053,41 @@
                       "description": "Extra request headers the kagent-ui pod forwards to its backend, on TOP of the always-forwarded Authorization. Upstream reads this as KAGENT_ADDITIONAL_FORWARDED_HEADERS. Needed by agentgateway-policies' uiTokenHop.impersonation: the hop stamps X-User-Id and X-Agent-Name on the request, but the dashboard's real data path is a Next.js SERVER ACTION running inside this pod, which re-creates the upstream request and copies only allowlisted headers \u2014 so without [x-user-id, x-agent-name] here the switch covers direct browser /api calls only and silently does nothing for the session list. Hop-by-hop headers are dropped by kagent-ui regardless of what is listed."
                     }
                   }
+                },
+                "database": {
+                  "type": "object",
+                  "title": "database",
+                  "default": {
+                    "postgres": {
+                      "bundled": {
+                        "storage": "500Mi"
+                      }
+                    }
+                  },
+                  "description": "Bundled-Postgres storage sizing for kagent. Fully typed (additionalProperties: false) per check-no-unknowns; A DEFAULT IS REQUIRED or the nested key is dropped from schema-expansion and never reaches the component release (installer #173/#174). The default matches the kagent chart's own 500Mi so it is a no-op for every install that does not override it. WHY THIS EXISTS: a PVC can only ever GROW. If an operator expands the live PVC (e.g. to recover a full disk) while the chart still declares the smaller size, helm's self-heal apply tries to patch it DOWN, the apiserver rejects it, and the kagent composition is stuck Synced=False FOREVER. That is not a local failure: the installer umbrella then reports Ready=False 'managed children not healthy', and Pass B's deps-Ready gate stops emitting EVERY component that depends on kagent -- on krateo-057 that silently left 8 agent components with no composition CR at all while their pods kept running unmanaged. Declare the real size here whenever the live PVC is resized.",
+                  "additionalProperties": false,
+                  "properties": {
+                    "postgres": {
+                      "type": "object",
+                      "title": "postgres",
+                      "additionalProperties": false,
+                      "properties": {
+                        "bundled": {
+                          "type": "object",
+                          "title": "bundled",
+                          "additionalProperties": false,
+                          "properties": {
+                            "storage": {
+                              "type": "string",
+                              "default": "500Mi",
+                              "title": "storage",
+                              "description": "PVC size for the bundled kagent Postgres (chart default 500Mi). MUST match the live PVC size: Kubernetes forbids shrinking a PVC, so declaring less than what exists wedges the kagent composition Synced=False and, via the umbrella's deps-Ready gate, blocks emission of every kagent-dependent component. krateo-057 runs 8Gi after the 2026-09-15 disk-full recovery."
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
