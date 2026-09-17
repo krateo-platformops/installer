@@ -177,7 +177,7 @@ components:
   # 1.6.10: X4 (one visible id-naming error for a dangling resourceRefId, RBAC-denied ids passed alongside so
   # navModel.isNavEntryAllowed still filters), A18 (verbs no longer return bare null), notifications deep-link
   # asks snowplow /api-info/names for the real plural (kind.toLowerCase()+'s' was wrong for 45 057 CRD kinds).
-  version: 1.6.22
+  version: 1.6.23
   deps:
   - frontend-crd
   - authn
