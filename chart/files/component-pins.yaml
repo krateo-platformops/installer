@@ -226,7 +226,7 @@ components:
   # 0.15.0 adds status.templatingErrors to LocalResource+Repo — must move in lockstep with the
   # provider (was skewed 0.14.2 vs provider 0.14.1 for 10 days). 0.15.1 = security-only (no CRD
   # change); kept in lockstep with the provider to preserve the no-skew invariant.
-  version: 0.15.2
+  version: 0.15.3
   tier: platform
   feature: portal
 - name: git-provider
@@ -240,7 +240,7 @@ components:
   # advisories: agent-constraint drop, key-constraint enforcement, VerifiedPublicKeyCallback skew,
   # @revoked auth bypass), go-git 5.19.2, moby/spdystream 0.5.1 (HIGH CRI DoS). git-provider speaks
   # SSH/git to forges so these matter here; 0.15.0 (running on 057) has them unpatched.
-  version: 0.15.2
+  version: 0.15.3
   deps:
   - git-provider-crd
   tier: platform
@@ -255,7 +255,7 @@ components:
   # are served+Ready before portal 1.8.21. PullRequest has NEVER reconciled against GitHub -> first real
   # BuilderPublish is the live test (watch the PullRequest CR reach Available with NO PATCH on the 2nd
   # reconcile; a PATCH every pass = drift, the failure its jq transform exists to prevent).
-  version: 0.3.0
+  version: 0.3.1
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: portal
@@ -838,7 +838,7 @@ components:
 - name: alert-troubleshooter-crd
   kind: AlertTroubleshooterCrds
   chart: alert-troubleshooter-crds
-  version: 0.2.37
+  version: 0.2.38
   tier: observability
   feature: specialistAgents
 - name: alert-troubleshooter
@@ -848,7 +848,7 @@ components:
   # and patches report status — the namespaced Role couldn't authorize the all-namespaces list, so
   # every observe pass 403'd on GET /apis/audit.krateo.io/v1alpha1/auditrecords. App-only fix (RBAC in
   # the app chart, CRDs unchanged) so the alert-troubleshooter-crd pin stays 0.2.35 per the decoupling.
-  version: 0.2.37
+  version: 0.2.38
   deps:
   - alert-troubleshooter-crd
   - incident-agent
