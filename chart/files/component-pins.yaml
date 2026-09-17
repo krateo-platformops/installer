@@ -838,7 +838,7 @@ components:
 - name: alert-troubleshooter-crd
   kind: AlertTroubleshooterCrds
   chart: alert-troubleshooter-crds
-  version: 0.2.35
+  version: 0.2.37
   tier: observability
   feature: specialistAgents
 - name: alert-troubleshooter
@@ -848,7 +848,7 @@ components:
   # and patches report status — the namespaced Role couldn't authorize the all-namespaces list, so
   # every observe pass 403'd on GET /apis/audit.krateo.io/v1alpha1/auditrecords. App-only fix (RBAC in
   # the app chart, CRDs unchanged) so the alert-troubleshooter-crd pin stays 0.2.35 per the decoupling.
-  version: 0.2.36
+  version: 0.2.37
   deps:
   - alert-troubleshooter-crd
   - incident-agent
