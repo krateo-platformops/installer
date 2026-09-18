@@ -46,7 +46,7 @@ components:
   # change, 1.6.7=A17 provenance stamp — both SPA/portal, no new CRD), so this is a clean re-serve.
   # 1.6.10: LOAD-BEARING lockstep — the image changes widget rendering + the WidgetProps contract, so a
   # widget CR carrying a new field is SILENTLY PRUNED if the live CRD lags. Not byte-identical; moves with image.
-  version: 1.6.21
+  version: 1.6.24
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -177,7 +177,7 @@ components:
   # 1.6.10: X4 (one visible id-naming error for a dangling resourceRefId, RBAC-denied ids passed alongside so
   # navModel.isNavEntryAllowed still filters), A18 (verbs no longer return bare null), notifications deep-link
   # asks snowplow /api-info/names for the real plural (kind.toLowerCase()+'s' was wrong for 45 057 CRD kinds).
-  version: 1.6.23
+  version: 1.6.24
   deps:
   - frontend-crd
   - authn
@@ -359,7 +359,7 @@ components:
   # (staged, 0.3.196). #206: the 3 builder RESTActions read PRs at github.krateo.io/v2022-11-28 (was v1alpha1
   # -> silent 404/empty) + fixes dead syncReason "Publishing" pill + dead blueprint row link. #207: builder
   # forms can set an optional source (template) repo. Also 20 snowplow SLI panels on the observability page.
-  version: 1.8.31
+  version: 1.8.32
   deps:
   - frontend
   - git-provider
