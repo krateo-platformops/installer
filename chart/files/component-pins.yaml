@@ -359,7 +359,7 @@ components:
   # (staged, 0.3.196). #206: the 3 builder RESTActions read PRs at github.krateo.io/v2022-11-28 (was v1alpha1
   # -> silent 404/empty) + fixes dead syncReason "Publishing" pill + dead blueprint row link. #207: builder
   # forms can set an optional source (template) repo. Also 20 snowplow SLI panels on the observability page.
-  version: 1.8.34
+  version: 1.8.35
   deps:
   - frontend
   - git-provider
@@ -401,7 +401,7 @@ components:
   # MUST equal the portal tag that ships the split: release-oci versions every chart under helm/
   # from the same tag, so portal and portal-agents always carry the SAME version. 1.8.19 is the
   # next tag; if the split lands on a different one, this and the portal pin move together.
-  version: 1.8.34
+  version: 1.8.35
   deps: ['portal']
   tier: platform
   feature: portal
@@ -442,7 +442,7 @@ components:
   feature: portal
 - name: krateo-observability
   kind: KrateoObservability
-  version: 0.1.14
+  version: 0.1.17
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -702,7 +702,7 @@ components:
   # the fleet flash-repoint (both slots resolve to gemini-3.8-flash on this project's Vertex; naming pro
   # was a silent lever). Chart-default only; the autopilot pod rolls but autopilot is NOT an mcpBackend so
   # no roll-guard fleet bounce. Served version migrates v0-4-11 -> v0-4-12 (schema unchanged, clean rename).
-  version: 0.5.1
+  version: 0.5.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
