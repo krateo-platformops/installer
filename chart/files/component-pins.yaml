@@ -46,7 +46,7 @@ components:
   # change, 1.6.7=A17 provenance stamp — both SPA/portal, no new CRD), so this is a clean re-serve.
   # 1.6.10: LOAD-BEARING lockstep — the image changes widget rendering + the WidgetProps contract, so a
   # widget CR carrying a new field is SILENTLY PRUNED if the live CRD lags. Not byte-identical; moves with image.
-  version: 1.6.28
+  version: 1.6.29
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -177,7 +177,7 @@ components:
   # 1.6.10: X4 (one visible id-naming error for a dangling resourceRefId, RBAC-denied ids passed alongside so
   # navModel.isNavEntryAllowed still filters), A18 (verbs no longer return bare null), notifications deep-link
   # asks snowplow /api-info/names for the real plural (kind.toLowerCase()+'s' was wrong for 45 057 CRD kinds).
-  version: 1.6.28
+  version: 1.6.29
   deps:
   - frontend-crd
   - authn
