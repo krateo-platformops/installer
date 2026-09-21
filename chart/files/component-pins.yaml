@@ -51,7 +51,8 @@ components:
   # bump below is a kind-resolver fix: the CRDs were never the lagging half, the SPA's own kind->plural table
   # had drifted BEHIND the CRD set it ships alongside. Holding this pin would break nothing.
   # 1.6.31: PURE LOCKSTEP again, verified byte-identical to 1.6.30 (only Chart.yaml's version line differs).
-  version: 1.6.31
+  # 1.6.32: LOCKSTEP, byte-identical to 1.6.31. Third consecutive cosmetic -crds bump on this component.
+  version: 1.6.32
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -199,7 +200,16 @@ components:
   # the next drag (onDragEnd now clears). Note (a) was PINNED BY ITS OWN TEST, which asserted ['pageheaders'] —
   # the suite encoded the defect as the contract and so defended it. The replacement asserts the BEHAVIOUR (a
   # started page accepts rows, cards, tables and pageheaders) and is mutation-checked.
-  version: 1.6.31
+  # 1.6.32 (#327): DATA LOSS on the builder path, reproduced on 057 — starting a new Autopilot thread
+  # destroyed the page you were building. teardownThread called blueprintStore.clear() on the grounds
+  # that a held draft "was dropped with the conversation that produced them", which was true until the
+  # composer let a person start a page, drag widgets in and bind data with NO agent involved: that
+  # draft belongs to them, not to a thread. Worst part is the pairing — the builder flow TELLS you to
+  # start a fresh thread before asking the agent for help, because Autopilot reads its own history, so
+  # the advice and the data loss arrived together, with no warning and no undo. The deny-by-default
+  # posture is untouched: previewGate/blueprintGate still reset, so a fresh thread has no recorded
+  # preview and publish stays refused until the draft is previewed again. Only the bytes survive.
+  version: 1.6.32
   deps:
   - frontend-crd
   - authn
