@@ -60,7 +60,20 @@ components:
   # here at all: this pin delivers literally nothing. It moves because the monorepo pipeline stamps
   # CHART_VERSION into every chart at tag time, so it takes a new version on every frontend tag whether
   # a CRD changed or not. Bumped for lockstep per Diego's rule; holding it would also be harmless.
-  version: 1.6.33
+  # 1.6.37: FIFTH consecutive byte-identical bump — verified again, and this time the source explains
+  # why it will keep happening: helm/frontend-crds/Chart.yaml is the SAME GIT BLOB at 1.6.33/34/35/36/37,
+  # so nothing under helm/ is committed per release and the version string is injected at package time.
+  #
+  # BUT #339 CHANGES WHAT A FUTURE CRD CHANGE WILL COST, so do not read "harmless" as "always harmless".
+  # The composer now derives its whole widget model — palette, which kinds are containers, named slots,
+  # required fields, the create-modal schema — from these CRD FILES at BUILD time (scripts/gen-widget-kinds.ts
+  # globs helm/frontend-crds/templates/*.crd.yaml into a COMMITTED widgetKinds.generated.ts; CI re-derives
+  # with --check). That is a build-time input compiled into the image, NOT a runtime apiserver read, so it
+  # adds no coupling today. The day helm/frontend-crds/templates/ actually changes, however, frontend and
+  # frontend-crd MUST move together: the image carries a frozen copy of the CRDs it was built against, and
+  # skew is silent in the worst direction — a kind on the cluster but absent from the baked table simply
+  # vanishes from the palette and its instances are dropped, with no error anywhere.
+  version: 1.6.37
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -229,7 +242,28 @@ components:
   # local UI state that never left the browser, so the agent never saw its own rejection; they now ride
   # the envelope as composeRefusals until corrected. Additive for existing pages. Chart byte-identical,
   # appVersion IS the image tag here (distinct GHCR digests verified), so this line delivers the fix.
-  version: 1.6.33
+  # 1.6.37: FOUR releases in one move (1.6.34/35/36/37), not the single bump the handoff described — its
+  # baseline said 1.6.36 because that is what the CLUSTER runs; main was three behind, and 1.6.34/35/36
+  # were tagged and published but never pinned here. Contents:
+  #   1.6.34 (#334 + #337) — CI finally RUNS the 1891 unit tests that had never run, and two composer
+  #     defects that made a draft lie. A container locked to the first thing dropped in it (placeChild
+  #     appended the child's plural, canAccept read any non-empty allowedResources as author intent, so
+  #     a page that had accepted a Row then silently refused everything else); and Remove did not remove
+  #     — removeChild rewrote only the parent, the orphaned file reappeared as a second page root with no
+  #     parentPath and therefore no delete button, and pagePublish emitted it, so a widget the author had
+  #     deleted still shipped in the change request.
+  #   1.6.35 (#338 + #339) — the Files tab shows the live draft and edits are undoable; the widget model
+  #     is derived from the CRDs at build time (see the -crd pin above).
+  #   1.6.36 (#340) — closes the composer review AND retires the portal chart's hardcoded seven-kind
+  #     page-composable RESTAction: placeableWidgets now calls snowplow GET /list?category=widgets&ns=.
+  #     That is a NEW runtime dependency on snowplow, already satisfied (the /list handler predates this
+  #     span, and all 44 CRDs already declare categories:[widgets,krateo]); it degrades to an empty
+  #     picker with a message on 403/404, never a crash. Per-user RBAC governs what the palette shows.
+  #   1.6.37 (#341) — bind live data to any kind that takes a list.
+  #
+  # DO NOT STOP AT 1.6.34 if this is ever replayed stepwise: it is the one version in the span where
+  # Remove is a confirmed irreversible delete, because undo only arrives with #338 in 1.6.35.
+  version: 1.6.37
   deps:
   - frontend-crd
   - authn
