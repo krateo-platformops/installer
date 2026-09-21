@@ -50,7 +50,8 @@ components:
   # CRDs are unchanged and ALREADY included pageheaders + themes at 1.6.29. Worth recording because the image
   # bump below is a kind-resolver fix: the CRDs were never the lagging half, the SPA's own kind->plural table
   # had drifted BEHIND the CRD set it ships alongside. Holding this pin would break nothing.
-  version: 1.6.30
+  # 1.6.31: PURE LOCKSTEP again, verified byte-identical to 1.6.30 (only Chart.yaml's version line differs).
+  version: 1.6.31
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -188,7 +189,17 @@ components:
   # reaching path (AutopilotProvider previewStartedDraft -> applyPreviewPageV2) is itself NEW in 1.6.29, so the
   # bug arrived with the feature and no earlier pin is affected. Chart is byte-identical; appVersion IS the
   # image tag (values.yaml tag:"" + deployment defaultTag .Chart.AppVersion), so this line delivers the fix.
-  version: 1.6.30
+  # 1.6.31 (#326): the SECOND half of the same path — 1.6.30 made a hand-started page RENDER, this makes it
+  # USABLE. Three defects found rehearsing drag & drop, none covered by a test: (a) startDraft scaffolded
+  # allowedResources: ['pageheaders'], and canAccept reads a NON-EMPTY list as intent, so a new page refused a
+  # Row/Card/everything — the canvas the builder exists for accepted nothing, and every individual refusal was
+  # correct; now [] (the unconstrained default newContainerYaml already writes). (b) draftNamespace counted
+  # pageDraft's portability template as a namespace, returning a string no apiserver accepts, so Bind Data
+  # refused on every hand-started page; it now skips templates. (c) drop-target highlights never cleared until
+  # the next drag (onDragEnd now clears). Note (a) was PINNED BY ITS OWN TEST, which asserted ['pageheaders'] —
+  # the suite encoded the defect as the contract and so defended it. The replacement asserts the BEHAVIOUR (a
+  # started page accepts rows, cards, tables and pageheaders) and is mutation-checked.
+  version: 1.6.31
   deps:
   - frontend-crd
   - authn
