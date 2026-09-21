@@ -75,13 +75,16 @@ components:
   # vanishes from the palette and its instances are dropped, with no error anywhere.
   # 1.6.38: SIXTH consecutive byte-identical bump. The 1.6.38 range touches five files, all under
   # ui/src/pages/PageComposer/ — zero under helm/ — so the caveat above stays dormant for another release.
-  version: 1.6.38
+  # 1.6.39: SEVENTH consecutive byte-identical bump; the 1.6.39 range touches nothing under helm/.
+  version: 1.6.39
   tier: platform
   feature: portal
 - name: snowplow-crd
   kind: SnowplowCrds
   chart: snowplow-crds
-  version: 1.12.7
+  # 1.12.9: byte-identical — the RestAction CRD md5 is the SAME at 1.12.7, 1.12.8 AND 1.12.9, and this
+  # chart has no appVersion and no workload, so applying it changes nothing on the cluster.
+  version: 1.12.9
   tier: platform
   feature: portal
 - name: authn
@@ -113,7 +116,19 @@ components:
 - name: snowplow
   kind: Snowplow
   chart: snowplow
-  version: 1.12.7
+  # 1.12.9: SKIPS 1.12.8, and that is safe — verified linear history with 1.12.8 an ancestor, so the
+  # :1.12.9 image CONTAINS both 1.12.8 commits, and neither touches a CRD, a schema or any persisted
+  # state, so there is no migration to have missed. The chart is byte-identical; all 660 lines of new app
+  # code ride the image tag (distinct GHCR digests verified), so a chart diff is the WRONG instrument here.
+  # 1.12.8 = two audit fixes: an informer gate that stops registering reflectors for resources discovery
+  # declares without list+watch (metrics.k8s.io pods/nodes advertise get+list only, so the reflector LISTed
+  # then failed WATCH forever — measured on 057 at +236k dirty-marks per 14min for ZERO evictions), and a
+  # CA-bundle install for token-auth endpoints (every NON-GET api-step against snowplow's own SA endpoint
+  # was dying x509: certificate signed by unknown authority). 1.12.9 = the built-in `quantity` jq module
+  # (#236) plus an otel bump. THE INFORMER GATE IS THE RISK: it sits on the registration path for every
+  # GVR, fails safe OPEN, and a wrong skip is SILENT — it degrades to apiserver fallthrough, which looks
+  # perfectly healthy. Confirm from the eviction/fallthrough counters, not from pod readiness.
+  version: 1.12.9
   deps:
   - snowplow-crd
   - authn
@@ -275,7 +290,8 @@ components:
   # and the Objects count rendered RED because antd's isPresetColor tests only the thirteen HUE presets,
   # so Badge color='default' fell through to the error tone. Presentation only — no CRD, schema or
   # widget-kind change, so nothing moves with it beyond the lockstep -crd pin.
-  version: 1.6.38
+  # 1.6.39: presentation and composer polish; chart byte-identical, appVersion IS the image tag.
+  version: 1.6.39
   deps:
   - frontend-crd
   - authn
@@ -457,7 +473,23 @@ components:
   # (staged, 0.3.196). #206: the 3 builder RESTActions read PRs at github.krateo.io/v2022-11-28 (was v1alpha1
   # -> silent 404/empty) + fixes dead syncReason "Publishing" pill + dead blueprint row link. #207: builder
   # forms can set an optional source (template) repo. Also 20 snowplow SLI panels on the observability page.
-  version: 1.8.36
+  # 1.8.37 (#237/#239): THE PORTAL-SIDE HALF OF frontend #340, and the only version that carries it.
+  # Retires the two Forms (author-widget, compose-page) and their two Cards, and strips the seven widget
+  # collection GET steps from restaction.page-composable — the composer reads snowplow /list now. Render
+  # identity goes 473 -> 469 objects: four REMOVED, zero added, zero renamed.
+  #
+  # DEPLOY ORDER IS LOAD-BEARING AND THE PR BODY STATES THE FLOOR WRONG BY ONE RELEASE. portal #239 says
+  # "requires frontend >= 1.6.35"; 1.6.35 still reads .status.widgets off page-composable, and the /list
+  # switch only lands in 1.6.36. Against a 1.6.35 frontend this empties the palette. We are at 1.6.39, so
+  # the floor is met with room — but do not trust that PR body if this is ever replayed.
+  #
+  # ROLLBACK IS THE TRAP, NOT THE ROLL. Forward is clean for snowplow's resolved-body cache: pure DELETEs
+  # plus an in-place content change on flex.page-portal-builder, which fires an UPDATE and evicts. Going
+  # BACK to 1.8.36 re-creates those four CRs under IDENTICAL names — exactly the delete+recreate-same-name
+  # case the cache does not evict. If you ever roll portal back, annotate krateo.io/cache-poke on
+  # flex/page-portal-builder. And frontend cannot roll below 1.6.36 without portal coming back with it,
+  # or the palette empties in silence.
+  version: 1.8.37
   deps:
   - frontend
   - git-provider
@@ -499,7 +531,8 @@ components:
   # MUST equal the portal tag that ships the split: release-oci versions every chart under helm/
   # from the same tag, so portal and portal-agents always carry the SAME version. 1.8.19 is the
   # next tag; if the split lands on a different one, this and the portal pin move together.
-  version: 1.8.36
+  # 1.8.37: co-versioned with portal, as always.
+  version: 1.8.37
   deps: ['portal']
   tier: platform
   feature: portal
@@ -891,7 +924,21 @@ components:
   agent: true
 - name: snowplow-agent
   kind: SnowplowAgent
-  version: 1.2.0
+  # 1.2.1: PROMPT-ONLY — diff is Chart.yaml plus files/prompts-eng.yaml, the Agent CR renders byte-
+  # identically, and there is no image (this chart carries no appVersion). One paragraph is added under
+  # "Canonical patterns": the built-in jq modules, telling the agent to `include "quantity";` rather than
+  # hand-roll k8s quantity parsing, to read the module for the authoritative function list, and to pass on
+  # that metrics.k8s.io reports a ~17s window so any verdict from it is INSTANTANEOUS, not sustained.
+  #
+  # IT REQUIRES snowplow >= 1.12.9 AND THAT IS WHY BOTH MOVE HERE. The `quantity` module it teaches only
+  # exists from 1.12.9 (#236); against an older snowplow the agent would author RESTActions whose filters
+  # include a module that is not there. Hard directional dependency, satisfied in this same installer.
+  #
+  # PROMPT-ONLY MEANS THE RUNNING POD MAY KEEP THE OLD PROMPT. Verify by the FIELD, not the ConfigMap —
+  # the prompt reaches the pod through the agent's config SECRET, so a changed ConfigMap is not evidence:
+  #   kubectl get deploy snowplow-agent -o jsonpath='{.spec.template.metadata.annotations.kagent\.dev/config-hash}'
+  # If that hash does not move, bounce the pod.
+  version: 1.2.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
