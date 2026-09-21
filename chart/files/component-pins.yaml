@@ -52,7 +52,15 @@ components:
   # had drifted BEHIND the CRD set it ships alongside. Holding this pin would break nothing.
   # 1.6.31: PURE LOCKSTEP again, verified byte-identical to 1.6.30 (only Chart.yaml's version line differs).
   # 1.6.32: LOCKSTEP, byte-identical to 1.6.31. Third consecutive cosmetic -crds bump on this component.
-  version: 1.6.32
+  # 1.6.33: LOCKSTEP, byte-identical again — and worth correcting a belief this file has repeated four
+  # times now. frontend-crds has NO appVersion KEY AT ALL (absent in the packaged Chart.yaml and in
+  # source; the sibling app chart carries appVersion: APP_VERSION, this one only version: CHART_VERSION),
+  # ships no workload, and renders no image. So the "appVersion IS the image tag, therefore the version
+  # line is the delivery mechanism" reasoning that makes the FRONTEND pin load-bearing does not apply
+  # here at all: this pin delivers literally nothing. It moves because the monorepo pipeline stamps
+  # CHART_VERSION into every chart at tag time, so it takes a new version on every frontend tag whether
+  # a CRD changed or not. Bumped for lockstep per Diego's rule; holding it would also be harmless.
+  version: 1.6.33
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -209,7 +217,19 @@ components:
   # the advice and the data loss arrived together, with no warning and no undo. The deny-by-default
   # posture is untouched: previewGate/blueprintGate still reset, so a fresh thread has no recorded
   # preview and publish stays refused until the draft is previewed again. Only the bytes survive.
-  version: 1.6.32
+  # 1.6.33 (#329/#330/#331/#333): closes the compose loop end-to-end, and MUST SHIP WITH krateo-autopilot
+  # 0.5.3 — see that pin. Four stacked fixes, each one closing a gap the previous left: (a) the compose
+  # bus was fire-and-forget, so actionBridge returned a success label in the same breath as dispatching
+  # and the rail reported "Added a Card inside page-x" over a canvas with no card; requests now carry a
+  # correlation id and the composer replies on all five code paths, with a 4s timeout refusal when no
+  # composer is mounted. (b) the page-context envelope reported the LIVE widget cache, not the draft
+  # under construction, so the agent named handles it had never been shown; it now carries the draft's
+  # structure incl. each container's allowedResources. (c) a refusal discarded the legalTargets set it
+  # had already computed, so it could not say where the widget WOULD fit; it now does. (d) refusals were
+  # local UI state that never left the browser, so the agent never saw its own rejection; they now ride
+  # the envelope as composeRefusals until corrected. Additive for existing pages. Chart byte-identical,
+  # appVersion IS the image tag here (distinct GHCR digests verified), so this line delivers the fix.
+  version: 1.6.33
   deps:
   - frontend-crd
   - authn
@@ -734,7 +754,22 @@ components:
   # the fleet flash-repoint (both slots resolve to gemini-3.8-flash on this project's Vertex; naming pro
   # was a silent lever). Chart-default only; the autopilot pod rolls but autopilot is NOT an mcpBackend so
   # no roll-guard fleet bounce. Served version migrates v0-4-11 -> v0-4-12 (schema unchanged, clean rename).
-  version: 0.5.2
+  # 0.5.3 (#123): PURE PROMPT CHANGE — one file (files/prompts-eng.yaml), 8 rendered lines, all inside the
+  # portal-protocol key, consumed by exactly one agent (agents-autopilot.yaml appends it to the autopilot
+  # systemMessage). Every template, values.yaml, values.schema.json and the whole krateo-agent-lib subchart
+  # are byte-identical; no new value, secret, env var or tool binding; modelConfig, subAgents and every MCP
+  # binding unchanged. So none of the 12 deps above is implicated.
+  #
+  # IT MUST SHIP IN THE SAME INSTALLER VERSION AS frontend 1.6.33, AND THAT IS A HARD REQUIREMENT RATHER
+  # THAN A PREFERENCE. The old prompt described a mechanism that did not exist — it told the orchestrator
+  # "a refusal comes back as a plain sentence, read it and pick a different target" while the portal's
+  # compose bus was fire-and-forget and reported success unconditionally, so no refusal ever reached the
+  # model (observed on 057 as the agent narrating a Card it had not added). 0.5.3 rewrites the protocol
+  # around two fence fields — `draft` and `composeRefusals` — that ONLY EXIST FROM FRONTEND 1.6.33. The
+  # ordering is asymmetric: autopilot-ahead-of-frontend tells the model to read fields that are
+  # structurally absent, while frontend-ahead-of-autopilot is merely half-inert. Shipping both in one
+  # installer version removes the question.
+  version: 0.5.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
