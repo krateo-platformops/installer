@@ -73,7 +73,9 @@ components:
   # frontend-crd MUST move together: the image carries a frozen copy of the CRDs it was built against, and
   # skew is silent in the worst direction — a kind on the cluster but absent from the baked table simply
   # vanishes from the palette and its instances are dropped, with no error anywhere.
-  version: 1.6.37
+  # 1.6.38: SIXTH consecutive byte-identical bump. The 1.6.38 range touches five files, all under
+  # ui/src/pages/PageComposer/ — zero under helm/ — so the caveat above stays dormant for another release.
+  version: 1.6.38
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -263,7 +265,17 @@ components:
   #
   # DO NOT STOP AT 1.6.34 if this is ever replayed stepwise: it is the one version in the span where
   # Remove is a confirmed irreversible delete, because undo only arrives with #338 in 1.6.35.
-  version: 1.6.37
+  # 1.6.38 (#342): composer drag & drop legibility — one commit, five files, all under PageComposer/.
+  # Three defects a screen recording made obvious: the drag chip was a ~27px translucent antd Tag drawn
+  # AT the grab offset, so the only feedback saying which widget was travelling sat on top of the label
+  # it was hovering and the two erased each other; palette labels wrapped mid-word ("ButtonGrou"/"p")
+  # because the plural badge was rigid and the KIND truncated instead — backwards, since "cards" is
+  # derivable from "Card" and "ButtonGr…" is derivable from nothing, so the plural now renders only on
+  # instance rows where it is that instance's only kind marker (tooltip and filtering still carry it);
+  # and the Objects count rendered RED because antd's isPresetColor tests only the thirteen HUE presets,
+  # so Badge color='default' fell through to the error tone. Presentation only — no CRD, schema or
+  # widget-kind change, so nothing moves with it beyond the lockstep -crd pin.
+  version: 1.6.38
   deps:
   - frontend-crd
   - authn
