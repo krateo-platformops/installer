@@ -530,7 +530,11 @@ components:
   # case the cache does not evict. If you ever roll portal back, annotate krateo.io/cache-poke on
   # flex/page-portal-builder. And frontend cannot roll below 1.6.36 without portal coming back with it,
   # or the palette empties in silence.
-  version: 1.8.37
+  # 1.8.38: adds the /reviews page — RESTAction + Table + PageHeader + page root for the nightly
+  # platform review's proposals. Content only; no CRD change and no new widget kind, so frontend
+  # is unaffected. The page renders before nightly-review is installed: both API reads carry
+  # continueOnError, so a cluster with no review.krateo.io CRDs shows an empty table, not a break.
+  version: 1.8.38
   deps:
   - frontend
   - git-provider
@@ -573,7 +577,8 @@ components:
   # from the same tag, so portal and portal-agents always carry the SAME version. 1.8.19 is the
   # next tag; if the split lands on a different one, this and the portal pin move together.
   # 1.8.37: co-versioned with portal, as always.
-  version: 1.8.37
+  # 1.8.38: co-versioned with portal, as always.
+  version: 1.8.38
   deps: ['portal']
   tier: platform
   feature: portal
@@ -1077,6 +1082,40 @@ components:
 # The policies chart deps stop at the substrate — depending on the agents themselves would stall
 # it on any profile where one of them is absent. Every rule and every default is the chart's own:
 # componentValues.agentgateway-policies.
+
+# ---------------------------------------------------------------------------------------------
+# Nightly platform review. Reads this platform's own telemetry and its agents' conversations once a
+# night and PROPOSES changes as pull requests — alerts, widgets, agent prompts, gateway policies,
+# documentation. It applies nothing, and the agent it consults holds no write tool: Autopilot returns
+# JSON, and this component's service is what validates, redacts and writes. A prompt injection in the
+# corpus can therefore produce a refused proposal, never a commit.
+#
+# IT SHIPS INERT. The chart defaults dryRun:true and an EMPTY proposalAllowlist, so a fresh install
+# reviews the platform, writes Proposal objects you can read, and opens nothing. Two switches have to
+# be thrown deliberately before it can reach a repository.
+# ---------------------------------------------------------------------------------------------
+- name: nightly-review-crd
+  kind: NightlyReviewCrds
+  chart: nightly-review-crds
+  # ReviewRun (an event, pruned) and Proposal (a decision record, kept). Separate CRDs because they
+  # have different lifetimes, and Proposal deliberately carries NO ownerReference to its run — that
+  # wiring would let the run's expiry garbage-collect the decision.
+  version: 0.1.0
+  tier: observability
+  feature: specialistAgents
+- name: nightly-review
+  kind: NightlyReview
+  version: 0.1.0
+  # Reads ClickHouse (krateo-observability), kagent sessions through kagent's own API — which is why
+  # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
+  # a direct database read would have had none of — and consults krateo-autopilot over A2A.
+  deps:
+  - nightly-review-crd
+  - krateo-autopilot
+  - kagent
+  - krateo-observability
+  tier: observability
+  feature: specialistAgents
 - name: agentgateway-controller
   kind: AgentgatewayController
   version: 0.2.0
