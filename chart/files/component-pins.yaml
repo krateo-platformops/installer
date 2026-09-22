@@ -89,7 +89,16 @@ components:
   # The real trigger is a SEMANTIC change, because what the image bakes at build time is the DERIVED
   # widget table, and a regenerator reordering keys leaves that table identical. Read as written, the
   # old caveat would raise a false alarm on every regeneration.
-  version: 1.6.43
+  # 1.6.45 (lockstep with frontend): BYTE-IDENTICAL for the NINTH consecutive time — verified, not
+  # assumed: all 44 CRD templates compare equal to 1.6.43 and the commit span touches nothing under
+  # helm/. Chart.yaml is the only difference. This chart has no appVersion and ships no workload, so
+  # applying it changes nothing on the cluster; it moves only to keep the pair in step.
+  #
+  # The forward caveat stays dormant: since frontend #339 the IMAGE bakes a frozen copy of the CRDs it
+  # was built against, so the first change under helm/frontend-crds/templates/ obliges frontend and
+  # frontend-crd to roll as a pair, and skew fails silently (a kind present on the cluster but absent
+  # from the baked table disappears from the palette, no error anywhere).
+  version: 1.6.45
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -351,7 +360,32 @@ components:
   # rendered it. Adds the property to all six plus a CI drift gate so they cannot diverge again.
   # Also carries regenerated CRDs and widgetKinds.generated.ts — key order only, semantically identical
   # (verified, see the -crd pin above).
-  version: 1.6.43
+  # 1.6.45: TWO releases, not one — 1.6.44 was cut and never pinned here, so this carries both. Safe to
+  # skip: history is linear (1.6.43 -> 1.6.44 -> 1.6.45 verified with merge-base --is-ancestor), so the
+  # :1.6.45 image CONTAINS 1.6.44's commits. The span is exactly two commits and touches NOTHING under
+  # helm/ — appVersion is the image tag, so all of it rides the image.
+  #
+  # 1.6.44 (#349) — bind-data accepts EXPRESSIONS. The column form refused every pipe, function and
+  # piece of arithmetic on the theory that a bad one would strand the author debugging generated code
+  # they never saw. That theory was FALSIFIED against 057 rather than argued: snowplow answers a
+  # malformed filter with `invalid jq query "...": unexpected token "}"` and a runtime fault with
+  # `expected an object but got: string (...)`, and the frontend already hoists that text into the
+  # widget error. So the guard is containment only now — an expression may not escape the parentheses
+  # it is interpolated into — and being wrong is the server's job to report. A restriction justified by
+  # an assumption nobody had tested.
+  #
+  # 1.6.45 (#350) — apiRef, widgetDataTemplate and resourcesRefsTemplate are authorable on every
+  # widget. All 44 widget CRDs already declared all three; the composer exposed none of them, which is
+  # why a two-source join looked like something only the agent could do.
+  #
+  # ONE NEW RUNTIME CALL, already satisfied: /list?category=actions. Same snowplow endpoint the palette
+  # already calls with category=widgets, under the caller's own RBAC — no new permission, no new
+  # service. Verified on 057: the RESTAction CRD declares categories ["krateo","rest","actions"] and 92
+  # RESTActions are visible, so the picker has real content. New /list traffic after this roll is that.
+  #
+  # VERIFY BY THE IMAGE, not a config-hash: there is no prompt and no Secret in this one. Expect
+  # ghcr.io/krateo-platformops/frontend:1.6.45 on deploy/frontend, pod Ready, 0 restarts.
+  version: 1.6.45
   deps:
   - frontend-crd
   - authn
