@@ -78,7 +78,8 @@ components:
   # 1.6.39: SEVENTH consecutive byte-identical bump; the 1.6.39 range touches nothing under helm/.
   # 1.6.40: EIGHTH consecutive byte-identical bump; the range touches nothing under helm/.
   # 1.6.41: NINTH consecutive byte-identical bump; the range touches nothing under helm/.
-  version: 1.6.41
+  # 1.6.42: TENTH consecutive byte-identical bump; the range touches nothing under helm/.
+  version: 1.6.42
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -313,7 +314,25 @@ components:
   # and a mounted pane whose URL never changes has none. Nothing was wrong with the data; nobody asked
   # for it again. Fixed with the same ['widgets'] invalidation a widget action already performs after a
   # write. Pairs with 1.6.40 — the two together are one user-visible symptom, fixed at two layers.
-  version: 1.6.41
+  # 1.6.42 (#347): the THIRD fix in this arc, and caused by the first. An apply is not atomic — it
+  # DELETEs every name it is about to write (the sweep, needed because the sandbox uses the draft's REAL
+  # names so the preview renders the same object graph that will be published) and then POSTs them.
+  # 1.6.40 made every edit re-apply, which is what allowed two to overlap: sweep(B) landing between
+  # sweep(A) and POST(A) means B's create hits A's object and the apiserver answers 409 —
+  #   flexes.widgets.templates.krateo.io "page-<slug>" already exists
+  # — that apply is abandoned and rolled back, and its drawer falls back to source-only, so "Rendered
+  # (live)" DISAPPEARS until a later apply happens to succeed. Measured on a live cluster: every
+  # recorded session produced exactly one 409.
+  #
+  # IT SELF-HEALS, WHICH IS PRECISELY WHY IT SURVIVED. Three applies land, one dies, and the preview is
+  # correct at the end anyway — so the symptom is a tab that flickers away and comes back, which reads
+  # as slowness rather than as a failure. Applies are now serialised.
+  #
+  # The arc is worth reading as one story: 1.6.40 made the sandbox follow the draft, 1.6.41 made the
+  # rendered pane follow the sandbox, and 1.6.42 stops the two applies that 1.6.40 made frequent from
+  # racing each other. Each fix exposed the next layer; none of them was visible until the one above it
+  # was fixed.
+  version: 1.6.42
   deps:
   - frontend-crd
   - authn
