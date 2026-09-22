@@ -79,7 +79,17 @@ components:
   # 1.6.40: EIGHTH consecutive byte-identical bump; the range touches nothing under helm/.
   # 1.6.41: NINTH consecutive byte-identical bump; the range touches nothing under helm/.
   # 1.6.42: TENTH consecutive byte-identical bump; the range touches nothing under helm/.
-  version: 1.6.42
+  # 1.6.43: the streak of byte-identical bumps ENDS — six CRD files differ (Breadcrumb, Card,
+  # Descriptions, Filters, Form, Steps) — AND THE PIN IS STILL NOT LOAD-BEARING. Verified structurally
+  # rather than by the file list: parsing every CRD and comparing canonical JSON gives 38 byte-identical,
+  # 6 differing by KEY ORDER ONLY, and ZERO semantic differences, with none added or removed.
+  #
+  # THAT REFINES THE CAVEAT RECORDED AT 1.6.37, which said the pins must pair "the first time
+  # helm/frontend-crds/templates/ actually changes". The files changed here and nothing else needed to.
+  # The real trigger is a SEMANTIC change, because what the image bakes at build time is the DERIVED
+  # widget table, and a regenerator reordering keys leaves that table identical. Read as written, the
+  # old caveat would raise a false alarm on every regeneration.
+  version: 1.6.43
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -332,7 +342,16 @@ components:
   # rendered pane follow the sandbox, and 1.6.42 stops the two applies that 1.6.40 made frequent from
   # racing each other. Each fix exposed the next layer; none of them was visible until the one above it
   # was fixed.
-  version: 1.6.42
+  # 1.6.43 (#348): the portal stops rejecting what its own CRDs allow. allowedResources is injected
+  # into six container CRDs by the generator, but was missing from the co-located ajv schemas the
+  # portal validates against — so a Card an agent authored, which the CLUSTER accepts and
+  # validate_manifest passes, was refused by the portal with "must NOT have additional properties" and
+  # the live preview silently dropped to source-only. Three validators disagreeing about one shape,
+  # with the strictest one invisible: the CR was valid everywhere it was checked except the place that
+  # rendered it. Adds the property to all six plus a CI drift gate so they cannot diverge again.
+  # Also carries regenerated CRDs and widgetKinds.generated.ts — key order only, semantically identical
+  # (verified, see the -crd pin above).
+  version: 1.6.43
   deps:
   - frontend-crd
   - authn
@@ -1100,12 +1119,16 @@ components:
   # ReviewRun (an event, pruned) and Proposal (a decision record, kept). Separate CRDs because they
   # have different lifetimes, and Proposal deliberately carries NO ownerReference to its run — that
   # wiring would let the run's expiry garbage-collect the decision.
-  version: 0.1.0
+  # 0.1.1: ships values.schema.json. 0.1.0 had none, and core-provider reads it to derive the
+  # Composition CRD — so both compositions wedged Synced=False with NO Ready condition at all
+  # (not Ready=False), which a sweep filtering on Ready==False misses entirely.
+  version: 0.1.1
   tier: observability
   feature: specialistAgents
 - name: nightly-review
   kind: NightlyReview
-  version: 0.1.0
+  # 0.1.1: ships values.schema.json (see the -crd pin above).
+  version: 0.1.1
   # Reads ClickHouse (krateo-observability), kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of — and consults krateo-autopilot over A2A.
