@@ -100,7 +100,9 @@ components:
   # from the baked table disappears from the palette, no error anywhere).
   # 1.6.46 (lockstep with frontend): BYTE-IDENTICAL for the TENTH consecutive time — verified, all 44
   # CRD templates compare equal to 1.6.45. No appVersion, no workload: applying it changes nothing.
-  version: 1.6.46
+  # 1.6.48 (lockstep): BYTE-IDENTICAL for the ELEVENTH consecutive time — all 44 CRD templates verified
+  # equal to 1.6.46. No appVersion, no workload; moves only to keep the pair in step.
+  version: 1.6.48
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -398,7 +400,16 @@ components:
   # browser. A green suite over the wrong surface is not evidence the feature works.
   #
   # Chart diff is Chart.yaml only; appVersion IS the image tag, so the fix rides the image.
-  version: 1.6.46
+  # 1.6.48: two builder fixes, both found by DRIVING the composer rather than by reading it.
+  #   #352 — the RESTAction picker listed 85 objects and displayed none. Rows resolved their plural
+  #         through the generated WIDGET table; RESTAction belongs to snowplow, so every row was
+  #         dropped. A picker that is populated and empty at the same time.
+  #   #353 — 14 of the 44 widget kinds could not be dropped AT ALL: a required field of type array
+  #         counted as "missing" while untouched, so the drop was refused with a message no amount of
+  #         typing could clear. Table and all four chart kinds are among the 14, which blocks any
+  #         Table-based page outright.
+  # Chart diff is Chart.yaml only; appVersion IS the image tag.
+  version: 1.6.48
   deps:
   - frontend-crd
   - authn
@@ -887,7 +898,42 @@ components:
   agent: true
 - name: repo-mcp-server
   kind: RepoMcpServer
-  version: 0.1.3
+  # 0.1.4: THE CORPUS EVERY AGENT GROUNDS ON HAS BEEN STALE, and nothing said so. Verified on 057
+  # BEFORE this bump, not taken from the handoff:
+  #   kubectl auth can-i get configmaps -n krateo-system \
+  #     --as=system:serviceaccount:krateo-system:repo-mcp-server   ->  no
+  #   in-pod corpus: frontend-1.4.8 (cluster ran 1.6.46), portal-1.6.0 (cluster 1.8.39),
+  #                  core-provider-2.13.14 (cluster 2.13.15)
+  #   cm/krateo-installed-versions: present and CORRECT (frontend 1.6.46, snowplow 1.12.9)
+  #
+  # repo-mcp-server overrides its build-time pins by reading that ConfigMap with its OWN
+  # ServiceAccount, and the chart created the SA and bound it to nothing. Two Roles named
+  # repo-mcp-server DO exist but they bind the CDC CONTROLLER SAs (repomcpservers-v0-1-2 / -v0-1-3),
+  # not the app SA — so the obvious object is once again the wrong one. The loader FAILS OPEN, so the
+  # 403 was swallowed and stale pins served: the denial was log.debug and the startup banner reported
+  # repository COUNTS but never VERSIONS. Healthy pod, correct ConfigMap, silently wrong answers.
+  #
+  # OBSERVED COST: frontend-agent, asked to build a page on quantity.jq (snowplow 1.12.9), searched
+  # provisioning_verdict, found only health.jq and ended its turn having written nothing. TWO earlier
+  # PROMPT fixes aimed at that behaviour changed nothing, because it was never a prompt problem.
+  #
+  # 0.1.4 adds templates/rbac.yaml — verified from the RENDERED chart, minimal and correctly scoped:
+  #   Role/repo-mcp-server-installed-versions  configmaps verbs=[get]
+  #                                            resourceNames=[krateo-installed-versions]
+  #   RoleBinding -> ServiceAccount/repo-mcp-server;  ZERO secrets rules.
+  # It also promotes the denial to a WARNING naming the cause and makes the banner state the versions
+  # it serves — so the next occurrence is visible rather than silent.
+  #
+  # BLAST RADIUS IS THE WHOLE FLEET: this pin is mcpBackend:true, so the roll-guard hash moves and all
+  # 16 agents re-roll, not five. Largest radius of any roll today; coordinate before applying.
+  #
+  # VERIFY AFTER (two commands, neither of which trusts the release object):
+  #   kubectl auth can-i get configmaps -n krateo-system --as=...:repo-mcp-server   -> yes
+  #   kubectl exec deploy/repo-mcp-server -- ls -d /tmp/krateo-repos/*/*/  -> frontend-1.6.48
+  # The pod resolves pins AT IMPORT and caches checkouts in an emptyDir, so the corpus only re-fetches
+  # on a NEW pod. The version bump recreates it, so no manual rollout restart is expected — but that is
+  # a prediction to CHECK, not to assume: if the paths still read 1.4.8, bounce it.
+  version: 0.1.4
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
