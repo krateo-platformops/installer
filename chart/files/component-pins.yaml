@@ -76,7 +76,8 @@ components:
   # 1.6.38: SIXTH consecutive byte-identical bump. The 1.6.38 range touches five files, all under
   # ui/src/pages/PageComposer/ — zero under helm/ — so the caveat above stays dormant for another release.
   # 1.6.39: SEVENTH consecutive byte-identical bump; the 1.6.39 range touches nothing under helm/.
-  version: 1.6.39
+  # 1.6.40: EIGHTH consecutive byte-identical bump; the range touches nothing under helm/.
+  version: 1.6.40
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -291,7 +292,17 @@ components:
   # so Badge color='default' fell through to the error tone. Presentation only — no CRD, schema or
   # widget-kind change, so nothing moves with it beyond the lockstep -crd pin.
   # 1.6.39: presentation and composer polish; chart byte-identical, appVersion IS the image tag.
-  version: 1.6.39
+  # 1.6.40 (#345): "Rendered (live)" was live for exactly one moment — the one the draft started in.
+  # applyPreviewPageV2 is the only writer into the preview sandbox and it is reached from a single call
+  # site, the previewPage verb, which fires when a draft is SEEDED. Every later edit went through
+  # useDraftFileBuses, whose handlers update the held store, push an undo step and re-arm the publish
+  # gate — and told the sandbox nothing. So a widget could be on the canvas, in the object tree, in the
+  # held files AND in the publish set while being absent from the surface labelled live. Measured on
+  # 057 rather than inferred: after a drag + a bind, row.page-<slug>-row was ABSENT and the bound
+  # RESTAction and Table 404'd in the sandbox, while everything else about the bind was already correct.
+  # The failure mode is the worst kind for a builder — the preview does not error, it quietly shows an
+  # older truth, so it is trusted precisely when it is wrong.
+  version: 1.6.40
   deps:
   - frontend-crd
   - authn
