@@ -913,7 +913,7 @@ components:
   # ordering is asymmetric: autopilot-ahead-of-frontend tells the model to read fields that are
   # structurally absent, while frontend-ahead-of-autopilot is merely half-inert. Shipping both in one
   # installer version removes the question.
-  version: 0.5.3
+  version: 0.5.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -1117,7 +1117,7 @@ components:
   # -crd bumps on this component (0.2.39 added the SpecDrift phase enum, 0.2.41 added Invalid — holding either
   # would have had the apiserver reject the status write and silently disable half the fix). The only way to
   # tell the two cases apart is to diff the charts; do not infer it from the component's history either way.
-  version: 0.2.42
+  version: 0.2.43
   tier: observability
   feature: specialistAgents
 - name: alert-troubleshooter
@@ -1135,7 +1135,7 @@ components:
   # DELETING the duplicate and routing create through _tile_for, with a test asserting both call sites emit an
   # identical tile — so the two-copies-one-wrong shape that caused it cannot silently come back. Chart is
   # byte-identical; appVersion IS the image tag, so this line is what delivers the fix.
-  version: 0.2.42
+  version: 0.2.43
   deps:
   - alert-troubleshooter-crd
   - incident-agent
