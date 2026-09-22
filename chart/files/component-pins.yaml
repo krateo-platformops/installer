@@ -98,7 +98,9 @@ components:
   # was built against, so the first change under helm/frontend-crds/templates/ obliges frontend and
   # frontend-crd to roll as a pair, and skew fails silently (a kind present on the cluster but absent
   # from the baked table disappears from the palette, no error anywhere).
-  version: 1.6.45
+  # 1.6.46 (lockstep with frontend): BYTE-IDENTICAL for the TENTH consecutive time — verified, all 44
+  # CRD templates compare equal to 1.6.45. No appVersion, no workload: applying it changes nothing.
+  version: 1.6.46
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -385,7 +387,18 @@ components:
   #
   # VERIFY BY THE IMAGE, not a config-hash: there is no prompt and no Secret in this one. Expect
   # ghcr.io/krateo-platformops/frontend:1.6.45 on deploy/frontend, pod Ready, 0 restarts.
-  version: 1.6.45
+  # 1.6.46: ONE FIX, and it is the one that makes 1.6.45 actually usable. The Data action 1.6.45 added
+  # to every widget opened NOTHING — button rendered, click set state, no modal, no error, no console
+  # message. The guard required a non-null draftNamespace(files), but a page draft holds the TEMPLATED
+  # namespace ({{ include "page.tierNamespace" ... }}) in every file, which draftNamespace deliberately
+  # skips. So it returned null for exactly the drafts the modal exists for.
+  #
+  # WORTH RECORDING WHY THE TESTS MISSED IT: 44 unit tests cover the emitters and not one MOUNTED the
+  # component, so a guard that never passes is invisible to all of them. Found by opening it in a
+  # browser. A green suite over the wrong surface is not evidence the feature works.
+  #
+  # Chart diff is Chart.yaml only; appVersion IS the image tag, so the fix rides the image.
+  version: 1.6.46
   deps:
   - frontend-crd
   - authn
@@ -587,7 +600,29 @@ components:
   # platform review's proposals. Content only; no CRD change and no new widget kind, so frontend
   # is unaffected. The page renders before nightly-review is installed: both API reads carry
   # continueOnError, so a cluster with no review.krateo.io CRDs shows an empty table, not a break.
-  version: 1.8.38
+  # 1.8.39: CONTENT-ONLY (widget CRs; no CRD change, no image). Rebuilds the /portal-builder landing
+  # page: 472 -> 476 rendered objects, 3 deleted and 7 added. Three defects, and two of them had never
+  # worked at all:
+  #   - the drafts table's heading and its explanatory sentence have NEVER rendered. Verified against
+  #     the LIVE CRD rather than taken on trust: tables.widgets.templates.krateo.io declares exactly 10
+  #     widgetData properties, `title` and `description` are not among them, and
+  #     x-kubernetes-preserve-unknown-fields is FALSE — so the apiserver silently prunes both. That is
+  #     why the section renders as a bare grid.
+  #   - the row click did nothing: rowNavigateTo pointed at ?resume={slug} and nothing consumes it.
+  #   - the primary action was "Ask Autopilot", which fails closed where Autopilot is disabled, leaving
+  #     the composer route behind no feature flag as the quietest thing on the page.
+  #
+  # FORWARD IS SAFE FOR SNOWPLOW'S RESOLVED-BODY CACHE, and I checked the specific trap: that cache
+  # invalidates on CR UPDATE but NOT on delete+recreate-under-the-same-name. Zero of the 7 added names
+  # reuse any of the 3 deleted names, and the page root flex.page-portal-builder changes IN PLACE,
+  # which fires an UPDATE and evicts correctly.
+  #
+  # ROLLBACK IS THE TRAP, NOT THE ROLL. Going back to 1.8.38 re-creates Flex/portal-builder-ask-cta,
+  # Card/compose-in-ui-card and Paragraph/compose-in-ui-body under IDENTICAL names — precisely the case
+  # the cache does not evict — so a rollback must poke krateo.io/cache-poke on flex.page-portal-builder.
+  #
+  # Expect a brief partial render of /portal-builder while cdc prunes before re-rendering. Self-heals.
+  version: 1.8.39
   deps:
   - frontend
   - git-provider
@@ -631,7 +666,8 @@ components:
   # next tag; if the split lands on a different one, this and the portal pin move together.
   # 1.8.37: co-versioned with portal, as always.
   # 1.8.38: co-versioned with portal, as always.
-  version: 1.8.38
+  # 1.8.39: co-versioned with portal; content-only, no CRD change, no image.
+  version: 1.8.39
   deps: ['portal']
   tier: platform
   feature: portal
