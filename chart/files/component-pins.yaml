@@ -77,7 +77,8 @@ components:
   # ui/src/pages/PageComposer/ — zero under helm/ — so the caveat above stays dormant for another release.
   # 1.6.39: SEVENTH consecutive byte-identical bump; the 1.6.39 range touches nothing under helm/.
   # 1.6.40: EIGHTH consecutive byte-identical bump; the range touches nothing under helm/.
-  version: 1.6.40
+  # 1.6.41: NINTH consecutive byte-identical bump; the range touches nothing under helm/.
+  version: 1.6.41
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -302,7 +303,17 @@ components:
   # RESTAction and Table 404'd in the sandbox, while everything else about the bind was already correct.
   # The failure mode is the worst kind for a builder — the preview does not error, it quietly shows an
   # older truth, so it is trusted precisely when it is wrong.
-  version: 1.6.40
+  # 1.6.41 (#346): the other half of #345. That fix made the preview SANDBOX follow the draft; the pane
+  # in FRONT of it still did not. An apply changes what the sandbox SERVES but not the URL the rendered
+  # pane FETCHES, and widget queries are keyed ['widgets', endpoint, extras] — on exactly that URL — so
+  # every re-apply was answered from the widget cache. Measured on 057 with #345 already live: the
+  # RESTAction had status.rows=23, the Table had dataSource=23, the root Flex listed all three children,
+  # and the rendered pane showed 0 rows — still 0 at +30s, long past the 30s staleTime. That is the
+  # point worth keeping: GOING STALE IS NOT THE SAME AS FETCHING. A stale query refetches on a trigger,
+  # and a mounted pane whose URL never changes has none. Nothing was wrong with the data; nobody asked
+  # for it again. Fixed with the same ['widgets'] invalidation a widget action already performs after a
+  # write. Pairs with 1.6.40 — the two together are one user-visible symptom, fixed at two layers.
+  version: 1.6.41
   deps:
   - frontend-crd
   - authn
