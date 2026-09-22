@@ -102,7 +102,9 @@ components:
   # CRD templates compare equal to 1.6.45. No appVersion, no workload: applying it changes nothing.
   # 1.6.48 (lockstep): BYTE-IDENTICAL for the ELEVENTH consecutive time — all 44 CRD templates verified
   # equal to 1.6.46. No appVersion, no workload; moves only to keep the pair in step.
-  version: 1.6.48
+  # 1.6.49 (lockstep): BYTE-IDENTICAL for the TWELFTH consecutive time — all 44 CRD templates verified
+  # equal to 1.6.48. No appVersion, no workload; moves only to keep the pair in step.
+  version: 1.6.49
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -409,7 +411,26 @@ components:
   #         typing could clear. Table and all four chart kinds are among the 14, which blocks any
   #         Table-based page outright.
   # Chart diff is Chart.yaml only; appVersion IS the image tag.
-  version: 1.6.48
+  # 1.6.49: two builder fixes (#354, #355), both found by DRIVING the composer for the pod-sizing
+  # demo rather than by reading it. #352 and #353 shipped in 1.6.48 and are already live.
+  #
+  #   #354 — a widget dropped into a container was born HIDDEN. defaultExpandAll is evaluated once at
+  #          mount, so anything added afterwards landed in a collapsed subtree that antd never renders:
+  #          no Data, Move or Remove action reachable on a widget that was genuinely there.
+  #
+  #   #355 — THE AGENT COULD PLACE A WIDGET THAT DOES NOT EXIST, and this one is not a UI bug. Observed
+  #          live: it wrote `resourcesRefs: [tables/pod-sizing]`, reported "I have added the pod-sizing
+  #          table", and the page PUBLISHED CLEAN with no such Table anywhere — rendering a hole. A
+  #          dangling reference was accepted at the authoring seam and every downstream signal said
+  #          success. Same shape as the rest of this batch: present in the build, absent at the seam,
+  #          nothing in between saying so.
+  #
+  # Chart diff is Chart.yaml only; appVersion IS the image tag. No RBAC, no CRD change, not mcpBackend
+  # — one pod bounces, no fleet re-roll, no coordination needed.
+  #
+  # VERIFY BY THE BUILD STAMP: the portal footer should read "build 1.6.49 · <sha>", and a widget
+  # dropped into a container should be revealed in the object tree immediately rather than hidden.
+  version: 1.6.49
   deps:
   - frontend-crd
   - authn
