@@ -840,7 +840,7 @@ components:
   modelOwner: true
 - name: installer-agent
   kind: InstallerAgent
-  version: 0.3.1
+  version: 0.3.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -967,7 +967,7 @@ components:
   # NOT mcpBackend, so this does NOT trip the roll-guard: only the autopilot pod bounces, no fleet
   # re-roll, no bench/recording coordination needed. Verify by the FIELD (the config SECRET, not the
   # prompts ConfigMap): deploy/autopilot annotation kagent.dev/config-hash must move.
-  version: 0.5.5
+  version: 0.5.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -1008,7 +1008,7 @@ components:
   # status.report instead of reports (alert->RCA loop dead). Matches clickstack-agent (already unbound).
   # Live toolNames should become ["list_databases","run_select_query","run_query"]. Not an mcpBackend
   # (no fleet bounce); served version migrates v0-1-11 -> v0-1-12.
-  version: 0.2.0
+  version: 0.2.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -1131,7 +1131,7 @@ components:
   requireApproval: []
 - name: clickstack-agent
   kind: ClickstackAgent
-  version: 3.1.5
+  version: 3.1.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -1189,7 +1189,7 @@ components:
   # DELETING the duplicate and routing create through _tile_for, with a test asserting both call sites emit an
   # identical tile — so the two-copies-one-wrong shape that caused it cannot silently come back. Chart is
   # byte-identical; appVersion IS the image tag, so this line is what delivers the fix.
-  version: 0.2.43
+  version: 0.2.44
   deps:
   - alert-troubleshooter-crd
   - incident-agent
