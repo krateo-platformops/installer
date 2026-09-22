@@ -913,7 +913,27 @@ components:
   # ordering is asymmetric: autopilot-ahead-of-frontend tells the model to read fields that are
   # structurally absent, while frontend-ahead-of-autopilot is merely half-inert. Shipping both in one
   # installer version removes the question.
-  version: 0.5.4
+  # 0.5.5: PROMPT-ONLY (Chart.yaml + Chart.lock + files/prompts-eng.yaml; no template references
+  # .Chart.AppVersion so there is no image; the whole helm-template diff is 2 lines, both the prompts
+  # ConfigMap). It edits ONE clause of `portal-protocol`, and that clause was FACTUALLY WRONG.
+  #
+  # 0.5.4 asserted: "it delegates any new RESTAction to `snowplow-agent`" — stated as a fact ABOUT
+  # frontend-agent rather than an instruction TO it. Measured on 057, it is false: frontend-agent
+  # SELF-AUTHORS. In the run that exposed it, snowplow-agent logged 25 lines, all startup MCP
+  # registration, and never took a turn, while frontend-agent made 10 validate_manifest calls and wrote
+  # the RESTAction itself. An orchestrator reasoning from the old sentence believes a RESTAction in
+  # frontend-agent's output carries the specialist's review. It does not.
+  #
+  # 0.5.5 replaces it with "It MAY delegate ... and it often does not", cites the measurement, and adds
+  # the operative instruction: do not assume a RESTAction in its output came from the specialist, and do
+  # not treat the hop as a guarantee. This is the ORCHESTRATOR half of the defect already fixed in
+  # snowplow-agent 1.2.2 and frontend-agent 1.5.2 — the rule was put in the agents while the
+  # orchestrator went on describing a delegation that nothing enforces.
+  #
+  # NOT mcpBackend, so this does NOT trip the roll-guard: only the autopilot pod bounces, no fleet
+  # re-roll, no bench/recording coordination needed. Verify by the FIELD (the config SECRET, not the
+  # prompts ConfigMap): deploy/autopilot annotation kagent.dev/config-hash must move.
+  version: 0.5.5
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
