@@ -104,7 +104,9 @@ components:
   # equal to 1.6.46. No appVersion, no workload; moves only to keep the pair in step.
   # 1.6.49 (lockstep): BYTE-IDENTICAL for the TWELFTH consecutive time — all 44 CRD templates verified
   # equal to 1.6.48. No appVersion, no workload; moves only to keep the pair in step.
-  version: 1.6.49
+  # 1.6.50 (lockstep): BYTE-IDENTICAL for the THIRTEENTH consecutive time — all 44 CRD templates
+  # verified equal to 1.6.49. No appVersion, no workload; moves only to keep the pair in step.
+  version: 1.6.50
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -430,7 +432,13 @@ components:
   #
   # VERIFY BY THE BUILD STAMP: the portal footer should read "build 1.6.49 · <sha>", and a widget
   # dropped into a container should be revealed in the object tree immediately rather than hidden.
-  version: 1.6.49
+  # 1.6.50: HALF OF A PAIR — land it with krateo-autopilot 0.5.7 or land neither. frontend #356/#357
+  # give the composer two new ops (addWidget, bindData) and give the agent's directives a way to reach
+  # them (composeAdd + `kind`, composeBind); autopilot 0.5.7 is the prompt that tells the agent those
+  # verbs exist. Deploy only this and the agent never uses the new ops; deploy only the agent and the
+  # prompt describes verbs the portal refuses. Neither half is dangerous alone, neither is useful alone.
+  # Chart diff is Chart.yaml only; appVersion IS the image tag.
+  version: 1.6.50
   deps:
   - frontend-crd
   - authn
@@ -1070,7 +1078,28 @@ components:
   # NOT mcpBackend, so this does NOT trip the roll-guard: only the autopilot pod bounces, no fleet
   # re-roll, no bench/recording coordination needed. Verify by the FIELD (the config SECRET, not the
   # prompts ConfigMap): deploy/autopilot annotation kagent.dev/config-hash must move.
-  version: 0.5.6
+  # 0.5.7: PROMPT-ONLY, the other half of the frontend 1.6.50 pair. Chart.lock + Chart.yaml +
+  # files/prompts-eng.yaml; the whole render diff is 7 lines, all in the `portal-protocol` key.
+  # composeBind goes 0 -> 3 occurrences and composeAdd 2 -> 3: the agent is told the new verbs exist.
+  #
+  # THIS IS THE ROOT CAUSE BEHIND frontend#355, not a follow-up to it. The agent that placed
+  # `tables/pod-sizing` — a Table existing nowhere — and reported "I have added the pod-sizing table"
+  # was NOT hallucinating: composeAdd offered "create a CONTAINER" or "place an EXISTING widget", and
+  # neither is "make a Table". It answered with the only verb shaped like an answer. #355 made that
+  # refusal explicit and stopped the silent hole; this gives it the verb it was reaching for.
+  #
+  # BLAST RADIUS IS ONE POD, and that is measured rather than argued. krateo-autopilot is NOT in the
+  # mcpBackend set ($mcpHash is computed from kagent, repo-mcp-server, config-refs-mcp-server,
+  # clickhouse-mcp-server and core-provider-agent), so the roll-guard does not move and the fleet does
+  # not re-roll — confirmed twice today, on 0.3.252 and 0.3.255, where the guard held through an
+  # autopilot bump and moved only when repo-mcp-server went with it in 0.3.256. Quieter than 0.5.6 too:
+  # that release also changed templates/agents-k8s-helm.yaml and bounced k8s-agent, whereas here that
+  # template is BYTE-IDENTICAL, so the k8s and helm sub-agents stay up.
+  #
+  # VERIFY BY THE FIELD: deploy/autopilot annotation kagent.dev/config-hash must move, and
+  #   kubectl get cm krateo-prompts-eng -o jsonpath='{.data.portal-protocol}' | grep -c composeBind
+  # must be >= 1 (0 means the prompt half did not land).
+  version: 0.5.7
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
