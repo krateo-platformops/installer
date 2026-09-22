@@ -1030,7 +1030,41 @@ components:
   agent: true
 - name: frontend-agent
   kind: FrontendAgent
-  version: 1.5.1
+  # 1.5.2: PROMPT-ONLY, and it lands the rule snowplow-agent 1.2.2 could not reach. The chart diff is
+  # Chart.yaml plus files/prompts-eng.yaml; no template references .Chart.AppVersion so there is no
+  # image; the rendered Agent CR is BYTE-IDENTICAL (4730 bytes at both versions); and the `helm template`
+  # diff is 18 lines that are ALL ADDITIONS, zero removals — a pure insertion of one new bullet.
+  #
+  # WHY THIS AGENT AND NOT THE ONE WE JUST ROLLED. snowplow-agent 1.2.2 (installer 0.3.248) put "an
+  # invented threshold is a bug even when the arithmetic is right" into the snowplow specialist. It had
+  # ZERO behavioural effect, because THE SPECIALIST NEVER RAN. Measured from the pod logs of the failing
+  # run: snowplow-agent logged 25 lines, all startup MCP registration, and never took a turn, while
+  # frontend-agent made 10 validate_manifest calls and authored the RESTAction itself.
+  #
+  # THE DELEGATION IS DOCUMENTED IN THREE PLACES AND ENFORCED IN NONE, which is the durable lesson here:
+  #   - frontend-agent 1.5.1: "DELEGATE that RESTAction to the snowplow specialist -- RESTActions are
+  #     its domain, not yours."
+  #   - krateo-autopilot 0.5.3 portal-protocol: "it delegates any new RESTAction to `snowplow-agent`" —
+  #     an ASSERTION ABOUT frontend-agent, not an instruction TO it.
+  #   - the orchestrator's delegation message grants explicit latitude ("any RESTAction via snowplow or
+  #     jq filter required").
+  # Nothing REQUIRES the hop, so a rule placed only in the specialist that owns the domain on paper is
+  # unreachable on the path that actually runs. 1.5.2 scopes the rule to hold whether or not it fires.
+  #
+  # KNOWLEDGE WAS NEVER THE GAP, and this is why adding facts would not have worked. frontend-agent
+  # 1.5.1's prompt contains ZERO occurrences of quantity / provisioning_verdict / utilization_pct /
+  # sum_quantities / modules / include — and it still emitted `include "quantity"` and `sum_quantities`
+  # correctly, having READ the module with its repo tools. It had `provisioning_verdict` in front of it
+  # in that same file and hand-wrote `usage < request` anyway, calling 75 of 91 pods overprovisioned
+  # where the module calls 54. For an agent with source-reading tools the missing thing is the RULE, not
+  # the reference.
+  #
+  # VERIFY BY THE FIELD, NOT THE ConfigMap (same as snowplow-agent — the prompt reaches the pod through
+  # the agent's config SECRET):
+  #   kubectl get deploy frontend-agent -o jsonpath='{.spec.template.metadata.annotations.kagent\.dev/config-hash}'
+  # It reads 3492187988851374085 before this roll, and the marker goes 0 -> 1 in secret/frontend-agent
+  # config.json. If the hash does not move, bounce the pod.
+  version: 1.5.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
