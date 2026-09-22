@@ -14818,6 +14818,186 @@
               }
             }
           }
+        },
+        "nightly-review": {
+          "type": "object",
+          "title": "Nightly platform review",
+          "description": "Reads this platform's telemetry and agent conversations once a night and PROPOSES changes as pull requests \u2014 alerts, widgets, agent prompts, gateway policies, documentation. Applies nothing. Ships inert: dryRun stays true and proposalAllowlist stays empty until an operator deliberately turns both. NOTE: no key here carries a `default` \u2014 a default on a componentValues leaf is applied into the live composition spec by core-provider and is therefore a silent override, not documentation.",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            },
+            "schedule": {
+              "type": "string",
+              "title": "Cron schedule",
+              "description": "When the review runs. Nightly by default in the chart."
+            },
+            "windowHours": {
+              "type": "integer",
+              "title": "Review window (hours)",
+              "description": "How far back to read. BOUNDED AS A SAFETY CONTROL, not a cost one: spans older than the otel-collector's JWT redaction can still carry live credentials."
+            },
+            "dryRun": {
+              "type": "boolean",
+              "title": "Dry run",
+              "description": "Produce Proposal objects but open NO pull requests. Leave true until a few nights of proposals have been read."
+            },
+            "suspend": {
+              "type": "boolean",
+              "title": "Suspend the CronJob"
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string"
+                },
+                "pullPolicy": {
+                  "type": "string"
+                }
+              }
+            },
+            "retention": {
+              "type": "object",
+              "additionalProperties": false,
+              "title": "Retention",
+              "description": "A ReviewRun is an event and is pruned. A DECIDED Proposal is an audit record kept far longer. An OPEN proposal is never collected \u2014 it is an undecided question.",
+              "properties": {
+                "runDays": {
+                  "type": "integer"
+                },
+                "decidedProposalDays": {
+                  "type": "integer"
+                }
+              }
+            },
+            "proposalAllowlist": {
+              "type": "object",
+              "title": "Where each proposal kind may open a pull request",
+              "description": "EMPTY MEANS DENY ALL, and that is the default. target.repo is chosen by the model from a corpus that includes user-written chat text, so without this list one sentence in a conversation could aim the write credential anywhere. A proposal naming a repo outside its kind's list is refused, never redirected.",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "clickhouseQueries": {
+              "type": "object",
+              "title": "Evidence queries",
+              "description": "Named SQL, as configuration rather than code, so it is reviewable and adaptable to your schema without a new image. {from} and {to} are substituted; nothing else is. A model is never asked to author SQL against a store that has held credentials.",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "config": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "authnUrl": {
+                  "type": "string",
+                  "description": "Enables the ServiceAccount -> Krateo JWT exchange. Required to read kagent sessions, which go through kagent's API so they inherit per-user RBAC."
+                },
+                "autopilotA2aUrl": {
+                  "type": "string"
+                },
+                "kagentApiUrl": {
+                  "type": "string"
+                },
+                "clickhouseUrl": {
+                  "type": "string"
+                },
+                "evidenceMaxChars": {
+                  "type": "integer"
+                }
+              }
+            },
+            "secrets": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Credentials are referenced, never inlined.",
+              "properties": {
+                "github": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Needs contents+pull-requests write on the ALLOWLISTED repositories only.",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "clickhouse": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "userKey": {
+                      "type": "string"
+                    },
+                    "passwordKey": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "resources": {
+              "type": "object"
+            }
+          }
         }
       }
     },
