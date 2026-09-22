@@ -989,21 +989,37 @@ components:
   agent: true
 - name: snowplow-agent
   kind: SnowplowAgent
-  # 1.2.1: PROMPT-ONLY — diff is Chart.yaml plus files/prompts-eng.yaml, the Agent CR renders byte-
-  # identically, and there is no image (this chart carries no appVersion). One paragraph is added under
-  # "Canonical patterns": the built-in jq modules, telling the agent to `include "quantity";` rather than
-  # hand-roll k8s quantity parsing, to read the module for the authoritative function list, and to pass on
-  # that metrics.k8s.io reports a ~17s window so any verdict from it is INSTANTANEOUS, not sustained.
+  # 1.2.2: PROMPT-ONLY, and one bullet of it. The chart diff is Chart.yaml plus files/prompts-eng.yaml;
+  # the rendered Agent CR is BYTE-IDENTICAL (4393 bytes at both versions) and the whole `helm template`
+  # diff is exactly TWO lines, both halves of the prompts ConfigMap. The chart does declare an appVersion
+  # — an earlier note here said it did not — but NO template references .Chart.AppVersion, so it still
+  # ships no image: the only thing this bump delivers is text.
   #
-  # IT REQUIRES snowplow >= 1.12.9 AND THAT IS WHY BOTH MOVE HERE. The `quantity` module it teaches only
-  # exists from 1.12.9 (#236); against an older snowplow the agent would author RESTActions whose filters
-  # include a module that is not there. Hard directional dependency, satisfied in this same installer.
+  # WHAT THE TEXT FIXES — "USE THE WHOLE MODULE, NOT JUST THE PARSING", added to the jq-modules bullet.
+  # Measured on a live cluster: asked for a table of overprovisioned pods, the agent correctly reached for
+  # `include "quantity"` and `sum_quantities` to PARSE the values, then hand-wrote the verdict as
+  # `usage < request` — which calls 75 of 91 pods overprovisioned where `provisioning_verdict` calls 54.
+  # The arithmetic was individually correct at every step; the defect is a THRESHOLD NOBODY CAN REPRODUCE
+  # presented as a finding, and "uses less than it reserved" is nearly every healthy pod, so the insight
+  # is a tautology. The new text puts the ratio in `utilization_pct` and the verdict in
+  # `provisioning_verdict`, states that an invented threshold is a bug EVEN WHEN THE ARITHMETIC IS RIGHT
+  # (thresholds live in the module so policy is one edit, and so two pages cannot disagree about what
+  # "overprovisioned" means), and extends the same rule to `health`/`normalize_health`/`usage_health`.
   #
-  # PROMPT-ONLY MEANS THE RUNNING POD MAY KEEP THE OLD PROMPT. Verify by the FIELD, not the ConfigMap —
-  # the prompt reaches the pod through the agent's config SECRET, so a changed ConfigMap is not evidence:
+  # THE snowplow >= 1.12.9 FLOOR FROM 1.2.1 STILL BINDS and is already met (snowplow is 1.12.9 here).
+  # This release deepens the same dependency rather than adding one: it names `sum_quantities`,
+  # `utilization_pct` and `provisioning_verdict`, all of which live in the `quantity` module that only
+  # exists from snowplow 1.12.9 (#236). Rolling snowplow BACK below 1.12.9 would leave the agent
+  # authoring filters that include a module that is not there.
+  #
+  # PROMPT-ONLY MEANS THE RUNNING POD MAY KEEP THE OLD PROMPT, and the obvious check is the wrong one.
+  # The prompt reaches the pod through the agent's config SECRET (deploy volume `config` -> secret
+  # snowplow-agent), so grepping the snowplow-agent-prompts-eng ConfigMap proves the chart RENDERED,
+  # not that the running agent reads the new bytes. Verify by the FIELD:
   #   kubectl get deploy snowplow-agent -o jsonpath='{.spec.template.metadata.annotations.kagent\.dev/config-hash}'
-  # If that hash does not move, bounce the pod.
-  version: 1.2.1
+  # It reads 16245247268778634987 before this roll (it moved from 12276131171719429138 on the 1.2.1
+  # roll, so the mechanism is confirmed working). If it does not move, bounce the pod.
+  version: 1.2.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
