@@ -1267,7 +1267,22 @@ components:
   #
   # VERIFY IN THE MOUNTED SECRET, not just the ConfigMap: the chart landing is not the running agent
   # seeing it. deploy/autopilot kagent.dev/config-hash must move.
-  version: 0.5.8
+  # 0.5.9: PROMPT-ONLY (chart/files/prompts-eng.yaml). Fixes V2 non-determinism that was being read as
+  # sampling noise — it is not. A single "add a table of pods" ask was measured at 76 LLM turns / 74 tool
+  # calls, context 13,924 -> 87,283 prompt tokens, of which read_repo_file 36 and search_repo 28 go
+  # against OUR OWN SOURCE to re-derive three contracts the prompt never stated: the composeBind directive
+  # shape (actionBridge.ts, composeAuthoring.ts), the quantity.jq function signatures, and the Table
+  # dataSource rows-of-typed-cells contract. Every run is therefore an open-ended research project whose
+  # length varies, and a run that goes long enough simply does not finish — which is the observed
+  # 0/1/2-directive spread. 0.5.9 states all three outright. NOT CLAIMED: that this makes the turn
+  # deterministic; only that it removes ~30 tool calls of rediscovery, and rediscovery is the measured
+  # source of the variance. Baseline to beat is four-in-six; the number gets reported either way.
+  # VERIFY BY THE FIELD, NOT THE ConfigMap: the prompt reaches the pod through the agent's config SECRET,
+  # so a changed cm/krateo-prompts-eng is not evidence the running agent picked it up. Watch
+  # .spec.template.metadata.annotations."kagent.dev/config-hash" on deploy/autopilot — 13541428634643632331
+  # before this roll. The chart carries no image (autopilot runs kagent/golang-adk:0.10.1), so the image
+  # tag does NOT move and is the wrong thing to check.
+  version: 0.5.9
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
