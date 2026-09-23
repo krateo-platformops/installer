@@ -118,9 +118,11 @@ components:
 - name: snowplow-crd
   kind: SnowplowCrds
   chart: snowplow-crds
-  # 1.12.9: byte-identical — the RestAction CRD md5 is the SAME at 1.12.7, 1.12.8 AND 1.12.9, and this
-  # chart has no appVersion and no workload, so applying it changes nothing on the cluster.
-  version: 1.12.9
+  # 1.12.10: byte-identical for the NINTH consecutive time — verified by pulling both charts, not
+  # assumed: the only delta is Chart.yaml's own version line, and the CRD templates hash the same
+  # (md5 370adc5f5ec20ada604e4f1dd3931382 at 1.12.9 and 1.12.10). No appVersion, no workload, so
+  # applying it changes nothing on the cluster. Moves in lockstep with snowplow only.
+  version: 1.12.10
   tier: platform
   feature: portal
 - name: authn
@@ -164,7 +166,20 @@ components:
   # (#236) plus an otel bump. THE INFORMER GATE IS THE RISK: it sits on the registration path for every
   # GVR, fails safe OPEN, and a wrong skip is SILENT — it degrades to apiserver fallthrough, which looks
   # perfectly healthy. Confirm from the eviction/fallthrough counters, not from pod readiness.
-  version: 1.12.9
+  # 1.12.10 (#237 A + A3): OBSERVABILITY ONLY — no serve-path behaviour change, no cache-key change, no
+  # repair verb. A = GET /debug/store?gvr=&namespace=&name= behind the existing /debug/* JWT gate,
+  # reporting the INFORMER STORE's view of one object (resourceVersion, uid, last-seen; metadata and
+  # sha256 only, never a body). A3 = per-GVR reflector-path attribution, warn on transition only.
+  # Deliverable B (divergence detection + evidence-driven repair) is MERGED but deliberately NOT here:
+  # it fires a targeted relist that takes a GVR non-servable for minutes, and 057 is carrying the live
+  # #237 staleness defect. Non-servable is a LATENCY excursion, not an outage — serve_assert.go makes a
+  # not-servable informer fall through to the apiserver rather than serve as authoritative — but the
+  # split was a safety call and B ships separately once 057 is quiet.
+  # WHY THIS TAG IS WORTH IT: L1 is structurally BLIND to store staleness. A successful refresh against
+  # a stale store resolves stale bytes and Puts them with a fresh CreatedAt, so cell age resets and every
+  # L1 counter reads healthy while the defect is active. /debug/store is the first per-object read of the
+  # store itself. READ IT AS A LAYER DISCRIMINATOR, NOT A DETECTOR: nothing in A fires on its own.
+  version: 1.12.10
   deps:
   - snowplow-crd
   - authn
