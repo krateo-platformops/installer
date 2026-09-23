@@ -1326,7 +1326,33 @@ components:
   # .spec.template.metadata.annotations."kagent.dev/config-hash" on deploy/autopilot — 13541428634643632331
   # before this roll. The chart carries no image (autopilot runs kagent/golang-adk:0.10.1), so the image
   # tag does NOT move and is the wrong thing to check.
-  version: 0.5.9
+  # 0.5.10: PROMPT-ONLY, two lines, and it is the FIX FOR WHY 0.5.9 DID NOT WORK. 0.5.9's diagnosis
+  # was right (the agent re-derives our own API instead of using the stated contract) and its remedy
+  # failed, because the remedy was MORE CONTRACT TEXT and the problem was not a shortage of it.
+  # ROOT CAUSE: the prompt contradicted itself. An unconditional "Verify before you assert — a
+  # platform fact is read before it is stated, and cited as repo/path:line" sits ~70 lines BEFORE the
+  # compose contract it ends up governing, so the worked composeBind example reads as a CLAIM
+  # AWAITING VERIFICATION rather than as the contract. Grepping it is then the OBEDIENT response, not
+  # a malfunction. 0.5.9 added volume to the losing side of that contradiction.
+  # 0.5.10 is a scope carve-out instead: platform facts are still read before being stated, unchanged;
+  # the directive contracts (compose verbs, Table dataSource shape, ${ } wrapper, quantity helpers)
+  # are marked NORMATIVE HERE — the contract itself, not a claim about it.
+  # MEASURED over the 0.5.9 pod's 75-minute life on 057: 120 read_repo_file + 118 search_repo =
+  # 248 of 256 tool calls (96.9%) against the repo corpus, 7 against Kubernetes, and ZERO to any of
+  # the 10 wired sub-agents. The turn is BIMODAL, not merely slow: ~1 run in 3 falls into a corpus
+  # loop and never comes out (one still issuing search_repo at 900s, 56 calls in), and in that state
+  # the user gets NOTHING because the turn ends before a directive is emitted.
+  # DELIVERY WAS NEVER THE PROBLEM — the 0.5.9 prompt was confirmed present in the mounted config
+  # Secret after that roll. Checking the Secret rather than the ConfigMap is what made this
+  # diagnosable at all; a ConfigMap-only check would have sent us back to re-verifying the rollout.
+  # NOT CLAIMED: that this works. 0.5.9's mechanism was right and its remedy failed; this can fail the
+  # same way. If the rate does not move, the contradiction was not what was driving the greps.
+  # Verified prompt-only by pulling both charts: only Chart.yaml (version + source URL), Chart.lock
+  # (its `generated` timestamp alone — no subchart moved) and files/prompts-eng.yaml differ, the last
+  # by exactly two lines. The chart carries no image; autopilot runs kagent/golang-adk:0.10.1, so the
+  # image tag does NOT move. VERIFY BY kagent.dev/config-hash on deploy/autopilot, which reads
+  # 7261125185538760440 before this roll, and by the marker in the MOUNTED SECRET — not the ConfigMap.
+  version: 0.5.10
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
