@@ -112,7 +112,10 @@ components:
   # verified equal to 1.6.51. No appVersion, no workload; moves only to keep the pair in step.
   # 1.6.53 (lockstep): BYTE-IDENTICAL for the SIXTEENTH consecutive time — all 44 CRD templates
   # verified equal to 1.6.52. No appVersion, no workload; moves only to keep the pair in step.
-  version: 1.6.53
+  # 1.6.55: TENTH consecutive byte-identical bump, verified by pulling both charts rather than
+  # inherited: the only delta is Chart.yaml's own version line and the CRD templates hash the same
+  # (md5 288885fc1ec30268c1f830a4afb26cf5 at 1.6.53 and 1.6.55). Lockstep with frontend only.
+  version: 1.6.55
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -526,7 +529,20 @@ components:
   #
   # Chart diff is Chart.yaml only; appVersion IS the image tag. No RBAC, no CRD change, not mcpBackend
   # — one pod bounces, the roll-guard does not move.
-  version: 1.6.53
+  # 1.6.55 (#362): SKIPS 1.6.54 DELIBERATELY, and 1.6.54 must never be deployed. It is a
+  # BYTE-IDENTICAL RE-RELEASE of 1.6.53 — both tags resolve to d9438b7c, verified with
+  # `git rev-list -n1` on a fresh clone, not taken on trust. It was tagged from a main that did not
+  # carry the fix after a `gh pr merge` returned an i/o timeout and the "pushed" line that followed
+  # was read as success. 1.6.55 is bfb8e30f, which IS the #362 merge; confirmed bfb8e30 is an
+  # ancestor of 1.6.55 and is NOT an ancestor of 1.6.54.
+  # The fix: LIVE_PREVIEW_CAPTION ended "...permissions. Closing this drawer removes them", true
+  # when the preview only ever appeared in a drawer. The composer now embeds PreviewContent INLINE,
+  # where there is no drawer to close, so the caption instructed people to do something the surface
+  # does not offer. 1.6.55 adds a second constant for the inline case and lets PreviewContent take a
+  # caption override. Found by watching a screen recording at 2:34, not by reading the code.
+  # Scope is presentation-only: 4 files, +106/-4, all under ui/src/components/Autopilot/ and
+  # ui/src/pages/PageComposer/, of which +76 is a new test. No CRD, no schema, no widget kind.
+  version: 1.6.55
   deps:
   - frontend-crd
   - authn
