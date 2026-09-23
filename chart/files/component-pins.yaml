@@ -108,7 +108,9 @@ components:
   # verified equal to 1.6.49. No appVersion, no workload; moves only to keep the pair in step.
   # 1.6.51 (lockstep): BYTE-IDENTICAL for the FOURTEENTH consecutive time — all 44 CRD templates
   # verified equal to 1.6.50. No appVersion, no workload; moves only to keep the pair in step.
-  version: 1.6.51
+  # 1.6.52 (lockstep): BYTE-IDENTICAL for the FIFTEENTH consecutive time — all 44 CRD templates
+  # verified equal to 1.6.51. No appVersion, no workload; moves only to keep the pair in step.
+  version: 1.6.52
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -464,7 +466,24 @@ components:
   #
   # Chart diff is Chart.yaml only; appVersion IS the image tag. No RBAC, no CRD change, not
   # mcpBackend — one pod bounces, the roll-guard does not move, no coordination needed.
-  version: 1.6.51
+  # 1.6.52: HALF OF A PAIR with krateo-autopilot 0.5.8 — land both or neither. The portal makes the
+  # wrong choice impossible; the prompt makes the right choice chosen. One alone leaves either an
+  # agent still reasoning wrongly and merely blocked, or instructions describing a rule nothing
+  # enforces.
+  #
+  # #360: the placement check consulted the PREVIEW SANDBOX as well as the authoring namespace. The
+  # sandbox is scratch for drafts in flight — everyone's — not a catalogue, and the palette and
+  # PlaceWidgetModal both list the authoring namespace ALONE. So the agent was handed something a
+  # person cannot reach: the exact invariant the handler's own docstring opens with, broken two
+  # commits after it was written. This draft's own widgets stay placeable (they are files, no lookup);
+  # other drafts' leftovers are refused.
+  #
+  # THE DEBRIS IS REAL AND MEASURED on 057: krateo-preview holds EIGHT pod-sizing*-table objects
+  # (diag1/2/3, v1b/c/d/f, and pod-sizing-table itself), all seeded by demo recordings, none in
+  # krateo-system. Every take adds more, so the trap re-arms itself.
+  #
+  # Chart diff is Chart.yaml only; appVersion IS the image tag.
+  version: 1.6.52
   deps:
   - frontend-crd
   - authn
@@ -1125,7 +1144,25 @@ components:
   # VERIFY BY THE FIELD: deploy/autopilot annotation kagent.dev/config-hash must move, and
   #   kubectl get cm krateo-prompts-eng -o jsonpath='{.data.portal-protocol}' | grep -c composeBind
   # must be >= 1 (0 means the prompt half did not land).
-  version: 0.5.7
+  # 0.5.8: PROMPT-ONLY, the other half of the frontend 1.6.52 pair. Chart.lock + Chart.yaml +
+  # files/prompts-eng.yaml; whole render diff is 14 lines, all in `portal-protocol`.
+  #
+  # IT REPLACES A TEST OF EXISTENCE WITH A TEST OF INTENT, which is the durable idea here. The old
+  # line — "if you find yourself naming a widget you have not seen, you meant to create one" — asks
+  # whether something EXISTS, and so fails precisely when a stale look-alike does. It now turns on
+  # what the USER asked for: a DESCRIBED thing ("a table of pods with their CPU requests") is created,
+  # only a NAMED thing ("add the fleet-card") is placed. Existence is a property of whatever debris
+  # the cluster has accumulated; intent is a property of the request.
+  # Marker: "DO NOT GO LOOKING FOR A WIDGET" goes 0 -> 1; the old "you have not seen" phrasing 1 -> 0.
+  #
+  # BLAST RADIUS TWO PODS. krateo-autopilot is NOT in the mcpBackend set, so the roll-guard does not
+  # move and the fleet does not re-roll — confirmed empirically on three consecutive rolls now
+  # (0.3.252, 0.3.255, 0.3.258). templates/agents-k8s-helm.yaml is byte-identical, so k8s-agent and
+  # helm-agent hold as they did for 0.5.7.
+  #
+  # VERIFY IN THE MOUNTED SECRET, not just the ConfigMap: the chart landing is not the running agent
+  # seeing it. deploy/autopilot kagent.dev/config-hash must move.
+  version: 0.5.8
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
