@@ -106,7 +106,9 @@ components:
   # equal to 1.6.48. No appVersion, no workload; moves only to keep the pair in step.
   # 1.6.50 (lockstep): BYTE-IDENTICAL for the THIRTEENTH consecutive time — all 44 CRD templates
   # verified equal to 1.6.49. No appVersion, no workload; moves only to keep the pair in step.
-  version: 1.6.50
+  # 1.6.51 (lockstep): BYTE-IDENTICAL for the FOURTEENTH consecutive time — all 44 CRD templates
+  # verified equal to 1.6.50. No appVersion, no workload; moves only to keep the pair in step.
+  version: 1.6.51
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -438,7 +440,31 @@ components:
   # verbs exist. Deploy only this and the agent never uses the new ops; deploy only the agent and the
   # prompt describes verbs the portal refuses. Neither half is dangerous alone, neither is useful alone.
   # Chart diff is Chart.yaml only; appVersion IS the image tag.
-  version: 1.6.50
+  # 1.6.51: FIXES A REGRESSION SHIPPED IN 1.6.50 — which this installer rolled an hour earlier, so the
+  # window was real and brief. #355's placement validation enumerated the whole widget category in BOTH
+  # namespaces. Measured on 057 rather than estimated: 553 widget CRs in krateo-system and 329 in
+  # krateo-preview, 882 total, ~7100ms to list. requestCompose allows 4000ms.
+  #
+  # So from 1.6.50 EVERY agent placement timed out — and the message blamed "no page composer is open
+  # to apply this" about a composer that was open and working. Three layers on one feature: #355 fixed
+  # a silent hole by ADDING validation, the validation was O(all widgets), and the timeout it caused
+  # reported as an entirely different fault. The unit tests could not have caught it: they mock the
+  # listing, so latency is invisible, and only a real cluster has 553 widgets.
+  #
+  # 1.6.51 asks about ONE widget instead — 111ms when it exists, 58ms when it does not — and answers
+  # better besides: a listing can only say "not among what you can see", fusing absence with
+  # permission, whereas a status code separates them (404 create it, 403 you may not read it).
+  #
+  # ALSO #358: the Card header action no longer overprints the card body — it moves from
+  # panel-centred to title-aligned. Found by pulling a FRAME OUT OF A SCREEN RECORDING: "Ask
+  # Autopilot" was printing legibly on top of step four of the portal-builder Steps. Invisible to the
+  # design lint (0 violations across 477 CRs) and to every Card test, because jsdom computes no layout
+  # and reports a zero-sized box for that button. This changes the alert-detail card's "Investigate
+  # with Autopilot" placement — a deliberate trade, revisitable if it reads worse.
+  #
+  # Chart diff is Chart.yaml only; appVersion IS the image tag. No RBAC, no CRD change, not
+  # mcpBackend — one pod bounces, the roll-guard does not move, no coordination needed.
+  version: 1.6.51
   deps:
   - frontend-crd
   - authn
