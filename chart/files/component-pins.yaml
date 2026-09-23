@@ -707,7 +707,36 @@ components:
   # the cache does not evict — so a rollback must poke krateo.io/cache-poke on flex.page-portal-builder.
   #
   # Expect a brief partial render of /portal-builder while cdc prunes before re-rendering. Self-heals.
-  version: 1.8.39
+  # 1.8.40: CONTENT-ONLY, and genuinely additive-free — 476 -> 476 rendered objects, ZERO added and
+  # ZERO removed. Three files: Chart.yaml plus card.your-drafts and paragraph.your-drafts. Unlike
+  # 1.8.39 nothing is deleted, so there is no delete+recreate-under-the-same-name risk at all.
+  #
+  # Two design-system defects, both found by reading the RENDERED PAGE rather than the templates:
+  #   P3, say it once — the header reads "Portal Builder (N drafts in progress)" while the section
+  #     listing those same drafts was titled "Your unfinished drafts". One set of objects under two
+  #     names is worse than a duplicate: the reader has to work out they are the same things. Now
+  #     "Drafts in progress", matching the counter.
+  #   P17, no implementation vocabulary — "applied to the preview sandbox", "swept on a timer" and
+  #     "not wired yet" were our words for the reader's situation. They manage drafts, not sandboxes
+  #     and timers. Replaced with what they can act on: a draft survives a closed tab, discarding
+  #     removes it, reopening is not possible yet.
+  #
+  # A THIRD FINDING WAS REVERTED RATHER THAN SHIPPED, and verified here: orientation is still
+  # `horizontal` in BOTH 1.8.39 and 1.8.40. The Steps were believed to be cramping; a frame from a
+  # screen recording showed they lay out fine and the Ask Autopilot button was simply printed OVER
+  # step four's text — fixed in frontend #358, live since 1.6.52. Vertical would have made it worse,
+  # since a taller card pushes the button further down.
+  #
+  # THE DESIGN LINT PASSES CLEAN ON THIS CHART — 0 violations across 477 CRs — and caught none of the
+  # three. It checks ten mechanical rules and all three findings sit outside them. "Design lint green"
+  # is not "follows the design system", and this pin is the evidence.
+  #
+  # CACHE NOTE, learned this morning: both changed CRs change IN PLACE, which should fire an UPDATE
+  # and evict snowplow's resolved-body cache. But the portal-builder pageheader was ALSO an in-place
+  # change that snowplow missed, serving a v1-8-36 body for two releases. If /portal-builder still
+  # reads "Your unfinished drafts" after this lands, that is the CACHE and not the roll: poke
+  # krateo.io/cache-poke on card.your-drafts rather than re-rolling.
+  version: 1.8.40
   deps:
   - frontend
   - git-provider
@@ -752,7 +781,8 @@ components:
   # 1.8.37: co-versioned with portal, as always.
   # 1.8.38: co-versioned with portal, as always.
   # 1.8.39: co-versioned with portal; content-only, no CRD change, no image.
-  version: 1.8.39
+  # 1.8.40: co-versioned with portal; content-only, no CRD change, no image.
+  version: 1.8.40
   deps: ['portal']
   tier: platform
   feature: portal
