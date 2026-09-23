@@ -1007,7 +1007,39 @@ components:
   # The pod resolves pins AT IMPORT and caches checkouts in an emptyDir, so the corpus only re-fetches
   # on a NEW pod. The version bump recreates it, so no manual rollout restart is expected — but that is
   # a prediction to CHECK, not to assume: if the paths still read 1.4.8, bounce it.
-  version: 0.1.4
+  # 0.1.5: THE PINS WERE READ ONCE, AT IMPORT. 0.1.4 gave the pod permission to read the
+  # installed-versions ConfigMap; it still read it exactly once, so the corpus tracked the platform as
+  # it was when the pod started and nothing after. Measured on 057 before this bump:
+  #   pod banner (17:17Z, 14h old, 0 restarts):  frontend@1.6.48, installer@0.3.256
+  #   cm/krateo-installed-versions now:          frontend@1.6.52, installer@0.3.260
+  #   corpus on disk:                            frontend-1.6.48/
+  # Four frontend releases went by underneath a pod that never restarted.
+  #
+  # WHAT IT COST, taken from the A2A stream rather than inferred: an agent asked
+  #   search_repo {"pattern":"composeBind","repo":"frontend"}
+  # and was told "frontend @ 1.6.48 — no matches". composeBind shipped in frontend 1.6.50. So the
+  # agent CHECKED before using the verb, was told it did not exist, and correctly did not emit it.
+  # That had been written up as an agent claiming an action it never performed. It was not: it
+  # reasoned properly from a confidently wrong answer.
+  #
+  # THE 0.1.4 VERIFICATION PASSED AND THE BUG WAS ALREADY THERE. Its banner read frontend@1.6.48 and
+  # that was CORRECT at that moment — we had just rolled 1.6.48. A check true at the instant of the
+  # roll and false forever after; the staleness window was a pod lifetime, so nothing re-checked it.
+  # 0.1.5 re-reads the pins on a 300s TTL, lazily, from the one function every fetch path goes
+  # through, fail-open. The bump alone fixes today's instance; the TTL fixes the next one.
+  #
+  # NOTE the TTL knob is NOT chart-configurable. The handoff cites KRATEO_PIN_REFRESH_SECONDS, but it
+  # appears nowhere in the chart — not in the deployment template, not in values — so 300s is an
+  # in-image default and tuning it needs a new image. Not blocking; recorded so nobody looks for a
+  # value that is not there.
+  #
+  # BLAST RADIUS IS THE WHOLE FLEET: repo-mcp-server is mcpBackend:true, so the roll-guard hash moves
+  # and all 16 agents re-roll, as in 0.3.256. Not the quiet single-pod kind — coordinate first.
+  #
+  # DECISIVE POST-CHECK, one line:
+  #   kubectl logs -n krateo-system deploy/repo-mcp-server | grep "runtime pin"
+  # must read frontend@1.6.52, NOT 1.6.48.
+  version: 0.1.5
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
