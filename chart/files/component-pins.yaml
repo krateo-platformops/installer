@@ -110,7 +110,9 @@ components:
   # verified equal to 1.6.50. No appVersion, no workload; moves only to keep the pair in step.
   # 1.6.52 (lockstep): BYTE-IDENTICAL for the FIFTEENTH consecutive time — all 44 CRD templates
   # verified equal to 1.6.51. No appVersion, no workload; moves only to keep the pair in step.
-  version: 1.6.52
+  # 1.6.53 (lockstep): BYTE-IDENTICAL for the SIXTEENTH consecutive time — all 44 CRD templates
+  # verified equal to 1.6.52. No appVersion, no workload; moves only to keep the pair in step.
+  version: 1.6.53
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -483,7 +485,33 @@ components:
   # krateo-system. Every take adds more, so the trap re-arms itself.
   #
   # Chart diff is Chart.yaml only; appVersion IS the image tag.
-  version: 1.6.52
+  # 1.6.53: THE HOST WAS DISCARDING THE AGENT'S WORK, and this is the third and last act of a story
+  # worth recording in full, because twice the agent was blamed for a fault that was ours.
+  #
+  # finalize applied AT MOST ONE proposal per reply:
+  #     const [proposal] = [...toolProposals, ...textProposals]
+  # Deliberate, and the reasoning was sound — two navigates in sequence would flash the page A then B
+  # while only the last chip's label matches what the reader ends up looking at. But that reasoning is
+  # about verbs that MOVE THE PAGE, and it was applied flatly to every verb. A compose verb edits the
+  # held draft and navigates nothing.
+  #
+  # Authoring a data-backed widget genuinely takes TWO directives: create the Table, then bind it to
+  # its RESTAction. So the bind was ALWAYS the second proposal and ALWAYS dropped — silently. No chip,
+  # no refusal, nothing in composeRefusals. The agent had no way to learn it had not happened.
+  #
+  # TWICE THE AGENT WAS WRONGLY BLAMED. First "it reports a bind it never issued" — that was the stale
+  # corpus (repo-mcp 0.1.4/0.1.5) telling it composeBind did not exist. Then "it genuinely does not
+  # emit one" — that was this. Both times a plausible story stopped the search. The raw A2A stream was
+  # the only instrument that could tell the difference, and it showed the agent emitting exactly the
+  # right directive after 48 tool calls of research, including reading composeBind in our own source.
+  #
+  # 1.6.53 runs compose proposals as an ORDERED SEQUENCE, awaited one at a time — order matters, since
+  # a bind names the widget the create just made. Every other verb keeps the one-action rule, and the
+  # two-navigate case is pinned by a test so the flash this cap exists to prevent stays prevented.
+  #
+  # Chart diff is Chart.yaml only; appVersion IS the image tag. No RBAC, no CRD change, not mcpBackend
+  # — one pod bounces, the roll-guard does not move.
+  version: 1.6.53
   deps:
   - frontend-crd
   - authn
