@@ -1669,7 +1669,38 @@ components:
   # bounds; rewrites /tts/v1/text:synthesize -> /v1/text:synthesize upstream. Requires a TLS platform
   # listener (fails render otherwise). Enabled via exposure.voice (compositions.yaml), which also derives
   # the frontend AUTOPILOT_VOICE_TTS_URL that points at it — same knob as the /stt/v1 dictation route.
-  version: 0.2.7
+  # 0.2.8: INERT ON ARRIVAL, verified rather than asserted. Adds templates/policy-llm-turn-budget.yaml,
+  # gated on .Values.llm.turnBudget.enabled which ships FALSE. Rendered output at default values is
+  # IDENTICAL to 0.2.7 apart from the helm.sh/chart label — 56 docs both sides, same line count, checked
+  # by rendering both charts and diffing. The new template contains no `lookup`, so that diff is sound
+  # (the chart DOES use lookup elsewhere, in cert-replay-hop.yaml, where both sides render equally
+  # vacuously and the comparison still holds).
+  # WHAT IT WILL DO, once a probe has confirmed the body root: bound a runaway agent turn. Every
+  # agent-loop iteration POSTs the whole conversation to /llm/v1, so the iteration count is already in
+  # the request body; past a budget a CEL transformation clamps tool_choice to "none", the provider can
+  # no longer return tool calls, and the turn ends on its next message WITH its answer.
+  # WHY NOT A RATE LIMIT: a turn ends when the model returns a message carrying no tool calls. A 429 does
+  # not produce that — it produces a tool error, and tool errors are MEASURED non-terminal here (a real
+  # search_repo failure landed mid-run and the loop carried on to 256 calls). On this route llm.retry
+  # retries the 429 and the turn then dies producing NOTHING. Throttling turns a 900s grind into a longer
+  # one, which is a regression against "the turn must end with an answer".
+  # WHY IT SHIPS OFF, AND WHY THAT GATE MUST BE RESPECTED: agentgateway documents the request body as
+  # `llmRequest` but does not enumerate its fields. A CEL expression naming a field that does not exist
+  # FAILS SILENTLY — the transformation does nothing and the policy still reports Accepted=True, which is
+  # indistinguishable from "the gateway cannot help". Two earlier fixes to this same problem were lost
+  # exactly that way. So bodyRoot is a VALUE to confirm, not a constant to trust.
+  # DO NOT SET enabled: true WITHOUT A PROBE READING. The sequence is: layer
+  # examples/turn-budget-probe/values.yaml (access-log attributes only, still no behaviour change), run
+  # ONE agent turn, then read probe_msgcount — rising across the turn means ship it; empty means the root
+  # is spelled differently (change a value, not the chart); sawtoothing means the predicate must key on
+  # something else. The component owner asked explicitly to be refused if they request enablement
+  # without that reading.
+  # CONTEXT WORTH CARRYING: this exists because PROMPTS COULD NOT FIX IT. Two prompt releases
+  # (krateo-autopilot 0.5.9 and 0.5.10) targeted the same runaway turn and moved the corpus-call ratio
+  # from 96.9% (248/256) to 96.1% (173/180) — i.e. not at all. A prompt can lower the probability of a
+  # loop; it cannot bound one. See also nightly-review, whose review turn times out at its 900s
+  # A2A_TIMEOUT against exactly this behaviour.
+  version: 0.2.8
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
