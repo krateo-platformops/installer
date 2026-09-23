@@ -125,7 +125,10 @@ components:
   # assumed: the only delta is Chart.yaml's own version line, and the CRD templates hash the same
   # (md5 370adc5f5ec20ada604e4f1dd3931382 at 1.12.9 and 1.12.10). No appVersion, no workload, so
   # applying it changes nothing on the cluster. Moves in lockstep with snowplow only.
-  version: 1.12.10
+  # 1.12.11: byte-identical again, verified by pulling both charts — only Chart.yaml's own version
+  # line differs and the CRD templates hash the same (md5 370adc5f5ec20ada604e4f1dd3931382 at
+  # 1.12.10 and 1.12.11). Lockstep with snowplow only.
+  version: 1.12.11
   tier: platform
   feature: portal
 - name: authn
@@ -182,7 +185,32 @@ components:
   # a stale store resolves stale bytes and Puts them with a fresh CreatedAt, so cell age resets and every
   # L1 counter reads healthy while the defect is active. /debug/store is the first per-object read of the
   # store itself. READ IT AS A LAYER DISCRIMINATOR, NOT A DETECTOR: nothing in A fires on its own.
-  version: 1.12.10
+  # 1.12.11 (#237 deliverable B): divergence detection + evidence-driven repair. This is the FIRST
+  # thing in the system that compares the informer store against an authority at all. A and A3
+  # (1.12.10) gave a per-object store READ; B compares.
+  # WHY IT WAS SPLIT OUT OF 1.12.10, and why that split was right: on a CONFIRMED divergence B fires
+  # a targeted relist, which takes that GVR non-servable for a few minutes while it rebuilds, and
+  # 057 was carrying the live #237 staleness defect at the time. NON-SERVABLE IS A LATENCY
+  # EXCURSION, NOT AN OUTAGE — verified from source, not from the handoff: a not-servable informer
+  # falls through to the apiserver rather than serving as authoritative
+  # (go/snowplow/internal/cache/serve_assert.go). Read the PRODUCTION citation at lines 121-123
+  # (serveRequiresServableViolations incremented, function returns false, caller falls through);
+  # line 112 is the TEST-MODE panic string and is the wrong evidence for runtime behaviour.
+  # Globally serialised — one relist in flight across all GVRs — with an alarmable breaker, and it
+  # fires only on evidence. Firing rate on 057 is UNKNOWN and deliberately not estimated: B is the
+  # first instrument that can detect this class, so there is no prior. That is the measurement.
+  # CLAIM CONSTRAINT, carry it verbatim: B closes invisibility for every loss class EXCEPT A STALE
+  # CACHER. Its oracle is the snapshot just received, not the apiserver, so if that snapshot is
+  # itself stale the store and the snapshot agree and every divergence counter reads 0 WITH THE
+  # DEFECT ACTIVE. #237's root cause is OPEN and that candidate is live. B MUST NOT be described as
+  # having made #237 detectable — only its other candidate classes.
+  # READING INSTRUCTION, inverted from the usual: read store_verifications_total and
+  # objects_verified_total FIRST. If those are zero, every divergence zero beneath them means "did
+  # not look", not "looked and found nothing". That pairing is why both counters exist.
+  # WHAT IT DOES NOT BUY: it will not explain the occurrence that prompted #237 — that object is
+  # currently fine and the pod holding the stale state is gone. It arms the next one, which on three
+  # occurrences in a week is not hypothetical.
+  version: 1.12.11
   deps:
   - snowplow-crd
   - authn
