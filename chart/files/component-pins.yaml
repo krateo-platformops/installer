@@ -130,7 +130,9 @@ components:
   # 1.12.11: byte-identical again, verified by pulling both charts — only Chart.yaml's own version
   # line differs and the CRD templates hash the same (md5 370adc5f5ec20ada604e4f1dd3931382 at
   # 1.12.10 and 1.12.11). Lockstep with snowplow only.
-  version: 1.12.11
+  # 1.12.12: byte-identical again, verified by pulling both charts — only Chart.yaml's own version line
+  # differs, CRD templates md5 370adc5f5ec20ada604e4f1dd3931382 at both. Lockstep with snowplow only.
+  version: 1.12.12
   tier: platform
   feature: portal
 - name: authn
@@ -212,7 +214,29 @@ components:
   # WHAT IT DOES NOT BUY: it will not explain the occurrence that prompted #237 — that object is
   # currently fine and the pod holding the stale state is gone. It arms the next one, which on three
   # occurrences in a week is not hypothetical.
-  version: 1.12.11
+  # 1.12.12: OBSERVABILITY ONLY — four fields on the resolved-cache metadata surface, read via
+  # /debug/apistage: rbacSubGen, perPage, page, extrasHash. No key change, no serve-path behaviour
+  # change, no Put decision change, and NO repair verb — so the risk profile is 1.12.10's (A + A3),
+  # not 1.12.11's (B). Nothing here can take a GVR non-servable.
+  # THE ONE COST, NAMED BY THE AUTHOR RATHER THAN DISCOVERED: a hash computed ONCE PER PUT, off the
+  # lock, at a measured 49.99 Puts/s. Deliberately NOT on the read path, because hashing under the store
+  # mutex during a metadata walk would stall serving at 100K entries.
+  # WHY IT MATTERS: it is the instrument that tests whether the 40.7% cache-waste figure is real. That
+  # number was computed on a tuple which COLLAPSED three of the key's own components — the exact three
+  # this adds — so IT MAY REVISE DOWNWARD, and that would be the instrument working rather than failing.
+  # A threshold is pre-registered so the outcome cannot be argued after the fact.
+  # THE GUARD IS THE PART WORTH COPYING. The capture script REFUSES to compute if the four fields are
+  # absent from the rows, and that guard was tested against a pre-instrument capture rather than assumed:
+  # it aborts with "this capture is from a build WITHOUT the instrument; a zero below would mean 'not
+  # measured', not 'no excess'." Without it, a clean zero across 4,823 cells would have read as evidence
+  # the fix is unnecessary — the same "did not look" vs "looked and found nothing" confusion B's paired
+  # denominators exist to prevent.
+  # 1.12.11 (B) IS LIVE AND ITS FIRST PRODUCTION READING WAS HONEST: eight divergence counters at zero
+  # AND their denominators at zero, with 191 skips attributed to the initial-sync guard, so it refused to
+  # present "did not look" as "looked and found nothing". /debug/store also returned an object's
+  # resourceVersion matching etcd exactly. That was the design intent and it held on first contact.
+  # The gated /debug/* capture is the component owner's to take; it is not blocked on this roll.
+  version: 1.12.12
   deps:
   - snowplow-crd
   - authn
