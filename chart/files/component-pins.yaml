@@ -1733,7 +1733,17 @@ components:
   # from 96.9% (248/256) to 96.1% (173/180) — i.e. not at all. A prompt can lower the probability of a
   # loop; it cannot bound one. See also nightly-review, whose review turn times out at its 900s
   # A2A_TIMEOUT against exactly this behaviour.
-  version: 0.2.8
+  # 0.2.9: turn-budget units fix — maxMessages 40 -> 150. 40 was reasoned in TOOL CALLS and written into
+  # a field that counts MESSAGES; a round trip adds two, so 40 fired at ~19 calls, below the ~62 messages
+  # a healthy turn needs. Still OFF, so inert either way.
+  # 0.2.10 (agentgateway-policies#58): llm.toolHistory.truncate, ON by default — truncates the tool results
+  # an agent loop has already acted on out of the history it resends every step, keeping the newest whole.
+  # Also MOVES the turn budget off its route-attached policy and onto the AgentgatewayBackend: a backend
+  # transformations list REPLACES a route one whole rather than merging, so the budget would have gone
+  # inert the moment truncation rendered, with every object still Accepted=True. Both now compose on one
+  # backend. BREAKING for one knob: llm.turnBudget.routeName fails the render (it could never work — one
+  # backend serves every LLM route this chart renders).
+  version: 0.2.10
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
