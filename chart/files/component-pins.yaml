@@ -1352,7 +1352,40 @@ components:
   # by exactly two lines. The chart carries no image; autopilot runs kagent/golang-adk:0.10.1, so the
   # image tag does NOT move. VERIFY BY kagent.dev/config-hash on deploy/autopilot, which reads
   # 7261125185538760440 before this roll, and by the marker in the MOUNTED SECRET — not the ConfigMap.
-  version: 0.5.10
+  # 0.5.11: TWO changes, deliberately bundled, and the second provably cannot confound the first.
+  # (#135) THE THIRD ATTEMPT AT THE RUNAWAY CORPUS TURN, and the first with a measured mechanism.
+  # 0.5.9 stated the compose contract; 0.5.10 declared it NORMATIVE; neither moved the corpus-call
+  # ratio (96.9% -> 96.1%). The reason 0.5.10 failed is precise: the verify-before-assert rule demands a
+  # fact be "read before it is stated AND CITED AS repo/path:line", and 0.5.10's carve-out mentions
+  # cite/citation/path:line exactly ZERO times. A contract written in the prompt HAS no path:line, so an
+  # agent that accepts it as normative and still believes it owes a citation has exactly one move: go
+  # find the file the contract lives in. 0.5.10 closed one duty and left the other standing.
+  # THE EVIDENCE IS POSITIVE, not an absence: across a clean n=12 serial baseline, 171 search_repo calls,
+  # most-searched terms were provisioning_verdict (21), composeBind (19), composeAdd (11), columns (10) —
+  # EVERY ONE already written in the prompt — and the single most-read file, 46 times, was
+  # actionBridge.ts, where those verbs are DEFINED. It was never missing the contract; it was looking for
+  # something to cite it as. 0.5.11 says a contract from this prompt is cited as NOTHING, because it IS
+  # the source. Prompt diff is exactly 2 lines.
+  # (#134) STOPS DECLARING A SETTING THE RUNTIME IGNORES. The chart emitted
+  # spec.declarative.context.compaction while runtime: go does not implement it, so every autopilot
+  # Agent CR has carried UnsupportedFeatures=True since 2026-08-24. On runtime: go the render is exactly
+  # SIX fewer lines and nothing else changes (368 -> 362, verified by rendering both charts), which is
+  # why it cannot affect the #135 measurement. OBSERVABLE HALF: the UnsupportedFeatures condition on
+  # agents.kagent.dev/autopilot should clear. It will NOT clear on incident-agent, autopilot-bench or
+  # incident-agent-bench — those carry the same dead setting from their own charts.
+  # WATCH THE PATH: the field is spec.declarative.context, NOT spec.context. Querying .spec.context
+  # returns absent on a CR that declares it, which reads as "already fixed" and is a wrong answer to a
+  # wrong question.
+  # A RETRACTED NUMBER, recorded so it is not re-quoted: the "roughly one turn in three never
+  # terminates" figure — which appears in agentgateway-policies 0.2.8's own template comment and in
+  # installer 0.3.269's commit — was inflated by a shared Chromium profile giving concurrent harness
+  # workers an unauthenticated browser, which were then filed as agent failures. A clean serial baseline
+  # is 12 of 12 emitting both directives, ZERO grinds, turns matched runs 12:12, corpus/turn median 29.5
+  # IQR [25.5,34.5], settle median 277.5s. The corpus grind is real; "one in three" was not.
+  # VERIFY BY THE MOUNTED SECRET, not the ConfigMap: marker for 0.5.11 is "AND THEY NEED NO CITATION"
+  # (1 occurrence in 0.5.11, 0 in 0.5.10, checked in the pulled charts). config-hash on deploy/autopilot
+  # reads 16423537220615722010 before this roll. No image moves; autopilot runs kagent/golang-adk:0.10.1.
+  version: 0.5.11
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
