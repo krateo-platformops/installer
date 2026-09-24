@@ -12864,6 +12864,54 @@
                       }
                     }
                   }
+                },
+                "toolHistory": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "How much of the tool-result history an agent loop re-sends is kept. Every step of a loop resends every earlier tool result verbatim, so prefill grows quadratically in tool calls.",
+                  "properties": {
+                    "truncate": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "Truncate tool results the model has already acted on, keeping the newest one whole. Rendered as a stage of the backend's composed `messages` rewrite, applied before provider conversion, so it is provider-independent and invisible to the agent. Needs agentgateway-policies >= 0.2.10.",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean",
+                          "description": "On by default in agentgateway-policies >= 0.2.10. It is lossy: a fact the model needs from an older tool result becomes unreadable mid-turn and nothing fetches it back. Set false for an agent fleet that reads back across long evidence chains."
+                        },
+                        "maxChars": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "description": "Characters kept from each already-acted-on tool result; the newest is exempt at any length. Defaults to 8000, which leaves six results in seven whole while still removing ~70% of tool-output characters. Lower it if prefill still dominates; raise it for agents that read back."
+                        }
+                      }
+                    }
+                  }
+                },
+                "transformations": {
+                  "type": "array",
+                  "description": "Raw CEL rewrites of the LLM request body, for a rewrite no chart feature covers. Each entry replaces one top-level field of the OpenAI-shaped request with its expression's result; the body is readable as `llmRequest`. An entry for the messages field fails the component's render when a chart fragment already composes it. Needs agentgateway-policies >= 0.2.10.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "field",
+                      "expression"
+                    ],
+                    "properties": {
+                      "field": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Top-level request-body field the expression's result replaces, e.g. `messages`."
+                      },
+                      "expression": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 16384,
+                        "description": "CEL expression evaluated against the request body, readable as `llmRequest`."
+                      }
+                    }
+                  }
                 }
               },
               "type": "object"
