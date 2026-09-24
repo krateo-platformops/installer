@@ -1460,7 +1460,26 @@ components:
   # the LLM route reaching every agent turn. Numbers taken before that roll are not comparable.
   # VERIFY BY THE MOUNTED SECRET, not the ConfigMap. config-hash on deploy/autopilot reads
   # 2070108129677833504 before this roll. No image moves (autopilot runs kagent/golang-adk:0.10.1).
-  version: 0.5.12
+  # 0.5.13: PROMPT-ONLY, 4 diff lines, two fixes — and THE RATIONALE FOR THE FIRST WAS RETRACTED BY ITS
+  # OWN AUTHOR BEFORE THIS SHIPPED. Recorded because the change is defensible and the measurement is not.
+  # (1) A delegate's answer becomes its own citation category. #135 split the citation duty into
+  # "platform facts: cite repo/path:line" and "contracts from this prompt: cite nothing". A specialist's
+  # answer is neither — prose with no path:line — so the duty could send the agent to re-derive it.
+  # 0.5.13 names the third category: a specialist's answer cites as the delegation itself.
+  # THE MEASUREMENT ORIGINALLY OFFERED FOR THIS DOES NOT SUPPORT IT. The turn cited as evidence had
+  # BOTH delegations FAIL: autopilot's log shows resultKeys ['error','subagent_session_id'] with `result`
+  # ABSENT (kagent's remoteA2AResponse declares every field omitempty, so absent result + present error
+  # means the call errored and returned no answer). There was no answer to carry through, so this rule
+  # could not have prevented that turn — the re-derivation was autopilot's CORRECT fallback. The real
+  # cause was a provider 429 exhausting a 13-second retry window, fixed separately in
+  # agentgateway-policies 0.2.11 (installer 0.3.275). The prompt rule still stands on its own terms.
+  # (2) Prose, not notation: the agent emitted "$\le 25%$" mid-answer and the rail renders Markdown only,
+  # so it reached the screen as those literal characters — confirmed from a recorded frame, not inferred.
+  # Chart.lock, Chart.yaml and files/prompts-eng.yaml differ; values.yaml and values.schema.json are
+  # BYTE-IDENTICAL, so there are no new installer CR keys — a straight pin bump. No image moves.
+  # VERIFY BY THE MOUNTED SECRET: markers "delegation itself" 0->1 and "Markdown" 0->1 in the pulled
+  # chart. config-hash on deploy/autopilot reads 13945332610198519870 before this roll.
+  version: 0.5.13
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
