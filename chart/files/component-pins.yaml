@@ -115,7 +115,9 @@ components:
   # 1.6.55: TENTH consecutive byte-identical bump, verified by pulling both charts rather than
   # inherited: the only delta is Chart.yaml's own version line and the CRD templates hash the same
   # (md5 288885fc1ec30268c1f830a4afb26cf5 at 1.6.53 and 1.6.55). Lockstep with frontend only.
-  version: 1.6.55
+  # 1.6.56: ELEVENTH consecutive byte-identical bump, verified by pulling both charts: only Chart.yaml's
+  # own version line differs, CRD templates md5 288885fc1ec30268c1f830a4afb26cf5 at both. Lockstep only.
+  version: 1.6.56
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -570,7 +572,29 @@ components:
   # caption override. Found by watching a screen recording at 2:34, not by reading the code.
   # Scope is presentation-only: 4 files, +106/-4, all under ui/src/components/Autopilot/ and
   # ui/src/pages/PageComposer/, of which +76 is a new test. No CRD, no schema, no widget kind.
-  version: 1.6.55
+  # 1.6.56 (#363): A SECOND PREVIEW OF AN UNCHANGED DRAFT DESTROYED THE RENDER ITS OWN FIRST PREVIEW
+  # PRODUCED. Not a stale-orphan collision — the colliding object was 8m59s old, created by that same
+  # take's first preview, and the age is the only thing that distinguishes the two diagnoses. Sequence:
+  # preview 1 creates pod-sizing-table (live render fine); preview 2, same draft, same names, gets 409
+  # "already exists"; the failure path then tears down the drafts that HAD landed, so "Rendered (live)"
+  # disappears. The agent previews twice routinely and so does a person clicking Preview page twice.
+  # WHY THE EXISTING SWEEP DID NOT PREVENT IT, which is the transferable part: the sweep deletes exactly
+  # the names the apply is about to write and its comment promises "re-used names never 409". It RAN. Its
+  # DELETE was REFUSED. Nobody could tell, because handleActionSet does NOT throw when the server refuses
+  # an op — it resolves with a per-op {ok:false, status, message} — and the sweep's helper returned void,
+  # discarding precisely that. A rejected delete and a successful one were INDISTINGUISHABLE, so the
+  # defect was the missing observation, not a malformed request; unfindable by reading the path, the RBAC
+  # or the GVR. 1.6.56 returns the sweep's results and reclaims a detected 409: delete that one name,
+  # CONFIRM the delete, retry ONCE — never a loop.
+  # The test names are the reason to trust the shape: one is "a 409 whose DELETE is REFUSED still fails,
+  # reporting what is in the way", i.e. the case a reclaim could paper over is pinned to fail loudly with
+  # the blocking object named. A silent-failure fix that introduces a second silent failure one layer
+  # down is the usual way this goes wrong.
+  # Scope: 1 commit, 2 files, +159/-6, both under ui/src/components/Autopilot/ (previewPageV2.ts +93/-6,
+  # previewPageV2.test.ts +66/-0). No CRD, no schema, no widget kind. applyWithReclaim confirmed present
+  # in the 1.6.56 tag's tree and ABSENT in 1.6.55's — checked two independent ways (git and the compare
+  # API), because skipping exactly that check is how 1.6.54 was tagged carrying nothing.
+  version: 1.6.56
   deps:
   - frontend-crd
   - authn
