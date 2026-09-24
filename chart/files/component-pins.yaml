@@ -1409,7 +1409,34 @@ components:
   # VERIFY BY THE MOUNTED SECRET, not the ConfigMap: marker for 0.5.11 is "AND THEY NEED NO CITATION"
   # (1 occurrence in 0.5.11, 0 in 0.5.10, checked in the pulled charts). config-hash on deploy/autopilot
   # reads 16423537220615722010 before this roll. No image moves; autopilot runs kagent/golang-adk:0.10.1.
-  version: 0.5.11
+  # 0.5.12: AN OWNERSHIP RULE, NOT ANOTHER PROMPT TWEAK. autopilot should not author widget CRs at all —
+  # that is frontend-agent's domain (Diego confirmed), and autopilot's own prompt already said so at
+  # line 228, but scoped only to `previewPage`. The compose path ~60 lines EARLIER hands it `kind` +
+  # `widgetData` with a worked example and names no owner, so it authored them itself.
+  # THE TOOL ASSIGNMENT ALREADY ENCODED THE DESIGN; ONLY THE PROMPT DID NOT. frontend-agent holds
+  # config-refs' `validate_manifest`, which checks a manifest against the LIVE schema before apply.
+  # autopilot does NOT hold it — correctly, because it is not the author. That asymmetry is only
+  # coherent under frontend-agent ownership, and the proof it was being violated is that one run was
+  # rejected with `/spec/widgetData must NOT have additional properties`: it failed at exactly the check
+  # the correct owner would have run first.
+  # MEASURED SHAPE: 29.5 corpus reads and ZERO delegations per turn. That is not a latency problem, it is
+  # an ownership violation presenting as latency. 0.5.12 puts the ownership rule at the point of decision
+  # rather than 60 lines after it. Prompt-only, 7 diff lines; markers frontend-agent 2->5,
+  # validate_manifest 0->1, "not the author" 0->1.
+  # THE ENDPOINT TO MEASURE IS DELEGATIONS MOVING OFF ZERO, and that is deliberately not settle time: a
+  # zero-to-nonzero transition cannot be explained away by pod age or provider clock drift, which is
+  # exactly how the 0.5.11 latency result had to be caveated. Delegation wiring is known good —
+  # frontend-agent called snowplow_agent at 2026-09-23T16:59:42 — so autopilot is the only agent with
+  # sub-agents wired that uses none.
+  # CONTEXT: the author closed repo-mcp-server#14, a schema tool they had just built FOR autopilot,
+  # because shipping it would have entrenched the wrong owner. Worth recording that the fix was to
+  # withdraw a capability rather than add one.
+  # BASELINE CAVEAT FOR WHOEVER MEASURES THIS: agentgateway-policies 0.2.10 went live shortly before
+  # (installer 0.3.271) carrying `llm.toolHistory.truncate` ENABLED at 8000 chars — a transformation on
+  # the LLM route reaching every agent turn. Numbers taken before that roll are not comparable.
+  # VERIFY BY THE MOUNTED SECRET, not the ConfigMap. config-hash on deploy/autopilot reads
+  # 2070108129677833504 before this roll. No image moves (autopilot runs kagent/golang-adk:0.10.1).
+  version: 0.5.12
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
