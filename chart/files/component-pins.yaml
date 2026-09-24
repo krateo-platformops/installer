@@ -1860,10 +1860,23 @@ components:
   # This is shared-capacity contention on the global endpoint — the case values.yaml already documented
   # on 2026-09-03 ("Resource exhausted under regional contention, 26 of 1,234 bench-route calls, with no
   # pattern in our own rate"). The retry policy was written for exactly this and given too short a backoff.
-  # WHAT I COULD NOT CONFIRM, recorded so nobody treats it as established: the specific 429s cited at
-  # 15:01:05/10/18 and 15:06:23/30/37 do not appear in the gateway logs I can read — only six 429 lines
-  # in six hours, at 11:10, 11:14, 11:15, 13:26 and 13:59. The mechanism stands on the policy values and
-  # the arithmetic; those particular timestamps come from the component owner's own source.
+  # THE 429s ARE REAL AND REPRODUCIBLE. An earlier version of this note said they could not be found —
+  # that was a WRONG INSTRUMENT on my part, corrected here rather than left standing, because a false
+  # "could not confirm" in a pin comment invites the next reader to distrust a real finding.
+  #   kubectl -n krateo-system logs deploy/krateo-agent-gateway --since=6h \
+  #     | grep "agentgateway-policies-llm" | grep "http.status=429"
+  # Two details are load-bearing. (a) deploy/krateo-agent-gateway, NOT krateo-agent-gateway-platform —
+  # there are two gateways and only the first carries the LLM route. (b) Filter to the llm route:
+  # grepping 429 alone also catches MCP routes, where kagent-tools answers steadily for unauthenticated
+  # callers under TOKEN_PASSTHROUGH, which is a different story. That returns 19 lines across the day,
+  # including 15:01:05/10/18 and 15:06:23/30/37.
+  # TWO WRONG READINGS, recorded because the lesson generalises beyond this component:
+  #   - `-l app.kubernetes.io/name=agentgateway` matches the agentgateway-CONTROLLER, not either
+  #     data-plane gateway, so the "six 429 lines" it returned were control-plane xDS logs and never
+  #     request records. Address a Deployment BY NAME when two deployments share a label.
+  #   - "4 x 429 on the platform gateway" was `grep 429` matching digits inside a microsecond timestamp
+  #     (15:00:04.429639Z) on lines whose actual field reads http.status=200. Grep for the FIELD
+  #     (http.status=429), never the bare number.
   # ALSO CORRECTED HERE: an earlier reading of this same incident blamed a slow snowplow-agent for a 341s
   # A2A call. It was a call that took 310s to FAIL. Nothing is slow about the specialist.
   version: 0.2.11
