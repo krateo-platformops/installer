@@ -1818,7 +1818,36 @@ components:
   # inert the moment truncation rendered, with every object still Accepted=True. Both now compose on one
   # backend. BREAKING for one knob: llm.turnBudget.routeName fails the render (it could never work — one
   # backend serves every LLM route this chart renders).
-  version: 0.2.10
+  # 0.2.11: THE PIN ALONE CHANGES NOTHING ON 057 — it MUST ship with a componentValues change.
+  # The chart default is llm.retry.attempts: 0, so the retry policy exists only because this install
+  # sets it (live: attempts 2, backoff 2s, codes [429,503], confirmed in both the live
+  # AgentgatewayPolicy and the Installer CR). 0.2.11 changes ONLY the chart DEFAULT backoff 2s -> 15s,
+  # so with componentValues still saying 2s you get the old behaviour on the new chart. Paired with
+  # componentValues.agentgateway-policies.llm.retry = {attempts: 3, backoff: 15s}. Both keys already
+  # exist in the CR, so this is a value change and NOT the nested-new-key gap.
+  # THE BUG: 429 and 503 share one backoff and should not. A 503 means "try again shortly"; a capacity
+  # 429 means "wait out the window". attempts 2 x backoff 2s plus ~6s per upstream call gives a
+  # THIRTEEN SECOND survivable window, so every retry lands inside the same exhausted window and the
+  # call fails. A failed LLM call fails the SUB-AGENT'S WHOLE A2A TASK, so autopilot receives
+  # {error, subagent_session_id} with no result and re-derives the work itself. One provider 429 costs
+  # a delegation and the turn that depended on it.
+  # BUDGET, verified not taken: attempts 3 x backoff 15s = 45s of gaps plus four ~6s calls is ~69s,
+  # inside llm.limits.timeout which reads traffic.timeouts.request = 120s live and 120s as the chart
+  # default. Keep that relationship if these numbers are ever tuned.
+  # NOT A QUOTA PROBLEM, checked before asking: on operations-dev-krateo-io the global input-tokens/min
+  # limit for gemini-3.8-flash is effectively 50,000,000 against a measured peak of 235,175 (0.5%), and
+  # global requests/min per base model is 250 against a peak of ~10 (4%). That model has NO regional
+  # quota buckets, only global, so pinning the backend off `region: global` is not available either.
+  # This is shared-capacity contention on the global endpoint — the case values.yaml already documented
+  # on 2026-09-03 ("Resource exhausted under regional contention, 26 of 1,234 bench-route calls, with no
+  # pattern in our own rate"). The retry policy was written for exactly this and given too short a backoff.
+  # WHAT I COULD NOT CONFIRM, recorded so nobody treats it as established: the specific 429s cited at
+  # 15:01:05/10/18 and 15:06:23/30/37 do not appear in the gateway logs I can read — only six 429 lines
+  # in six hours, at 11:10, 11:14, 11:15, 13:26 and 13:59. The mechanism stands on the policy values and
+  # the arithmetic; those particular timestamps come from the component owner's own source.
+  # ALSO CORRECTED HERE: an earlier reading of this same incident blamed a slow snowplow-agent for a 341s
+  # A2A call. It was a call that took 310s to FAIL. Nothing is slow about the specialist.
+  version: 0.2.11
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
