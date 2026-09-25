@@ -117,7 +117,9 @@ components:
   # (md5 288885fc1ec30268c1f830a4afb26cf5 at 1.6.53 and 1.6.55). Lockstep with frontend only.
   # 1.6.56: ELEVENTH consecutive byte-identical bump, verified by pulling both charts: only Chart.yaml's
   # own version line differs, CRD templates md5 288885fc1ec30268c1f830a4afb26cf5 at both. Lockstep only.
-  version: 1.6.56
+  # 1.6.58: BYTE-IDENTICAL, verified rather than assumed — no commit between 1.6.56 and 1.6.58 touches
+  # helm/frontend-crds/. Lockstep with the app pin only. (1.6.57 SKIPPED: its charts never published.)
+  version: 1.6.58
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -648,7 +650,20 @@ components:
   # previewPageV2.test.ts +66/-0). No CRD, no schema, no widget kind. applyWithReclaim confirmed present
   # in the 1.6.56 tag's tree and ABSENT in 1.6.55's — checked two independent ways (git and the compare
   # API), because skipping exactly that check is how 1.6.54 was tagged carrying nothing.
-  version: 1.6.56
+  # 1.6.58: SKIP 1.6.57 — its image shipped but its charts never did (a test fixture Chart.yaml added by
+  # #365 broke the org release-oci push; #368 fixes it), so 1.6.57 is unpinnable: verified, the registry
+  # serves no frontend or frontend-crds 1.6.58-minus-one. Three PRs land here, not the two the handoff
+  # listed: #366 held-draft fixes (previews route to the right surface, Close draft really discards the
+  # sandbox too, every draft is linted); #367 ONE PUBLISH PATH — every builder publishes through a single
+  # BuilderPublish claim with no file-count limit and the legacy GitHub PR path is gone; and #365, which
+  # the handoff omitted, adding ui/src/pages/BlueprintComposer/architecture.ts (+301 lines), its tests and
+  # the builder-publish fixture that caused the publish breakage above.
+  # INSTALL IMPACT of #367: config key AUTOPILOT_PUBLISH_VIA_GIT_PROVIDER is GONE. The chart already
+  # defaulted it true and config accepts unknown string keys, so a CR still setting it keeps rendering and
+  # the key is ignored. Publishing now always needs git-provider + the builder-publish composition, which
+  # was already the default path — so no CR edit is required, but a CR that relied on setting it FALSE
+  # silently loses that opt-out.
+  version: 1.6.58
   deps:
   - frontend-crd
   - authn
@@ -1684,7 +1699,14 @@ components:
   agent: true
 - name: core-provider-agent
   kind: CoreProviderAgent
-  version: 0.57.0
+  # 0.58.0 (#29): it states it is the SOLE blueprint author and no longer claims it can apply or publish —
+  # the prompt catching up with the retirement of krateo-blueprint-agent. Render diff is the Agent
+  # description/a2aConfig plus the prompt ConfigMap; tool grants unchanged; the example chart is now
+  # gate-tested in CI.
+  # THIS RE-ROLLS THE FLEET, deliberately and with sign-off: the pin carries mcpBackend: true, so the
+  # version change moves gateway.mcpBackendHash and therefore every agent's rollGuard. Expect every agent
+  # pod to restart, and expect to bounce autopilot-bench by hand (it is not installer-managed).
+  version: 0.58.0
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
