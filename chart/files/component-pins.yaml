@@ -1799,7 +1799,10 @@ components:
   # Proposal.status.phase is a strict enum and gained Refused; ReviewRun.status.proposals gained a
   # `refused` counter. Without these the apiserver would REJECT the phase write (failing the run) and
   # silently PRUNE the counter, because neither CRD sets x-kubernetes-preserve-unknown-fields.
-  version: 0.1.5
+  # 0.1.6: CRD-ONLY — ReviewRun.status.evidence gains empty/note/shape per source. The collector already
+  # wrote them and the apiserver was PRUNING all three (no x-kubernetes-preserve-unknown-fields), so the
+  # run still could not say WHY a source came back with nothing. Pair-bump again: the app is unchanged.
+  version: 0.1.6
   tier: observability
   feature: specialistAgents
 - name: nightly-review
@@ -1822,7 +1825,9 @@ components:
   # nonce, because a corpus line containing </evidence> used to escape the quoted region and speak as
   # the harness. 0.1.3 shipped these with a red test suite and 0.1.4 was tagged at the same commit as
   # 0.1.3 by mistake — 0.1.5 is the first of the three that is both correct and green.
-  version: 0.1.5
+  # 0.1.6: no app change; moves in lockstep with the -crd pin above, whose schema is what lets the run
+  # record why an evidence source was empty.
+  version: 0.1.6
   # Reads ClickHouse (krateo-observability), kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of — and consults krateo-autopilot over A2A.
