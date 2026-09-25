@@ -208,7 +208,7 @@ exposure:
 features:
   coreProvider: true              # engine-present MARKER: core-provider is always-on via bootstrap (gates no component here)
   coreAgents: false                # base agent layer: kagent + model-configs (the fleet's ModelConfigs) + repo-mcp-server (the fleet's grounding server) + installer-agent + krateo-autopilot + incident-agent (alert root-cause analysis) + core-provider-agent (the sole blueprint author)
-  specialistAgents: false          # the 4 component specialist agents + clickhouse-mcp (needs coreAgents)
+  specialistAgents: false          # the 4 component specialist agents + clickhouse-mcp + the alert/incident pipeline (alert-troubleshooter, incident-controller) + nightly-review (needs coreAgents)
   codegenAgents: false             # LEGACY, KEEP FALSE: the codegen specialists were retired in #144 and krateo-blueprint-agent is DRAINING behind this flag; enabling it redeploys a retired agent nothing routes to
   structureGraph: false            # OPT-IN structure-graph-mcp-server (code-structure grounding); needs coreAgents.
                                   #   Its consumers reference it off by default — set their

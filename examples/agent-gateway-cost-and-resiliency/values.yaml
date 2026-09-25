@@ -14,8 +14,8 @@
 
 features:
   portal: true            # authn — the issuer whose JWKS the gateway validates every token against
-  coreAgents: true        # also brings the Alert/TroubleshootingReport CRDs budget-alerts.yaml needs
-  specialistAgents: true
+  coreAgents: true        # incident-agent, which runs the RCA of the budget alerts
+  specialistAgents: true  # the Alert and Incident CRDs budget-alerts.yaml needs
   ingress: false          # agentGateway installs its own Gateway API CRDs and agentgateway controller
   agentGateway: true
 

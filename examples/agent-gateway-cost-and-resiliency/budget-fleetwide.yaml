@@ -29,9 +29,9 @@ componentValues:
                                 # policy is not surprised on upgrade
 
     # Budget breaches as INCIDENTS: an Alert CR becomes a HyperDX alert whose webhook fires
-    # incident-agent, which runs RCA and writes a TroubleshootingReport the portal shows under
+    # incident-agent, which runs RCA into an Incident the portal shows under
     # /incidents. Off by default; needs accessLog.enabled (a render guard checks) AND the
-    # alert-troubleshooter CRDs, which features.coreAgents brings.
+    # Alert and Incident CRDs, which features.specialistAgents brings.
     observability:
       alerts:
         enabled: true
