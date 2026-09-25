@@ -1768,13 +1768,23 @@ components:
   # 0.1.1: ships values.schema.json. 0.1.0 had none, and core-provider reads it to derive the
   # Composition CRD — so both compositions wedged Synced=False with NO Ready condition at all
   # (not Ready=False), which a sweep filtering on Ready==False misses entirely.
-  version: 0.1.1
+  # 0.1.2: BYTE-IDENTICAL here, verified rather than assumed — the single commit between the tags
+  # touches autopilot.py, evidence.py and main.py and neither helm/ directory. Lockstep only.
+  version: 0.1.2
   tier: observability
   feature: specialistAgents
 - name: nightly-review
   kind: NightlyReview
   # 0.1.1: ships values.schema.json (see the -crd pin above).
-  version: 0.1.1
+  # 0.1.2: THE CLIENT NEVER READ THE AGENT'S ANSWER. ask() harvested result.message.parts and
+  # result.parts; kagent's A2A executor sends neither — the reply arrives in result.status.message.parts
+  # with an artifact event beside it — so five consecutive nights failed with "empty response" on turns
+  # that reached `completed` and returned exactly the contracted JSON. A2A_TIMEOUT (900s) was never
+  # involved: the runs ended at ~264s. Proven with a probe on this cluster using the real nightly-review
+  # SA identity: old parser 0 texts, new parser 4, newest exactly {"proposals": []}. The same release
+  # stops a terminal `failed` task reporting as silence, and marks an empty kagent session list
+  # `degraded` instead of a bare returned: 0 that three different causes all produce.
+  version: 0.1.2
   # Reads ClickHouse (krateo-observability), kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of — and consults krateo-autopilot over A2A.
