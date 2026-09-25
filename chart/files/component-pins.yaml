@@ -132,7 +132,10 @@ components:
   # 1.12.10 and 1.12.11). Lockstep with snowplow only.
   # 1.12.12: byte-identical again, verified by pulling both charts — only Chart.yaml's own version line
   # differs, CRD templates md5 370adc5f5ec20ada604e4f1dd3931382 at both. Lockstep with snowplow only.
-  version: 1.12.12
+  # 1.12.13: byte-identical again, verified by pulling both charts — only Chart.yaml's own version line
+  # differs, CRD templates md5 370adc5f5ec20ada604e4f1dd3931382 at both. NOTE THE CHART IS PUBLISHED AS
+  # `snowplow-crds`, PLURAL; `charts/snowplow-crd` does not exist, though the COMPONENT here is singular.
+  version: 1.12.13
   tier: platform
   feature: portal
 - name: authn
@@ -236,7 +239,34 @@ components:
   # present "did not look" as "looked and found nothing". /debug/store also returned an object's
   # resourceVersion matching etcd exactly. That was the design intent and it held on first contact.
   # The gated /debug/* capture is the component owner's to take; it is not blocked on this roll.
-  version: 1.12.12
+  # 1.12.13 (#247/#255): FOUR OBSERVABILITY COUNTERS AND NOTHING ELSE. No behaviour change — every
+  # existing code path fires exactly as today, with a dedicated test arm asserting it. No flag, no new
+  # endpoint, no chart default changed, and it authorises no fix.
+  #   snowplow_rbac_subgen_bumps_total
+  #   snowplow_rbac_subgen_subjects_tracked
+  #   snowplow_rbac_binding_noop_updates_total
+  #   snowplow_rbac_binding_semantic_noop_updates_total
+  # SCOPE VERIFIED FROM THE DIFF, not from a green workflow: 1 commit, 10 files, +1204/-5, of which 659
+  # additions are TESTS in two new files. Production changes are two counter files, two expvar files,
+  # +110/-3 in rbac_subgen.go, +18/-2 in bindings_by_gvr_delta.go, +52 in the OTLP mirror, +16/-0 in
+  # main.go. Tag 1.12.13 -> 0508aab5; image and both charts confirmed by manifest fetch (HTTP 200
+  # anonymously), not inferred from CI.
+  # THE ONE NON-OBVIOUS THING, declared by the author rather than found by review: internal/metrics is
+  # the OTLP mirror and is gated by OTEL_METRICS_ENABLED (default FALSE), so the counters ALSO needed
+  # unconditional expvar registration in main.go to be readable at /debug/vars at all — otherwise they
+  # would be ABSENT rather than zero on every default-configuration pod. That is two new unconditional
+  # calls on the STARTUP path (RegisterRBACSubGenExpvar, RegisterRBACBindingNoopExpvar), sitting beside
+  # the existing RegisterRBACSnapshotExpvar and the same shape. Nothing on the request path reads them;
+  # the hot read side (subGenValue) is untouched.
+  # WHY IT IS WORTH A ROLL: it measures whether a watch relist rotates the L1 cache key for EVERY user
+  # with no RBAC change anywhere (#253). The current instrument cannot distinguish "RBAC is quiet" from
+  # "rotation is happening and we cannot see it", and that question gates a key-version decision held
+  # for 1.13.0 (#254).
+  # DO NOT READ AN ALL-ZERO /debug/vars AFTER THIS ROLL AS A FAILURE. A freshly rolled pod has no
+  # history, so every counter starts at zero and the first captures REFUSE to report: the #253 gate
+  # makes INADMISSIBLE a distinct verdict from a real reading, and it needs >=2 distinct rbacSubGen
+  # values resident before any number means anything. That is the instrument working.
+  version: 1.12.13
   deps:
   - snowplow-crd
   - authn
