@@ -207,7 +207,7 @@
         "coreAgents": {
           "type": "boolean",
           "default": false,
-          "description": "Deploy the base agent layer: kagent-crds -> kagent -> model-configs (the kagent ModelConfigs the whole fleet references by name) + installer-agent + krateo-autopilot (which also brings up repo-mcp-server, the fleet's grounding server) + incident-agent (alert root-cause analysis). Default false."
+          "description": "Deploy the base agent layer: kagent-crds -> kagent -> model-configs (the kagent ModelConfigs the whole fleet references by name) + installer-agent + krateo-autopilot (which also brings up repo-mcp-server, the fleet's grounding server) + incident-agent (alert root-cause analysis) + core-provider-agent, the sole blueprint author (promoted here 2026-09-25 as krateo-blueprint-agent began draining; krateo-autopilot already depended on it). Default false."
         },
         "portal": {
           "type": "boolean",
@@ -221,7 +221,7 @@
         },
         "specialistAgents": {
           "type": "boolean",
-          "description": "Deploy the 5 component specialist agents (authn/snowplow/frontend/clickstack/core-provider) + clickhouse-mcp (needs coreAgents)."
+          "description": "Deploy the 4 component specialist agents (authn/snowplow/frontend/clickstack) + clickhouse-mcp (needs coreAgents)."
         },
         "ingress": {
           "type": "boolean",
@@ -235,7 +235,7 @@
         },
         "codegenAgents": {
           "type": "boolean",
-          "description": "Opt-in codegen/conversion specialist agents (code-analysis, ansible-to-operator, tf-provider-to-operator, tf-to-helm) from krateo-agentiko/codegen-agents. Needs coreAgents. Default false."
+          "description": "LEGACY \u2014 keep false. The codegen/conversion specialists (code-analysis, ansible-to-operator, tf-provider-to-operator, tf-to-helm) were retired in #144, and krateo-blueprint-agent is DRAINING behind this flag on its way out: core-provider-agent is the sole blueprint author. Enabling it redeploys a retired agent that nothing routes to. Default false."
         },
         "agentGateway": {
           "type": "boolean",

@@ -596,7 +596,8 @@
        sub-agent. When extraAgents is NOT explicitly set, the installer AUTO-DERIVES it from the
        feature-enabled `agent` components (excluding the orchestrator itself) — so the enterprise
        profile wires the whole fleet (installer/authn/snowplow/frontend/clickstack/core-provider
-       agents) and agent-only wires just the installer-agent, with no manual list. An explicit
+       agents) and agent-only wires the CORE ones — installer-agent, incident-agent and, since
+       core-provider-agent was promoted to coreAgents, that too — with no manual list. An explicit
        componentValues.<owner>.extraAgents (including `[]` for standalone) is honored instead. Either
        way the set is gated to feature-enabled components — a reference to a feature-disabled Agent
        makes kagent fail to compile the orchestrator ("Agent <name> not found").
