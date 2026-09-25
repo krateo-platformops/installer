@@ -1944,7 +1944,12 @@ components:
   #     (http.status=429), never the bare number.
   # ALSO CORRECTED HERE: an earlier reading of this same incident blamed a slow snowplow-agent for a 341s
   # A2A call. It was a call that took 310s to FAIL. Nothing is slow about the specialist.
-  version: 0.2.11
+  # 0.2.12 (#64): drops krateo-blueprint-agent — its MCP route (krateo-chart-gate-mcp-server) and its
+  # sub-agent delegation entry — and keeps core-provider-chart-gate-mcp-server. Safe only AFTER the drain
+  # rolled out (0.3.279 on 057), which is why it was held back a release; against live 057 it is a NO-OP,
+  # verified: gateway objects there already name blueprint-agent zero times. Policies hot-load, so no
+  # fleet bounce.
+  version: 0.2.12
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
@@ -1974,32 +1979,3 @@ components:
   # sibling of internalUrls: compositions.yaml sets this to exposure.port when it is set.
   internalPorts:
   - path: jwt.jwks.port
-# ---- krateo-blueprint-agent (DRAINING — retired, do not re-enable) ---------------------
-# The blueprint-authoring agent, now LEGACY: core-provider-agent is the sole blueprint author and
-# autopilot's routing has pointed there since 2026-08-12, so nothing delegates here any more. It had been
-# PROMOTED from the (now-retired) codegen group to coreAgents in #144 — "it is a core agent" — Deploys with the base agent layer (kagent + the model-configs-owned
-# ModelConfigs) and joins the autopilot fleet as an A2A sub-agent. Its chart bundles the
-# krateo-chart-gate-mcp-server (render-and-validate gate) whose image ships from the SAME release
-# tag, so the pin version must name a chart whose gate image is published: 0.2.7 (fix #9 unblocked
-# the promotion + a clean tag builds the image); 0.2.3/0.2.6 are pre-fix (0.2.6's gate image is
-# `manifest unknown`). Kind is crdgen PascalCase(chart).
-# (The four codegen/conversion specialists code-analysis / ansible-to-operator / tf-provider-to-
-# operator / tf-to-helm were RETIRED in #144; features.codegenAgents is kept hard-defaulted false.)
-- name: krateo-blueprint-agent
-  kind: KrateoBlueprintAgent
-  # 0.2.10 (#12): modelConfig.name gemini-pro -> gemini-flash (+ the create=true branch's modelConfig.model
-  # 2.5-pro -> 3.8-flash) — closes the fleet flash-repoint (label correction; both slots resolve to
-  # gemini-3.8-flash on Vertex). Chart-default only; the agent pod rolls, NOT an mcpBackend so no fleet
-  # bounce. Served version migrates v0-2-9 -> v0-2-10 (schema unchanged, clean rename).
-  version: 0.2.10
-  repo: oci://ghcr.io/krateo-agentiko/charts
-  deps:
-  - kagent
-  tier: observability
-  # DRAINING (2026-09-25). coreAgents -> codegenAgents, which is hard-defaulted false, so this stops
-  # being emitted and the cdc tears it down. NOT deleted from this file in the same change: it is
-  # deployed, and a pin that vanishes while its Composition still exists fails the unknown-name check
-  # on every existing install. The block goes, and the name joins retired-components.yaml, only once
-  # the Composition AND its CompositionDefinition are gone on every cluster.
-  feature: codegenAgents
-  agent: true

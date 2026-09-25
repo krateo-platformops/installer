@@ -24,3 +24,6 @@ retired:
 - ansible-to-operator-agent
 - tf-provider-to-operator-agent
 - tf-to-helm-agent
+# Retired 2026-09-25 (installer 0.3.279 drained it, 0.3.281 deletes the pin): core-provider-agent is
+# the sole blueprint author. Its Composition and CompositionDefinition were gone on 057 before this landed.
+- krateo-blueprint-agent
