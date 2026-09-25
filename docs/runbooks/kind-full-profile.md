@@ -111,8 +111,8 @@ bootstrap:
 features:
   portal: true             # authn -> snowplow -> frontend -> portal + observability
   oasgenProvider: true
-  coreAgents: true         # kagent + installer-agent + autopilot (ships repo-mcp-server)
-  specialistAgents: true   # the 5 component agents + clickhouse-mcp (needs coreAgents)
+  coreAgents: true         # kagent + installer-agent + autopilot (ships repo-mcp-server) + core-provider-agent
+  specialistAgents: true   # the 4 component agents + clickhouse-mcp (needs coreAgents)
 exposure:
   type: NodePort           # kind has no LoadBalancer controller
 registryAuth:

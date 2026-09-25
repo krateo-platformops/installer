@@ -207,9 +207,9 @@ exposure:
 #     --type merge -p '{"spec":{"features":{"<key>":true}}}'
 features:
   coreProvider: true              # engine-present MARKER: core-provider is always-on via bootstrap (gates no component here)
-  coreAgents: false                # base agent layer: kagent + model-configs (the fleet's ModelConfigs) + repo-mcp-server (the fleet's grounding server) + installer-agent + krateo-autopilot + incident-agent (alert root-cause analysis)
-  specialistAgents: false          # the 5 component specialist agents + clickhouse-mcp (needs coreAgents)
-  codegenAgents: false             # OPT-IN codegen/conversion specialists (code-analysis, ansible-to-operator, tf-provider-to-operator, tf-to-helm); needs coreAgents
+  coreAgents: false                # base agent layer: kagent + model-configs (the fleet's ModelConfigs) + repo-mcp-server (the fleet's grounding server) + installer-agent + krateo-autopilot + incident-agent (alert root-cause analysis) + core-provider-agent (the sole blueprint author)
+  specialistAgents: false          # the 4 component specialist agents + clickhouse-mcp (needs coreAgents)
+  codegenAgents: false             # LEGACY, KEEP FALSE: the codegen specialists were retired in #144 and krateo-blueprint-agent is DRAINING behind this flag; enabling it redeploys a retired agent nothing routes to
   structureGraph: false            # OPT-IN structure-graph-mcp-server (code-structure grounding); needs coreAgents.
                                   #   Its consumers reference it off by default — set their
                                   #   mcpServers.structureGraph.enabled too, or nothing names the server.
@@ -407,8 +407,9 @@ componentValues:
     # ORCHESTRATOR BY DEFAULT: the autopilot auto-attaches EVERY deployed agent as an A2A
     # sub-agent — the installer derives extraAgents from the feature-enabled `agent`
     # components (excluding the autopilot itself). So the enterprise profile wires the whole fleet
-    # (installer/authn/snowplow/frontend/clickstack/core-provider agents) and agent-only wires just
-    # the installer-agent — no manual list needed, and it adapts to whatever profile is enabled.
+    # (installer/authn/snowplow/frontend/clickstack/core-provider agents) and agent-only wires the core
+    # ones (installer-agent + incident-agent + core-provider-agent, promoted to coreAgents 2026-09-25)
+    # — no manual list needed, and it adapts to whatever profile is enabled.
     # To pin an EXPLICIT set instead, list them here (still gated to deployed agents); an explicit
     # `extraAgents: []` means standalone (no orchestration).
     #   extraAgents:

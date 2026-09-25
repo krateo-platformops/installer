@@ -96,10 +96,10 @@ bootstrap:
     enabled: true          # required on a bare cluster
 features:
   coreProvider: true       # engine-present marker
-  coreAgents: true          # kagent + installer-agent + autopilot (ships repo-mcp-server)
+  coreAgents: true          # kagent + installer-agent + autopilot (ships repo-mcp-server) + core-provider-agent
   portal: false             # the agent turns the platform on later
   oasgenProvider: false
-  specialistAgents: false   # not the component specialist agents yet
+  specialistAgents: false   # not the 4 component specialist agents yet
 registryAuth:
   enabled: true
   username: <your-github-username>

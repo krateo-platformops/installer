@@ -1523,7 +1523,6 @@ components:
   - frontend-agent
   - clickstack-agent
   - core-provider-agent
-  - krateo-blueprint-agent
   tier: observability
   feature: coreAgents
   agent: true
@@ -1693,7 +1692,11 @@ components:
   - kagent
   - model-configs
   tier: observability
-  feature: specialistAgents
+  # PROMOTED to coreAgents (2026-09-25): it is the SOLE blueprint author now that krateo-blueprint-agent
+  # is draining, and krateo-autopilot — a coreAgents component — ALREADY deps on it, so leaving it behind
+  # specialistAgents left a coreAgents-only cluster with no blueprint author and an unsatisfiable dep.
+  # Its own deps (repo-mcp-server, kagent, model-configs) are already core, so nothing else moves.
+  feature: coreAgents
   agent: true
 # alert-troubleshooter (krateo-platformops): the "auto-troubleshoot on fire" bridge — a HyperDX alert
 # fires a webhook -> incident-agent A2A root-cause analysis -> TroubleshootingReport CR the portal
@@ -1949,9 +1952,10 @@ components:
   # sibling of internalUrls: compositions.yaml sets this to exposure.port when it is set.
   internalPorts:
   - path: jwt.jwks.port
-# ---- krateo-blueprint-agent (a CORE agent) ---------------------------------------------
-# The blueprint-authoring agent: PROMOTED from the (now-retired) codegen group to coreAgents in
-# #144 — "it is a core agent". Deploys with the base agent layer (kagent + the model-configs-owned
+# ---- krateo-blueprint-agent (DRAINING — retired, do not re-enable) ---------------------
+# The blueprint-authoring agent, now LEGACY: core-provider-agent is the sole blueprint author and
+# autopilot's routing has pointed there since 2026-08-12, so nothing delegates here any more. It had been
+# PROMOTED from the (now-retired) codegen group to coreAgents in #144 — "it is a core agent" — Deploys with the base agent layer (kagent + the model-configs-owned
 # ModelConfigs) and joins the autopilot fleet as an A2A sub-agent. Its chart bundles the
 # krateo-chart-gate-mcp-server (render-and-validate gate) whose image ships from the SAME release
 # tag, so the pin version must name a chart whose gate image is published: 0.2.7 (fix #9 unblocked
@@ -1970,5 +1974,10 @@ components:
   deps:
   - kagent
   tier: observability
-  feature: coreAgents
+  # DRAINING (2026-09-25). coreAgents -> codegenAgents, which is hard-defaulted false, so this stops
+  # being emitted and the cdc tears it down. NOT deleted from this file in the same change: it is
+  # deployed, and a pin that vanishes while its Composition still exists fails the unknown-name check
+  # on every existing install. The block goes, and the name joins retired-components.yaml, only once
+  # the Composition AND its CompositionDefinition are gone on every cluster.
+  feature: codegenAgents
   agent: true
