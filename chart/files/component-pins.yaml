@@ -1795,7 +1795,11 @@ components:
   # (not Ready=False), which a sweep filtering on Ready==False misses entirely.
   # 0.1.2: BYTE-IDENTICAL here, verified rather than assumed — the single commit between the tags
   # touches autopilot.py, evidence.py and main.py and neither helm/ directory. Lockstep only.
-  version: 0.1.2
+  # 0.1.5: NOT byte-identical this time — both CRDs changed and the two pins MUST move as a pair.
+  # Proposal.status.phase is a strict enum and gained Refused; ReviewRun.status.proposals gained a
+  # `refused` counter. Without these the apiserver would REJECT the phase write (failing the run) and
+  # silently PRUNE the counter, because neither CRD sets x-kubernetes-preserve-unknown-fields.
+  version: 0.1.5
   tier: observability
   feature: specialistAgents
 - name: nightly-review
@@ -1809,7 +1813,16 @@ components:
   # SA identity: old parser 0 texts, new parser 4, newest exactly {"proposals": []}. The same release
   # stops a terminal `failed` task reporting as silence, and marks an empty kagent session list
   # `degraded` instead of a bare returned: 0 that three different causes all produce.
-  version: 0.1.2
+  # 0.1.5: makes a dry run produce something to read, which the shipped default did not. An EMPTY
+  # proposalAllowlist refused every proposal by DROPPING it, so zero Proposal objects were created while
+  # values.yaml promised a review "you can read"; refusals are now stored in phase Refused and still
+  # never published (the gate moved next to the credential, as is_publishable()). Also: per-item schema
+  # validation, so one wrong enum no longer discards the whole batch and fails the night — the cheapest
+  # way an injected instruction could suppress the review; and the evidence fence carries a per-run
+  # nonce, because a corpus line containing </evidence> used to escape the quoted region and speak as
+  # the harness. 0.1.3 shipped these with a red test suite and 0.1.4 was tagged at the same commit as
+  # 0.1.3 by mistake — 0.1.5 is the first of the three that is both correct and green.
+  version: 0.1.5
   # Reads ClickHouse (krateo-observability), kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of — and consults krateo-autopilot over A2A.
