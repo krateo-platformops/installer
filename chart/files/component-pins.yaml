@@ -953,7 +953,27 @@ components:
   # change that snowplow missed, serving a v1-8-36 body for two releases. If /portal-builder still
   # reads "Your unfinished drafts" after this lands, that is the CACHE and not the roll: poke
   # krateo.io/cache-poke on card.your-drafts rather than re-rolling.
-  version: 1.8.40
+  # 1.8.44: three changes in one release — the publish-chain Register (#246), the palette RESTAction
+  # (#247), and S11c, the composition topology (#248). 1.8.41-1.8.43 are contained in it.
+  #
+  # TWO PRECONDITIONS, BOTH CHECKED ON 057 RATHER THAN TAKEN ON TRUST.
+  # (1) S11c reads FlowChart's architecture fields. The live CRD serves widgetData.data[] with state,
+  #     detail and exception, required [kind,name,uid] — met by frontend-crd 1.6.62, already rolled.
+  # (2) THE RBAC ONE IS THE RISK, and a live `auth can-i` CANNOT answer it before the pin lands: the
+  #     v1-8-44 ServiceAccount does not exist yet, and the CURRENT builderpublishes-v1-8-40 SA — which
+  #     does exist and runs the live controller — answers `no` to creating configmaps too. The real
+  #     instrument is the DERIVED ClusterRole, which today grants configmaps get/list/watch and NO
+  #     create, while granting secrets create because the chart renders a Secret. Those rules are
+  #     derived from what the chart renders, so 1.8.44's new templates/architecture.yaml (a ConfigMap
+  #     per composition, and ungated — the chart's other five templates all sit behind a lookup, this
+  #     one does not, so every render path sees it) should widen that rule the same way. VERIFY
+  #     ClusterRole/builderpublishes-v1-8-44 grants configmaps create IMMEDIATELY AFTER this lands; if
+  #     it does not, every composition's architecture ConfigMap fails to apply and the detail page has
+  #     nothing to read. Do not hand-patch the RBAC — that is a chart fix.
+  #
+  # Helm prunes four objects S3c retired on upgrade: Card author-blueprint-card, Form author-blueprint,
+  # Flex blueprint-builder-ask-cta and RESTAction page-composable.
+  version: 1.8.44
   deps:
   - frontend
   - git-provider
@@ -999,7 +1019,8 @@ components:
   # 1.8.38: co-versioned with portal, as always.
   # 1.8.39: co-versioned with portal; content-only, no CRD change, no image.
   # 1.8.40: co-versioned with portal; content-only, no CRD change, no image.
-  version: 1.8.40
+  # 1.8.44: co-versioned with portal, as always.
+  version: 1.8.44
   deps: ['portal']
   tier: platform
   feature: portal
