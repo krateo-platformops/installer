@@ -1823,7 +1823,11 @@ components:
   # run still could not say WHY a source came back with nothing. Pair-bump again: the app is unchanged.
   # 0.1.7: BYTE-IDENTICAL here — verified, not assumed: the commit range touches autopilot.py, the
   # nightly-review chart and its tests, and nothing under helm/nightly-review-crds/. Lockstep only.
-  version: 0.1.7
+  # 0.1.8: BYTE-IDENTICAL again, and this time that is load-bearing rather than incidental — the
+  # release it accompanies implements `superseded` and writes a Superseded phase, both of which the
+  # SHIPPED schema already declares. Checked before relying on it: the Proposal phase enum has carried
+  # Superseded, and ReviewRun.status.proposals.superseded has been an integer, since 0.1.5.
+  version: 0.1.8
   tier: observability
   feature: specialistAgents
 - name: nightly-review
@@ -1863,7 +1867,19 @@ components:
   # 900s budget never fired. It is now the total wall-clock budget, with A2A_READ_TIMEOUT (180s) for
   # silence, and on expiry the client stops READING rather than trying to stop the agent, so the
   # session stays inspectable while the run gets its window back.
-  version: 0.1.7
+  # 0.1.8: THREE CHECKS THAT REPORTED SOMETHING OTHER THAN WHAT THEY MEASURED, each fixed against a
+  # failing test written first — nine went red before any fix existed; the suite is 42 green.
+  # `redaction_count` zipped two JSON strings positionally and a trailing `> 0` reduced it to a bool,
+  # so it could not answer the question in its own name, and nothing called it. Dedup compared bodies
+  # literally, so a reworded comment or two reordered YAML keys re-proposed a suggestion already open,
+  # while `superseded` was reported as a hardcoded 0 beside a docstring describing a mechanism that did
+  # not exist; YAML is now compared as parsed data with mappings sorted, and a same-target
+  # different-body proposal supersedes rather than duplicates. The phase vocabulary was bare strings
+  # matched across two functions — agreeing today, and silently re-proposing the entire backlog the day
+  # one was renamed. None of the three could fail loudly: they reported, and the report was wrong.
+  # The allowlist is now asked BEFORE anything is superseded, so a refused proposal cannot retire a
+  # legitimately open one — a quieter attack than the one the allowlist exists to stop.
+  version: 0.1.8
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
