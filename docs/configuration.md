@@ -233,8 +233,14 @@ Values worth knowing:
 | `componentValues.incident-controller.checks.networkPolicy.apiServer` | The check pods' only egress. Empty means the chart looks up the `kubernetes` Service and EndpointSlice in `default` while it renders; set it explicitly where that lookup is not allowed. |
 | `componentValues.incident-controller.controller.{pollInterval,settleWindow}` | Check cadence (`1m`) and how long a failing verify is retried (`5m`). |
 
-`config.reportCooldown` is gone: a firing on an open Incident only counts. Both schemas reject the
-key, so drop it from your values before upgrading.
+`config.reportCooldown` is gone: a firing on an open Incident only counts. **Before upgrading,
+remove `componentValues.alert-troubleshooter.config.reportCooldown` from the Installer CR** (and from
+your values files): the schema no longer accepts it.
+
+```bash
+kubectl patch installer installer -n krateo-system --type json \
+  -p '[{"op":"remove","path":"/spec/componentValues/alert-troubleshooter/config/reportCooldown"}]'
+```
 
 ## Portal users, demo content, and a custom portal
 
