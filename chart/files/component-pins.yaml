@@ -1582,7 +1582,18 @@ components:
   # BYTE-IDENTICAL, so there are no new installer CR keys — a straight pin bump. No image moves.
   # VERIFY BY THE MOUNTED SECRET: markers "delegation itself" 0->1 and "Markdown" 0->1 in the pulled
   # chart. config-hash on deploy/autopilot reads 13945332610198519870 before this roll.
-  version: 0.5.13
+  # 0.6.0: PROMPT ONLY again. It teaches the chart verbs the frontend introduced at 1.6.65
+  # (chartPut/chartDelete/chartLink), makes core-provider-agent the sole blueprint author, and moves
+  # registration to the Install step on /blueprint-builder. So it carries the SAME frontend >= 1.6.66
+  # ordering constraint as core-provider-agent above: on an older frontend the agent edits an open
+  # chart blind. Moved in the SAME installer version as core-provider-agent on purpose — that pin is
+  # mcpBackend, so it re-rolls the whole fleet through mcpBackendHash, and pairing them spends one
+  # fleet restart instead of two.
+  # The chart's appVersion reads 0.1.0 and that is the convention here, not a mistake: 0.5.13, the
+  # version live today, reads 0.1.0 as well. No image moves.
+  # VERIFY BY THE MOUNTED SECRET, not the ConfigMap: config-hash reads 14017113924344901936 on
+  # deploy/autopilot and 10290822186941988922 on deploy/core-provider-agent before this roll.
+  version: 0.6.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -1764,7 +1775,18 @@ components:
   # THIS RE-ROLLS THE FLEET, deliberately and with sign-off: the pin carries mcpBackend: true, so the
   # version change moves gateway.mcpBackendHash and therefore every agent's rollGuard. Expect every agent
   # pod to restart, and expect to bounce autopilot-bench by hand (it is not installer-managed).
-  version: 0.58.0
+  # 0.59.0/0.60.0/0.61.0: descriptor-first authoring, then a gate that ingests the way the 1.6.64
+  # frontend does (so a chart's declared edges are reported as ENFORCED), then an edit mode for an open
+  # chart. 0.61.0 contains the other two. Prompt and gate only — no values changes, so no new installer
+  # CR keys.
+  #
+  # ORDERING: THIS MUST ROLL AFTER frontend 1.6.66, and that is new as of 0.60.0. Earlier I recorded
+  # this component as having no ordering dependency, which was true of 0.58.0/0.59.0 — I checked
+  # 1.6.61...1.6.63 for lint or schema drift and found none. It stopped being true when the gate kernel
+  # was pinned to the 1.6.64 frontend: ahead of the frontend, the gate passes charts as "edges enforced"
+  # that the live frontend does not gate. The reverse skew was checked too — 1.6.64...1.6.66 touches
+  # nothing matching lint, schema, gate or verb — so a frontend AHEAD of the pinned kernel is fine.
+  version: 0.61.0
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
