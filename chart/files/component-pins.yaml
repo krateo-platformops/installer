@@ -126,7 +126,11 @@ components:
   # changed. It also RELAXES: data.items.required drops from [date,kind,name,namespace,resourceVersion,
   # uid,version] to [kind,name,uid], so existing FlowChart CRs stay valid twice over. frontend-crds
   # 1.6.62 is byte-identical to 1.6.61 apart from its version line.
-  version: 1.6.62
+  # 1.6.66: BACK TO LOCKSTEP ONLY. Verified against what is LIVE rather than against the previous
+  # release: the packaged frontend-crds templates at 1.6.66 are byte-identical to the 1.6.62 copy
+  # taken when 1.6.62 was rolled, and the whole 1.6.62...1.6.66 range touches 0 files under helm/.
+  # Four releases of UI work, no CRD surface: the pair moves together only to keep the two pins equal.
+  version: 1.6.66
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -682,7 +686,21 @@ components:
   # Typing them HERE with a default would freeze them — that is the #203 localhost class of bug, whose
   # evidence is still the four localhost defaults under that same subschema. 057 overrides only
   # AUTOPILOT_PAGE_BUILDER_REPO, which is a different key and stays pinned.
-  version: 1.6.62
+  # 1.6.66: four releases of Blueprint Builder work, UI-only (57 files across 1.6.62...1.6.66, none
+  # under helm/, CRDs byte-identical to what is live). 1.6.63 S4b generates a gate for each declared
+  # edge; 1.6.64 makes a chart Autopilot proposes carry the gate every declared edge needs, so those
+  # dependencies are enforced; 1.6.65 adds the draft-only agent verbs chartPut/chartDelete/chartLink;
+  # 1.6.66 has chartPut regenerate dependency gates, sends the open chart's files as page context, and
+  # lets a refused chart action reach the agent.
+  #
+  # THIS PIN IS NOW AN ORDERING CONSTRAINT FOR TWO OTHERS, which it never used to be. core-provider-agent
+  # 0.60.0+ pins its gate kernel to the 1.6.64 frontend and reports declared edges as enforced, and
+  # krateo-autopilot 0.6.0's prompt teaches the chart verbs 1.6.65 introduced — so both assume a
+  # frontend at >= 1.6.66 and must roll AFTER this one. Rolled before it, the gate would pass charts as
+  # "edges enforced" that the live frontend does not gate, and the agent would edit an open chart blind.
+  # Checked rather than assumed in the other direction too: 1.6.64...1.6.66 touches nothing matching
+  # lint, schema, gate or verb, so a frontend AHEAD of the gate's pinned kernel introduces no skew.
+  version: 1.6.66
   deps:
   - frontend-crd
   - authn
