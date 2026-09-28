@@ -1951,6 +1951,7 @@ components:
   # 0.1.13: BYTE-IDENTICAL, lockstep only.
   # 0.1.14: NOT byte-identical — ReviewRun gains truncated/truncatedAtChars/droppedChars per
   # evidence source, and `empty` is re-described because it is no longer degradation on its own.
+  # 0.1.15: BYTE-IDENTICAL, lockstep only — the range touches evidence.py and tests.
 - name: nightly-review-crd
   kind: NightlyReviewCrds
   chart: nightly-review-crds
@@ -1981,7 +1982,7 @@ components:
   # conditions[].type is a free-form string and message already exists, checked against the SHIPPED
   # CRD before being relied on.
   # 0.1.11: BYTE-IDENTICAL, lockstep only — the range touches prompt.py and tests.
-  version: 0.1.14
+  version: 0.1.15
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -2027,6 +2028,17 @@ components:
   # AIza..., user:pass@host and generic api_key/client_secret/access_token/password.
   # The pull request also now quotes the queries the SERVICE issued rather than the model's paraphrase
   # of them — the first real proposals cited SQL with no window clause that matched nothing that ran.
+  # 0.1.15: ONE LINE, AND IT WAS THE WHOLE OF THE CLICKHOUSE TIMEOUT. The run records its window as
+  # ISO-8601 (right for the CR, whose schema types it date-time) and the same string went straight into
+  # SQL — so ClickHouse compared a DateTime64 column to '2026-09-27T14:17:43.745807+00:00', could not
+  # prune by primary-key range, and full-scanned 13.9M rows every night. Measured on 057 with the same
+  # predicate and the same 96k matching rows: the ISO literal takes 167 SECONDS against a 120s read
+  # timeout; 'YYYY-MM-DD HH:MM:SS' takes 15.7s and the full grouped query 2.3s. It also explains what
+  # never added up — this query failed on half the runs while the other two, reading the SAME window,
+  # never did: they scan far less, so the same handicap stayed inside budget.
+  # Only what enters SQL is converted; the ReviewRun keeps its ISO window. A NAIVE timestamp is not
+  # shifted — astimezone() on one assumes the host's local zone and slid the window two hours on the
+  # machine this was written on, which a test caught before it shipped.
 - name: nightly-review
   kind: NightlyReview
   # 0.1.1: ships values.schema.json (see the -crd pin above).
@@ -2103,7 +2115,7 @@ components:
   # response contract" and NEVER SENT THE CONTRACT. RESPONSE_SCHEMA lived in the same file and was used
   # for validation only. The schema is now rendered into the message from the same object that
   # validates, so it cannot drift, and two tests assert it still reaches the model.
-  version: 0.1.14
+  version: 0.1.15
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
