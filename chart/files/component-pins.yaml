@@ -903,8 +903,8 @@ components:
   # krateo.io/cache-poke on card.your-drafts rather than re-rolling.
   # 1.8.41 (#244): the incident pages read Incidents — header chip with the alert's state, okSince and
   # "#N of this alert", the three scripts with their last exit codes, I applied it, Close, and a check
-  # history from status.checks; apiRef alerts show their RESTAction and value against the threshold.
-  # Its RESTActions read the Incident CRD, which incident-controller-crd installs.
+  # history from status.checks. Its RESTActions read the Incident CRD, which incident-controller-crd
+  # installs.
   version: 1.8.41
   deps:
   - frontend
@@ -1724,8 +1724,7 @@ components:
   tier: observability
   feature: specialistAgents
 # alert-provider (repo krateo-platformops/alert-troubleshooter): the "auto-troubleshoot on fire"
-# bridge — an Alert firing
-# (a HyperDX webhook, or an apiRef alert's RESTAction polled through snowplow) opens an Incident with an
+# bridge — an Alert firing opens an Incident with an
 # incident-agent A2A root-cause analysis and its how-to-fix scripts, or counts the firing on the
 # alert's open Incident. NOT a kagent Agent (a plain webhook service that CALLS incident-agent), so no `agent`. Needs
 # BOTH the observability stack (HyperDX API + the hyperdx-api-token secret, from krateo-observability) AND
@@ -1744,9 +1743,9 @@ components:
   # -crd bumps on this component (0.2.39 added the SpecDrift phase enum, 0.2.41 added Invalid — holding either
   # would have had the apiserver reject the status write and silently disable half the fix). The only way to
   # tell the two cases apart is to diff the charts; do not infer it from the component's history either way.
-  # 0.2.45: LOAD-BEARING. Alert gains spec.apiRef (exactly one of where/apiRef, a CEL rule),
-  # status.okSince and status.value. The TroubleshootingReport CRD is gone: this upgrade deletes it and
-  # every report with it (no migration; the Incident CRD ships in incident-controller-crd).
+  # 0.2.45: LOAD-BEARING. Alert gains status.okSince. The chart ships no TroubleshootingReport CRD:
+  # this upgrade deletes it and every report with it (no migration; the Incident CRD ships in
+  # incident-controller-crd).
   version: 0.2.45
   tier: observability
   feature: specialistAgents
@@ -1760,11 +1759,11 @@ components:
   # DELETING the duplicate and routing create through _tile_for, with a test asserting both call sites emit an
   # identical tile — so the two-copies-one-wrong shape that caused it cannot silently come back. Chart is
   # byte-identical; appVersion IS the image tag, so this line is what delivers the fix.
-  # 0.2.45 (#48 #49 #50 #51 #52): HyperDX alerts, webhooks and incidents key on the Alert's
+  # 0.2.45 (#48 #49 #51 #52): HyperDX alerts, webhooks and incidents key on the Alert's
   # metadata.name; each firing opens an Incident or bumps the open one's status.firings (Policy A),
-  # and the RCA writes status.howToFix {precondition, apply, verify}. apiRef alerts resolve their
-  # RESTAction through snowplow (config.snowplowUrl) as the service's authn identity (config.authnUrl).
-  # config.reportCooldown and the observer thread are gone; the chart schema rejects reportCooldown.
+  # and the RCA writes status.howToFix {precondition, apply, verify}. The service's authn identity
+  # (config.authnUrl) authenticates its A2A calls. The chart has no observer thread, and its schema
+  # rejects config.reportCooldown and config.snowplowUrl.
   version: 0.2.45
   deps:
   - alert-provider-crd

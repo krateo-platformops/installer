@@ -8455,12 +8455,7 @@
                 "authnUrl": {
                   "type": "string",
                   "title": "authn URL",
-                  "description": "Base URL of authn, where the handler exchanges its ServiceAccount token for a Krateo JWT used on the A2A call and on snowplow calls. Empty disables it. With features.agentGateway the installer fills it with authn's in-cluster Service."
-                },
-                "snowplowUrl": {
-                  "type": "string",
-                  "title": "snowplow URL",
-                  "description": "Base URL of snowplow, which resolves an apiRef Alert's RESTAction (GET <snowplowUrl>/call) as the service's authn identity, so apiRef alerts also need authnUrl."
+                  "description": "Base URL of authn, where the service exchanges its ServiceAccount token for a Krateo JWT that authenticates its A2A calls through the agent gateway. Empty disables it. With features.agentGateway the installer fills it with authn's in-cluster Service."
                 },
                 "hyperdxApiUrl": {
                   "type": "string",
