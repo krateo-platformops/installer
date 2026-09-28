@@ -15,6 +15,8 @@ components:
   version: 0.23.0
   tier: platform
   feature: oasgenProvider
+  # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
+  # not against the previous tag. Lockstep only; no CRD change since 1.6.64.
 - name: frontend-crd
   kind: FrontendCrds
   chart: frontend-crds
@@ -130,7 +132,7 @@ components:
   # release: the packaged frontend-crds templates at 1.6.66 are byte-identical to the 1.6.62 copy
   # taken when 1.6.62 was rolled, and the whole 1.6.62...1.6.66 range touches 0 files under helm/.
   # Four releases of UI work, no CRD surface: the pair moves together only to keep the two pins equal.
-  version: 1.6.66
+  version: 1.6.67
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -308,6 +310,12 @@ components:
     peer: snowplow
   - path: env.URL_AUTHN
     peer: authn
+  # 1.6.67: three PRs, all UI and kernel — 48 files across 1.6.66...1.6.67, none under helm/ and none
+  # outside ui/. #380 a highlighter fix for wrapped lines plus composer focus and inert palette fields
+  # while an edge is drawn; #381 drift between declared dependencies and generated gates now shows as a
+  # lint problem with a "Regenerate gates" action; #382 the S12a status-projection compile kernel,
+  # which nothing calls at runtime yet. No new ordering constraint: core-provider-agent and
+  # krateo-autopilot already sit at versions that assume >= 1.6.66.
 - name: frontend
   kind: Frontend
   chart: frontend
@@ -700,7 +708,7 @@ components:
   # "edges enforced" that the live frontend does not gate, and the agent would edit an open chart blind.
   # Checked rather than assumed in the other direction too: 1.6.64...1.6.66 touches nothing matching
   # lint, schema, gate or verb, so a frontend AHEAD of the gate's pinned kernel introduces no skew.
-  version: 1.6.66
+  version: 1.6.67
   deps:
   - frontend-crd
   - authn
