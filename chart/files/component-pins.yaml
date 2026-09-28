@@ -1879,6 +1879,10 @@ components:
 # reviews the platform, writes Proposal objects you can read, and opens nothing. Two switches have to
 # be thrown deliberately before it can reach a repository.
 # ---------------------------------------------------------------------------------------------
+  # 0.1.12: NOT byte-identical — description text only. `Refused` stays in the Proposal phase enum and
+  # `refused` stays on ReviewRun status, both re-described as historical, because two Proposal objects
+  # on 057 sit in exactly that phase and removing the value would invalidate them on their next status
+  # write. A schema that cannot represent what is already stored under it is the worse outcome.
 - name: nightly-review-crd
   kind: NightlyReviewCrds
   chart: nightly-review-crds
@@ -1909,9 +1913,18 @@ components:
   # conditions[].type is a free-form string and message already exists, checked against the SHIPPED
   # CRD before being relied on.
   # 0.1.11: BYTE-IDENTICAL, lockstep only — the range touches prompt.py and tests.
-  version: 0.1.11
+  version: 0.1.12
   tier: observability
   feature: specialistAgents
+  # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
+  # could name, and existed because target.repo is model-chosen from a corpus containing user chat
+  # while this service held a GitHub write credential. Both premises are going: publishing moves to the
+  # platform's own chain so the credential becomes git-provider's, and every proposal becomes a pull
+  # request on a branch that a human reads before anything merges — a proposal blocked before it can
+  # become one teaches nobody anything, including the next night's review, which is meant to learn from
+  # what was merged and what was rejected. THE COST, stated rather than left to be discovered: the
+  # reviewer may now name any repository the install-level git credentials can write to. dryRun is the
+  # single remaining switch.
 - name: nightly-review
   kind: NightlyReview
   # 0.1.1: ships values.schema.json (see the -crd pin above).
@@ -1988,7 +2001,7 @@ components:
   # response contract" and NEVER SENT THE CONTRACT. RESPONSE_SCHEMA lived in the same file and was used
   # for validation only. The schema is now rendered into the message from the same object that
   # validates, so it cannot drift, and two tests assert it still reaches the model.
-  version: 0.1.11
+  version: 0.1.12
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
