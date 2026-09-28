@@ -1949,6 +1949,8 @@ components:
   # on 057 sit in exactly that phase and removing the value would invalidate them on their next status
   # write. A schema that cannot represent what is already stored under it is the worse outcome.
   # 0.1.13: BYTE-IDENTICAL, lockstep only.
+  # 0.1.14: NOT byte-identical — ReviewRun gains truncated/truncatedAtChars/droppedChars per
+  # evidence source, and `empty` is re-described because it is no longer degradation on its own.
 - name: nightly-review-crd
   kind: NightlyReviewCrds
   chart: nightly-review-crds
@@ -1979,7 +1981,7 @@ components:
   # conditions[].type is a free-form string and message already exists, checked against the SHIPPED
   # CRD before being relied on.
   # 0.1.11: BYTE-IDENTICAL, lockstep only — the range touches prompt.py and tests.
-  version: 0.1.13
+  version: 0.1.14
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -2015,6 +2017,16 @@ components:
   # on dryRun. The version is discovered because the kind is version-pinned per portal release; note
   # that the CRD's STORAGE version is `vacuum` (served:false, no schema), so discovery reads SERVED
   # versions only — preferring storage returns a kind the apiserver will not serve.
+  # 0.1.14: four of the eight findings filed against this component, all about what the run RECORDS.
+  # Every successful run used to report PartiallyCompleted forever, because kagent scopes A2A sessions
+  # per caller so this service's identity sees none of its own — an empty source that EXPLAINS itself is
+  # no longer degradation, and a status that is always the same is a status nobody reads. An unwindowed
+  # ClickHouse query is now refused rather than run (the window is a disclosure control, not a cost
+  # one). Truncation is recorded on the run instead of only marked inside the corpus, where the model
+  # could see it and the record could not. And the redaction denylist gained glpat-, xox[abposr]-,
+  # AIza..., user:pass@host and generic api_key/client_secret/access_token/password.
+  # The pull request also now quotes the queries the SERVICE issued rather than the model's paraphrase
+  # of them — the first real proposals cited SQL with no window clause that matched nothing that ran.
 - name: nightly-review
   kind: NightlyReview
   # 0.1.1: ships values.schema.json (see the -crd pin above).
@@ -2091,7 +2103,7 @@ components:
   # response contract" and NEVER SENT THE CONTRACT. RESPONSE_SCHEMA lived in the same file and was used
   # for validation only. The schema is now rendered into the message from the same object that
   # validates, so it cannot drift, and two tests assert it still reaches the model.
-  version: 0.1.13
+  version: 0.1.14
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
