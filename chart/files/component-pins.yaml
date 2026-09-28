@@ -752,6 +752,13 @@ components:
   version: 0.15.4
   tier: platform
   feature: portal
+  # 0.15.5 (#27, fixes #26): a Repo whose PUSH LANDED but whose status write afterwards hit a 409 stayed
+  # stuck on krateo.io/external-create-pending forever. Both status writes in the Repo sync path now
+  # retry on conflict with a re-read, the external name is preserved, and Observe falls back to the
+  # external name when targetCommitId is empty. This is the RIGHT SHAPE of fix: the standing rule is
+  # that cdc must self-recover from a stuck handshake and that those annotations are never removed by
+  # hand, so the repair belongs in the reconciler's conflict handling, which is exactly where it went.
+  # It does NOT unstick Repos already wedged (#22) — those stay as they are, deliberately.
 - name: git-provider
   kind: GitProvider
   chart: git-provider
@@ -763,7 +770,7 @@ components:
   # advisories: agent-constraint drop, key-constraint enforcement, VerifiedPublicKeyCallback skew,
   # @revoked auth bypass), go-git 5.19.2, moby/spdystream 0.5.1 (HIGH CRI DoS). git-provider speaks
   # SSH/git to forges so these matter here; 0.15.0 (running on 057) has them unpatched.
-  version: 0.15.4
+  version: 0.15.5
   deps:
   - git-provider-crd
   tier: platform
