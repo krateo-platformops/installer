@@ -863,6 +863,12 @@ components:
   # templated override value a string, with the projection embedded as a JSON literal inside one ${ }.
   # The authored Form validated fine all along — it is the RESOLVED widgetData snowplow checks, which is
   # the same shape as the lookup-vacuous-render trap: what was validated was not what runs.
+  # 1.8.48 (#252): the SECOND S12c defect, narrower than the first. A PROJECTING blueprint's Install is
+  # two writes — the <chart>-status RESTAction, then the CompositionDefinition carrying apiRef — and the
+  # first POSTed with metadata.name: "" because the frontend's buildPayload merged the resource ref's
+  # payload base (which carries an empty name) over the op's payload. The set stops at the first
+  # failure, so nothing was written; verified on 057 that no empty-named RESTAction and no 0928c
+  # artifacts exist. A plain install was never affected, and only e2e-bp-0928c projects today.
 - name: portal
   kind: Portal
   # 1.8.2 (#135): fixes the alert detail page — the alert-detail/alert-editdef RESTActions built the
@@ -1043,7 +1049,7 @@ components:
   #
   # Helm prunes four objects S3c retired on upgrade: Card author-blueprint-card, Form author-blueprint,
   # Flex blueprint-builder-ask-cta and RESTAction page-composable.
-  version: 1.8.47
+  version: 1.8.48
   deps:
   - frontend
   - git-provider
@@ -1083,6 +1089,7 @@ components:
   # 1.8.45: co-versioned with portal, as always.
   # 1.8.46: co-versioned with portal, as always.
   # 1.8.47: co-versioned with portal, as always.
+  # 1.8.48: co-versioned with portal, as always.
 - name: portal-agents
   kind: PortalAgents
   # MUST equal the portal tag that ships the split: release-oci versions every chart under helm/
@@ -1093,7 +1100,7 @@ components:
   # 1.8.39: co-versioned with portal; content-only, no CRD change, no image.
   # 1.8.40: co-versioned with portal; content-only, no CRD change, no image.
   # 1.8.44: co-versioned with portal, as always.
-  version: 1.8.47
+  version: 1.8.48
   deps: ['portal']
   tier: platform
   feature: portal
