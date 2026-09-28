@@ -1922,6 +1922,7 @@ components:
   # `refused` stays on ReviewRun status, both re-described as historical, because two Proposal objects
   # on 057 sit in exactly that phase and removing the value would invalidate them on their next status
   # write. A schema that cannot represent what is already stored under it is the worse outcome.
+  # 0.1.13: BYTE-IDENTICAL, lockstep only.
 - name: nightly-review-crd
   kind: NightlyReviewCrds
   chart: nightly-review-crds
@@ -1952,7 +1953,7 @@ components:
   # conditions[].type is a free-form string and message already exists, checked against the SHIPPED
   # CRD before being relied on.
   # 0.1.11: BYTE-IDENTICAL, lockstep only — the range touches prompt.py and tests.
-  version: 0.1.12
+  version: 0.1.13
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -1964,6 +1965,30 @@ components:
   # what was merged and what was rejected. THE COST, stated rather than left to be discovered: the
   # reviewer may now name any repository the install-level git credentials can write to. dryRun is the
   # single remaining switch.
+  # 0.1.13: PUBLISHES THROUGH THE PLATFORM'S OWN CHAIN AND NO LONGER HOLDS A GITHUB TOKEN. It used to
+  # branch, GET the file, PUT it with its sha and POST a pull request over the REST API with its own
+  # credential; it now creates ONE BuilderPublish claim per proposal and stops, and the chain
+  # (Repository -> Repo -> LocalResource -> PullRequest) does the rest — the same one portal-builder and
+  # blueprint-builder use. The credential becomes git-provider's, the readiness gate that prevents
+  # GitHub's 422 is the chain's, and PullRequest is level-based so re-asserting a claim cannot open a
+  # second one. GITHUB_TOKEN is gone from the chart, its values entry and its schema entry.
+  #
+  # REQUIRES portal >= 1.8.46, which is where the builderpublishes CRD and its `builder: review` enum
+  # value ship. Publishing as `blueprint` would have made an overnight machine suggestion
+  # indistinguishable from a person's authored blueprint on every list selecting krateo.io/builder, and
+  # in the commit messages. Verified server-side on 057 at v1-8-46: a claim with builder: review is
+  # accepted and one with builder: blueprint still is, so the enum was widened, not replaced.
+  #
+  # Publishing is ASYNCHRONOUS now: the run creates a claim and exits, and the pull request appears on
+  # the chain's own reconcile. So the run no longer writes phase PrOpen or status.pullRequest — both
+  # would be guesses — and records the claim as a LABEL, because the Proposal CRD is structural and an
+  # undeclared status key is pruned silently. Reading the outcome back is the next piece of work.
+  #
+  # RBAC: the namespaced Role gains get/list/create/patch on builderpublishes, and a ClusterRole grants
+  # exactly one verb on exactly one resourceName (the BuilderPublish CRD) for version discovery, gated
+  # on dryRun. The version is discovered because the kind is version-pinned per portal release; note
+  # that the CRD's STORAGE version is `vacuum` (served:false, no schema), so discovery reads SERVED
+  # versions only — preferring storage returns a kind the apiserver will not serve.
 - name: nightly-review
   kind: NightlyReview
   # 0.1.1: ships values.schema.json (see the -crd pin above).
@@ -2040,7 +2065,7 @@ components:
   # response contract" and NEVER SENT THE CONTRACT. RESPONSE_SCHEMA lived in the same file and was used
   # for validation only. The schema is now rendered into the message from the same object that
   # validates, so it cannot drift, and two tests assert it still reaches the model.
-  version: 0.1.12
+  version: 0.1.13
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
