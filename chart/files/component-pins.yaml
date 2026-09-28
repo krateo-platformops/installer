@@ -18,6 +18,7 @@ components:
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
   # not against the previous tag. Lockstep only; no CRD change since 1.6.64.
   # 1.6.68: BYTE-IDENTICAL, lockstep only — no CRD change since 1.6.64.
+  # 1.6.69: BYTE-IDENTICAL, lockstep only — still no CRD change since 1.6.64.
 - name: frontend-crd
   kind: FrontendCrds
   chart: frontend-crds
@@ -133,7 +134,7 @@ components:
   # release: the packaged frontend-crds templates at 1.6.66 are byte-identical to the 1.6.62 copy
   # taken when 1.6.62 was rolled, and the whole 1.6.62...1.6.66 range touches 0 files under helm/.
   # Four releases of UI work, no CRD surface: the pair moves together only to keep the two pins equal.
-  version: 1.6.68
+  version: 1.6.69
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -321,6 +322,11 @@ components:
   # projection also publishes status-projection.json, and its compositiondefinition.yaml carries apiRef
   # plus statusDataTemplate. Safe alone: without portal 1.8.45 the extra file is simply ignored by
   # Install, so the two halves can roll in either order.
+  # 1.6.69 (#384): the Blueprint Composer's Conditions strip (mockup 8b/8c). UI only. CONTAINS 1.6.68,
+  # so 057 goes 1.6.67 -> 1.6.69 in one step and the S12 frontend half rides along; 1.6.68 was pinned
+  # here and tagged as installer 0.3.296 but never rolled, because rolling it would have been a trip to
+  # a version superseded before it landed. Range against what is LIVE: 1.6.67...1.6.69 is 15 files,
+  # none under helm/.
 - name: frontend
   kind: Frontend
   chart: frontend
@@ -713,7 +719,7 @@ components:
   # "edges enforced" that the live frontend does not gate, and the agent would edit an open chart blind.
   # Checked rather than assumed in the other direction too: 1.6.64...1.6.66 touches nothing matching
   # lint, schema, gate or verb, so a frontend AHEAD of the gate's pinned kernel introduces no skew.
-  version: 1.6.68
+  version: 1.6.69
   deps:
   - frontend-crd
   - authn
@@ -830,6 +836,15 @@ components:
   # install keeps its one plain write, byte for byte, so installs without a bundle are unaffected.
   # Pairs with frontend 1.6.68 and is safe in either order: with no bundle present this behaves exactly
   # as 1.8.44 did.
+  # 1.8.46 (#250): adds the BuilderPublish `review` builder value — the schema enum gains it, passed
+  # through like the other three with the same chain and gates, the label becomes krateo.io/builder:
+  # review, commits read feat(review): add <path>, and the default PR body says "Proposed by the Krateo
+  # nightly review". The portal's cross-builder change-request feed skips it. This is what lets
+  # nightly-review publish through builder-publish WITHOUT its proposals being indistinguishable from a
+  # person's authored blueprint on every list that selects by that label. CONTAINS 1.8.45, so 057 goes
+  # 1.8.44 -> 1.8.46 in one step and the S12 portal half rides along; 1.8.45 was tagged as installer
+  # 0.3.297 and never rolled for the same reason as frontend 1.6.68.
+  # NOTE: builderpublishes' CRD comes from THIS chart, so the review value is only usable once this is live.
 - name: portal
   kind: Portal
   # 1.8.2 (#135): fixes the alert detail page — the alert-detail/alert-editdef RESTActions built the
@@ -1010,7 +1025,7 @@ components:
   #
   # Helm prunes four objects S3c retired on upgrade: Card author-blueprint-card, Form author-blueprint,
   # Flex blueprint-builder-ask-cta and RESTAction page-composable.
-  version: 1.8.45
+  version: 1.8.46
   deps:
   - frontend
   - git-provider
@@ -1048,6 +1063,7 @@ components:
 # so during the gap the sidebar entry is HIDDEN rather than pointing at pages that 404 — a clean
 # disappearance instead of a broken link.
   # 1.8.45: co-versioned with portal, as always.
+  # 1.8.46: co-versioned with portal, as always.
 - name: portal-agents
   kind: PortalAgents
   # MUST equal the portal tag that ships the split: release-oci versions every chart under helm/
@@ -1058,7 +1074,7 @@ components:
   # 1.8.39: co-versioned with portal; content-only, no CRD change, no image.
   # 1.8.40: co-versioned with portal; content-only, no CRD change, no image.
   # 1.8.44: co-versioned with portal, as always.
-  version: 1.8.45
+  version: 1.8.46
   deps: ['portal']
   tier: platform
   feature: portal
