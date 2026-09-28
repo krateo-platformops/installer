@@ -25,6 +25,6 @@ retired:
 - tf-provider-to-operator-agent
 - tf-to-helm-agent
 # Replaced by alert-provider and alert-provider-crd (same repo, renamed charts). The Alert CRD moves
-# between their helm releases; docs/configuration.md#the-alert-and-incident-pipeline has the steps.
+# between their helm releases; docs/configuration.md#upgrading-from-alert-troubleshooter has the steps.
 - alert-troubleshooter
 - alert-troubleshooter-crd
