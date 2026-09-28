@@ -1730,9 +1730,10 @@ components:
 # (config.compareA2aUrl) judges one of the alert's open Incidents to be the same problem, which then
 # counts it. NOT a kagent Agent (a plain service that CALLS incident-agent and autopilot), so no
 # `agent`. Needs BOTH the observability stack (HyperDX API + the hyperdx-api-token secret, from
-# krateo-observability) AND incident-agent, so it deps both and rides the specialistAgents feature —
-# the same portal cross-dep pattern clickhouse-mcp-server uses. It writes Incidents, so it deps
-# incident-controller-crd. Public krateo-platformops chart, so no repo override.
+# krateo-observability) AND its two agents, incident-agent and krateo-autopilot, so it deps all three
+# and rides the specialistAgents feature — the same portal cross-dep pattern clickhouse-mcp-server
+# uses. It writes Incidents, so it deps incident-controller-crd. Public krateo-platformops chart, so
+# no repo override.
 # Dedicated CRD composition (Alert). Every CRD-owning component ships a
 # *-crds composition (cf. authn-crd/frontend-crd/snowplow-crd) so the CRD lifecycle is DECOUPLED from
 # the app's version churn — an app-only bump no longer migrates or (on a handover mis-fire) tears down
@@ -1774,6 +1775,7 @@ components:
   - alert-provider-crd
   - incident-controller-crd
   - incident-agent
+  - krateo-autopilot
   - krateo-observability
   tier: observability
   feature: specialistAgents
