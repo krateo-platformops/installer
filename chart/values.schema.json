@@ -8450,7 +8450,13 @@
               "properties": {
                 "autopilotA2aUrl": {
                   "type": "string",
-                  "title": "RCA agent A2A URL"
+                  "title": "RCA agent A2A URL",
+                  "description": "A2A endpoint of the agent that runs an Incident's root-cause analysis (incident-agent). With features.agentGateway the installer fills it with the gateway's /api/a2a/<namespace>/incident-agent route."
+                },
+                "compareA2aUrl": {
+                  "type": "string",
+                  "title": "Incident comparison agent A2A URL",
+                  "description": "A2A endpoint of the agent that judges whether a firing alert's current problem is the same as one of its open Incidents (autopilot). With features.agentGateway the installer fills it with the gateway's /api/a2a/<namespace>/autopilot route."
                 },
                 "authnUrl": {
                   "type": "string",

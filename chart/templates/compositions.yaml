@@ -79,7 +79,7 @@
      listeners (portal/HyperDX) move onto a SEPARATE platform Gateway whose Service is
      `<svcMatch>-platform` (a LoadBalancer). So the BROWSER-origin resolutions for the portal stack and
      HyperDX must target that -platform Service, while every IN-CLUSTER URL that talks to the agent
-     gateway :8080 (kagentapp.proxy.url, the model route, the incident-agent A2A URL) stays on
+     gateway :8080 (kagentapp.proxy.url, the model route, alert-provider's A2A URLs) stays on
      $gwComp.svcMatch. $portalSvc = the browser-origin Service name: -platform when internalDataPlane,
      else the primary Service unchanged (byte-identical when the knob is off). */}}
 {{- $portalSvc := $gwComp.svcMatch }}
@@ -548,10 +548,10 @@
 {{- end -}}
 {{- end -}}
 {{- /* alert-provider is a plain service (NOT a kagent agent), so it can't carry a caller's
-     token the way the agents above do — it has no caller; a HyperDX alert fires it. Instead it
+     token the way the agents above do — it has no caller; its own loop evaluates the alerts. Instead it
      exchanges its OWN projected SA token (audience "authn") at authn for a Krateo JWT and presents
-     THAT on its A2A call to incident-agent, so incident-agent can propagate it to its now-gated MCP
-     tools. So under the gateway we point config.authnUrl at authn's in-cluster Service (chart default
+     THAT on its A2A calls to incident-agent and autopilot, so incident-agent can propagate it to its
+     gated MCP tools. So under the gateway we point config.authnUrl at authn's in-cluster Service (chart default
      "" = disabled, which is exactly right when the gateway is OFF and nothing downstream is gated).
      Port follows authn's own exposePort by default, and the shared exposure.port ONLY in LB/NodePort
      modes ($isLB) — the SAME gate the peer-url/internalUrls wiring uses, because that shared port is a
@@ -574,6 +574,9 @@
      (direct incident-agent:8080) correctly stands when the gateway is OFF and nothing enforces RBAC. */ -}}
 {{- $a2a := printf "http://%s.%s.svc.cluster.local:%v/api/a2a/%s/incident-agent" $gwName $top.Values.namespaces.krateo $gwPort $top.Values.namespaces.krateo -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "config" "autopilotA2aUrl") "value" $a2a) -}}
+{{- /* Its comparison call (is a firing the same problem as an open Incident?) goes to autopilot on the
+     same gateway path; the policies chart's incidentCompare route rate-limits it. Fill-if-absent. */ -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "config" "compareA2aUrl") "value" (printf "http://%s.%s.svc.cluster.local:%v/api/a2a/%s/autopilot" $gwName $top.Values.namespaces.krateo $gwPort $top.Values.namespaces.krateo)) -}}
 {{- end -}}
 {{- /* HyperDX FRONTEND_URL (#100): in Gateway path mode point HyperDX's own SPA at the gateway origin it
      is served on (its platform-hdx listener at gatewayPort), so HyperDX's browser redirects/links
