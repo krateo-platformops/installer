@@ -1893,7 +1893,8 @@ components:
   # 0.1.10: BYTE-IDENTICAL, lockstep only. The new AgentResponse condition needs no schema change —
   # conditions[].type is a free-form string and message already exists, checked against the SHIPPED
   # CRD before being relied on.
-  version: 0.1.10
+  # 0.1.11: BYTE-IDENTICAL, lockstep only — the range touches prompt.py and tests.
+  version: 0.1.11
   tier: observability
   feature: specialistAgents
 - name: nightly-review
@@ -1965,7 +1966,14 @@ components:
   # stored on the run as an AgentResponse condition and printed once, REDACTED FIRST through the same
   # path a proposal takes: it is model output over a corpus that has held JWTs and an AWS key, and a
   # diagnostic that copies a credential into a CR and a pod log is worse than the failure it explains.
-  version: 0.1.10
+  # 0.1.11: AND IT PAID FOR ITSELF THE SAME HOUR. With refusals finally legible, the first run showed
+  # the reviewer producing FIVE findings, every one discarded with "Additional properties are not
+  # allowed ('description','id','priority','type' were unexpected)". Not silence, not an empty list —
+  # an invented field vocabulary, because the prompt ended with "Return ONLY a JSON object matching the
+  # response contract" and NEVER SENT THE CONTRACT. RESPONSE_SCHEMA lived in the same file and was used
+  # for validation only. The schema is now rendered into the message from the same object that
+  # validates, so it cannot drift, and two tests assert it still reaches the model.
+  version: 0.1.11
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
