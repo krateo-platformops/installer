@@ -854,6 +854,15 @@ components:
   # 1.8.44 -> 1.8.46 in one step and the S12 portal half rides along; 1.8.45 was tagged as installer
   # 0.3.297 and never rolled for the same reason as frontend 1.6.68.
   # NOTE: builderpublishes' CRD comes from THIS chart, so the review value is only usable once this is live.
+  # 1.8.47 (#251): FIXES A LIVE REGRESSION THAT 1.8.45 SHIPPED. Since S12c, the marketplace Install
+  # form failed to render for EVERY blueprint on 057 — "actions.rest[1].ops[1].payloadToOverride[3]
+  # .value: Invalid value: object". The Form CRD types payloadToOverride values as strings; the S12c
+  # widgetDataTemplate resolved [3] to an object and [4] to an array via `${ .projection.apiRef // {} }`
+  # and `${ .projection.statusDataTemplate // [] }`, and those fallbacks fire on EVERY install, not only
+  # a projecting one. Reproduced from the live Form CR before accepting the report. 1.8.47 makes every
+  # templated override value a string, with the projection embedded as a JSON literal inside one ${ }.
+  # The authored Form validated fine all along — it is the RESOLVED widgetData snowplow checks, which is
+  # the same shape as the lookup-vacuous-render trap: what was validated was not what runs.
 - name: portal
   kind: Portal
   # 1.8.2 (#135): fixes the alert detail page — the alert-detail/alert-editdef RESTActions built the
@@ -1034,7 +1043,7 @@ components:
   #
   # Helm prunes four objects S3c retired on upgrade: Card author-blueprint-card, Form author-blueprint,
   # Flex blueprint-builder-ask-cta and RESTAction page-composable.
-  version: 1.8.46
+  version: 1.8.47
   deps:
   - frontend
   - git-provider
@@ -1073,6 +1082,7 @@ components:
 # disappearance instead of a broken link.
   # 1.8.45: co-versioned with portal, as always.
   # 1.8.46: co-versioned with portal, as always.
+  # 1.8.47: co-versioned with portal, as always.
 - name: portal-agents
   kind: PortalAgents
   # MUST equal the portal tag that ships the split: release-oci versions every chart under helm/
@@ -1083,7 +1093,7 @@ components:
   # 1.8.39: co-versioned with portal; content-only, no CRD change, no image.
   # 1.8.40: co-versioned with portal; content-only, no CRD change, no image.
   # 1.8.44: co-versioned with portal, as always.
-  version: 1.8.46
+  version: 1.8.47
   deps: ['portal']
   tier: platform
   feature: portal
