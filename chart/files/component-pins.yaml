@@ -138,6 +138,8 @@ components:
   version: 1.6.70
   tier: platform
   feature: portal
+  # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
+  # rather than assumed. Lockstep only.
 - name: snowplow-crd
   kind: SnowplowCrds
   chart: snowplow-crds
@@ -153,7 +155,7 @@ components:
   # 1.12.13: byte-identical again, verified by pulling both charts — only Chart.yaml's own version line
   # differs, CRD templates md5 370adc5f5ec20ada604e4f1dd3931382 at both. NOTE THE CHART IS PUBLISHED AS
   # `snowplow-crds`, PLURAL; `charts/snowplow-crd` does not exist, though the COMPONENT here is singular.
-  version: 1.12.13
+  version: 1.12.15
   tier: platform
   feature: portal
 - name: authn
@@ -182,6 +184,20 @@ components:
   gatewayPath: /auth
   gatewayRewrite: true
   gatewayAuth: public
+  # 1.12.15: A SECURITY FIX — cross-user identity leaks on the SA-serve path. #268 (branch-E SA-endpoint
+  # dial), #269 (getFromAPIServer using the SA rest.Config, reachable live through a widget apiRef) and
+  # #267 (a ServiceAccount token cached forever). Also carries #256 (internal-REST-config apiserver
+  # reads re-gated with per-user RBAC) and #264 (per-namespace RBAC verdicts memoized within a refilter
+  # pass). Supersedes the abandoned 1.12.14, which would have UNMASKED #268 on a fresh pod.
+  #
+  # THE CHART DIFF IS THE WRONG INSTRUMENT HERE and would report a no-op: 1.12.13...1.12.15 is 39 files
+  # with ZERO under helm/. All of it rides the image, which resolves off .Chart.AppVersion. The
+  # reviewable surface is the commit range, not the chart.
+  #
+  # IT SHOULD ALSO CLOSE SOMETHING THE NIGHTLY REVIEW FOUND: #267 is the stale SA token behind
+  # sar_viewCompositions 401s, and the review recorded 13,707 "api call response failure ...
+  # subjectaccessreviews ... Unauthorized" from snowplow in a single 24h window. Worth re-reading that
+  # count after the roll — it is a free check on whether the fix landed.
 - name: snowplow
   kind: Snowplow
   chart: snowplow
@@ -284,7 +300,7 @@ components:
   # history, so every counter starts at zero and the first captures REFUSE to report: the #253 gate
   # makes INADMISSIBLE a distinct verdict from a real reading, and it needs >=2 distinct rbacSubGen
   # values resident before any number means anything. That is the instrument working.
-  version: 1.12.13
+  version: 1.12.15
   deps:
   - snowplow-crd
   - authn
