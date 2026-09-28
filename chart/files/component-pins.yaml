@@ -1953,7 +1953,8 @@ components:
   #     (http.status=429), never the bare number.
   # ALSO CORRECTED HERE: an earlier reading of this same incident blamed a slow snowplow-agent for a 341s
   # A2A call. It was a call that took 310s to FAIL. Nothing is slow about the specialist.
-  version: 0.2.11
+  # 0.2.13: incidentCompare, the rate-limited route for alert-provider's comparison calls to autopilot.
+  version: 0.2.13
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller

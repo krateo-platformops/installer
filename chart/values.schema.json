@@ -14521,6 +14521,57 @@
                   "type": "object"
                 }
               }
+            },
+            "incidentCompare": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "A dedicated route for alert-provider's comparison calls (is a firing the same problem as an open Incident?): /api/a2a/<namespace>/<agent> carrying the header below, under its own local rate limit. A 429 makes alert-provider retry on its next pass.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Render the route and its rate limit."
+                },
+                "agent": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The agent that judges the comparison. The installer fills componentValues.alert-provider.config.compareA2aUrl with autopilot's route, so override that too when this changes."
+                },
+                "header": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "The request header that selects this route over the agent's general A2A route.",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Local rate limit on the route; over it the gateway answers 429.",
+                  "properties": {
+                    "requestsPerMinute": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "burst": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Short-burst allowance above requestsPerMinute."
+                    },
+                    "requestsPerHour": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
             }
           }
         },
