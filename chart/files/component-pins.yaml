@@ -1888,7 +1888,9 @@ components:
   # release it accompanies implements `superseded` and writes a Superseded phase, both of which the
   # SHIPPED schema already declares. Checked before relying on it: the Proposal phase enum has carried
   # Superseded, and ReviewRun.status.proposals.superseded has been an integer, since 0.1.5.
-  version: 0.1.8
+  # 0.1.9: BYTE-IDENTICAL, lockstep only — the range touches prompt.py and the app chart's agent
+  # template, nothing under helm/nightly-review-crds/.
+  version: 0.1.9
   tier: observability
   feature: specialistAgents
 - name: nightly-review
@@ -1940,7 +1942,20 @@ components:
   # one was renamed. None of the three could fail loudly: they reported, and the report was wrong.
   # The allowlist is now asked BEFORE anything is superseded, so a refused proposal cannot retire a
   # legitimately open one — a quieter attack than the one the allowlist exists to stop.
-  version: 0.1.8
+  # 0.1.9: THE REVIEWER WAS INSTRUCTED INTO SILENCE AND OBEYED. Three successful nights on 0.1.8 each
+  # completed in ~2 minutes, called the model once, and returned ZERO proposals — and nothing
+  # downstream was eating them: created 0, refused 0, deduplicated 0, no ValidationNotes condition, so
+  # no item was dropped in validation. The prompt said "PROPOSING NOTHING IS A VALID AND FREQUENT
+  # OUTCOME ... return an empty list", the Agent CR's systemMessage repeated it, and the evidence was
+  # aggregate counts, so an empty list was the obedient answer rather than a model failure.
+  # The caution was calibrated for a reviewer whose proposals become pull requests; this one ships
+  # inert (dryRun true, empty allowlist), so a weak proposal costs one object to read while silence
+  # costs the whole component. Rebalanced, NOT loosened: every anti-fabrication and anti-injection
+  # guard stays and the fabrication warning is sharper, withholding is named as a failure too, and low
+  # confidence is given its purpose. Evidence was the other half and is already fixed in
+  # componentValues (samples instead of counts, live since 0.3.288 rev 216) — that alone did NOT change
+  # the outcome, which is what isolates the prompt.
+  version: 0.1.9
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
