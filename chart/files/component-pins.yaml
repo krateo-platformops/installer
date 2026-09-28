@@ -824,6 +824,12 @@ components:
   # served before a BuilderPublish claim (publish-time) needs them. Private krateo-blueprints chart =>
   # inherits the default registryAuth creds like marketplace-catalog (no registries[] entry needed).
   # spec.resourceGroup defaults to github.krateo.io in the chart's own values (installer emits spec: {}).
+  # 1.8.45 (#249): S12 status projection, portal half. Install reads the status bundle from the
+  # publish claim; when one is present a single confirmed submit writes TWO objects — the
+  # <chart>-status RESTAction first, then the CompositionDefinition carrying the apiRef. Every other
+  # install keeps its one plain write, byte for byte, so installs without a bundle are unaffected.
+  # Pairs with frontend 1.6.68 and is safe in either order: with no bundle present this behaves exactly
+  # as 1.8.44 did.
 - name: portal
   kind: Portal
   # 1.8.2 (#135): fixes the alert detail page — the alert-detail/alert-editdef RESTActions built the
@@ -1004,7 +1010,7 @@ components:
   #
   # Helm prunes four objects S3c retired on upgrade: Card author-blueprint-card, Form author-blueprint,
   # Flex blueprint-builder-ask-cta and RESTAction page-composable.
-  version: 1.8.44
+  version: 1.8.45
   deps:
   - frontend
   - git-provider
@@ -1041,6 +1047,7 @@ components:
 # releases. The portal's agents.enabled flag (below, componentValues) defaults FALSE in the chart,
 # so during the gap the sidebar entry is HIDDEN rather than pointing at pages that 404 — a clean
 # disappearance instead of a broken link.
+  # 1.8.45: co-versioned with portal, as always.
 - name: portal-agents
   kind: PortalAgents
   # MUST equal the portal tag that ships the split: release-oci versions every chart under helm/
@@ -1051,7 +1058,7 @@ components:
   # 1.8.39: co-versioned with portal; content-only, no CRD change, no image.
   # 1.8.40: co-versioned with portal; content-only, no CRD change, no image.
   # 1.8.44: co-versioned with portal, as always.
-  version: 1.8.44
+  version: 1.8.45
   deps: ['portal']
   tier: platform
   feature: portal
