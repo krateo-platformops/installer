@@ -19,6 +19,7 @@ components:
   # not against the previous tag. Lockstep only; no CRD change since 1.6.64.
   # 1.6.68: BYTE-IDENTICAL, lockstep only — no CRD change since 1.6.64.
   # 1.6.69: BYTE-IDENTICAL, lockstep only — still no CRD change since 1.6.64.
+  # 1.6.70: BYTE-IDENTICAL to 1.6.69 — verified by diffing the packaged templates, not assumed.
 - name: frontend-crd
   kind: FrontendCrds
   chart: frontend-crds
@@ -134,7 +135,7 @@ components:
   # release: the packaged frontend-crds templates at 1.6.66 are byte-identical to the 1.6.62 copy
   # taken when 1.6.62 was rolled, and the whole 1.6.62...1.6.66 range touches 0 files under helm/.
   # Four releases of UI work, no CRD surface: the pair moves together only to keep the two pins equal.
-  version: 1.6.69
+  version: 1.6.70
   tier: platform
   feature: portal
 - name: snowplow-crd
@@ -327,6 +328,11 @@ components:
   # here and tagged as installer 0.3.296 but never rolled, because rolling it would have been a trip to
   # a version superseded before it landed. Range against what is LIVE: 1.6.67...1.6.69 is 15 files,
   # none under helm/.
+  # 1.6.70 (#385): the blueprint draft lint refuses a workload whose image: is still the empty
+  # placeholder. That is the defect the Blueprint Builder E2E hit on 057 — e2e-comp-a rendered and then
+  # failed to apply with `Deployment.apps ... spec.template.spec.containers[0].image: Required value`,
+  # because a parameter-less blueprint left the composer's placeholder in place and Preview could not
+  # show it (the Deployment was gated). 1.6.69...1.6.70 is 3 files, all under ui/, none under helm/.
 - name: frontend
   kind: Frontend
   chart: frontend
@@ -719,7 +725,7 @@ components:
   # "edges enforced" that the live frontend does not gate, and the agent would edit an open chart blind.
   # Checked rather than assumed in the other direction too: 1.6.64...1.6.66 touches nothing matching
   # lint, schema, gate or verb, so a frontend AHEAD of the gate's pinned kernel introduces no skew.
-  version: 1.6.69
+  version: 1.6.70
   deps:
   - frontend-crd
   - authn
