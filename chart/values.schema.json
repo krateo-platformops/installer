@@ -8379,10 +8379,10 @@
             }
           }
         },
-        "alert-troubleshooter": {
+        "alert-provider": {
           "type": "object",
-          "title": "Alert Troubleshooter",
-          "description": "Turns each firing of an observability Alert into an Incident with an incident-agent root-cause analysis and its how-to-fix scripts. Full-coverage schema for the alert-troubleshooter chart (pinned 0.2.45). Every key of the chart's values.yaml is settable on the Composition spec; omitted keys use chart defaults.",
+          "title": "Alert Provider",
+          "description": "Turns each firing of an observability Alert into an Incident with an incident-agent root-cause analysis and its how-to-fix scripts. Full-coverage schema for the alert-provider chart (pinned 0.2.45). Every key of the chart's values.yaml is settable on the Composition spec; omitted keys use chart defaults.",
           "additionalProperties": false,
           "properties": {
             "global": {
@@ -14276,7 +14276,7 @@
                 "alerts": {
                   "type": "object",
                   "additionalProperties": false,
-                  "description": "Budget breaches as INCIDENTS. An Alert CR (observability.krateo.io) is reconciled into a HyperDX alert whose webhook fires incident-agent, which runs RCA and writes a TroubleshootingReport the portal shows under /incidents. These count the accessLog rows, so they need accessLog.enabled AND the alert-troubleshooter CRD (features.coreAgents). spec.where edits DO NOT PROPAGATE to the live HyperDX alert - change one by deleting and recreating the CR.",
+                  "description": "Budget breaches as INCIDENTS. An Alert CR (observability.krateo.io) is reconciled into a HyperDX alert; while it fires, alert-provider opens an Incident with an incident-agent RCA, which the portal shows under /incidents. These count the accessLog rows, so they need accessLog.enabled AND the Alert CRD (alert-provider-crd, features.specialistAgents). spec.where edits DO NOT PROPAGATE to the live HyperDX alert - change one by deleting and recreating the CR.",
                   "properties": {
                     "enabled": {
                       "type": "boolean",

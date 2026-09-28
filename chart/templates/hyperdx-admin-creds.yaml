@@ -1,8 +1,8 @@
 {{/*
-  hyperdx-admin-creds — the HyperDX admin login the alert-troubleshooter component's bootstrap Job uses
+  hyperdx-admin-creds — the HyperDX admin login the alert-provider component's bootstrap Job uses
   to register/log in headlessly and mint the `hyperdx-api-token` Secret its handler reads. The
-  alert-troubleshooter chart deliberately does NOT ship this (never commit a password) — its bootstrap-job
-  documents that the INSTALLER generates it. So we do, whenever alert-troubleshooter can be deployed
+  alert-provider chart deliberately does NOT ship this (never commit a password) — its bootstrap-job
+  documents that the INSTALLER generates it. So we do, whenever alert-provider can be deployed
   (the specialistAgents feature). The bootstrap Job REGISTERS this admin on first-boot HyperDX and logs in
   with it thereafter, so any stable email/password works — email is fixed, password is generated.
 
@@ -20,9 +20,9 @@
 {{/* 27 random alphanumerics for entropy + a fixed suffix that GUARANTEES the character classes
      HyperDX's registration policy requires — at least one special character (it 400s a ZodError
      "Password must include at least one special character" otherwise), plus upper/lower/digit to
-     satisfy common policies. Found live: randAlphaNum alone made the alert-troubleshooter bootstrap
-     Job fail to register the HyperDX admin, so its hyperdx-api-token was never minted and the pod
-     stayed in CreateContainerConfigError. */}}
+     satisfy common policies. randAlphaNum alone fails that policy: the alert-provider bootstrap Job
+     cannot register the HyperDX admin, its hyperdx-api-token is never minted and the pod stays in
+     CreateContainerConfigError. */}}
 {{- $pw = printf "%s-Aa1!" (randAlphaNum 27) }}
 {{- end }}
 apiVersion: v1

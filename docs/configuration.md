@@ -58,7 +58,7 @@ later on the CR.
 | `portal` | `true` | The non-agent platform: `authn` → `snowplow` → `git-provider` → `frontend` → `portal` + `krateo-helm-render-service`, their `*-crd` charts, **and the observability tier** (clickhouse/mongodb operators, `krateo-observability`, both OTel collectors, `krateo-sse-proxy`). `git-provider` (ordered before `portal`) supplies the `git.krateo.io` CRDs the portal's Autopilot Builders publish through — [below](#git-provider--scm-agnostic-portal-builder-publishing). |
 | `oasgenProvider` | `true` | `oasgen-provider` + its CRD chart. |
 | `coreAgents` | `false` | The base agent layer: `kagent-crds` → `kagent` → `model-configs` + `repo-mcp-server` + `installer-agent` + `krateo-autopilot` + `incident-agent` + `core-provider-agent` (the sole blueprint author). `model-configs` owns the kagent ModelConfigs the whole fleet references by name — one place to pin a model or switch provider. `repo-mcp-server` is the grounding server every agent reads through, and a `deps:` prerequisite of each of them. |
-| `specialistAgents` | `false` | The 4 component specialist agents (`authn/snowplow/frontend/clickstack`) + `clickhouse-mcp-server`, the [alert and incident pipeline](#the-alert-and-incident-pipeline) (`alert-troubleshooter`, `incident-controller`, their `*-crd` charts) and `nightly-review`. Needs `coreAgents` (they all dep on `kagent`, and the pipeline's RCA runs on `incident-agent`). |
+| `specialistAgents` | `false` | The 4 component specialist agents (`authn/snowplow/frontend/clickstack`) + `clickhouse-mcp-server`, the [alert and incident pipeline](#the-alert-and-incident-pipeline) (`alert-provider`, `incident-controller`, their `*-crd` charts) and `nightly-review`. Needs `coreAgents` (they all dep on `kagent`, and the pipeline's RCA runs on `incident-agent`). |
 | `structureGraph` | `false` | Opt-in **code-structure grounding**: `structure-graph-mcp-server` (a Graphify tree-sitter AST graph of the engine repos). Both consumers — `krateo-autopilot` and `core-provider-agent` — reference it off by default, so turning this on without also setting their `mcpServers.structureGraph.enabled` deploys a server nothing names. Needs `coreAgents`. |
 | `ingress` | `false` | Opt-in **edge layer**, dep-chained: `gateway-api-crds` (the Gateway API CRDs) → `agentgateway` (the Gateway API controller + CRDs + the platform `GatewayClass`/`Gateway`) → `cert-manager` (operator + CRDs) → `cert-manager-issuers` (ACME/CA Issuers) → `external-dns` (DNS records) — all **public** `oci://ghcr.io/krateo-blueprints/charts`. Off by default; the base install pulls nothing from `krateo-blueprints` unless enabled. Leave off if you front Krateo another way (an existing ingress controller / cloud LB / mesh, or your own Gateway). |
 | `agentGateway` | `false` | Opt-in **agent gateway**, dep-chained: `agentgateway-controller` (Gateway API CRDs + the agentgateway controller) → `agentgateway-policies` (the `GatewayClass`, the agent `Gateway`, the routes, the JWT/RBAC policies, and the guardrails on the fleet's LLM traffic) — both **private** `oci://ghcr.io/krateo-agentiko/charts`, so `registryAuth` applies. Needs `coreAgents`, and an issuer whose JWKS the gateway trusts (`authn`, via `portal`, by default) — below. |
@@ -214,12 +214,12 @@ would fail kagent's compile.
 Three components under `features.specialistAgents` turn a firing Alert into an Incident and close
 it again:
 
-- `alert-troubleshooter` (+ `alert-troubleshooter-crd`, the Alert CRD) evaluates each Alert — a
+- `alert-provider` (+ `alert-provider-crd`, the Alert CRD) evaluates each Alert — a
   ClickHouse `where` through HyperDX, or an `apiRef` RESTAction through snowplow — and, on a firing,
   opens an Incident with an `incident-agent` root-cause analysis and three how-to-fix scripts, or
   bumps `status.firings` on the alert's open Incident.
 - `incident-controller-crd` installs the Incident CRD (`observability.krateo.io/v1alpha1`) first;
-  `alert-troubleshooter` and `incident-controller` both dep on it.
+  `alert-provider` and `incident-controller` both dep on it.
 - `incident-controller` runs each Incident's precondition and verify scripts in a read-only check
   pod and moves it through Open, Verifying, Resolved and Closed. A human runs the apply script.
 
@@ -227,19 +227,19 @@ Values worth knowing:
 
 | Key | Notes |
 |---|---|
-| `componentValues.alert-troubleshooter.config.snowplowUrl` | Snowplow that resolves `apiRef` alerts. Chart default: the in-cluster Service. |
-| `componentValues.alert-troubleshooter.config.authnUrl` | Where the service exchanges its token for a Krateo JWT. `apiRef` alerts need it; with `features.agentGateway` the installer fills it. |
+| `componentValues.alert-provider.config.snowplowUrl` | Snowplow that resolves `apiRef` alerts. Chart default: the in-cluster Service. |
+| `componentValues.alert-provider.config.authnUrl` | Where the service exchanges its token for a Krateo JWT. `apiRef` alerts need it; with `features.agentGateway` the installer fills it. |
 | `componentValues.incident-controller.checks.readApiGroups` | The Krateo API groups check scripts may read (get/list/watch). The built-in `view` role covers no Krateo CRs; add a group here for scripts that read it. Never a wildcard: that includes Secrets. |
 | `componentValues.incident-controller.checks.networkPolicy.apiServer` | The check pods' only egress. Empty means the chart looks up the `kubernetes` Service and EndpointSlice in `default` while it renders; set it explicitly where that lookup is not allowed. |
 | `componentValues.incident-controller.controller.{pollInterval,settleWindow}` | Check cadence (`1m`) and how long a failing verify is retried (`5m`). |
 
 `config.reportCooldown` is gone: a firing on an open Incident only counts. **Before upgrading,
-remove `componentValues.alert-troubleshooter.config.reportCooldown` from the Installer CR** (and from
+remove `componentValues.alert-provider.config.reportCooldown` from the Installer CR** (and from
 your values files): the schema no longer accepts it.
 
 ```bash
 kubectl patch installer installer -n krateo-system --type json \
-  -p '[{"op":"remove","path":"/spec/componentValues/alert-troubleshooter/config/reportCooldown"}]'
+  -p '[{"op":"remove","path":"/spec/componentValues/alert-provider/config/reportCooldown"}]'
 ```
 
 ## Portal users, demo content, and a custom portal
@@ -477,7 +477,7 @@ There is no second copy of the policies chart's surface in this chart: every set
 name and port, the JWKS endpoint, the claims, all three RBAC layers and every guardrail knob — is
 `componentValues.agentgateway-policies`, with the defaults chosen by that chart. The installer
 reads `gateway.name`/`gateway.port`, `jwt.userClaim` and the `llm` block back out, so `proxy.url`,
-the controller's claim, `alert-troubleshooter`'s A2A URL and `model-configs`'
+the controller's claim, `alert-provider`'s A2A URL and `model-configs`'
 `agentgateway.modelRoute` (both its `url` and, when `llm.enabled` is off, its `enabled`) all follow
 an override of them.
 

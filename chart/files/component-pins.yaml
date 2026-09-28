@@ -1555,7 +1555,7 @@ components:
   # Live toolNames should become ["list_databases","run_select_query","run_query"]. Not an mcpBackend
   # (no fleet bounce); served version migrates v0-1-11 -> v0-1-12.
   # 0.2.2 (#20): prompt-only. The RCA's how to fix is three scripts (precondition, apply, verify) and
-  # the record is an Incident, matching alert-troubleshooter 0.2.45's output contract. No new values.
+  # the record is an Incident, matching alert-provider 0.2.45's output contract. No new values.
   version: 0.2.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
@@ -1707,7 +1707,7 @@ components:
   agent: true
 # incident-controller (krateo-platformops): runs each Incident's precondition and verify scripts in a
 # read-only check pod (its own krateo-incident-checks namespace, apiserver-only egress, no DNS) and moves
-# the incident Open -> Verifying -> Resolved on their exit codes. alert-troubleshooter opens the
+# the incident Open -> Verifying -> Resolved on their exit codes. alert-provider opens the
 # Incidents; this component and a human close them. The Incident CRD ships in its own *-crds chart,
 # like every CRD-owning component, and installs first. Public krateo-platformops charts and images.
 - name: incident-controller-crd
@@ -1723,7 +1723,8 @@ components:
   - incident-controller-crd
   tier: observability
   feature: specialistAgents
-# alert-troubleshooter (krateo-platformops): the "auto-troubleshoot on fire" bridge — an Alert firing
+# alert-provider (repo krateo-platformops/alert-troubleshooter): the "auto-troubleshoot on fire"
+# bridge — an Alert firing
 # (a HyperDX webhook, or an apiRef alert's RESTAction polled through snowplow) opens an Incident with an
 # incident-agent A2A root-cause analysis and its how-to-fix scripts, or counts the firing on the
 # alert's open Incident. NOT a kagent Agent (a plain webhook service that CALLS incident-agent), so no `agent`. Needs
@@ -1735,10 +1736,10 @@ components:
 # *-crds composition (cf. authn-crd/frontend-crd/snowplow-crd) so the CRD lifecycle is DECOUPLED from
 # the app's version churn — an app-only bump no longer migrates or (on a handover mis-fire) tears down
 # these CRDs (core-provider#89). crdgen kind = PascalCase(chart): crds -> Crds. Versioned in lockstep
-# with alert-troubleshooter (same repo tag). Public krateo-platformops chart.
-- name: alert-troubleshooter-crd
-  kind: AlertTroubleshooterCrds
-  chart: alert-troubleshooter-crds
+# with alert-provider (same repo tag). Public krateo-platformops chart.
+- name: alert-provider-crd
+  kind: AlertProviderCrds
+  chart: alert-provider-crds
   # 0.2.42: PURE LOCKSTEP, verified byte-identical to 0.2.41. Note this breaks the recent run of LOAD-BEARING
   # -crd bumps on this component (0.2.39 added the SpecDrift phase enum, 0.2.41 added Invalid — holding either
   # would have had the apiserver reject the status write and silently disable half the fix). The only way to
@@ -1749,13 +1750,8 @@ components:
   version: 0.2.45
   tier: observability
   feature: specialistAgents
-- name: alert-troubleshooter
-  kind: AlertTroubleshooter
-  # 0.2.36 (#28): additive ClusterRole+ClusterRoleBinding for the observer thread, which reads
-  # auditrecords + troubleshootingreports CLUSTER-WIDE (a remediation write can target any namespace)
-  # and patches report status — the namespaced Role couldn't authorize the all-namespaces list, so
-  # every observe pass 403'd on GET /apis/audit.krateo.io/v1alpha1/auditrecords. App-only fix (RBAC in
-  # the app chart, CRDs unchanged) so the alert-troubleshooter-crd pin stays 0.2.35 per the decoupling.
+- name: alert-provider
+  kind: AlertProvider
   # 0.2.42 (#43): fixes a NameError that made the dashboard CREATE path unrunnable — ensure_dashboard_tile
   # built its tile from an inline literal referencing an undefined `source_id`, while the sibling _tile_for
   # helper that update_dashboard_tile already used had it right as source["id"]. Reached only when a tile must
@@ -1771,7 +1767,7 @@ components:
   # config.reportCooldown and the observer thread are gone; the chart schema rejects reportCooldown.
   version: 0.2.45
   deps:
-  - alert-troubleshooter-crd
+  - alert-provider-crd
   - incident-controller-crd
   - incident-agent
   - krateo-observability
