@@ -1890,7 +1890,10 @@ components:
   # Superseded, and ReviewRun.status.proposals.superseded has been an integer, since 0.1.5.
   # 0.1.9: BYTE-IDENTICAL, lockstep only — the range touches prompt.py and the app chart's agent
   # template, nothing under helm/nightly-review-crds/.
-  version: 0.1.9
+  # 0.1.10: BYTE-IDENTICAL, lockstep only. The new AgentResponse condition needs no schema change —
+  # conditions[].type is a free-form string and message already exists, checked against the SHIPPED
+  # CRD before being relied on.
+  version: 0.1.10
   tier: observability
   feature: specialistAgents
 - name: nightly-review
@@ -1955,7 +1958,14 @@ components:
   # confidence is given its purpose. Evidence was the other half and is already fixed in
   # componentValues (samples instead of counts, live since 0.3.288 rev 216) — that alone did NOT change
   # the outcome, which is what isolates the prompt.
-  version: 0.1.9
+  # 0.1.10: 0.1.9 WORKED, AND IMMEDIATELY EXPOSED A BLIND SPOT. The first run on the rebalanced prompt
+  # stopped returning an empty list and instead returned something that was not the contract, failing
+  # with "response has no `proposals` array" — better than silence, but the run recorded only the
+  # exception, so what actually arrived was undiagnosable from the cluster. An unusable response is now
+  # stored on the run as an AgentResponse condition and printed once, REDACTED FIRST through the same
+  # path a proposal takes: it is model output over a corpus that has held JWTs and an AWS key, and a
+  # diagnostic that copies a credential into a CR and a pod log is worse than the failure it explains.
+  version: 0.1.10
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
