@@ -136,7 +136,10 @@ components:
   # release: the packaged frontend-crds templates at 1.6.66 are byte-identical to the 1.6.62 copy
   # taken when 1.6.62 was rolled, and the whole 1.6.62...1.6.66 range touches 0 files under helm/.
   # Four releases of UI work, no CRD surface: the pair moves together only to keep the two pins equal.
-  version: 1.6.71
+  # 1.6.72: co-versioned with frontend, which ships only ui/ changes. Verified rather than assumed:
+  # the packaged frontend-crds templates at 1.6.72 are byte-identical to 1.6.71 outside Chart.yaml,
+  # so this pin moves only to keep the pair equal — there is no CRD surface change in it.
+  version: 1.6.72
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -744,7 +747,11 @@ components:
   # "edges enforced" that the live frontend does not gate, and the agent would edit an open chart blind.
   # Checked rather than assumed in the other direction too: 1.6.64...1.6.66 touches nothing matching
   # lint, schema, gate or verb, so a frontend AHEAD of the gate's pinned kernel introduces no skew.
-  version: 1.6.71
+  # 1.6.72 (#387): a Form schema with no fields that carries a title or description now renders as an
+  # info message instead of "Error while rendering widget". That is what DISPLAYS portal 1.8.50's
+  # "still being registered" state, so the two move together; with portal alone the create form shows
+  # the generic nothing-to-render error, which is still better than failing to resolve. Diff is ui/ only.
+  version: 1.6.72
   deps:
   - frontend-crd
   - authn
@@ -1077,7 +1084,17 @@ components:
   #
   # Helm prunes four objects S3c retired on upgrade: Card author-blueprint-card, Form author-blueprint,
   # Flex blueprint-builder-ask-cta and RESTAction page-composable.
-  version: 1.8.49
+  # 1.8.50 (#254): closes the three known Blueprint Builder bugs. (1) A composition-detail node whose
+  # gate is open but which was never created no longer reads "waits for <a parent that is done>"; it
+  # says it was not created and why, carrying the composition's NotSynced exception when that is the
+  # cause. (2) blueprint-create no longer fails with `split cannot be applied to: null` before
+  # core-provider has generated the kind — it reports that the blueprint is still being registered.
+  # Measured on 057 BEFORE this roll, so the fix is checkable after it: that defect produced 48
+  # malformed-path 401s in 30 minutes on snowplow's prewarm path (logged with the template error
+  # sitting in the request path), and nightly-review independently counted 8,459 observations
+  # overnight. (3) CI now validates every resolved Form in test-builder-install against the released
+  # Form CRD, which caught a null stringSchema fixed in the same release.
+  version: 1.8.50
   deps:
   - frontend
   - git-provider
@@ -1129,7 +1146,8 @@ components:
   # 1.8.39: co-versioned with portal; content-only, no CRD change, no image.
   # 1.8.40: co-versioned with portal; content-only, no CRD change, no image.
   # 1.8.44: co-versioned with portal, as always.
-  version: 1.8.49
+  # 1.8.50: co-versioned with portal, as always. Verified byte-identical to 1.8.49 outside Chart.yaml.
+  version: 1.8.50
   deps: ['portal']
   tier: platform
   feature: portal
