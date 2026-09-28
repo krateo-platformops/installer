@@ -767,6 +767,17 @@ components:
   # that cdc must self-recover from a stuck handshake and that those annotations are never removed by
   # hand, so the repair belongs in the reconciler's conflict handling, which is exactly where it went.
   # It does NOT unstick Repos already wedged (#22) — those stay as they are, deliberately.
+  # 0.15.6 (#25): bumps provider-runtime to v1.4.0, which RECOVERS a stuck create. Inside a 2-minute
+  # grace it keeps re-observing; after that, if the resource is still absent, the RUNTIME clears
+  # external-create-pending itself and the create runs again. That keeps the never-by-hand rule intact —
+  # nothing external reaches in. Checked the blast radius before accepting it: git-provider manages
+  # repoes AND localresources, and LocalResource.Observe asks the forge (it walks the branch for a
+  # commit whose footer names the resource), so a create that landed is found and grace-then-clear is
+  # never reached; only a genuinely absent commit re-commits, which is correct rather than duplicate.
+  # LIVE CHECK AFTER THIS ROLLS, and it is falsifiable: exactly TWO Repos are pending-WITHOUT-succeeded
+  # (publish-e2e-bp-0928-source, publish-pod-sizing-v1b-source) and they should converge. The other 18
+  # Repos and all 146 marker-carrying LocalResources carry -succeeded too and must NOT move; movement
+  # there is a stop signal, not a success.
 - name: git-provider
   kind: GitProvider
   chart: git-provider
@@ -778,7 +789,7 @@ components:
   # advisories: agent-constraint drop, key-constraint enforcement, VerifiedPublicKeyCallback skew,
   # @revoked auth bypass), go-git 5.19.2, moby/spdystream 0.5.1 (HIGH CRI DoS). git-provider speaks
   # SSH/git to forges so these matter here; 0.15.0 (running on 057) has them unpatched.
-  version: 0.15.5
+  version: 0.15.6
   deps:
   - git-provider-crd
   tier: platform
