@@ -762,13 +762,22 @@ components:
 # git-provider-credentials Secret (key: token = a GitHub PAT with repo push scope) in the release namespace
 # out-of-band; until it exists the branch push fails even though every CR applies. A non-github host would
 # need a portal->builder-publish git.host passthrough (not present today).
+  # 0.15.6: CATCHING UP A LOCKSTEP THAT WAS BROKEN HERE, not shipping anything new. git-provider moved
+  # 0.15.4 -> 0.15.5 -> 0.15.6 in two separate bumps and this pin was left behind in both; the block
+  # above says the two must move together and that is exactly the rule that was missed. Harmless today,
+  # verified rather than assumed: 0.15.4...0.15.6 is 7 files with ZERO under helm/, and the packaged
+  # git-provider-crds templates are byte-identical between the two versions. The rule exists so a FUTURE
+  # CRD change cannot ship a controller expecting fields the CRDs lack — and a skew that is harmless is
+  # precisely the state in which the rule gets forgotten again.
+  # NOTE it is still an operational event despite identical content: version IS the API version here, so
+  # the leaf is pruned and recreated at v0-15-6.
 - name: git-provider-crd
   kind: GitProviderCrds
   chart: git-provider-crds
   # 0.15.0 adds status.templatingErrors to LocalResource+Repo — must move in lockstep with the
   # provider (was skewed 0.14.2 vs provider 0.14.1 for 10 days). 0.15.1 = security-only (no CRD
   # change); kept in lockstep with the provider to preserve the no-skew invariant.
-  version: 0.15.4
+  version: 0.15.6
   tier: platform
   feature: portal
   # 0.15.5 (#27, fixes #26): a Repo whose PUSH LANDED but whose status write afterwards hit a 409 stayed
