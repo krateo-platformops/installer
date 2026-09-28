@@ -20,6 +20,7 @@ components:
   # 1.6.68: BYTE-IDENTICAL, lockstep only — no CRD change since 1.6.64.
   # 1.6.69: BYTE-IDENTICAL, lockstep only — still no CRD change since 1.6.64.
   # 1.6.70: BYTE-IDENTICAL to 1.6.69 — verified by diffing the packaged templates, not assumed.
+  # 1.6.71: BYTE-IDENTICAL to 1.6.70, verified by diffing the packaged templates. Lockstep only.
 - name: frontend-crd
   kind: FrontendCrds
   chart: frontend-crds
@@ -135,7 +136,7 @@ components:
   # release: the packaged frontend-crds templates at 1.6.66 are byte-identical to the 1.6.62 copy
   # taken when 1.6.62 was rolled, and the whole 1.6.62...1.6.66 range touches 0 files under helm/.
   # Four releases of UI work, no CRD surface: the pair moves together only to keep the two pins equal.
-  version: 1.6.70
+  version: 1.6.71
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -349,6 +350,8 @@ components:
   # failed to apply with `Deployment.apps ... spec.template.spec.containers[0].image: Required value`,
   # because a parameter-less blueprint left the composer's placeholder in place and Preview could not
   # show it (the Deployment was gated). 1.6.69...1.6.70 is 3 files, all under ui/, none under helm/.
+  # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
+  # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
   kind: Frontend
   chart: frontend
@@ -741,7 +744,7 @@ components:
   # "edges enforced" that the live frontend does not gate, and the agent would edit an open chart blind.
   # Checked rather than assumed in the other direction too: 1.6.64...1.6.66 touches nothing matching
   # lint, schema, gate or verb, so a frontend AHEAD of the gate's pinned kernel introduces no skew.
-  version: 1.6.70
+  version: 1.6.71
   deps:
   - frontend-crd
   - authn
@@ -891,6 +894,9 @@ components:
   # payload base (which carries an empty name) over the op's payload. The set stops at the first
   # failure, so nothing was written; verified on 057 that no empty-named RESTAction and no 0928c
   # artifacts exist. A plain install was never affected, and only e2e-bp-0928c projects today.
+  # 1.8.49 (#253): LEG 2 OF 3. The blueprint-render RESTAction forwards lookupStubs — only when the array
+  # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
+  # One RESTAction changed.
 - name: portal
   kind: Portal
   # 1.8.2 (#135): fixes the alert detail page — the alert-detail/alert-editdef RESTActions built the
@@ -1071,7 +1077,7 @@ components:
   #
   # Helm prunes four objects S3c retired on upgrade: Card author-blueprint-card, Form author-blueprint,
   # Flex blueprint-builder-ask-cta and RESTAction page-composable.
-  version: 1.8.48
+  version: 1.8.49
   deps:
   - frontend
   - git-provider
@@ -1112,6 +1118,7 @@ components:
   # 1.8.46: co-versioned with portal, as always.
   # 1.8.47: co-versioned with portal, as always.
   # 1.8.48: co-versioned with portal, as always.
+  # 1.8.49: co-versioned with portal, as always.
 - name: portal-agents
   kind: PortalAgents
   # MUST equal the portal tag that ships the split: release-oci versions every chart under helm/
@@ -1122,14 +1129,17 @@ components:
   # 1.8.39: co-versioned with portal; content-only, no CRD change, no image.
   # 1.8.40: co-versioned with portal; content-only, no CRD change, no image.
   # 1.8.44: co-versioned with portal, as always.
-  version: 1.8.48
+  version: 1.8.49
   deps: ['portal']
   tier: platform
   feature: portal
   chart: portal-agents
+  # 0.4.0 (#19): /render accepts lookupStubs and returns a `lookups` report. LEG 1 OF 3 of the Preview
+  # gate-stubs feature. A request without stubs renders exactly as before, and a parity test pins the
+  # stubbed path to action.Install's output.
 - name: krateo-helm-render-service
   kind: KrateoHelmRenderService
-  version: 0.3.2
+  version: 0.4.0
   tier: platform
   feature: portal
   chart: krateo-helm-render-service
