@@ -2155,7 +2155,12 @@ components:
   # that will not run until 02:00, so there is no window where it writes against the old schema.
   # evidence.*.queries is the fix for a LIVE bug: the service has recorded the real bound SQL since
   # 0.1.15 and the apiserver has been eating it on every write for want of a declaration.
-  version: 0.1.22
+  # 0.1.23: adds spec.decision {claim, decidedAt, decidedBy, phase, reason}. MUST be Ready before portal
+  # 1.8.55, which writes that field from 24 templates: spec is structural, so against the 0.1.22 CRD the
+  # PATCH returns 200 and stores NOTHING — a Reject the page reports and the cluster never recorded.
+  # Also fixes a latent CRD bug: a null-valued key in runRef's description that strict decoding refused.
+  # Supersedes 0.1.21 and 0.1.22.
+  version: 0.1.23
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -2358,7 +2363,28 @@ components:
   # admins) so Reject works through /call with the caller's token. REDUNDANT ON 057, where admins is
   # already cluster-admin — it exists for installs that do not grant that, which is most of them. Do not
   # read a passing can-i on 057 as proof the new rule is what allowed it.
-  version: 0.1.22
+  # 0.1.23: the decision surface plus the questions read.
+  # #33 ships a ValidatingAdmissionPolicy (only spec.decision is mutable by anyone but the service SA;
+  # PrOpen->Rejected only; decidedBy must equal the requester) and a MutatingAdmissionPolicy that stamps
+  # decidedBy/decidedAt. The MAP is gated on .Capabilities — 057 is k8s v1.36.2-gke and serves
+  # MutatingAdmissionPolicy at admissionregistration.k8s.io/v1, checked, so it renders. Without it the
+  # portal's Reject would be REFUSED, because the portal does not send decidedBy itself.
+  # #32 reads the TEXT of user-authored kagent messages from event.data, window-bounded and redacted.
+  # THAT IS A DELIBERATE WIDENING OF THIS SERVICE'S REACH, decided by Diego against my recommendation,
+  # and it is recorded here because the code cannot record it: until now the role held SELECT on
+  # `session` alone, so it was STRUCTURALLY unable to read a conversation, which was the whole argument
+  # for the design. It now holds SELECT on event too (verified t|t|f|f — task and feedback stay
+  # revoked). Real prompts therefore enter the corpus, the model, and pull-request bodies; redact()
+  # strips secret-shaped strings, it does not anonymise. The role also carries admin's password, at
+  # Diego's direction, so that one Secret now yields admin's credentials AND every conversation.
+  # I argued for a separate event-only role with its own password so the content reader would be
+  # revocable independently; that was declined. Recording it so the next person reads a decision rather
+  # than an accident.
+  # The run's scope field states the wider access honestly (0.1.23 rewrote it); a run BEFORE the grant
+  # records that scope with ok:false and 'permission denied for table event', which reads as
+  # attempted-and-refused rather than as a false claim.
+  # New RBAC: list flexes (page-* roots census) and get/patch on proposals for portal-admin.
+  version: 0.1.23
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
