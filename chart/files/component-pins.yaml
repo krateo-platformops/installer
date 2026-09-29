@@ -2125,7 +2125,14 @@ components:
   # 0.1.19: declares agentsDeployed / agentsNeverUsed / agentsIdle7d / agentsActiveInWindow. Structural
   # schema, so undeclared fields are pruned on write and the run would report counters it never kept.
   # 0.1.20: co-versioned with nightly-review; no schema change in this one.
-  version: 0.1.20
+  # 0.1.22: adds spec.subject, ReviewRun status.steps/summary, evidence.*.queries and the
+  # TargetResolved condition incl. reason NotFoundOrPrivate. MUST be Ready before the app, which now
+  # writes all of those — under the 0.1.20 schema they were absent and structural pruning dropped them
+  # silently. The deps below give that ordering inside one installer version, and the app is a CronJob
+  # that will not run until 02:00, so there is no window where it writes against the old schema.
+  # evidence.*.queries is the fix for a LIVE bug: the service has recorded the real bound SQL since
+  # 0.1.15 and the apiserver has been eating it on every write for want of a declaration.
+  version: 0.1.22
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -2311,7 +2318,24 @@ components:
   # An idle agent that is not deployed is history, not a problem. If the deployed set cannot be read the
   # source over-reports WITH the existing note rather than reporting nothing — a hidden live problem is
   # worse than a noisy dead one.
-  version: 0.1.20
+  # 0.1.22: the Platform Review service half — stable spec.subject for dedup, Alert proposals forced to
+  # observability.krateo.io/v1alpha1 (closes #24; others are dropped with a note), a TargetResolved
+  # condition, status.steps/summary, and status.model carrying real token counts from kagent usage
+  # metadata (its empty `name` field removed rather than left permanently blank).
+  # THREE FINDINGS FIXED BEFORE THIS ROLLED, two of them mine from checking it against 057:
+  # (a) TargetResolved used an anonymous GitHub HEAD, and anonymous GitHub returns 404 for a PRIVATE
+  #     repo and a nonexistent one alike — krateo-agentiko/krateo-autopilot and incident-agent are
+  #     private, and a Prompt proposal aiming at one would have been marked invented when it was right.
+  #     Now reason NotFoundOrPrivate, saying it cannot be distinguished anonymously. No token added.
+  # (b) the check-3 test could not discriminate: group `admins` already has patch on proposals/status
+  #     via cluster-admin-binding-krateo-system, so can-i says yes with or without the new rule.
+  # (c) theirs: the target index is Proposed-only, so a same-file replacement cannot supersede a PrOpen
+  #     proposal and orphan its open PR.
+  # Ships a ClusterRole+Binding nightly-review-portal-admin (proposals/status get/patch/update, Group
+  # admins) so Reject works through /call with the caller's token. REDUNDANT ON 057, where admins is
+  # already cluster-admin — it exists for installs that do not grant that, which is most of them. Do not
+  # read a passing can-i on 057 as proof the new rule is what allowed it.
+  version: 0.1.22
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
