@@ -1106,7 +1106,16 @@ components:
   # sitting in the request path), and nightly-review independently counted 8,459 observations
   # overnight. (3) CI now validates every resolved Form in test-builder-install against the released
   # Form CRD, which caught a null stringSchema fixed in the same release.
-  version: 1.8.50
+  # 1.8.51 (#255): fixes the marketplace-detail filter. The prewarm resolves that RESTAction with no
+  # ?extras.name, so its own `.name` is null and `.entries[$n]` fails — gojq renders that identically
+  # to a null key in from_entries, which is why the log text alone could not localise it (jq says
+  # "Cannot index object with null"). An absent name is now found:false, nameless compdef entries are
+  # dropped defensively, and a named resolve is unchanged. Five widgets were failing: the four
+  # marketplace-detail-* and blueprint-install-page-header. Baseline before this roll, so it is
+  # checkable after: 336 occurrences per 30 minutes on 1.8.50, all with an empty traceId (prewarm
+  # path only, nothing user-facing). Confirmed NOT a snowplow cache artifact — they survived a cold
+  # cache when snowplow 1.12.16 replaced the pod.
+  version: 1.8.51
   deps:
   - frontend
   - git-provider
@@ -1159,7 +1168,8 @@ components:
   # 1.8.40: co-versioned with portal; content-only, no CRD change, no image.
   # 1.8.44: co-versioned with portal, as always.
   # 1.8.50: co-versioned with portal, as always. Verified byte-identical to 1.8.49 outside Chart.yaml.
-  version: 1.8.50
+  # 1.8.51: co-versioned with portal, as always. Verified byte-identical to 1.8.50 outside Chart.yaml.
+  version: 1.8.51
   deps: ['portal']
   tier: platform
   feature: portal
@@ -2045,7 +2055,11 @@ components:
   # CRD before being relied on.
   # 0.1.11: BYTE-IDENTICAL, lockstep only — the range touches prompt.py and tests.
   # 0.1.16: co-versioned with nightly-review; the -crd half is unchanged in content.
-  version: 0.1.16
+  # 0.1.17: NOT byte-identical — #14 reworded three descriptions in the Proposal CRD (confidence,
+  # observedCount, and evidence[].query, which is now marked historical and KEPT rather than deleted:
+  # the schema is structural, so removing it would prune the value from every stored proposal on its
+  # next write, and 17 entries on 057 still carry one). Checked rather than assumed, as for 0.1.14.
+  version: 0.1.17
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -2184,7 +2198,12 @@ components:
   # issued. The service records what it actually asked in stats["queries"] and publish.py renders
   # those into the pull request instead; a paraphrase beside the real thing is worse than its
   # absence, because a reviewer cannot tell which they are reading.
-  version: 0.1.16
+  # 0.1.17 (#14): `confidence` keeps its name and stops pretending to be checked. The cap demoted
+  # high unless two evidence items or a summed observedCount of two backed it — arithmetic on the
+  # model's own unbounded field, so any number it wrote satisfied the check. Across the first nine
+  # real proposals on 057 it never once fired: four carried a single evidence item and all four kept
+  # high on counts of 636/612/8459/4403. The CRD now states the field is the model's own estimate.
+  version: 0.1.17
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
