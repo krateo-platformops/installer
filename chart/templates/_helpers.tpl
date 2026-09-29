@@ -114,6 +114,9 @@ components:
   path:
   - chartGate
   - imagePullSecrets
+- name: alert-provider
+  path:
+  - imagePullSecrets
 {{- end -}}
 
 {{/* inst.imagePullAuths — the image-pull credential REFERENCES for the private-image components, as a JSON

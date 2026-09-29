@@ -4878,6 +4878,81 @@
                 }
               },
               "description": "Upstream clickstack chart values, passed through opaquely."
+            },
+            "defaultAlerts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "alerts": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "displayName": {
+                        "type": "string"
+                      },
+                      "where": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "threshold": {
+                        "type": "integer",
+                        "description": "A row count. Typed integer, not number: crdgen types number as a string in the Installer CRD."
+                      },
+                      "thresholdType": {
+                        "type": "string",
+                        "enum": [
+                          "above",
+                          "below",
+                          "above_exclusive",
+                          "below_or_equal",
+                          "equal",
+                          "not_equal",
+                          "between",
+                          "not_between"
+                        ]
+                      },
+                      "interval": {
+                        "type": "string",
+                        "enum": [
+                          "1m",
+                          "5m",
+                          "15m",
+                          "30m",
+                          "1h",
+                          "6h",
+                          "12h",
+                          "1d"
+                        ]
+                      },
+                      "tier": {
+                        "type": "string",
+                        "enum": [
+                          "core",
+                          "extended"
+                        ],
+                        "description": "core ships whenever defaultAlerts.enabled; extended also requires defaultAlerts.extended. Absent is treated as core."
+                      }
+                    }
+                  }
+                },
+                "extended": {
+                  "type": "boolean",
+                  "description": "Also ship the extended tier: catch-all and baseline-relative alerts whose thresholds mean 'far above normal' rather than 'anything at all', and which need retuning per cluster."
+                }
+              },
+              "title": "Default alerts",
+              "description": "The Alert CRs the chart ships. `alerts` replaces the whole list; `enabled: false` ships none."
             }
           }
         },
@@ -8444,6 +8519,19 @@
                 }
               }
             },
+            "imagePullSecrets": {
+              "type": "array",
+              "description": "Required for the private image. Left unset the installer wires it from registryAuth; set it (including []) to override.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
             "config": {
               "type": "object",
               "additionalProperties": false,
@@ -8490,7 +8578,8 @@
                         "type": "string"
                       },
                       "threshold": {
-                        "type": "number"
+                        "type": "integer",
+                        "description": "A row count. Typed integer, not number: crdgen types number as a string in the Installer CRD."
                       },
                       "thresholdType": {
                         "type": "string"
