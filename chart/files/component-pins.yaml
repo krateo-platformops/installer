@@ -140,7 +140,14 @@ components:
   # the packaged frontend-crds templates at 1.6.72 are byte-identical to 1.6.71 outside Chart.yaml,
   # so this pin moves only to keep the pair equal — there is no CRD surface change in it.
   # 1.6.73: co-versioned with frontend. Verified byte-identical to 1.6.72 outside Chart.yaml.
-  version: 1.6.73
+  # 1.6.75: ADDS Listy .spec.widgetData.itemTemplate.rowActionsDisplay, and THIS PIN MUST BE LIVE BEFORE
+  # portal 1.8.53. Checked rather than taken from the handoff: the field is absent in 1.6.73, and the
+  # Listy CRD's six x-kubernetes-preserve-unknown-fields subtrees are all elsewhere (resourcesRefs and
+  # actions payloads, widgetData.dataSource[], .status) — itemTemplate is STRUCTURAL. So under the old
+  # CRD the portal's drafts Listys would be applied with the field SILENTLY PRUNED: no error, no event,
+  # just row actions that never render. That is why the order is load-bearing and not a preference.
+  # 1.6.75's -crds chart is byte-identical to 1.6.74's outside Chart.yaml, verified.
+  version: 1.6.75
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -788,7 +795,16 @@ components:
   # default in this installer's schema, so core-provider injects neither, and the live Frontend CR
   # carries exactly {enabled, namespace} — both still accepted. Also verified agentgateway.enabled
   # still yields /api/a2a/<ns>/autopilot in 1.6.73, so the 405 fix survives the bump.
-  version: 1.6.73
+  # 1.6.75: the draft-records kernel — every preview is stored and can be restored when abandoned
+  # (#389 kernel, #390 owner-scoped preview names, #392 the Listy rowActionsDisplay field, #393 autosave
+  # + resume + adopt + legacy discard), plus #394 so Enter on a row's control acts on the control rather
+  # than opening the row. Supersedes 1.6.73 and 1.6.74, which it contains.
+  # CHART change, not just an image: the sandbox author Role's configmaps verbs gain update and patch
+  # (create/get/list/watch/update/patch/delete), which the draft records need to rewrite in place.
+  # This is what finally answers the 229 orphaned sandbox drafts. They are NOT deleted — they surface as
+  # 'Unowned drafts' with Adopt and Discard, which is the right ending for a delete that was nearly run
+  # against them this morning before it turned out the Portal Builder offers them for resume.
+  version: 1.6.75
   deps:
   - frontend-crd
   - authn
