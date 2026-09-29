@@ -159,7 +159,10 @@ components:
   # 1.12.13: byte-identical again, verified by pulling both charts — only Chart.yaml's own version line
   # differs, CRD templates md5 370adc5f5ec20ada604e4f1dd3931382 at both. NOTE THE CHART IS PUBLISHED AS
   # `snowplow-crds`, PLURAL; `charts/snowplow-crd` does not exist, though the COMPONENT here is singular.
-  version: 1.12.15
+  # 1.12.16: co-versioned with snowplow. Verified rather than assumed: the packaged snowplow-crds
+  # templates at 1.12.16 are byte-identical to 1.12.15 outside Chart.yaml, so this moves only to
+  # keep the pair equal — no CRD surface change.
+  version: 1.12.16
   tier: platform
   feature: portal
 - name: authn
@@ -304,7 +307,16 @@ components:
   # history, so every counter starts at zero and the first captures REFUSE to report: the #253 gate
   # makes INADMISSIBLE a distinct verdict from a real reading, and it needs >=2 distinct rbacSubGen
   # values resident before any number means anything. That is the instrument working.
-  version: 1.12.15
+  # 1.12.16 = the v7 Step 2 DARK subsystem (#266: requester-profile / projection-digest /
+  # shadow-parity) on top of the SA-serve fix already in 1.12.15, and it carries #267/#268/#269
+  # unchanged. Entirely dark: no ComputeKey change, no served-byte change, a default-off
+  # process-local toggle, so deploying it changes nothing observable. Verified: the packaged chart
+  # is byte-identical to 1.12.15 outside Chart.yaml, and the image moves via appVersion because
+  # values.image.tag is empty — so this pin bump IS the image bump. Enabling shadow-parity for the
+  # Step-E correctness measurement is a separate runtime /debug toggle, not a chart or env change.
+  # NOTE: snowplow is a declared dep of frontend, so this flip opens a window where frontend's
+  # dep gate sees it absent; the comparable window on the 0.3.311 roll ran ~400s.
+  version: 1.12.16
   deps:
   - snowplow-crd
   - authn
@@ -2032,7 +2044,8 @@ components:
   # conditions[].type is a free-form string and message already exists, checked against the SHIPPED
   # CRD before being relied on.
   # 0.1.11: BYTE-IDENTICAL, lockstep only — the range touches prompt.py and tests.
-  version: 0.1.15
+  # 0.1.16: co-versioned with nightly-review; the -crd half is unchanged in content.
+  version: 0.1.16
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -2165,7 +2178,13 @@ components:
   # response contract" and NEVER SENT THE CONTRACT. RESPONSE_SCHEMA lived in the same file and was used
   # for validation only. The schema is now rendered into the message from the same object that
   # validates, so it cannot drift, and two tests assert it still reaches the model.
-  version: 0.1.15
+  # 0.1.16: the model no longer authors the query a proposal carries. evidence[].query was removed
+  # from the response contract because the model filled it with a plausible reconstruction — the
+  # first real proposals cited SQL with no window clause that matched nothing this service had
+  # issued. The service records what it actually asked in stats["queries"] and publish.py renders
+  # those into the pull request instead; a paraphrase beside the real thing is worse than its
+  # absence, because a reviewer cannot tell which they are reading.
+  version: 0.1.16
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
