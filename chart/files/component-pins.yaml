@@ -162,7 +162,8 @@ components:
   # 1.12.16: co-versioned with snowplow. Verified rather than assumed: the packaged snowplow-crds
   # templates at 1.12.16 are byte-identical to 1.12.15 outside Chart.yaml, so this moves only to
   # keep the pair equal — no CRD surface change.
-  version: 1.12.16
+  # 1.12.17: co-versioned with snowplow. Verified byte-identical to 1.12.16 outside Chart.yaml.
+  version: 1.12.17
   tier: platform
   feature: portal
 - name: authn
@@ -316,7 +317,18 @@ components:
   # Step-E correctness measurement is a separate runtime /debug toggle, not a chart or env change.
   # NOTE: snowplow is a declared dep of frontend, so this flip opens a window where frontend's
   # dep gate sees it absent; the comparable window on the 0.3.311 roll ran ~400s.
-  version: 1.12.16
+  # 1.12.17 (#272): ships the /debug/shadow-parity toggle route — the runtime surface that makes the
+  # v7 Step-E measurement reachable at all. 1.12.16 shipped the dark subsystem but its ONLY callers of
+  # SetShadowParityEnabled were tests and every /debug/* route was a GET, so there was no way to turn
+  # it on; that gap was found and disclosed by the snowplow session after 1.12.16 had already rolled.
+  # Still DARK: default-off, no env backing, no boot flip, so the roll changes nothing observable
+  # until an operator POSTs. Verified byte-identical to 1.12.16 outside Chart.yaml.
+  # THE FLIP IS A SEPARATE DECISION and is gated on two things that cannot be proven from the chart:
+  # an unauthenticated call to the toggle route must return 401 on the live pod (a 503 means the
+  # pod's JWKS is misconfigured — the #271 failure mode — and the measurement would be void), and the
+  # counters are per-pod process-local expvars, so read them from ONE pod, never through the ingress
+  # at replicas > 1.
+  version: 1.12.17
   deps:
   - snowplow-crd
   - authn
