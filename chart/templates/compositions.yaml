@@ -508,6 +508,24 @@
      else has a reason to want CORS off here while the portal is calling the gateway directly. */ -}}
 {{- if eq $c.name "agentgateway-policies" -}}
 {{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "cors" "enabled") "value" true) -}}
+{{- /* AND THE ORIGIN, DERIVED — not left at the chart's `*`. The chart defaults allowOrigins to ["*"]
+     because, as its own schema says, the browser-facing origin is not knowable in-cluster; the
+     installer DOES know it, because exposure.tls.host is the single declared source the consumer URLs
+     and the voice endpoints are already built from. So derive it here rather than asking every operator
+     to re-spell their own hostname in componentValues, which is what the chart comment assumed would
+     happen and which on krateo-057 nobody did — the gateway ran with a wildcard origin for as long as
+     CORS has been wired.
+     Shares the `and $gwTLS $gwPortalHost` predicate with the consumer-URL block above on purpose: the
+     origin the browser is told to call and the origin the gateway accepts are the same fact, and two
+     templates deciding one fact separately is how they drift.
+     No TLS host => NOT written, so the chart default stands and a plain-HTTP install renders
+     byte-identically. componentValues still wins for anything unusual (multiple origins, a CDN in
+     front); this only replaces `*` with the host this install actually serves.
+     allowCredentials stays at the chart's false: narrowing the origin is not a licence to start
+     accepting cookies cross-site. */ -}}
+{{- if and $gwTLS $gwPortalHost -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "cors" "allowOrigins") "value" (list (printf "https://%s" $gwPortalHost))) -}}
+{{- end -}}
 {{- end -}}
 {{- /* exposure.voice (#118 dictation, #52 speak-back): derive the frontend transcribe + tts URLs from
      the TLS host (no hardcoded host) and enable the two gateway routes they point at (/stt/v1, /tts/v1).
