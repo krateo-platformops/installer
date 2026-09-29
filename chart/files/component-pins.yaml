@@ -174,7 +174,11 @@ components:
   # 1.12.17: co-versioned with snowplow. Verified byte-identical to 1.12.16 outside Chart.yaml.
   # 1.12.19: co-versioned with snowplow. Verified byte-identical to 1.12.17 outside Chart.yaml, so no
   # CRD change and no ordering constraint against the app.
-  version: 1.12.19
+  # 1.12.21: co-versioned with snowplow. Verified byte-identical through 1.12.19 -> 1.12.20 -> 1.12.21
+  # outside Chart.yaml (its own version line only), so no CRD surface change and no ordering constraint
+  # against the app. SKIPS 1.12.20, and that skip is safe for the reason above: the packaged templates
+  # are identical at all three, so there is no CRD migration to have stepped over.
+  version: 1.12.21
   tier: platform
   feature: portal
 - name: authn
@@ -351,7 +355,36 @@ components:
   # Chart verified byte-identical to 1.12.17 outside Chart.yaml, so the entire fix is the image.
   # Ships a metadata-only JWT-gated /debug/deps endpoint; ?filter=missing-backing-edges spot-checks that
   # the defect class is gone. Not needed for the roll.
-  version: 1.12.19
+  # 1.12.21 (Refs #271), which CARRIES 1.12.20. Rolled as one flip rather than two; see the last
+  # paragraph for why that was the deciding factor.
+  # THE REASON TO ROLL IS 1.12.20's DIAGNOSTIC, not a fix: an `sa_dial` bool on the three
+  # api-call-failure log sites in dispatchOneCall, so the recurring 057 "subjectaccessreviews ...
+  # Unauthorized" lines name their own root cause instead of leaving it to be guessed. sa_dial=true
+  # means candidate a' (a stale SA-endpoint token, the #267 gap); sa_dial=false means candidate b (a
+  # rejected per-user clientconfig). Those are different fixes, which is the whole point of the split.
+  # HOW TO READ IT, and this is the part that has already burned me once: the 057 SAR-401s arrive in
+  # BURSTS of exactly 170 or 340 lines with 2-39 minute gaps between them. A per-minute rate off a short
+  # sample measures which phase of a burst you sampled, not the level — I reported "plateaued at 85/min",
+  # then "zero", then "2.5x higher" off exactly that mistake and had to withdraw the figure. Report the
+  # true/false split as COUNTS over a stated window spanning several bursts, never as a rate.
+  # WHAT 1.12.21 ADDS OVER 1.12.20, and why it is inert: the v7 Step 2E populate-side shadow-parity hook.
+  # It is an atomic.Bool defaulting OFF, flipped from exactly ONE non-test call site — the RefreshAuth-
+  # gated /debug/shadow-parity route — with ZERO references anywhere under helm/ and no boot-time env
+  # read. So there is no values.schema.json leaf for a `default:` to pin, which matters because a
+  # defaulted componentValues leaf is a SILENT LIVE OVERRIDE (core-provider applies schema defaults into
+  # the composition CR spec) and that exact mechanism caused today's Autopilot 405. Enabling the parity
+  # measurement window is a RUNTIME act against a live pod, not a redeploy: nothing here changes until
+  # someone makes an authenticated call, and nobody makes that call by accident.
+  # Both charts verified byte-identical to 1.12.19 outside Chart.yaml at BOTH 1.12.20 and 1.12.21, so the
+  # entire change at either tag rides the image and a chart diff is the wrong instrument. Image is a real
+  # multi-arch OCI index (linux/amd64 + linux/arm64) at both; digests 1.12.19 a3ef1536, 1.12.20 802e7c65.
+  # WHY ONE FLIP AND NOT TWO: 1.12.21 is a strict superset of 1.12.20, and a pin flip is never free even
+  # when the chart is byte-identical — the version IS the apiVersion, so each flip prunes and recreates
+  # the leaf and opens a window where dependents can sit unready. Paying that twice for content that is
+  # inert on the first pass buys nothing. An earlier revision of this bump pinned 1.12.20 and said "NOT
+  # 1.12.21" because its artifacts did not exist yet; they were published before this merged, the three
+  # objections (single manifest, neither chart present) were re-checked first-hand and are cleared.
+  version: 1.12.21
   deps:
   - snowplow-crd
   - authn
