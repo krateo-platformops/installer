@@ -2091,7 +2091,11 @@ components:
   # observedCount, and evidence[].query, which is now marked historical and KEPT rather than deleted:
   # the schema is structural, so removing it would prune the value from every stored proposal on its
   # next write, and 17 entries on 057 still carry one). Checked rather than assumed, as for 0.1.14.
-  version: 0.1.17
+  # 0.1.18: declares scope / sessions / createdInWindow on ReviewRun.status.evidence. NOT cosmetic and
+  # not optional: that schema is structural, so without these the new source's stats are PRUNED on
+  # write and the run would claim a scope it never recorded — the same silent-pruning bug that hid the
+  # truncation fields in 0.1.14.
+  version: 0.1.18
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -2235,7 +2239,23 @@ components:
   # model's own unbounded field, so any number it wrote satisfied the check. Across the first nine
   # real proposals on 057 it never once fired: four carried a single evidence item and all four kept
   # high on counts of 636/612/8459/4403. The CRD now states the field is the model's own estimate.
-  version: 0.1.17
+  # 0.1.18: kagent-sessions finally returns something. It read /api/sessions as itself, and kagent
+  # 0.10.x scopes that to the calling principal with no flag and no authorizer that could widen it, so
+  # the service saw only sessions it owns and it owns none — its own A2A traffic is filed under
+  # synthetic A2A_USER_<contextId> ids. The controller's log for the 02:00 run read
+  # `userID: nightly-review, count: 0` while 3,223 sessions existed, so the review has been reasoning
+  # on two sources of three since it shipped.
+  # It now reads kagent's Postgres with a role granted SELECT on `session` and nothing else. The
+  # boundary is a PRIVILEGE, not a promise: content lives in event.data and task and the role is
+  # revoked on both — verified live as session=t event=f task=f feedback=f, and again by connecting as
+  # the role (3,223 sessions readable, `permission denied for table event`). It emits aggregate counts
+  # and never user_id values, because this corpus reaches a model and then a pull-request body.
+  # REQUIRES componentValues.nightly-review.secrets.kagentDb.name to be set per install, and there is
+  # deliberately NO schema default for it: a default would be injected into every Installer CR, and on
+  # any install lacking that Secret the CronJob's secretKeyRef could not resolve and the pod would fail
+  # with CreateContainerConfigError. Unset means the source reports not-configured and the run is
+  # PartiallyCompleted — visible and harmless.
+  version: 0.1.18
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the

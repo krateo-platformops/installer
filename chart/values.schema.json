@@ -15039,6 +15039,22 @@
                       "type": "string"
                     }
                   }
+                },
+                "kagentDb": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Credential for kagent's Postgres, which the review reads for session METADATA across EVERY user \u2014 a deliberate departure from the per-user RBAC the rest of this platform enforces. The role named here must hold SELECT on `session` and nothing else: conversation content lives in event.data and task and the role is revoked on both, so the limit is a database privilege rather than a promise the code makes. Verify it where the role is created (session=t, event=f, task=f) rather than trusting these keys. NO `default` ON ANY LEAF, DELIBERATELY, and this one bites harder than documentation: core-provider applies this schema's defaults into the Installer CR spec, so a default name would be set on EVERY install \u2014 and on any install where that Secret does not exist the CronJob's secretKeyRef cannot resolve and the pod fails with CreateContainerConfigError. Unset must mean unset: the source then reports not-configured and the run is PartiallyCompleted, which is visible and harmless.",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "userKey": {
+                      "type": "string"
+                    },
+                    "passwordKey": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             },
