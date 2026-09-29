@@ -2022,7 +2022,14 @@ components:
   #   kubectl get deploy frontend-agent -o jsonpath='{.spec.template.metadata.annotations.kagent\.dev/config-hash}'
   # It reads 3492187988851374085 before this roll, and the marker goes 0 -> 1 in secret/frontend-agent
   # config.json. If the hash does not move, bounce the pod.
-  version: 1.5.2
+  # 1.5.3 (#16): a prompt fix, and its own pin line rather than a ride on the frontend chart — the fix
+  # ships in the AGENTIKO frontend-agent chart (oci://ghcr.io/krateo-agentiko/charts/frontend-agent),
+  # NOT in krateo-platformops/frontend. Worth stating because the two move together in conversation and
+  # a prompt fix that quietly did not land is invisible: the page renders, just wrongly.
+  # The rule: a page's heading or title is a PageHeader, the FIRST CHILD of the root Flex — never a
+  # Paragraph, never a Card title. Same verify-by-the-field instruction as above applies; the prompt
+  # reaches the pod through secret/frontend-agent, so read the config-hash annotation, not a ConfigMap.
+  version: 1.5.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -2205,7 +2212,16 @@ components:
   # PATCH returns 200 and stores NOTHING — a Reject the page reports and the cluster never recorded.
   # Also fixes a latent CRD bug: a null-valued key in runRef's description that strict decoding refused.
   # Supersedes 0.1.21 and 0.1.22.
-  version: 0.1.23
+  # 0.1.25 (via 0.1.24): STEP 1 of an ordered pair again, and for the same reason the last one existed.
+  # status gains agentAnalysis and usage, and evidence[*] gains questionsFolded, droppedAgents, skipped
+  # and agents. status is structural, so against the 0.1.23 CRD every one of those is PRUNED ON WRITE
+  # with a 200 back — the run would report a shape it never recorded. That is the exact bug that ate
+  # evidence[*].queries for seven releases, so it is checked rather than assumed: verified by unpacking
+  # the 0.1.25 chart and reading the ReviewRun schema, not by trusting the release note.
+  # The app's deps below give the ordering inside one installer version, and the app is a CronJob that
+  # does not run until 02:00, so there is no window where it writes against the old schema.
+  # 0.1.24 is skipped and superseded; nothing between it and 0.1.25 touches the CRD surface.
+  version: 0.1.25
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -2429,7 +2445,36 @@ components:
   # records that scope with ok:false and 'permission denied for table event', which reads as
   # attempted-and-refused rather than as a false claim.
   # New RBAC: list flexes (page-* roots census) and get/patch on proposals for portal-admin.
-  version: 0.1.23
+  # 0.1.25 (#35), which CARRIES 0.1.24 (#34). 0.1.24 is superseded and must not be rolled on its own.
+  # 0.1.24 = the `analyse` stage: one call per agent with sessions in the window, through the same
+  # tool-less reviewer, reading FULL conversations plus that agent's own prompt resolved from the
+  # *-prompts-eng ConfigMaps. config.agentAnalysis bounds it: maxAgents 8, excludeAgents ["*-bench"],
+  # corpusMaxChars 16000, timeoutSeconds 300 per call, totalSeconds 1500. New RBAC is get on
+  # agents.kagent.dev (list was already there) and get on configmaps IN THE RELEASE NAMESPACE ONLY,
+  # never Secrets.
+  # BEHAVIOUR CHANGE, expect the proposals to look different on the first run and do not read it as a
+  # regression: kagent 0.10.1 IGNORES params.metadata.systemPrompt, so the main review had NEVER
+  # received prompt.SYSTEM — the alert-kind and subject rules. It now travels as the first message
+  # part. The shape shift is the correction landing, not drift.
+  # It also closes a redaction gap I found while reading 0.1.23: the denylist matched on \b, which does
+  # not fire after an underscore, so DB_PASSWORD=, KAGENT_DB_PASSWORD=, PGPASSWORD=, MY_API_KEY= and
+  # CLICKHOUSE_PASSWORD= all passed through. That was latent at 0.1.23 and would have become live at
+  # 0.1.24, which is the first release to put tool-call content in front of the model. A test now runs
+  # the real analyse() against a fake reviewer and asserts no raw secret reaches it.
+  # 0.1.25 = the bound that 0.1.24 was missing, and it is the reason this waited for a second tag rather
+  # than rolling 0.1.24: jobDeadlineSeconds (default 3600, schema MINIMUM 600) becomes the Job's
+  # activeDeadlineSeconds, with terminationGracePeriodSeconds 60, and main.py handles SIGTERM by marking
+  # the running step AND the run Failed with the reason. Without it an analyse call that hangs on an
+  # external service holds the night's slot forever and concurrencyPolicy: Forbid (already present) then
+  # skips every LATER night — one hang would have silently ended the nightly review. The SIGTERM half
+  # matters as much as the deadline: a killed run left Running is indistinguishable from a running one.
+  # COST ON 057: about 3 analysis calls and 75-115k input tokens a night, and the job may run ~25 min
+  # longer than before.
+  # NOTE the stale claim two lines below, corrected here rather than left to mislead: there IS now a
+  # Postgres reader. The kagent-sessions source reads kagent's database directly through a dedicated
+  # role, and agent-analysis reads agent replies and tool output through it too. The API-path argument
+  # in that comment described 0.1.13 and has not been true since 0.1.19.
+  version: 0.1.25
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
