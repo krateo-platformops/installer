@@ -1162,7 +1162,17 @@ components:
   # 16 KB — core-provider-agent's 12.4 KB chart becomes 20.3 KB of URL, so Preview 431'd on any
   # realistic chart. The draft is now written to krateo-preview as one ConfigMap, POSTed in a body as
   # the user, rendered BY NAME through this RA, and deleted as soon as the render answers.
-  version: 1.8.52
+  # 1.8.53 (#257): STEP 2 of the ordered pair — frontend-crd 1.6.75 had to be live first, and was,
+  # confirmed not by reading the pin but by writing itemTemplate.rowActionsDisplay to a probe Listy on
+  # 057 and reading the value back. That distinction matters: the field's path is structural, so under
+  # the old CRD the apply SUCCEEDS with the field pruned — a read-back is the only check that separates
+  # 'served' from 'silently dropped'.
+  # Adds the RESTActions my-drafts and unowned-drafts plus Listy lists on /blueprint-builder and
+  # /portal-builder, and REMOVES restaction.preview-drafts, table.preview-drafts, card.your-drafts and
+  # paragraph.your-drafts, which helm prunes on upgrade.
+  # The 229 legacy sandbox objects are NOT touched: they appear as 'Unowned drafts' with Adopt and
+  # Discard. Nothing is deleted by this roll.
+  version: 1.8.53
   deps:
   - frontend
   - git-provider
@@ -1217,7 +1227,8 @@ components:
   # 1.8.50: co-versioned with portal, as always. Verified byte-identical to 1.8.49 outside Chart.yaml.
   # 1.8.51: co-versioned with portal, as always. Verified byte-identical to 1.8.50 outside Chart.yaml.
   # 1.8.52: co-versioned with portal, as always. Verified byte-identical to 1.8.51 outside Chart.yaml.
-  version: 1.8.52
+  # 1.8.53: co-versioned with portal, as always. Verified byte-identical to 1.8.52 outside Chart.yaml.
+  version: 1.8.53
   deps: ['portal']
   tier: platform
   feature: portal
