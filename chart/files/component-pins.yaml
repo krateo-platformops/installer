@@ -2376,7 +2376,23 @@ components:
   # rolled out (0.3.279 on 057), which is why it was held back a release; against live 057 it is a NO-OP,
   # verified: gateway objects there already name blueprint-agent zero times. Policies hot-load, so no
   # fleet bounce.
-  version: 0.2.12
+  # 0.2.13 (#67): the LLM request guardrail was silently CORRUPTING relayed content. regex.pii used
+  # agentgateway's PhoneNumber builtin, which is libphonenumber — any run of 7+ digits and separators
+  # that validates as a number in US/GB/DE/IL/IN/CA/BR. On the REQUEST path it rewrote a chart the
+  # orchestrator relayed: json-schema.org/draft/2020-12/schema became draft/<PHONE_NUMBER>/schema and
+  # Preview's render failed, and a chart named catalog-service-09291152 became
+  # catalog-service-phonenumber. Anything with version-like or date-like digits was exposed: charts,
+  # dates, SHAs. PhoneNumber is out; two explicit patterns replace it (international with a leading +,
+  # and US (415) 555-2671).
+  # TRADE-OFF, recorded because it is a real narrowing and not a pure fix: national-format numbers
+  # WITHOUT a leading + are no longer masked, so 415 555 2671 now passes through unmasked.
+  # Verified independently rather than from the handoff: the rendered policy contains PhoneNumber zero
+  # times (it survives only as a comment and an opt-in schema enum), and both reported corruptions plus
+  # 2026-09-29T10:32:21Z / 1.12.17 / installer-0.3.317 test clean against the two new patterns while
+  # +1 415 555 2671 and (415) 555-2671 still mask. Also checked the hazard that would have made this
+  # bump a no-op: no installer schema default exists on the guardrails/regex/pii path, and the live CR
+  # does not override it, so the chart default is what applies.
+  version: 0.2.13
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
