@@ -2095,7 +2095,9 @@ components:
   # not optional: that schema is structural, so without these the new source's stats are PRUNED on
   # write and the run would claim a scope it never recorded — the same silent-pruning bug that hid the
   # truncation fields in 0.1.14.
-  version: 0.1.18
+  # 0.1.19: declares agentsDeployed / agentsNeverUsed / agentsIdle7d / agentsActiveInWindow. Structural
+  # schema, so undeclared fields are pruned on write and the run would report counters it never kept.
+  version: 0.1.19
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -2255,7 +2257,23 @@ components:
   # any install lacking that Secret the CronJob's secretKeyRef could not resolve and the pod would fail
   # with CreateContainerConfigError. Unset means the source reports not-configured and the run is
   # PartiallyCompleted — visible and harmless.
-  version: 0.1.18
+  # 0.1.19: kagent-sessions reports what ISN'T happening. 0.1.18 made it return data and it still
+  # produced nothing — the manual run on 057 handed the model four rows and a total and zero proposals
+  # cited any of it, correctly: ClickHouse gives error patterns (problem-shaped), Kubernetes gives
+  # existing Alerts (coverage-shaped), and a census of things that worked is neither.
+  # The window was the bug. Filtering rows by updated_at means an agent idle three weeks has NO ROW, so
+  # the fact that makes it interesting is what excludes it; a GROUP BY over rows that exist can never
+  # report absence. The window now only MARKS in-window rows, never restricts them.
+  # On 057 that surfaces: authn-agent with 1 session in its whole life 20 days ago, tk-swarm-ro deployed
+  # and NEVER used, and 4 bench agents idle 21-23 days holding 1,531 sessions between them.
+  # CARRIES A NEW CLUSTER-SCOPED GRANT: list on kagent.dev/agents, because an agent with no session has
+  # no row to group and the deployed set is the only way to see it. Rolling the pin is what delivers
+  # that ClusterRole — without it the deployed-set read 403s and the never-used signal is silently lost,
+  # which is the alert-troubleshooter#31 shape.
+  # Two candidate signals were measured and DROPPED rather than built: `source` holds two values across
+  # 3,224 rows and separates nothing, and created_at = updated_at occurs zero times, so an abandonment
+  # field would have been permanently empty.
+  version: 0.1.19
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
