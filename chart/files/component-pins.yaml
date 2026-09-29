@@ -139,7 +139,8 @@ components:
   # 1.6.72: co-versioned with frontend, which ships only ui/ changes. Verified rather than assumed:
   # the packaged frontend-crds templates at 1.6.72 are byte-identical to 1.6.71 outside Chart.yaml,
   # so this pin moves only to keep the pair equal — there is no CRD surface change in it.
-  version: 1.6.72
+  # 1.6.73: co-versioned with frontend. Verified byte-identical to 1.6.72 outside Chart.yaml.
+  version: 1.6.73
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -775,7 +776,19 @@ components:
   # info message instead of "Error while rendering widget". That is what DISPLAYS portal 1.8.50's
   # "still being registered" state, so the two move together; with portal alone the create form shows
   # the generic nothing-to-render error, which is still better than failing to resolve. Diff is ui/ only.
-  version: 1.6.72
+  # 1.6.73 (#388): the caller half of the portal 1.8.52 draft-render path. Two CHART changes, not just
+  # an image: the sandbox Role gains ConfigMaps (create/get/list/watch/delete) in krateo-preview only,
+  # and preview-sandbox/resourcequota.yaml is REMOVED — so this upgrade DELETES
+  # ResourceQuota/preview-widget-count in krateo-preview. That deletion is intended.
+  # No ordering constraint: the frontend falls back to the old path until the portal RA and the
+  # ConfigMap grant are both live, so Preview degrades rather than breaking.
+  # Checked before rolling, because it would have broken the render: 1.6.73 drops the values
+  # previewSandbox.quota and previewSandbox.widgetPlurals and its chart schema is
+  # additionalProperties:false, declaring only authors/enabled/namespace. Neither dropped key carries a
+  # default in this installer's schema, so core-provider injects neither, and the live Frontend CR
+  # carries exactly {enabled, namespace} — both still accepted. Also verified agentgateway.enabled
+  # still yields /api/a2a/<ns>/autopilot in 1.6.73, so the 405 fix survives the bump.
+  version: 1.6.73
   deps:
   - frontend-crd
   - authn
@@ -1127,7 +1140,13 @@ components:
   # checkable after: 336 occurrences per 30 minutes on 1.8.50, all with an empty traceId (prewarm
   # path only, nothing user-facing). Confirmed NOT a snowplow cache artifact — they survived a cold
   # cache when snowplow 1.12.16 replaced the pod.
-  version: 1.8.51
+  # 1.8.52 (#256): adds the RESTAction blueprint-render-draft, and supersedes 1.8.51 (which it
+  # contains, marketplace-detail filter fix included). Preview used to send the WHOLE chart in
+  # blueprint-render's ?extras on a GET, and the gateway refuses HTTP/2 requests whose headers exceed
+  # 16 KB — core-provider-agent's 12.4 KB chart becomes 20.3 KB of URL, so Preview 431'd on any
+  # realistic chart. The draft is now written to krateo-preview as one ConfigMap, POSTed in a body as
+  # the user, rendered BY NAME through this RA, and deleted as soon as the render answers.
+  version: 1.8.52
   deps:
   - frontend
   - git-provider
@@ -1181,7 +1200,8 @@ components:
   # 1.8.44: co-versioned with portal, as always.
   # 1.8.50: co-versioned with portal, as always. Verified byte-identical to 1.8.49 outside Chart.yaml.
   # 1.8.51: co-versioned with portal, as always. Verified byte-identical to 1.8.50 outside Chart.yaml.
-  version: 1.8.51
+  # 1.8.52: co-versioned with portal, as always. Verified byte-identical to 1.8.51 outside Chart.yaml.
+  version: 1.8.52
   deps: ['portal']
   tier: platform
   feature: portal
