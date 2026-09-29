@@ -147,7 +147,8 @@ components:
   # CRD the portal's drafts Listys would be applied with the field SILENTLY PRUNED: no error, no event,
   # just row actions that never render. That is why the order is load-bearing and not a preference.
   # 1.6.75's -crds chart is byte-identical to 1.6.74's outside Chart.yaml, verified.
-  version: 1.6.75
+  # 1.6.76: co-versioned with frontend. Verified byte-identical to 1.6.75 outside Chart.yaml.
+  version: 1.6.76
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -171,7 +172,9 @@ components:
   # templates at 1.12.16 are byte-identical to 1.12.15 outside Chart.yaml, so this moves only to
   # keep the pair equal — no CRD surface change.
   # 1.12.17: co-versioned with snowplow. Verified byte-identical to 1.12.16 outside Chart.yaml.
-  version: 1.12.17
+  # 1.12.19: co-versioned with snowplow. Verified byte-identical to 1.12.17 outside Chart.yaml, so no
+  # CRD change and no ordering constraint against the app.
+  version: 1.12.19
   tier: platform
   feature: portal
 - name: authn
@@ -336,7 +339,19 @@ components:
   # pod's JWKS is misconfigured — the #271 failure mode — and the measurement would be void), and the
   # counters are per-pod process-local expvars, so read them from ONE pod, never through the ingress
   # at replicas > 1.
-  version: 1.12.17
+  # 1.12.19 (#277/#278): THE FIRST OF THIS RUN THAT IS NOT DARK — a live user-facing correctness fix.
+  # Shared-RA widgets, the compositions-datagrid among them, served STALE rows for up to ~1h after a
+  # backing mutation, because the fast-path serve recorded no invalidation edge. That was active on 057
+  # while 1.12.18 and 1.12.19 sat published and unrolled — I was waiting on a handoff message instead of
+  # checking the registry, which is a bad reason for a correctness fix to wait. Check the registry.
+  # It also carries forward the 1.12.17 /debug/shadow-parity toggle route and the 1.12.18 allow/deny
+  # split, both still DARK and inert: they change nothing until their toggles are flipped, and the v7
+  # parity measurement they exist for is on hold pending a populate-side hook (#275), because the #266
+  # hook turned out to be live-serve only and fires zero checks on the prewarm path.
+  # Chart verified byte-identical to 1.12.17 outside Chart.yaml, so the entire fix is the image.
+  # Ships a metadata-only JWT-gated /debug/deps endpoint; ?filter=missing-backing-edges spot-checks that
+  # the defect class is gone. Not needed for the roll.
+  version: 1.12.19
   deps:
   - snowplow-crd
   - authn
@@ -804,7 +819,15 @@ components:
   # This is what finally answers the 229 orphaned sandbox drafts. They are NOT deleted — they surface as
   # 'Unowned drafts' with Adopt and Discard, which is the right ending for a delete that was nearly run
   # against them this morning before it turned out the Portal Builder offers them for resume.
-  version: 1.6.75
+  # 1.6.76 (#395): a draft composed BY HAND was labelled 'Autopilot thread'. Attribution now requires an
+  # Autopilot proposal to have actually changed the draft. Narrow, but it is a provenance claim: saying an
+  # agent touched something it did not erodes trust in every other label on the page.
+  # Supersedes 1.6.75. Diff since it is 4 files under ui/src only, so frontend-crds is unchanged and
+  # there is no ordering constraint with portal this time — unlike the 1.6.75 pair.
+  # Released after the draft-records E2E passed on 057: autosave, kill-and-resume, Adopt of one legacy
+  # draft set and a full-set Discard of another (229 -> 225, exactly those two sets), keyboard resume,
+  # and clean-up leaving zero records behind. I verified that 225 and the two named sets myself.
+  version: 1.6.76
   deps:
   - frontend-crd
   - authn
