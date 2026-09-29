@@ -1195,7 +1195,18 @@ components:
   # paragraph.your-drafts, which helm prunes on upgrade.
   # The 229 legacy sandbox objects are NOT touched: they appear as 'Unowned drafts' with Adopt and
   # Discard. Nothing is deleted by this roll.
-  version: 1.8.53
+  # 1.8.55 (#258): the Platform Review — /reviews with Proposals and Runs tabs, admin-tier detail routes,
+  # 70 review templates and the decision forms. Reject and 'record as change request open' write
+  # spec.decision with the caller's token.
+  # STEP 2 of an ordered pair. nightly-review-crd 0.1.23 had to serve spec.decision first, and did —
+  # proven by WRITING a probe Proposal with spec.decision and reading it back, not by comparing pins,
+  # because spec is structural and a prune returns 200. Against the old CRD a Reject would have been
+  # reported by the page and never recorded by the cluster.
+  # The probe also proved the MutatingAdmissionPolicy is live and unspoofable: decidedBy was written as
+  # 'probe-user' and came back stamped with the real authenticated identity, with decidedAt added.
+  # Effective phase is decision-first (only Merged status overrides), actions are gated by phase
+  # (Proposed both, PrOpen reject-only, otherwise none), and Reject's reason is optional.
+  version: 1.8.55
   deps:
   - frontend
   - git-provider
@@ -1251,7 +1262,8 @@ components:
   # 1.8.51: co-versioned with portal, as always. Verified byte-identical to 1.8.50 outside Chart.yaml.
   # 1.8.52: co-versioned with portal, as always. Verified byte-identical to 1.8.51 outside Chart.yaml.
   # 1.8.53: co-versioned with portal, as always. Verified byte-identical to 1.8.52 outside Chart.yaml.
-  version: 1.8.53
+  # 1.8.55: co-versioned with portal. Verified byte-identical to 1.8.54 outside Chart.yaml.
+  version: 1.8.55
   deps: ['portal']
   tier: platform
   feature: portal
