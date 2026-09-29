@@ -148,7 +148,12 @@ components:
   # just row actions that never render. That is why the order is load-bearing and not a preference.
   # 1.6.75's -crds chart is byte-identical to 1.6.74's outside Chart.yaml, verified.
   # 1.6.76: co-versioned with frontend. Verified byte-identical to 1.6.75 outside Chart.yaml.
-  version: 1.6.76
+  # 1.6.78: co-versioned with frontend. Verified byte-identical to 1.6.76 outside Chart.yaml (its own
+  # version line only), so NO CRD surface change and no ordering constraint against the app this time —
+  # unlike the 1.6.75 pair above, where itemTemplate.rowActionsDisplay made the order load-bearing.
+  # Checked rather than taken from the handoff, which said only 'unchanged in substance': the whole
+  # packaged tree was diffed, not just the schema for the fields the PRs mention.
+  version: 1.6.78
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -860,7 +865,26 @@ components:
   # Released after the draft-records E2E passed on 057: autosave, kill-and-resume, Adopt of one legacy
   # draft set and a full-set Discard of another (229 -> 225, exactly those two sets), keyboard resume,
   # and clean-up leaving zero records behind. I verified that 225 and the two named sets myself.
-  version: 1.6.76
+  # 1.6.78, which SUPERSEDES 1.6.77 (never rolled — it was staged, Diego had not cleared it, and 1.6.78
+  # landed first, so this is one flip instead of two). Three PRs, and TWO of them change things outside
+  # the feature they shipped with. Recording that here because a filming pass followed immediately and
+  # 'my tag only touched the composer' is the kind of claim that costs a re-shoot:
+  #   #396 — the Autopilot rail's live-activity label no longer collapses into a one-letter column
+  #     beside a long request. This was the ENTIRE content of 1.6.77.
+  #   #397 — the composer's canvas tag is truthful, the Publish form's copy fits both origins, and the
+  #     page strip and the form both name the slug repo. SIDE EFFECT: it raises the dark blue/geekblue
+  #     tag seeds to meet AA, which changes darkTheme TOKENS — so EVERY blue tag in dark mode gets
+  #     brighter, not only the composer's.
+  #   #398 — the live preview: an edit PATCHes unchanged widgets in place instead of delete-then-create,
+  #     which removes the 'Not found' flash (the author Role already grants patch, so no chart change
+  #     needed — contrast 1.6.75, which did need one); only removed names are deleted, and last;
+  #     RESTActions are off the canvas; the Files tab no longer squeezes it. SIDE EFFECT: virtual tables
+  #     at >=100 rows now truncate cells with the full text on hover, which AFFECTS THE COMPOSITIONS
+  #     LIST too, not just the preview.
+  # Chart verified byte-identical to 1.6.76 outside Chart.yaml at both frontend and frontend-crds, so the
+  # entire change rides the image and a chart diff is the wrong instrument. Image is a real multi-arch
+  # OCI index (linux/amd64 + linux/arm64).
+  version: 1.6.78
   deps:
   - frontend-crd
   - authn
