@@ -194,7 +194,10 @@ components:
   # 1.12.23, and that skip is safe AND deliberate: 1.12.23 was published but its tag dereferences to
   # b991ac3 (the #279 hardening only) and `git merge-base --is-ancestor 23af561 b991ac3` is FALSE, so it
   # does NOT contain the #292 leak fix. 1.12.24 contains both. Checked by ancestry, not by release note.
-  version: 1.12.24
+  # 1.12.27: co-versioned with snowplow. Verified byte-identical to 1.12.24 outside Chart.yaml, so no
+  # CRD surface change and no ordering constraint against the app. Skips 1.12.25 and 1.12.26, both of
+  # which 1.12.27 contains by ancestry.
+  version: 1.12.27
   tier: platform
   feature: portal
 - name: authn
@@ -492,7 +495,42 @@ components:
   # 443c54c (#288) are all IN this tag — checked by merge-base, not taken from the handoff.
   # NOT IN THIS VERSION, expected in 1.12.25: #248 the UAF-decline-freeze reaper (described as the
   # dominant live L1 gap), #260/#257 RBAC substrate + role-rules skip, #189 resurrection guard, #204.
-  version: 1.12.24
+  # 1.12.27 (tag -> commit 55b256c). COLLAPSES THREE UNROLLED RELEASES INTO ONE ROLL: 1.12.25 and
+  # 1.12.26 were both tagged and published while 057 sat on 1.12.24, and I only noticed because I went
+  # looking rather than waiting to be handed each one — the same lapse as 1.12.18/1.12.19 sitting
+  # unrolled earlier. VERIFIED BY ANCESTRY, not from the handoff: merge-base confirms 1.12.25 (2db77eb)
+  # and 1.12.26 (70ad881) are both ancestors of 1.12.27 (55b256c), so deploying this gets everything.
+  # Safe to collapse: all forward cache-correctness / detector / test fixes. No schema migration, no
+  # key-version bump — v7 is 1.13.0 and is in NONE of these — nothing irreversible.
+  # CARRIES #248, the read-independent maxEntryAge REAPER for UAF-decline-FROZEN L1 cells (in 1.12.25,
+  # therefore here; reapPastMaxEntryAge present x3 at this tag).
+  # HOW TO VERIFY #248, and I got this wrong twice before the owner corrected me, so read it carefully:
+  #   #248 does NOT reduce the UAF decline rate. The gate that declines Puts because the restactions L1
+  #   key cannot separate UAF scope is UNTOUCHED until the v7 UAF-scope digest in 1.13.0. What #248 does
+  #   is BOUND THE STALENESS of a cell that was cached and then frozen, by evicting it past maxEntryAge
+  #   without waiting for a read. So the discriminators are:
+  #     evict_max_age_total        0 -> non-zero   (real before-state; unambiguous from exactly zero,
+  #                                                 though the counter is SHARED with the Get-lazy path)
+  #     widget_content_evict_total 0 -> non-zero   (the frozen-fraction PROXY, and the better signal)
+  #   WATCH THE PAIR: if evict_max_age_total climbs while widget_content_evict_total stays 0, the reaper
+  #   is evicting something but NOT the frozen widget-content set — technically working, practically not.
+  #   DO NOT plan to read suppressed_resident: it exists as a struct field from 1.12.25 but was never
+  #   added to the expvar map, so it never reaches /debug/vars in any released version. Filed upstream as
+  #   #345, lands 1.12.28+. I nearly reported the whole mechanism as fabricated after grepping a working
+  #   tree checked out at 1.12.21 — verify symbols BY COMMIT, not by whatever the checkout happens to be.
+  # THE BASELINE THIS ROLLS AGAINST, captured on 1.12.24 BEFORE rolling, at
+  # scratchpad/uaf-baseline-1.12.24.txt:
+  #   evict_max_age_total 0, widget_content_evict_total 0, widget_content_store_total 9805,
+  #   evict_lru_total 0 (cache at 337MB of a 2GB cap, so no LRU pressure), entries 4095,
+  #   hit_total/miss_total 2309550/3732074 (38.2%)
+  #   9805 widget-content cells stored and ZERO ever evicted, with no LRU pressure and no TTL path
+  #   reaching them, IS the unbounded-staleness population #248 exists to bound. That number is a far
+  #   better argument for the release than the decline rate, and the owner is putting it in the issue.
+  # The ~14k/hour UAF decline baseline is parked for the 1.13.0 v7 read and must NOT be read against
+  # this roll. Reading it here is exactly the error the owner corrected.
+  # Both charts verified byte-identical to 1.12.24 outside Chart.yaml (26311 B and 6219 B), image is a
+  # real multi-arch OCI index (amd64 + arm64).
+  version: 1.12.27
   deps:
   - snowplow-crd
   - authn
