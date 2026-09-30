@@ -1250,6 +1250,18 @@ components:
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
 - name: portal
+  # 1.8.59 (tag -> commit 85bbe19dd291cd62b5b125ea34e40a6e9f8ad0bf, verified by ls-remote).
+  # #275: /controller-builder rebuilt on the blueprint-builder widget structure — drafts card, controller
+  # deliverables (Registering/Installed/Failed/Configure credentials), RestDefinitions registry card. Its
+  # buttons link to /controller-builder/compose, which exists only from frontend 1.6.84 — SO 1.6.84 MUST
+  # BE LIVE FIRST, and it is (installer 0.3.348). Shipping these in the other order gives dead links.
+  # #277: the controller-render-draft RestAction + endpoint Secret oasgen-render-endpoint pointing at
+  # http://oasgen-provider-render.<ns>.svc:80.
+  # NOTE the Secret ships REGARDLESS of whether that service exists. render.enabled is still OFF and is
+  # currently UNREACHABLE — componentValues.oasgen-provider.render is not typed in this chart's schema, so
+  # helm REJECTS it ("additional properties 'render' not allowed"). Diego has decided to KEEP the render
+  # service, so typing that key (with NO default — a default would force render on for every install) is a
+  # separate follow-up. Until then controller Preview reports it needs oasgen-render and Publish stays off.
   # 1.8.58 (#276) CLOSES A LIVE EXPOSURE: Settings -> Users -> New's password field is now
   # `format: password` + `writeOnly: true` and reviewBeforeSubmit is GONE, so the value renders masked
   # and never reaches snowplow /jq — only the /call write body. Verified in the PUBLISHED chart
@@ -1547,7 +1559,7 @@ components:
   # perturbed. Content-only: no snowplow restart.
   # Chart diff is Chart.yaml plus exactly those four restaction templates; userAccessFilter occurrences in
   # composition-detail go 3 -> 5.
-  version: 1.8.58
+  version: 1.8.59
   deps:
   - frontend
   - git-provider
@@ -1610,7 +1622,7 @@ components:
   # diffing the packaged trees, which is how the difference was noticed at all.
   # 1.8.57: co-versioned with portal. Verified byte-identical to 1.8.56 outside Chart.yaml (129998 B at
   # both), so portal-agents carries none of the fix — it moves only to keep the pair equal.
-  version: 1.8.58
+  version: 1.8.59
   deps: ['portal']
   tier: platform
   feature: portal
