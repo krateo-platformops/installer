@@ -2048,8 +2048,23 @@ components:
   # Chart diff is Chart.yaml, Chart.lock (dependency digest refresh) and files/prompts-eng.yaml — no
   # template change, no image move, and no ADK braces introduced. Pairs with frontend-agent 1.5.3,
   # already live: 0.6.1 stops naming kinds, 1.5.3 makes the specialist pick the right one.
-  # VERIFY BY THE MOUNTED SECRET as above — config-hash on deploy/autopilot must move.
-  version: 0.6.1
+  # VERIFY BY THE MOUNTED SECRET as above — config-hash on deploy/autopilot must move. It moved:
+  # 6129930329762181307 -> 13533324902980676084.
+  # 0.6.2 (#141): supersedes 0.6.1 and exists because of a LESSON, not a bug in the rule. 0.6.1 said the
+  # right thing and then QUOTED the wrong phrasing as an example — "a brief that offered 'PageHeader or
+  # Paragraph/Typography heading' invited the wrong one". I flagged that quote in the 0.6.1 note as a GREP
+  # hazard (a search looks like a regression because the bad string is ADDED). The real hazard was worse:
+  # rr-20260930-0200's analyse stage caught AUTOPILOT COPYING THE QUOTED ANTI-PATTERN into a brief
+  # (proposal p-d3d9b5b145ffbafd). 0.6.2 states the rule without quoting the counter-example.
+  # CARRY THIS BEYOND THIS CHART: do not put an anti-pattern verbatim in a prompt, even labelled as
+  # wrong. The model has the string and the salience, and the label is the weakest part of the context.
+  # This is also the first fleet change that the nightly review found rather than a human — the analyse
+  # stage (nightly-review 0.1.25) read the agent's own conversations and named it.
+  # Chart diff is Chart.yaml, Chart.lock (dependency digest) and files/prompts-eng.yaml; occurrences of
+  # 'PageHeader or Paragraph' go 1 -> 0, checked by grepping both packaged trees. No template change, no
+  # image move. VERIFY BY THE MOUNTED SECRET: config-hash on deploy/autopilot reads
+  # 13533324902980676084 before this roll and must move.
+  version: 0.6.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
