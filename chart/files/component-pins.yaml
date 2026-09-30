@@ -22,6 +22,12 @@ components:
   # 1.6.70: BYTE-IDENTICAL to 1.6.69 — verified by diffing the packaged templates, not assumed.
   # 1.6.71: BYTE-IDENTICAL to 1.6.70, verified by diffing the packaged templates. Lockstep only.
 - name: frontend-crd
+  # 1.6.83 SUPERSEDES 1.6.82 (which was staged but never rolled). Carries a SECURITY fix:
+  # #424 — form fields marked `format: password` or `writeOnly: true` render masked and are no
+  # longer sent to snowplow /jq; they leave the browser only in the /call write body, are masked in
+  # the review step and blast-radius confirm, are never drafted or prefilled, and the AuditRecord
+  # keeps only the status. Two adversarial security reviews, blockers fixed. Plus #422, the composer
+  # engine reading the Builder spec (behaviour-preserving).
   # 1.6.82 (#421) adds ONE new CRD to this chart: builders.builders.templates.krateo.io
   # (group builders.templates.krateo.io, namespaced) — the Builder CR contract plus a plugin
   # registry. Renders 45 CRDs, 44 widgets + Builder; verified against the published chart, not
@@ -165,7 +171,7 @@ components:
   # length — that is gzip variance, not content. The file diff is the instrument; tarball size is not.
   # 1.6.81: co-versioned with frontend. Verified byte-identical to 1.6.79 outside Chart.yaml (skipping
   # 1.6.80, which was never rolled), so no CRD surface change and no ordering constraint against the app.
-  version: 1.6.82
+  version: 1.6.83
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1055,7 +1061,7 @@ components:
   # that showed a JSON box for such a field now shows rows. Worth one glance at a blueprint install form.
   # Both charts verified byte-identical to the deployed 1.6.79 outside Chart.yaml, so the whole change
   # rides the image; image is a real multi-arch OCI index (amd64 + arm64).
-  version: 1.6.82
+  version: 1.6.83
   deps:
   - frontend-crd
   - authn
