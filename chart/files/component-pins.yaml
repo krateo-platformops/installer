@@ -1758,8 +1758,20 @@ components:
   tier: observability
   feature: coreAgents
 - name: model-configs
+  # 0.1.2 adds an optional per-slot `reasoningEffort` and the slot `flashLow`
+  # (ModelConfig gemini-flash-low, gemini-3.8-flash at reasoningEffort: low), for the Autopilot
+  # page-building A/B whose baseline put 69% of the chain's reasoning tokens on snowplow-agent.
+  # INERT until an agent's componentValues.<agent>.modelConfig.name is set to gemini-flash-low —
+  # nothing references the new slot, so the pin bump alone changes no agent's behaviour, and
+  # gemini-flash/gemini-pro render byte-identically (verified against 057's live values).
+  # reasoningEffort is emitted ONLY on the agentgateway route path (kagent sends it as OpenAI
+  # reasoning_effort, agentgateway maps it to Gemini 3 thinkingLevel); on the vertexAI/local paths
+  # the field does not exist and the chart drops it. 057 IS on the route path (live gemini-flash
+  # has provider OpenAI + the /llm/v1 baseUrl), so the effort lands here. A bare `helm template`
+  # with chart defaults takes the vertexAI branch and shows NO effort — that render is the wrong
+  # instrument for this question, not evidence the feature is broken.
   kind: ModelConfigs
-  version: 0.1.1
+  version: 0.1.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
