@@ -1233,6 +1233,14 @@ components:
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
 - name: portal
+  # 1.8.58 (#276) CLOSES A LIVE EXPOSURE: Settings -> Users -> New's password field is now
+  # `format: password` + `writeOnly: true` and reviewBeforeSubmit is GONE, so the value renders masked
+  # and never reaches snowplow /jq — only the /call write body. Verified in the PUBLISHED chart
+  # (templates/form.settings-user-create.yaml lines 54-55, 0 occurrences of reviewBeforeSubmit).
+  # REQUIRES frontend >= 1.6.83, which honours those two keys; 1.6.83 is live on 057 (installer
+  # 0.3.343), so the dependency is satisfied — this pin is inert without it.
+  # Also #274: the my-drafts RestAction serves every builder from one list, plus a controller drafts
+  # card widget that NO page mounts yet. Page and blueprint drafts byte-identical.
   kind: Portal
   # 1.8.2 (#135): fixes the alert detail page — the alert-detail/alert-editdef RESTActions built the
   # apiserver path with a brace placeholder `{name}` but snowplow only substitutes `${ }` jq exprs, so
@@ -1522,7 +1530,7 @@ components:
   # perturbed. Content-only: no snowplow restart.
   # Chart diff is Chart.yaml plus exactly those four restaction templates; userAccessFilter occurrences in
   # composition-detail go 3 -> 5.
-  version: 1.8.57
+  version: 1.8.58
   deps:
   - frontend
   - git-provider
@@ -1585,7 +1593,7 @@ components:
   # diffing the packaged trees, which is how the difference was noticed at all.
   # 1.8.57: co-versioned with portal. Verified byte-identical to 1.8.56 outside Chart.yaml (129998 B at
   # both), so portal-agents carries none of the fix — it moves only to keep the pair equal.
-  version: 1.8.57
+  version: 1.8.58
   deps: ['portal']
   tier: platform
   feature: portal
@@ -1950,6 +1958,9 @@ components:
   tier: observability
   feature: coreAgents
 - name: krateo-autopilot
+  # 0.6.3 (#143) is PROMPT-ONLY: the orchestrator now publishes a controller as its own chart in a
+  # repo named for the kind, and the retired krateo-oas target is dropped from the prompt. No image
+  # or chart-structure change, so nothing to verify beyond the prompt text reaching the Agent CR.
   kind: KrateoAutopilot
   # 0.4.8 adds ONE thing to the chart: generic Kubernetes knowledge (files/knowledge/*.md) appended
   # to the K8S-AGENT's system prompt, gated on knowledge.kubernetes.playbook / .architecture — both
@@ -2207,7 +2218,7 @@ components:
   # 'PageHeader or Paragraph' go 1 -> 0, checked by grepping both packaged trees. No template change, no
   # image move. VERIFY BY THE MOUNTED SECRET: config-hash on deploy/autopilot reads
   # 13533324902980676084 before this roll and must move.
-  version: 0.6.2
+  version: 0.6.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
