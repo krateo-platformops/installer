@@ -22,6 +22,13 @@ components:
   # 1.6.70: BYTE-IDENTICAL to 1.6.69 — verified by diffing the packaged templates, not assumed.
   # 1.6.71: BYTE-IDENTICAL to 1.6.70, verified by diffing the packaged templates. Lockstep only.
 - name: frontend-crd
+  # 1.6.82 (#421) adds ONE new CRD to this chart: builders.builders.templates.krateo.io
+  # (group builders.templates.krateo.io, namespaced) — the Builder CR contract plus a plugin
+  # registry. Renders 45 CRDs, 44 widgets + Builder; verified against the published chart, not
+  # inferred from CI. Also in the tag: #419 KOG RestDefinition validator now checks oasgen 0.23
+  # fields, #420 controller kernels. NO visible UI change in any of it.
+  # frontend and frontend-crd move TOGETHER because the CRD chart changed — a new CRD served by a
+  # stale -crds pin would leave the app's contract unbacked.
   kind: FrontendCrds
   chart: frontend-crds
   # 1.6.0: MINOR — adds the new widget kind PageHeader (pageheaders.widgets.templates.krateo.io) + additive
@@ -158,7 +165,7 @@ components:
   # length — that is gzip variance, not content. The file diff is the instrument; tarball size is not.
   # 1.6.81: co-versioned with frontend. Verified byte-identical to 1.6.79 outside Chart.yaml (skipping
   # 1.6.80, which was never rolled), so no CRD surface change and no ordering constraint against the app.
-  version: 1.6.81
+  version: 1.6.82
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1048,7 +1055,7 @@ components:
   # that showed a JSON box for such a field now shows rows. Worth one glance at a blueprint install form.
   # Both charts verified byte-identical to the deployed 1.6.79 outside Chart.yaml, so the whole change
   # rides the image; image is a real multi-arch OCI index (amd64 + arm64).
-  version: 1.6.81
+  version: 1.6.82
   deps:
   - frontend-crd
   - authn
