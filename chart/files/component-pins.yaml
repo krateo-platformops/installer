@@ -1316,7 +1316,38 @@ components:
   # 'probe-user' and came back stamped with the real authenticated identity, with decidedAt added.
   # Effective phase is decision-first (only Merged status overrides), actions are gated by phase
   # (Proposed both, PrOpen reject-only, otherwise none), and Reject's reason is optional.
-  version: 1.8.55
+  # 1.8.56 (#259): fixes AT THE SOURCE the malformed-dial class I measured on 057 — 19 RestActions that
+  # built an apiserver path by concatenating a `//` fallback and then dialled it. snowplow 1.12.21 has no
+  # step `condition`, so the fix is a dependsOn.iterator that returns [] when the input is missing, which
+  # means THE STEP DOES NOT RUN rather than running against a placeholder. That is the right shape and
+  # the only one that works for the sentinel case: changing the fallback string would just move the 404.
+  #   review-proposal      `(.name // "")`      -> /…/builderpublishes/review-        measured x601/20min
+  #   blueprint-detail     sentinel fake GVR    -> /apis/none.krateo.io/v1/none       measured x358/20min
+  #   composition-arch.    empty ns + suffix    -> /api/v1/namespaces//configmaps/-…  measured x67/20min
+  # Root causes per the author: review-proposal was the phase-1 prewarm resolving with extras=nil
+  # (phase1_walk.go:1610); blueprint-detail/comps had NO dependsOn at all and RACED compdef on map order
+  # (sort.go:28) — that race, not a missing value, is why the sentinel fired.
+  # WHY THIS PIN AND snowplow 1.12.22's #288 GUARD ARE NOT REDUNDANT, and the measurement that proved it:
+  # the guard rejects DNS-invalid path segments, so it closes the review- and -architecture shapes but
+  # CANNOT close the sentinel — `none.krateo.io/v1` and `none` are valid DNS-1123, and snowplow must not
+  # refuse them, because it cannot tell a deliberate fake GVR from a legitimate one not yet discovered
+  # (the pre-CRD case it correctly dials and retries). Measured on 1.12.22 BEFORE this pin, 45-minute
+  # window: review- 0, -architecture 0, none.krateo.io STILL 95. Exactly as predicted, and the 95 also
+  # served as the positive control proving the log was not merely quiet. This pin closes the third.
+  # TWO BEHAVIOUR CHANGES TO KNOW:
+  #  (a) composition-detail/-editdef/-events/-resources `found` read `/namespaces//<plural>`, i.e. an
+  #      ALL-NAMESPACES list, so the #72/#74 scoping never applied. Now truly namespaced, same output,
+  #      needs strictly less privilege. NOTE it is NOT a chart-RBAC change — #259 touches no Role, and
+  #      portal grants users nothing here; the list ran under the CALLER's rights. So on 057, where
+  #      admins are cluster-admin, it worked before and works after: 057 CANNOT demonstrate this fix.
+  #      Its real effect is on installs where users are not cluster-admin, where that step was 403ing all
+  #      along and continueOnError hid it — i.e. this is likely a functional fix for those installs, not
+  #      a privilege reduction for this one.
+  #  (b) resource-detail `object` now runs after `disco`, and alert-editdef DEGRADES with "The Alert
+  #      schema could not be read" instead of failing the resolve. Verify (b) by finding that STRING: a
+  #      resolve that no longer fails is indistinguishable from one that was never exercised.
+  # Also: portal now ships scripts/lint-ra-paths.py, so this class has a lint rather than only a fix.
+  version: 1.8.56
   deps:
   - frontend
   - git-provider
@@ -1373,7 +1404,11 @@ components:
   # 1.8.52: co-versioned with portal, as always. Verified byte-identical to 1.8.51 outside Chart.yaml.
   # 1.8.53: co-versioned with portal, as always. Verified byte-identical to 1.8.52 outside Chart.yaml.
   # 1.8.55: co-versioned with portal. Verified byte-identical to 1.8.54 outside Chart.yaml.
-  version: 1.8.55
+  # 1.8.56: co-versioned with portal, but NOT byte-identical this time — breaking the run of co-version
+  # notes above, so do not skim it as one. templates/restaction.agent-detail.yaml gains an input gate of
+  # the same #259 class (gated on the ?extras name; without one the step does not run). Checked by
+  # diffing the packaged trees, which is how the difference was noticed at all.
+  version: 1.8.56
   deps: ['portal']
   tier: platform
   feature: portal
