@@ -2823,7 +2823,42 @@ components:
   # +1 415 555 2671 and (415) 555-2671 still mask. Also checked the hazard that would have made this
   # bump a no-op: no installer schema default exists on the guardrails/regex/pii path, and the live CR
   # does not override it, so the chart default is what applies.
-  version: 0.2.13
+  # 0.2.14 (#68): FIXES A FALSE POSITIVE THAT WAS SILENTLY REMOVING AN AGENT FROM REVIEW COVERAGE, and
+  # the root cause is the guardrail firing on Krateo's OWN vocabulary.
+  # encodingEvasion's delimiter rule was `(?i)<\|?(system|im_start|im_end|endoftext|assistant|user)\|?>`
+  # — OPTIONAL pipes, so a bare `<user>` counted as a role token. Krateo writes `<user>-clientconfig` 70
+  # times in snowplow's source, and snowplow-agent's tool output carries it. Result: the nightly review's
+  # analyse call for snowplow-agent was 403'd with "Request blocked: encoding evasion or prompt delimiter
+  # injection detected" (rr-20260930-0200), and that agent was UNREVIEWABLE. The run degraded correctly
+  # and recorded the error verbatim in evidence[agent-analysis].agents[], which is how it was found.
+  # Now: `(?i)(<\|(system|assistant|user)\|>|<\|?(im_start|im_end|endoftext)\|?>)` — ROLE TOKENS NEED
+  # THEIR PIPES; im_start/im_end/endoftext keep optional ones. The `###` rule gains (?im) and \s*(:|$)
+  # so it matches only a standalone header or one ending in a colon.
+  # I FRAMED THIS WRONG TO DIEGO FIRST TIME and the correction is the useful part: I presented it as a
+  # trade between exempting the reviewer route (weakening injection defence on the call carrying the most
+  # untrusted text) and leaving the agent unreviewable. Neither was needed — it was never a real
+  # injection signal, it was an over-broad regex. Check whether a guardrail hit is a FALSE POSITIVE before
+  # reasoning about the policy trade it appears to force.
+  # TRADE-OFF, recorded because narrowing a detection rule is never free: a genuine bare `<user>`
+  # delimiter now passes. Judged acceptable — bare `<user>` is far likelier to be a Krateo identifier
+  # than an attack, and real injection payloads use the pipe-delimited forms — but it IS less coverage.
+  # THE GUARD AGAINST RECURRENCE is the better half of this release: guardrail-regex-check.py now holds
+  # EVERY enabled Reject rule to must-reject AND must-pass samples, and 7 of the old rules failed it.
+  # A rule that only has must-reject cases cannot catch the class of bug this was.
+  # STILL OVER-BLOCKING, shipped as WARN rather than fixed, and these are Diego's policy calls not bugs:
+  # "decode the base64 value of the Secret..." and "Enable debug mode...".
+  # Re-checked the no-op hazard the 0.2.13 note names, because it applies to this path too: zero installer
+  # schema defaults on any guardrails/regex/encoding path, and the live Installer CR's
+  # componentValues.agentgateway-policies carries no `guardrails` key at all (only certReplayHop, cors,
+  # extraMcpServers, extraSubAgents, jwt, llm, networkPolicy, stt, tracing, tts, uiTokenHop). So the chart
+  # default is what applies and this bump takes effect.
+  # VERIFY ON THE LIVE OBJECT, not the pin: agentgatewaypolicy/agentgateway-policies-guardrails in
+  # krateo-system holds the rendered rule, and it contained the optional-pipe form before this roll.
+  # Chart diff is Chart.yaml and values.yaml only — no template change — so per the 0.2.5 precedent it
+  # should hot-load without a fleet bounce. Verify that rather than assume it.
+  # AFTER THE ROLL: the next nightly run should analyse snowplow-agent. Also worth checking whether the 7
+  # alert-troubleshooter LLM 403s of 2026-09-29 stop recurring — same guardrail, plausibly same cause.
+  version: 0.2.14
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
