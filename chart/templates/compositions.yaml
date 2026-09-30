@@ -603,7 +603,17 @@
      fills it — same eventual-consistency posture as AUTOPILOT). Gated on $gwPathMode + $gwComp.svcMatch:
      host/LB/NodePort and gateway-off installs never enter here, so their render is byte-identical. */ -}}
 {{- if and (eq $c.name "krateo-observability") $gwPathMode $gwComp.svcMatch -}}
-{{- $hdxOrigin := include "inst.peerurl" (list $top $portalSvc (int $c.gatewayPort)) -}}
+{{- /* Under TLS the origin cannot be inst.peerurl's http://<lb-ip>: the scheme would be wrong (the
+     listener now terminates TLS) AND the certificate is issued for exposure.tls.host, so an IP origin
+     fails verification in the browser. Use the host the certificate names, on HyperDX's own listener
+     port. Plaintext installs keep inst.peerurl unchanged. */ -}}
+{{- $hdxOrigin := "" -}}
+{{- $tlsHost := dig "tls" "host" "" $top.Values.exposure -}}
+{{- if and $gwTLS $tlsHost -}}
+{{- $hdxOrigin = printf "https://%s:%v" $tlsHost (int $c.gatewayPort) -}}
+{{- else -}}
+{{- $hdxOrigin = include "inst.peerurl" (list $top $portalSvc (int $c.gatewayPort)) -}}
+{{- end -}}
 {{- if $hdxOrigin -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "clickstack" "hyperdx" "config" "FRONTEND_URL") "value" $hdxOrigin) -}}
 {{- end -}}
@@ -671,12 +681,29 @@
 {{/* Listener spec — normally the shared platform-http:$gwPlatformPort (or the component's own, e.g.
      HyperDX's platform-hdx:3000). Under path-mode TLS the DEFAULT (platform-http) routes move to the
      platform-https:443 HTTPS listener (protocol + Terminate tls → exposure.tls.certificateRef), so the
-     whole single-origin portal is served over TLS; a component pinned to its OWN listener (HyperDX)
-     is left untouched. */}}
+     whole single-origin portal is served over TLS.
+
+     EVERY platform listener follows, not just the shared one. They all land on the platform Gateway,
+     which the agentgateway controller gives ONE LoadBalancer Service — so they share a single public
+     IP. Leaving a component with its OWN listener on plaintext while the portal moved to :443 served
+     that component in the clear on the same public address as the HTTPS portal, and every template
+     still rendered correctly because each listener was individually valid. That is how HyperDX ended
+     up reachable over public HTTP on :3000: a Next.js root-asset app can't be path-prefixed, so it
+     gets its own listener, and only the shared listener was being upgraded. A component listener
+     keeps its own NAME and PORT and gains the same protocol + certificateRef — the certificate is
+     for exposure.tls.host, which is valid on any port. agentgateway-policies now refuses a mixed
+     posture outright, so this and that guard have to agree.
+
+     Off (no exposure.tls) => byte-identical: every listener stays plaintext, the documented HTTP
+     mode. */}}
 {{- $lname := default "platform-http" $d.gatewayListener }}
 {{- $lspec := dict "name" $lname "port" (int (default $gwPlatformPort $d.gatewayPort)) }}
-{{- if and $gwTLS (eq $lname "platform-http") }}
+{{- if $gwTLS }}
+{{- if eq $lname "platform-http" }}
 {{- $lspec = dict "name" "platform-https" "port" 443 "protocol" "HTTPS" "tls" (dict "certificateRef" $gwCertRef) }}
+{{- else }}
+{{- $lspec = dict "name" $lname "port" (int (default $gwPlatformPort $d.gatewayPort)) "protocol" "HTTPS" "tls" (dict "certificateRef" $gwCertRef) }}
+{{- end }}
 {{- end }}
 {{- $route := dict
      "name" $d.name

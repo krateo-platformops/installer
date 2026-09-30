@@ -3051,7 +3051,7 @@ components:
   # should hot-load without a fleet bounce. Verify that rather than assume it.
   # AFTER THE ROLL: the next nightly run should analyse snowplow-agent. Also worth checking whether the 7
   # alert-troubleshooter LLM 403s of 2026-09-29 stop recurring — same guardrail, plausibly same cause.
-  version: 0.2.14
+  version: 0.2.16
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
