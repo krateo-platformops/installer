@@ -1728,11 +1728,11 @@ components:
   feature: specialistAgents
 # alert-provider (repo krateo-platformops/alert-troubleshooter): the "auto-troubleshoot on fire"
 # bridge. Every 60 s it reads each Alert's HyperDX state; while it is ALERT, a firing opens an Incident
-# with an incident-agent A2A root-cause analysis and its how-to-fix scripts, unless autopilot
-# (config.compareA2aUrl) judges one of the alert's open Incidents to be the same problem, which then
-# counts it. NOT a kagent Agent (a plain service that CALLS incident-agent and autopilot), so no
-# `agent`. Needs BOTH the observability stack (HyperDX API + the hyperdx-api-token secret, from
-# krateo-observability) AND its two agents, incident-agent and krateo-autopilot, so it deps all three
+# with an incident-agent A2A root-cause analysis and its how-to-fix scripts, unless one LLM call on
+# the model-configs slot config.compareModelConfig names one of the alert's open Incidents as the
+# cause, which then counts it. NOT a kagent Agent (a plain service that CALLS incident-agent and a
+# ModelConfig's model), so no `agent`. Needs the observability stack (HyperDX API + the
+# hyperdx-api-token secret, from krateo-observability), incident-agent and model-configs, so it deps all three
 # and rides the specialistAgents feature — the same portal cross-dep pattern clickhouse-mcp-server
 # uses. It writes Incidents, so it deps incident-controller-crd. Public krateo-platformops chart, so
 # no repo override.
@@ -1777,7 +1777,7 @@ components:
   - alert-provider-crd
   - incident-controller-crd
   - incident-agent
-  - krateo-autopilot
+  - model-configs
   - krateo-observability
   tier: observability
   feature: specialistAgents

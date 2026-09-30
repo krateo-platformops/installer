@@ -574,9 +574,6 @@
      (direct incident-agent:8080) correctly stands when the gateway is OFF and nothing enforces RBAC. */ -}}
 {{- $a2a := printf "http://%s.%s.svc.cluster.local:%v/api/a2a/%s/incident-agent" $gwName $top.Values.namespaces.krateo $gwPort $top.Values.namespaces.krateo -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "config" "autopilotA2aUrl") "value" $a2a) -}}
-{{- /* Its comparison call (is a firing the same problem as an open Incident?) goes to autopilot on the
-     same gateway path; the policies chart's incidentCompare route rate-limits it. Fill-if-absent. */ -}}
-{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "config" "compareA2aUrl") "value" (printf "http://%s.%s.svc.cluster.local:%v/api/a2a/%s/autopilot" $gwName $top.Values.namespaces.krateo $gwPort $top.Values.namespaces.krateo)) -}}
 {{- end -}}
 {{- /* HyperDX FRONTEND_URL (#100): in Gateway path mode point HyperDX's own SPA at the gateway origin it
      is served on (its platform-hdx listener at gatewayPort), so HyperDX's browser redirects/links

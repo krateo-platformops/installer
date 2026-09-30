@@ -8541,10 +8541,10 @@
                   "title": "RCA agent A2A URL",
                   "description": "A2A endpoint of the agent that runs an Incident's root-cause analysis (incident-agent). With features.agentGateway the installer fills it with the gateway's /api/a2a/<namespace>/incident-agent route."
                 },
-                "compareA2aUrl": {
+                "compareModelConfig": {
                   "type": "string",
-                  "title": "Incident comparison agent A2A URL",
-                  "description": "A2A endpoint of the agent that judges whether a firing alert's current problem is the same as one of its open Incidents (autopilot). With features.agentGateway the installer fills it with the gateway's /api/a2a/<namespace>/autopilot route."
+                  "title": "Incident comparison ModelConfig",
+                  "description": "kagent ModelConfig (a model-configs slot, default gemini-flash) whose model names, in one call per firing, the open Incident of an alert that covers the alert's current records."
                 },
                 "authnUrl": {
                   "type": "string",
@@ -14623,7 +14623,7 @@
                 "agent": {
                   "type": "string",
                   "minLength": 1,
-                  "description": "The agent that judges the comparison. The installer fills componentValues.alert-provider.config.compareA2aUrl with autopilot's route, so override that too when this changes."
+                  "description": "The agent the route leads to."
                 },
                 "header": {
                   "type": "object",

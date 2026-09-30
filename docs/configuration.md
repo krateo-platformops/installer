@@ -235,9 +235,9 @@ Values worth knowing:
 | Key | Notes |
 |---|---|
 | `componentValues.alert-provider.config.autopilotA2aUrl` | The agent that writes the root-cause analysis, `incident-agent`. With `features.agentGateway` the installer fills it with the gateway's `/api/a2a/<namespace>/incident-agent` route. |
-| `componentValues.alert-provider.config.compareA2aUrl` | The agent that compares a firing with the alert's open Incidents, `autopilot`. With `features.agentGateway` the installer fills it with the gateway's `/api/a2a/<namespace>/autopilot` route. |
+| `componentValues.alert-provider.config.compareModelConfig` | The ModelConfig slot whose model compares a firing with the alert's open Incidents, in one chat completion per firing: `gemini-flash` by default. Behind the agent gateway it runs on the gateway's `/llm/v1` route, like the agents. |
 | `componentValues.alert-provider.config.authnUrl` | Where the service exchanges its token for the Krateo JWT that authenticates its A2A calls through the agent gateway. With `features.agentGateway` the installer fills it. |
-| `componentValues.agentgateway-policies.incidentCompare` | The comparison calls' own route (header `x-krateo-purpose: incident-compare`) and rate limit: by default 10 a minute (burst 5) and 120 an hour. On a `429`, `alert-provider` retries on its next pass. Changing `agent` here needs a matching `compareA2aUrl`. |
+| `componentValues.agentgateway-policies.incidentCompare` | The comparison calls' own route (header `x-krateo-purpose: incident-compare`) and rate limit: by default 10 a minute (burst 5) and 120 an hour. On a `429`, `alert-provider` retries on its next pass. |
 | `componentValues.incident-controller.checks.readApiGroups` | The Krateo API groups check scripts may read (get/list/watch). The built-in `view` role covers no Krateo CRs; add a group here for scripts that read it. Never a wildcard: that includes Secrets. |
 | `componentValues.incident-controller.checks.networkPolicy.apiServer` | The check pods' only egress. Empty means the chart looks up the `kubernetes` Service and EndpointSlice in `default` while it renders; set it explicitly where that lookup is not allowed. |
 | `componentValues.incident-controller.controller.{pollInterval,settleWindow}` | Check cadence (`1m`) and how long a failing verify is retried (`5m`). |
