@@ -156,7 +156,9 @@ components:
   # 1.6.79: co-versioned with frontend. Verified byte-identical to 1.6.78 outside Chart.yaml. NOTE the
   # packaged tarball is 6 BYTES LARGER (41959 -> 41965) even though the version string is the same
   # length — that is gzip variance, not content. The file diff is the instrument; tarball size is not.
-  version: 1.6.79
+  # 1.6.81: co-versioned with frontend. Verified byte-identical to 1.6.79 outside Chart.yaml (skipping
+  # 1.6.80, which was never rolled), so no CRD surface change and no ordering constraint against the app.
+  version: 1.6.81
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -989,7 +991,26 @@ components:
   # (margin-inline-end: var(--spacing-sm)). Supersedes 1.6.78, which was rolled — so unlike the 1.6.77
   # case this is a second flip on purpose, not a skipped one: 1.6.78 was already live for the demo takes.
   # Charts byte-identical to 1.6.78 outside Chart.yaml; image is a real multi-arch index.
-  version: 1.6.79
+  # 1.6.81, which SUPERSEDES 1.6.80 — never rolled, so this is one flip instead of two. Supersession
+  # CHECKED BY ANCESTRY rather than taken from the handoff: GitHub compare of 1.6.80's commit c1c3a7c
+  # against 1.6.81's cf181cf returns status=ahead, ahead_by=1, behind_by=0, so #400 is genuinely in it.
+  # Two changes, 14 files, all under ui/src:
+  #   #400 — useMeasuredWidth attached its ResizeObserver only AT MOUNT, so a PieChart or LineChart that
+  #     first rendered its empty state never measured and stayed BLANK after data arrived. That is the
+  #     Portal Builder's place-then-bind order: the pod-sizing pie resolved 4 slices from snowplow and
+  #     drew nothing. Now a callback ref. USER-VISIBLE FOR EVERYONE, not a demo-only defect — any chart
+  #     placed before its data arrived was silently blank.
+  #   #401 — composer binding: the Data modal offers the draft's own RESTActions ("In this draft") before
+  #     the cluster ones, the template row starts on the kind's data field, and PieChart colorMap is
+  #     editable as key -> palette rows.
+  # THE PART THAT REACHES BEYOND THE COMPOSER, and the reason to look after rolling: SchemaFields now
+  # renders ANY array-of-objects field as add/remove rows carrying the item's own fields, and typed maps
+  # as key -> value rows, where it previously showed a JSON TEXTAREA. That applies to EVERY schema-driven
+  # form, blueprint install and create forms included (Form.module.css +20 lines is consistent). So a form
+  # that showed a JSON box for such a field now shows rows. Worth one glance at a blueprint install form.
+  # Both charts verified byte-identical to the deployed 1.6.79 outside Chart.yaml, so the whole change
+  # rides the image; image is a real multi-arch OCI index (amd64 + arm64).
+  version: 1.6.81
   deps:
   - frontend-crd
   - authn
@@ -2420,7 +2441,10 @@ components:
   # that ate evidence[*].queries for seven releases. Verified by unpacking the 0.1.27 chart and reading
   # the ReviewRun schema, not from the release note.
   # Skips 0.1.26, which is superseded and must not be rolled.
-  version: 0.1.27
+  # 0.1.28: co-versioned with nightly-review. Verified byte-identical to 0.1.27 outside Chart.yaml, so no
+  # CRD surface change this time and no ordering constraint — unlike 0.1.25 and 0.1.27, both of which
+  # added structural status fields and had to go first.
+  version: 0.1.28
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -2719,7 +2743,50 @@ components:
   # where core-provider writes defaults into the composition CR spec. So it does not trigger the
   # silent-override mechanism. It would if targetCheckApiUrl were ever exposed through installer
   # componentValues — pinning it now rather than rediscovering it then.
-  version: 0.1.27
+  # 0.1.28 (#38): proposal destinations now come ONLY from values — config.destinations.components, 63
+  # entries, each repo/dir/prompt-file verified by the author with authenticated gh; config.targets per
+  # kind still wins. The annotation retarget and every hardcoded repo are GONE from the code. No
+  # destination => target cleared, TargetResolved False/NoDestination, never published.
+  # THIS FIXES A CORRECTNESS BUG, not plumbing. Before it the model built
+  # `krateo-platformops/<component>` and assumed it existed; I resolved the five NotFoundOrPrivate targets
+  # with an authenticated lookup and THREE DID NOT EXIST. All three are now right, verified authenticated:
+  #   krateo-platformops/kagent                     404 -> krateo-agentiko/kagent            (exists, private)
+  #   krateo-platformops/installer-chart-inspector  404 -> krateo-platformops/core-provider   (exists, public)
+  #   krateo-platformops/github-provider            404 -> krateo-blueprints/github-provider-kog (exists, private)
+  # The chart-inspector mapping has corroboration the handoff did not cite: chart-inspector:2.13.18 and
+  # core-provider:2.13.18 ship at the SAME version tag, consistent with one repo.
+  # THE DRIFT JOB IS THE REAL DELIVERABLE, and it is sharper than the check I asked for.
+  # .github/workflows/drift.yaml runs on PRs, on main, AND DAILY at 05:17 UTC — because the installer
+  # drifts WITHOUT opening a nightly-review PR, so PR-time checking alone would go stale silently. That
+  # was the author's insight, not mine. It fails on: a pin with no entry and no reviewed allowlist reason;
+  # an org mismatch (against `repo:`, or the default ociRepo org for unpinned-registry components); a
+  # stale allowlist line; and a FAILED FETCH, which never silently skips. It forced 11 entries nobody
+  # would have added by hand (the *-crd charts, kagent-crds, the otel collectors,
+  # agentgateway-controller) and 5 upstream wrappers are allowlisted with stated reasons.
+  # A POSITION I TOOK AND WITHDREW, recorded because the reasoning matters more than the outcome: I argued
+  # the map should NOT carry components that wrap third-party software — 13 of the 63 do (kagent x3,
+  # agentgateway x3, otel x4, clickhouse/mongodb operators, clickhouse-mcp-server) — on the grounds that a
+  # PR against a packaging wrapper cannot fix upstream behaviour. Diego overruled it: wrapping something
+  # means owning its exposure, and the wrapper can set a better default, expose a knob, ship an alert or
+  # document the trap. My own worked example proved him right — the kagent PVC exhaustion was fixed
+  # ENTIRELY in Krateo's layer, by installer 0.3.202 typing
+  # kagentapp.database.postgres.bundled.storage. Nothing upstream was needed.
+  # THE REFINEMENT THAT SURVIVES, not worth blocking on: destination ACCURACY, not existence. That kagent
+  # fix landed in the INSTALLER, not in krateo-agentiko/kagent, so for some components the Krateo-side
+  # surface is the chart wrapper and for others it is the installer's pins and values. Where they differ a
+  # proposal lands in the right org and the wrong repo. The first real proposals will show this better
+  # than reasoning will.
+  # A CORRECTION TO THE HANDOFF, benign and the same one as 0.1.27: "no schema defaults (tested)" means no
+  # defaults on the NEW keys. The chart's own values.schema.json carries 25 (jobDeadlineSeconds,
+  # clickhouseQueries, targetCheckApiUrl, the kagentQuestions and agentAnalysis blocks). All fine — these
+  # are CHART defaults, not installer passthrough leaves where core-provider writes them into the
+  # composition CR spec.
+  # EXPECT ON THE FIRST RUN: existing NotFoundOrPrivate proposals are NOT retargeted retroactively, only
+  # new runs are. So the three bad targets stay wrong in the list until superseded. Do not read that as
+  # the fix failing.
+  # TARGET_COMPONENTS reaches the CronJob via `dig`, so a values file without the map renders {} rather
+  # than failing — verified by rendering the chart against the live componentValues.
+  version: 0.1.28
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
