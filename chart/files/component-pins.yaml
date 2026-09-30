@@ -6,13 +6,31 @@ components:
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
+  # 0.25.0 (two minors from 0.23.0; tag derefs to commit 9c93f45). Lockstep with oasgen-provider.
+  # THE CHANGE THAT MATTERS: e4fc190 "a deleted RestDefinition must not own anything" (#137). A CRD
+  # whose krateo.io/owned-by-restdefinition names a DELETED RestDefinition is now ADOPTED instead of
+  # blocking regeneration forever — previously that leftover was indistinguishable from a real second
+  # owner, so an ordinary OAS change could never be applied again without a human editing annotations.
+  # This platform HAS hit that: a kog bump drove an RD Ready=False, Repository CRs lost
+  # status.default_branch, the builder-publish gate closed and 35 LocalResources were pruned.
+  # Ownership is read ONLY in ApplyOrUpdateCRD for the one CRD a reconciling RestDefinition writes —
+  # there is no cluster-wide CRD List and no startup sweep (verified by reading apply.go at the tag,
+  # and independently by the oasgen session). An undetermined lookup (RBAC/transport) RETRIES rather
+  # than adopting, so a flaky check cannot hand a CRD to a second controller.
+  # 057 carries 6 CRDs owned by deleted tk-keycloak-kog RestDefinitions. They are INERT: no live RD
+  # produces any keycloak kind, no main keycloak CRD exists, 0 instances. Left in place deliberately —
+  # 0.25.0 is the fix for them, so deleting them is a production action for no remaining reason.
+  # Also: #110 changes generated status types for a kind with findby and no get — exactly ONE on 057,
+  # github-provider-kog-collaborator (Collaborator), with 0 instances, so only the schema moves.
+  # render.enabled DEFAULTS FALSE — no render Deployment until portal T6 wants one. Left off.
+  # Charts now declare kubeVersion ">=1.33.0-0" and helm REFUSES below it; 057 is v1.36.2-gke.2064000.
   kind: OasgenProviderCrds
   chart: oasgen-provider-crds
   # 0.23.0 (bumped in lockstep with oasgen-provider): additive RestDefinition schema only — the
   # compareScope `updatable` enum (CEL-guarded to an update verb) + a corrected oasPath/JQ ref
   # pattern. RestDefinition stays v1alpha1 served+storage (no conversion webhook); crds MUST match
   # the provider or the apiserver rejects compareScope:updatable at admission.
-  version: 0.23.0
+  version: 0.25.0
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -1589,7 +1607,7 @@ components:
   # Big-version wrapper-CRD jump (OasgenProvider v0-21-1 -> v0-23-0 CDC controllers) — may need a
   # cdc restart + CRD helm-ownership nudge on the live roll. oasgen is idle on 057 (0 RestDefinition
   # CRs), so data-plane blast radius is just this deployment's restart.
-  version: 0.23.0
+  version: 0.25.0
   deps:
   - oasgen-provider-crd
   tier: platform
