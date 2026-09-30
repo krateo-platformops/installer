@@ -188,7 +188,11 @@ components:
   # are identical at all three, so there is no CRD migration to have stepped over.
   # 1.12.22: co-versioned with snowplow. Verified byte-identical to 1.12.21 outside Chart.yaml (its own
   # version line only), so no CRD surface change and no ordering constraint against the app.
-  version: 1.12.22
+  # 1.12.24: co-versioned with snowplow. Verified byte-identical to 1.12.22 outside Chart.yaml. SKIPS
+  # 1.12.23, and that skip is safe AND deliberate: 1.12.23 was published but its tag dereferences to
+  # b991ac3 (the #279 hardening only) and `git merge-base --is-ancestor 23af561 b991ac3` is FALSE, so it
+  # does NOT contain the #292 leak fix. 1.12.24 contains both. Checked by ancestry, not by release note.
+  version: 1.12.24
   tier: platform
   feature: portal
 - name: authn
@@ -438,7 +442,55 @@ components:
   # and git ls-remote confirms the tag dereferences to 443c54cf as the handoff claimed.
   # AFTER THE ROLL: the access-preview 401s should go to ~0. That is the check, and it is a falsifiable
   # one — 720 in 20 minutes beforehand is a loud baseline.
-  version: 1.12.22
+  # THAT CHECK PASSED: 0 SAR-401s over a 45-minute window and across three subsequent installer rolls,
+  # with 333 sa_dial lines in the window as the positive control proving the path was live rather than
+  # idle. But read the next paragraph before concluding the class was closed, because I did and was wrong.
+  #
+  # 1.12.24 (tag obj a1337e41 -> commit 81805acf), TWELVE fixes. ROLLED FOR #292, and the reason is that
+  # #271 CLOSED ONLY HALF THE BUG. One defect, two carriers, and only one of them is observable:
+  #   TOKEN-AUTH (#271, shipped 1.12.22) — a nil-endpointRef stage resolves to snowplow's SA endpoint.
+  #     The stray Krateo JWT sits in Authorization and client-go's BearerTokenFile round-tripper will not
+  #     overwrite an existing header, so the SA token never attaches => apiserver 401. LOUD, and what the
+  #     720-per-20-minutes baseline was measuring.
+  #   CERT-AUTH (#292, this version) — a nil-endpointRef stage resolves to the user's <user>-clientconfig,
+  #     so isSA=false and #271's gate DOES NOT FIRE. A clientconfig authenticates by CLIENT CERT, so there
+  #     is no bearer round-tripper to suppress the stray header: `Authorization: Bearer <user-JWT>` is
+  #     PRESENTED ON THE WIRE and THE DIAL SUCCEEDS. Silent. It does not 401, so a SAR-401 count cannot
+  #     see it by construction. A live user-credential leak to an apiserver that audit-logs requests,
+  #     live on 057 from before 1.12.22 until this roll.
+  #   The fix drops the bare `EndpointRef == nil` disjunct outright: a nil ref is an apiserver-credential
+  #   dial that never wants a Krateo JWT. The two legitimate targets remain — an explicit ExportJWT
+  #   opt-in, and the self-loopback at snowplow's own JWT-gated /call (a NAMED ref matched by
+  #   parsedHostEqualsSelf, so #57 is unaffected).
+  # DO NOT EXPECT A POST-ROLL MEASUREMENT FOR #292. There is none available, and that is not laziness: a
+  # successful dial carrying a stray header is externally indistinguishable from a clean one, so neither
+  # the logs nor the authenticated access-preview check can see it. Acceptance is the diff plus the
+  # real-transport exact-equality leak-absence falsifier shipped with it. The deploy IS the fix.
+  # THE GENERAL LESSON, worth more than this pin: a metric that counts only FAILURES is blind to the
+  # variant of the same bug that SUCCEEDS. Before calling a class closed from a count, ask what the bug's
+  # other failure modes would look like in that instrument.
+  # SUBSTANTIAL CONTENT BESIDES #292:
+  #   #217 three-state servable confirmation — the keystone. A transient discovery blip used to retract
+  #     confirmation and degrade eviction for ~10% of minutes; it now RETAINS confirmation
+  #     (fail-open-not-fail-stuck) while an authoritative 404 still retracts.
+  #   #206 stop+join the leaked resolved-cache summary goroutine (the -count=3 flake root).
+  #   #293 skip garbage RESTAction dials (unrendered ${...} and failed-jq paths) with per-reason
+  #     attribution — the SNOWPLOW half of the malformed-dial class. ITS COUNTERS WILL READ ~0 ON 057 AND
+  #     THAT IS NOT A FAILURE: portal 1.8.56 gated all 19 RestActions at source, so there are no garbage
+  #     dials left here to skip. A live signal would need a pre-1.8.56 cluster or a synthetic; acceptance
+  #     is its falsifier (RED garbage-dialed -> GREEN skipped). Do not read the zero as #293 not working.
+  #   #279 the ns="" hardening Diego directed — declines a templated-namespace empty fan to the #285
+  #     fence instead of recording a guessed cluster-wide edge. Corpus-INDEPENDENT by construction, so it
+  #     needs no measured-corpus check; this is also why skipping 1.12.23 loses nothing.
+  #   plus #238 /debug/reconcile ?dryRun, #246 ownsInformer test-pin, #215 unserved-group skip counter,
+  #   #249 lastEventAgeSeconds doc, #221 stoppable dispatch-summary goroutine, #232 AWS nil-verb guard,
+  #   #251 lazy diag EvaluateRBAC, #179 inspect nonReadVerb flag.
+  # Both charts verified byte-identical to 1.12.22 outside Chart.yaml (26315 B and 6219 B), image is a
+  # real multi-arch OCI index (amd64 + arm64), and ancestry confirms 23af561 (#292), b991ac3 (#279) and
+  # 443c54c (#288) are all IN this tag — checked by merge-base, not taken from the handoff.
+  # NOT IN THIS VERSION, expected in 1.12.25: #248 the UAF-decline-freeze reaper (described as the
+  # dominant live L1 gap), #260/#257 RBAC substrate + role-rules skip, #189 resurrection guard, #204.
+  version: 1.12.24
   deps:
   - snowplow-crd
   - authn
