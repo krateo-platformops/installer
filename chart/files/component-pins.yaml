@@ -1458,7 +1458,40 @@ components:
   #      schema could not be read" instead of failing the resolve. Verify (b) by finding that STRING: a
   #      resolve that no longer fails is indistinguishable from one that was never exercised.
   # Also: portal now ships scripts/lint-ra-paths.py, so this class has a lint rather than only a fix.
-  version: 1.8.56
+  # 1.8.57 (#260): FIXES A LIVE USER-FACING REGRESSION THAT 1.8.56 INTRODUCED AND THAT I ROLLED AND
+  # "VERIFIED" AS 0.3.333. Every composition detail page resolved nothing — "composition · Unknown",
+  # empty architecture — for any caller able to list cluster-wide, i.e. admins. Measured by the author
+  # over real 057 data: 1 of 44 compositions resolving before, 44 of 44 after.
+  # THE MECHANISM, and it is a good trap to know: 1.8.56 made composition-detail, -editdef, -events and
+  # -resources fan out `found` as PER-NAMESPACE LISTs over 46 kinds. snowplow's cluster-list collapse
+  # (resolvers/restactions/api/cluster_list.go:156, GVR taken from the FIRST element only at :664)
+  # replaces an iterator of namespaced lists with ONE cluster list of the first element's kind, for a
+  # caller allowed to list it cluster-wide. So every other kind went unread. A CLUSTER-SCOPE path is not
+  # collapsed (:715), which is the fix: one cluster-scope list per kind, plus a userAccessFilter so a
+  # namespace-scoped tenant still resolves only its own (#72). The snowplow side is filed as #351, and
+  # the author confirms per-kind cluster-scope is the right shape REGARDLESS of #351 — portal's README
+  # now forbids fanning out per-namespace LISTs over different kinds, so nobody reverts it later.
+  # MY VERIFICATION FAILURE, recorded because the lesson outlives the bug: on 0.3.333 I flagged this very
+  # behaviour change and concluded "057 CANNOT demonstrate this fix; it worked before and works after."
+  # Wrong in the worst direction — on 057 it worked before and BROKE after, for exactly the
+  # cluster-wide-capable callers I said were unaffected. I verified that the INTENDED fix landed (the
+  # sentinel dials went 352 -> 0 on the same pod either side of the content landing) and never checked
+  # that anything else still worked. CONFIRMING A FIX AND CONFIRMING NO REGRESSION ARE DIFFERENT TESTS.
+  # For a change touching the four RestActions that serve the composition pages, "does a composition page
+  # still resolve" was the obvious second test. The author's 1.8.56 test had the same gap: it asserted the
+  # requests were BUILT; 1.8.57's asserts the composition RESOLVES.
+  # KNOWN COST, accepted: the userAccessFilter puts these four high-traffic RestActions into the
+  # UAF-declaring set, so snowplow DECLINES their L1 puts — the cache key does not fold UAF scope until
+  # v7/1.13.0. The widgets carrier of that decline already runs ~10,100/hour on 057. So the composition
+  # pages are now UNCACHED, correctness over cache, and the author has noted it on #351 so the
+  # decline-rate rise is not later read as a regression.
+  # Rolled INSIDE an agreed benchmark hold, on Diego's direct go, after telling the benchmark owner first
+  # — a live user-facing regression outranks a baseline that can be re-run. Confirmed with them that the
+  # run only builds pages in /portal-builder and never touches these four RestActions, so it is not
+  # perturbed. Content-only: no snowplow restart.
+  # Chart diff is Chart.yaml plus exactly those four restaction templates; userAccessFilter occurrences in
+  # composition-detail go 3 -> 5.
+  version: 1.8.57
   deps:
   - frontend
   - git-provider
@@ -1519,7 +1552,9 @@ components:
   # notes above, so do not skim it as one. templates/restaction.agent-detail.yaml gains an input gate of
   # the same #259 class (gated on the ?extras name; without one the step does not run). Checked by
   # diffing the packaged trees, which is how the difference was noticed at all.
-  version: 1.8.56
+  # 1.8.57: co-versioned with portal. Verified byte-identical to 1.8.56 outside Chart.yaml (129998 B at
+  # both), so portal-agents carries none of the fix — it moves only to keep the pair equal.
+  version: 1.8.57
   deps: ['portal']
   tier: platform
   feature: portal
