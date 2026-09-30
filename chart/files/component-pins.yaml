@@ -153,7 +153,10 @@ components:
   # unlike the 1.6.75 pair above, where itemTemplate.rowActionsDisplay made the order load-bearing.
   # Checked rather than taken from the handoff, which said only 'unchanged in substance': the whole
   # packaged tree was diffed, not just the schema for the fields the PRs mention.
-  version: 1.6.78
+  # 1.6.79: co-versioned with frontend. Verified byte-identical to 1.6.78 outside Chart.yaml. NOTE the
+  # packaged tarball is 6 BYTES LARGER (41959 -> 41965) even though the version string is the same
+  # length — that is gzip variance, not content. The file diff is the instrument; tarball size is not.
+  version: 1.6.79
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -183,7 +186,9 @@ components:
   # outside Chart.yaml (its own version line only), so no CRD surface change and no ordering constraint
   # against the app. SKIPS 1.12.20, and that skip is safe for the reason above: the packaged templates
   # are identical at all three, so there is no CRD migration to have stepped over.
-  version: 1.12.21
+  # 1.12.22: co-versioned with snowplow. Verified byte-identical to 1.12.21 outside Chart.yaml (its own
+  # version line only), so no CRD surface change and no ordering constraint against the app.
+  version: 1.12.22
   tier: platform
   feature: portal
 - name: authn
@@ -389,7 +394,51 @@ components:
   # inert on the first pass buys nothing. An earlier revision of this bump pinned 1.12.20 and said "NOT
   # 1.12.21" because its artifacts did not exist yet; they were published before this merged, the three
   # objections (single manifest, neither chart present) were re-checked first-hand and are cleared.
-  version: 1.12.21
+  # 1.12.22 (commit 443c54cf, tag obj 0d6a9608): FOUR fixes, and the first of them is a CREDENTIAL LEAK,
+  # so this is the one pin in this bump with an exposure clock on it rather than a correctness argument.
+  #   #271 — CLOSES the SAR-401 that 1.12.20's sa_dial diagnostic was built to explain, and the mechanism
+  #     is not what the diagnostic's own label implied. A nil-endpointRef PREWARM stage carrying the
+  #     cohort's Krateo authn JWT resolved to the SA endpoint; bearerAppendForStage appended that JWT,
+  #     and client-go's bearer round-tripper WILL NOT OVERWRITE an existing Authorization header
+  #     (transport/round_trippers.go) — so the SA's BearerTokenFile token was never presented. The
+  #     apiserver received a Krateo RS256 JWT instead of a k8s token => 401, AND the user's JWT reached
+  #     the apiserver, which audit-logs it. Fix = provenance-gate the append on isSA; isSA=false paths
+  #     (clientconfig cert-auth, #57 loopback) byte-identical.
+  #     MEASURED BEFORE THE FIX on 057: 720 SAR-401s in a 20-minute window across 5 bursts, all from the
+  #     access-preview RestAction's 10 SubjectAccessReview POSTs. So 720 JWT presentations to the
+  #     apiserver in 20 minutes, from one pod.
+  #     CORRECTING MY OWN EARLIER READ, recorded so the next person does not repeat it: I reported this
+  #     as content-only severity, on the grounds that every access-preview step sets continueOnError so
+  #     nothing fails. That was right about FUNCTION and wrong about EXPOSURE. I also read sa_dial=true
+  #     as cause a′ (a stale SA token) and had to withdraw it — at that dial site the SAME marker that is
+  #     logged is the one that switches the transport onto the token FILE, so sa_dial=true means the #267
+  #     fix is ACTIVE and can never mean a stale static token. The token was fresh; it just never reached
+  #     the wire, because the JWT was already in the header.
+  #   #216 — fire the gone-forget hook on a confirmed-404 self-eviction, so a degraded-probe deletion
+  #     drops the harvested copy. This is the "stops serving deleted content" fix; user-visible.
+  #   #279 — record the fanned LIST edge on an iterator-empty resolve, so a cold empty fan is
+  #     invalidated (no cold stale-negative). SHIPS CORRECTNESS-SAFE BUT NOT YET BULLETPROOF: the ns=""
+  #     scope over-marks and is never wrong, and Diego has directed a design hardening (decline a
+  #     templated namespace to the fence, never record a guessed cluster-wide edge) to land separately.
+  #     Rolling this now rather than waiting for that was a deliberate call: the hardening improves a
+  #     design, it does not fix a live defect, and #271 does.
+  #   #288 — the empty-interpolation / DNS-invalid dial guard, plus a verb-aware empty-name
+  #     collection-mutation safety gate. This is the snowplow HALF of a two-sided bug whose SOURCE is
+  #     portal content: three portal RestActions build a path by concatenating a `//` fallback, then dial
+  #     it (review-proposal `(.name // "")` -> /…/builderpublishes/review-, x601; blueprint-detail
+  #     `(.compdef.status.* // "none.krateo.io/v1")` -> /apis/none.krateo.io/v1/none, x358; and an
+  #     empty-namespace /api/v1/namespaces//configmaps/-architecture, x67 — about 1026 futile apiserver
+  #     round trips per 20 minutes from one pod, all swallowed by continueOnError). THE GUARD CLOSES TWO
+  #     OF THE THREE and cannot close the sentinel one: `none.krateo.io/v1` and `none` are valid
+  #     DNS-1123 segments, and snowplow must not refuse them, because it cannot distinguish a deliberate
+  #     fake GVR from a legitimate GVR that is not yet discovered (the pre-CRD case it correctly dials
+  #     and retries). So do NOT read #288 as closing the class — the sentinel shape is portal's alone.
+  # Both charts verified byte-identical to 1.12.21 outside Chart.yaml, so the whole change rides the
+  # image; a chart diff is the wrong instrument. Image is a real multi-arch OCI index (amd64 + arm64),
+  # and git ls-remote confirms the tag dereferences to 443c54cf as the handoff claimed.
+  # AFTER THE ROLL: the access-preview 401s should go to ~0. That is the check, and it is a falsifiable
+  # one — 720 in 20 minutes beforehand is a loud baseline.
+  version: 1.12.22
   deps:
   - snowplow-crd
   - authn
@@ -884,7 +933,11 @@ components:
   # Chart verified byte-identical to 1.6.76 outside Chart.yaml at both frontend and frontend-crds, so the
   # entire change rides the image and a chart diff is the wrong instrument. Image is a real multi-arch
   # OCI index (linux/amd64 + linux/arm64).
-  version: 1.6.78
+  # 1.6.79 (#399): ONE CSS file. The Autopilot rail's "asking <agent>" label gets 8px before the brief
+  # (margin-inline-end: var(--spacing-sm)). Supersedes 1.6.78, which was rolled — so unlike the 1.6.77
+  # case this is a second flip on purpose, not a skipped one: 1.6.78 was already live for the demo takes.
+  # Charts byte-identical to 1.6.78 outside Chart.yaml; image is a real multi-arch index.
+  version: 1.6.79
   deps:
   - frontend-crd
   - authn
@@ -1896,7 +1949,20 @@ components:
   # version live today, reads 0.1.0 as well. No image moves.
   # VERIFY BY THE MOUNTED SECRET, not the ConfigMap: config-hash reads 14017113924344901936 on
   # deploy/autopilot and 10290822186941988922 on deploy/core-provider-agent before this roll.
-  version: 0.6.0
+  # 0.6.1 (#140, tag 182ee5b): ONE prompt paragraph in files/prompts-eng.yaml. The orchestrator now
+  # briefs a page to frontend-agent IN THE PERSON'S WORDS, not in widget kinds — "a heading that reads
+  # Krateo pods", "a table of the pods in krateo-system" — and leaves the choice of kind to
+  # frontend-agent, whose own prompt (1.5.3) knows that a page heading is a PageHeader.
+  # A GREP WILL LOOK LIKE A REGRESSION HERE, so read the diff not the match: the string "PageHeader or
+  # Paragraph/Typography heading" is ADDED by this version, not removed. It is added as a QUOTED EXAMPLE
+  # OF THE MISTAKE ("a brief that offered ... invited the wrong one, and a page heading is a
+  # PageHeader"), directly under the new instruction. The old text offered the choice; the new text cites
+  # having offered it as the bug.
+  # Chart diff is Chart.yaml, Chart.lock (dependency digest refresh) and files/prompts-eng.yaml — no
+  # template change, no image move, and no ADK braces introduced. Pairs with frontend-agent 1.5.3,
+  # already live: 0.6.1 stops naming kinds, 1.5.3 makes the specialist pick the right one.
+  # VERIFY BY THE MOUNTED SECRET as above — config-hash on deploy/autopilot must move.
+  version: 0.6.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
