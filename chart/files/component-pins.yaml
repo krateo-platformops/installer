@@ -195,6 +195,15 @@ components:
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
   # rather than assumed. Lockstep only.
 - name: snowplow-crd
+  # 1.12.30 (tag -> annotated cbcb7eed9f9d9b9bcd5b8eb5c44f84fc41ba6913 -> commit 8a2b5aec70ecb488b368a8de325f51c0d9e8ee43,
+  # verified by ls-remote against krateo-platformops/snowplow, not taken from the release report).
+  # Lockstep with snowplow. Carries the content-staleness elimination (#315/#316), #282/#218, the landed
+  # batch (#178/#341/#328/#344/#326/#260/#345), and #239's DIRTY-MARK ATTRIBUTION INSTRUMENT.
+  # #239 matters beyond this bump: on 1.12.27 NO dirty/stale/mark gauge exists anywhere in expvar (searched
+  # all keys; the three name-matches are other subsystems and two never move), so any dirty-mark rate quoted
+  # before 1.12.30 is an ESTIMATE, not a measurement. 1.12.30 makes it directly readable.
+  # ROLL IN ISOLATION: a snowplow pin flip prunes and recreates the leaf, and snowplow is the content API the
+  # whole portal reads. Confirm 057 is quiet first — do not stack it on another component's convergence window.
   kind: SnowplowCrds
   chart: snowplow-crds
   # 1.12.10: byte-identical for the NINTH consecutive time — verified by pulling both charts, not
@@ -228,7 +237,7 @@ components:
   # 1.12.27: co-versioned with snowplow. Verified byte-identical to 1.12.24 outside Chart.yaml, so no
   # CRD surface change and no ordering constraint against the app. Skips 1.12.25 and 1.12.26, both of
   # which 1.12.27 contains by ancestry.
-  version: 1.12.27
+  version: 1.12.30
   tier: platform
   feature: portal
 - name: authn
@@ -561,7 +570,7 @@ components:
   # this roll. Reading it here is exactly the error the owner corrected.
   # Both charts verified byte-identical to 1.12.24 outside Chart.yaml (26311 B and 6219 B), image is a
   # real multi-arch OCI index (amd64 + arm64).
-  version: 1.12.27
+  version: 1.12.30
   deps:
   - snowplow-crd
   - authn
