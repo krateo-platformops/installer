@@ -2413,7 +2413,14 @@ components:
   # The app's deps below give the ordering inside one installer version, and the app is a CronJob that
   # does not run until 02:00, so there is no window where it writes against the old schema.
   # 0.1.24 is skipped and superseded; nothing between it and 0.1.25 touches the CRD surface.
-  version: 0.1.25
+  # 0.1.27: STEP 1 of an ordered pair again. status gains `coverage` — agentsSkipped, charsRead,
+  # charsTotal, charsTotalIsLowerBound, complete, conversationsRead, conversationsTotal, sentence,
+  # sourcesCut, sourcesFailed. status is structural, so against the 0.1.25 CRD every one of those is
+  # PRUNED ON WRITE with a 200 back and the run would claim a coverage it never recorded — the same bug
+  # that ate evidence[*].queries for seven releases. Verified by unpacking the 0.1.27 chart and reading
+  # the ReviewRun schema, not from the release note.
+  # Skips 0.1.26, which is superseded and must not be rolled.
+  version: 0.1.27
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -2666,7 +2673,53 @@ components:
   # Postgres reader. The kagent-sessions source reads kagent's database directly through a dedicated
   # role, and agent-analysis reads agent replies and tool output through it too. The API-path argument
   # in that comment described 0.1.13 and has not been true since 0.1.19.
-  version: 0.1.25
+  # 0.1.27 (#36 + #37), which CARRIES 0.1.26. Rolled because it closes three separate gaps that the
+  # FIRST analyse run exposed — this is the release where the nightly review's own findings came back as
+  # fixes.
+  #   #36 FIXED DESTINATIONS: config.targets maps a proposal kind to {repo, pathPrefix}, and for a listed
+  #     kind the service REPLACES the model's target.repo and the directory of target.path. Alert ->
+  #     krateo-platformops/observability, pathPrefix charts/krateo-observability/templates. That is the
+  #     right shape: the destination is a FIXED FACT, and the model was guessing it. It emitted
+  #     `krateo-observability` — wrong twice, no owner prefix and the wrong repo name — so all three Alert
+  #     proposals failed TargetResolved with "'krateo-observability' is not a GitHub owner/name", a FORMAT
+  #     rejection that never reached GitHub. Nothing about repo ownership was ever the blocker; I had told
+  #     Diego it was and had to correct that.
+  #   STATED COVERAGE: the service now says what it actually read. It matters because run
+  #     rr-20260930-0200 dropped 2,469,686 chars with truncated=true and folded all 40 questions, so for
+  #     incident-agent (1.21M chars, 425 messages dropped) and autopilot (35 of 45 conversations dropped)
+  #     the assessments rest on a small slice. charsTotalIsLowerBound and complete are the honest fields:
+  #     an unstated limitation reads as comprehensiveness.
+  #   #37 REDACTION: my denylist finding, and it was a REAL gap rather than theoretical. A genuine PAT was
+  #     already caught by its ghp_ shape under any env-var name, but `*_TOKEN=<value of no known shape>`
+  #     PASSED, because the key list knew access_token and not token. `token` and `secret_key` now join
+  #     the key pattern. This is the same \b-boundary class as the DB_PASSWORD= gap I found at 0.1.23.
+  #     It matters now and not before because of the credential change below.
+  # CREDENTIAL CHANGE, and state the property precisely rather than as unchanged: the repo check uses
+  # gh-token/token via env valueFrom.secretKeyRef, optional:true. The SERVICEACCOUNT still has no Secret
+  # RBAC — that property holds. But the token IS now in the pod's process environment, so "the service
+  # cannot reach credentials" is NO LONGER TRUE. It is a weaker property than before, deliberately traded
+  # for definitive RepoFound/RepoNotFound instead of the honest-but-useless "an anonymous check cannot
+  # tell those apart". Diego's call; I had recommended delegating the check to git-provider instead, and
+  # this is the better outcome for the proposals.
+  # WHAT THE TOKEN WILL AND WILL NOT FIX, resolved by authenticated lookup before the roll so the first
+  # run is not misread: of the five NotFoundOrPrivate proposals, TWO are genuinely private and become
+  # actionable (krateo-agentiko/autopilot, krateo-agentiko/installer-agent, both pushed within the week).
+  # THREE TARGETS DO NOT EXIST AT ALL — krateo-platformops/kagent, /installer-chart-inspector and
+  # /github-provider all 404 WITH authentication. The model builds `krateo-platformops/<component>` and
+  # assumes it exists; it was wrong 3 times in 5. So expect those three to flip from "cannot tell" to
+  # "definitely wrong target", which is an improvement but is a correctness problem in the proposals, not
+  # a validation one. The general fix (derive the target from component-pins `repo:`, or refuse to emit a
+  # guessed one) is with the owner as the next change.
+  # ONE-OFF ON THE FIRST RUN: #36 also fixes a stale fingerprint left by #34's retarget, so existing Alert
+  # proposals get SUPERSEDED BY SUBJECT rather than deduped. Expect churn in the proposal list once, and
+  # do not read it as the retarget failing.
+  # A CORRECTION TO THE HANDOFF, benign but worth pinning: it said the new schema keys carry no defaults
+  # with a test enforcing it. One does — config.targetCheckApiUrl = https://api.github.com. That is the
+  # CHART's own values.schema.json, where a default is normal, NOT the installer's passthrough schema
+  # where core-provider writes defaults into the composition CR spec. So it does not trigger the
+  # silent-override mechanism. It would if targetCheckApiUrl were ever exposed through installer
+  # componentValues — pinning it now rather than rediscovering it then.
+  version: 0.1.27
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
