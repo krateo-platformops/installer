@@ -1559,7 +1559,7 @@ components:
   # perturbed. Content-only: no snowplow restart.
   # Chart diff is Chart.yaml plus exactly those four restaction templates; userAccessFilter occurrences in
   # composition-detail go 3 -> 5.
-  version: 1.8.59
+  version: 1.8.60
   deps:
   - frontend
   - git-provider
@@ -1622,7 +1622,7 @@ components:
   # diffing the packaged trees, which is how the difference was noticed at all.
   # 1.8.57: co-versioned with portal. Verified byte-identical to 1.8.56 outside Chart.yaml (129998 B at
   # both), so portal-agents carries none of the fix — it moves only to keep the pair equal.
-  version: 1.8.59
+  version: 1.8.60
   deps: ['portal']
   tier: platform
   feature: portal
@@ -1636,6 +1636,32 @@ components:
   tier: platform
   feature: portal
   chart: krateo-helm-render-service
+  # RUN 1 OF A TWO-RUN RENAME MIGRATION — this component is DELIBERATELY still here.
+  # The chart was renamed helm-render-service -> blueprint-render-service, which changes the crdgen
+  # kind (PascalCase(chart)) and therefore the CRD, the CompositionDefinition and the component
+  # identity. A chart rename is not a rename on a cluster: it is a delete-and-create under a
+  # different API type. Removing this entry in the SAME run as adding the new one would have helm
+  # prune the CD and the CR together, and helm does not order those — if the CD goes first its
+  # per-kind controller is gone and nothing can release the CR's composition.krateo.io/finalizer,
+  # leaving it Terminating and needing hand-edited finalizer surgery.
+  # So: run 1 ADDS only. Both renderers run; names do not collide (krateo-helm-render-service /
+  # helm-render-endpoint vs blueprint-render-service / blueprint-render-endpoint), so blueprint
+  # previews never break. Run 2 deletes the CR first, while its controller still runs, and only then
+  # drops this entry.
+- name: blueprint-render-service
+  kind: BlueprintRenderService
+  version: 0.5.0
+  tier: platform
+  feature: portal
+  chart: blueprint-render-service
+  # Same image (ghcr.io/krateo-platformops/helm-render-service) — only the CHART was renamed.
+  # Release name blueprint-render-service makes the fullname collapse to blueprint-render-service,
+  # so no fullnameOverride and no componentValues are needed. Renders Deployment + Service on :8080
+  # and ships its OWN endpoint Secret blueprint-render-endpoint with
+  # server-url=http://blueprint-render-service.krateo-system.svc:8080 (verified by helm template).
+  # ASYMMETRY WORTH KNOWING: this renderer is its own component and chart; the controller renderer is
+  # a SUB-DEPLOYMENT of oasgen-provider. They share a naming convention but not a structure, so do
+  # not go looking for a controller-render-service component here.
 - name: oasgen-provider
   kind: OasgenProvider
   chart: oasgen-provider
