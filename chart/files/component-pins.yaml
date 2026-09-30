@@ -1604,22 +1604,28 @@ components:
   - mongodb-operator
   tier: observability
   feature: portal
-  # HyperDX behind the agentgateway in Gateway path mode (#100). Unlike the portal APIs
-  # (authn/snowplow/sse-proxy) which share the :80 platform-http listener under a /path, HyperDX is a
-  # Next.js root-asset app (hardcoded /_next, /assets) so it CANNOT live under a path prefix — it gets
-  # its OWN listener (platform-hdx:3000), a public route at /, no rewrite. svcMatch is the live HyperDX
-  # app Service (the clickstack chart's fullnameOverride krateo-clickstack), resolved by inst.svcname for
-  # the route backend. gatewayListener/gatewayPort are the FIRST use of a per-component listener: the four
-  # portal pins carry neither, so the platformRoutes generator's default-fallbacks keep them on
-  # platform-http:$platformPort byte-identically. No expose:true, so no service-flip / host HTTPRoute —
-  # HyperDX is reached only through the gateway route. FRONTEND_URL is computed from the gateway :3000
-  # origin into clickstack.hyperdx.config (compositions.yaml), replacing the interim 057 override.
+  # HyperDX IS NOT PUBLICLY ROUTED, deliberately. It was: a Next.js root-asset app (hardcoded /_next,
+  # /assets) cannot live under a path prefix, so it had its OWN listener (platform-hdx:3000) with a
+  # public route at /. That put the whole trace search over ClickHouse on the platform LoadBalancer,
+  # and — because the TLS upgrade only moved the SHARED listener — it sat there on plaintext HTTP
+  # beside the HTTPS portal, with HyperDX's own login as the entire perimeter and the login itself
+  # crossing the internet in the clear.
+  #
+  # An operator console is not an end-user surface. The portal already reads the same ClickHouse
+  # through snowplow's RestActions, which is what users are meant to see; HyperDX is for operators and
+  # is reached in-cluster (kubectl port-forward svc/krateo-clickstack 3000). Nothing in the portal
+  # depends on the public route: the alert-detail deep-links are gated on a console URL that is unset,
+  # so they render inert either way.
+  #
+  # Restoring it means BOTH a listener and the TLS block that listener needs — agentgateway-policies
+  # refuses a mixed TLS posture, so a plaintext re-add fails the render rather than shipping quietly.
+  # And prefer gatewayAuth: authenticated over public if it ever comes back.
+  #
+  # svcMatch stays: it names the live HyperDX app Service (the clickstack chart's fullnameOverride) for
+  # anything that still resolves it. No expose:true, so no service-flip / host HTTPRoute either.
+  # FRONTEND_URL is consequently NOT set by the installer — with no external origin there is no honest
+  # value to compute, and the chart default stands (compositions.yaml gates on gatewayPort).
   svcMatch: krateo-clickstack
-  gatewayPath: /
-  gatewayRewrite: false
-  gatewayAuth: public
-  gatewayListener: platform-hdx
-  gatewayPort: 3000
 - name: otel-collector-deployment
   kind: OtelCollectorDeployment
   version: 0.3.7

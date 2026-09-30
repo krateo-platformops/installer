@@ -602,7 +602,11 @@
      override still wins and it stays unset until the gateway Service has an address (next reconcile
      fills it — same eventual-consistency posture as AUTOPILOT). Gated on $gwPathMode + $gwComp.svcMatch:
      host/LB/NodePort and gateway-off installs never enter here, so their render is byte-identical. */ -}}
-{{- if and (eq $c.name "krateo-observability") $gwPathMode $gwComp.svcMatch -}}
+{{- /* Gated on $c.gatewayPort too: HyperDX is no longer publicly routed, and $gwComp.svcMatch is the
+     GATEWAY's service name, not this component's — so without the port check this block would still
+     fire and build an origin on port 0. No route => no external origin => no honest FRONTEND_URL, so
+     the installer sets none and the chart default stands. */ -}}
+{{- if and (eq $c.name "krateo-observability") $gwPathMode $gwComp.svcMatch $c.gatewayPort -}}
 {{- /* Under TLS the origin cannot be inst.peerurl's http://<lb-ip>: the scheme would be wrong (the
      listener now terminates TLS) AND the certificate is issued for exposure.tls.host, so an IP origin
      fails verification in the browser. Use the host the certificate names, on HyperDX's own listener
