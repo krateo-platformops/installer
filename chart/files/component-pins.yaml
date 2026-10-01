@@ -55,6 +55,8 @@ components:
   # 1.6.70: BYTE-IDENTICAL to 1.6.69 — verified by diffing the packaged templates, not assumed.
   # 1.6.71: BYTE-IDENTICAL to 1.6.70, verified by diffing the packaged templates. Lockstep only.
 - name: frontend-crd
+  # 1.6.87: lockstep with frontend, NO CRD change — verified byte-identical to 1.6.86 by diffing the
+  # packaged trees. It moves only to keep the pair equal.
   # 1.6.86: lockstep with frontend, no CRD change. Verified by diffing the packaged trees — 47 yaml
   # files and 539848 bytes on BOTH 1.6.85 and 1.6.86, identical except Chart.yaml's version. The
   # Builder CRD already defines spec.verbs.allowed and spec.summarizer.plugin, which is WHY portal
@@ -220,7 +222,7 @@ components:
   # length — that is gzip variance, not content. The file diff is the instrument; tarball size is not.
   # 1.6.81: co-versioned with frontend. Verified byte-identical to 1.6.79 outside Chart.yaml (skipping
   # 1.6.80, which was never rolled), so no CRD surface change and no ordering constraint against the app.
-  version: 1.6.86
+  version: 1.6.87
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -671,6 +673,18 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+  # 1.6.87 (tag -> commit 672b22b = main HEAD; LIGHTWEIGHT tag, where 1.6.86 was ANNOTATED — check
+  # both ref forms or a deref returns nothing and reads as a false mismatch).
+  # #434: Controller Builder round 2 — the authoring verbs added in portal 1.8.63's Builder CR
+  # (controllerBindId, controllerSetExcludedFields, controllerSetItemsPath,
+  # controllerSetConfigurationFields) become usable here.
+  # ORDER, already satisfied: portal 1.8.63 shipped verbs.allowed 8 -> 12 FIRST, live as installer
+  # 0.3.363 and verified there (all four new verbs present on the controller-builder CR,
+  # installed-version v1-8-63). Verbs are deny-by-default, so the reverse order leaves this frontend
+  # offering verbs the cluster refuses.
+  # Pre-roll bundle baseline, so the post-check cannot be vacuous: at 1.6.86 all four verb names and
+  # `source-spec-version` occur ZERO times, while controllerStart (7) and publishRestDef (7) DO occur
+  # — those two non-zero controls are what make the zeros real absences rather than a broken grep.
   # 1.6.86 (ANNOTATED tag -> commit a02fe28..., = main HEAD).
   # #433 lets Autopilot AUTHOR a controller through the Controller Builder's own kernels: six verbs
   # (controllerStart, controllerPlace, controllerMapVerb, controllerSetIdentifiers,
@@ -1170,7 +1184,7 @@ components:
   # that showed a JSON box for such a field now shows rows. Worth one glance at a blueprint install form.
   # Both charts verified byte-identical to the deployed 1.6.79 outside Chart.yaml, so the whole change
   # rides the image; image is a real multi-arch OCI index (amd64 + arm64).
-  version: 1.6.86
+  version: 1.6.87
   deps:
   - frontend-crd
   - authn
