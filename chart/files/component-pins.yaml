@@ -1280,6 +1280,28 @@ components:
   tier: platform
   feature: portal
 - name: github-provider-kog
+  # REVERTED TO 0.3.1. 0.3.2 CANNOT BE INSTALLED IN PLACE and this is not a transient — it is
+  # rejected on every cluster that has already generated the PullRequest CRD, which is every existing
+  # install. It succeeds only on a fresh one.
+  #   RestDefinition "github-provider-kog-pullrequest" is invalid:
+  #   spec.resource.additionalStatusFields: AdditionalStatusFields are immutable, you cannot change
+  #   them once the CRD has been generated
+  # 0.3.2 grows that list 3 -> 5 (adds `merged`, `merged_at`). oasgen-provider treats it as immutable
+  # post-generation, so helm refuses, the release stays on the OLD chart, and the composition retries
+  # forever at Ready=False/Synced=False.
+  # NOTE THE TRAP, because it is why this looked fine at first: the CompositionDefinition reported
+  # 0.3.2 Ready=True — Pass A registration succeeded. Only the COMPOSITION CR was failing. A check on
+  # the CD, or on the composition rollup, reads GREEN here while the component never upgraded. The
+  # honest signals were the helm release still on 0.3.1 rev33 (three weeks old) and the field that had
+  # to rise, PullRequest .status.merged, still at 0/24.
+  # Reverting is a no-op on the cluster — the 0.3.1 release is what is actually deployed — so this
+  # only clears the stuck composition. Nothing depends on 0.3.2: portal 1.8.63's #287 reads `merged`
+  # only when present and shows "-" otherwise.
+  # The fix belongs in oasgen-provider: let additionalStatusFields grow by APPEND ONLY, keeping
+  # removals and renames immutable. Adding optional status properties to a generated CRD is safe for
+  # stored CRs; removing them is what breaks. A new kind/version would instead make every existing
+  # PullRequest CR a migration, and deleting the CRD to force regeneration would destroy 24 publish
+  # records.
   # 0.3.2 (ANNOTATED tag -> commit 965d158 = main HEAD; note the LIGHTWEIGHT ref on the same tag
   # resolves to 9af5ffe, so read the deref, not the bare ref, for THIS repo).
   # Surfaces PullRequest `.status.merged` / `.merged_at`, which portal 1.8.63's #287 builder tables
@@ -1304,7 +1326,7 @@ components:
   # are served+Ready before portal 1.8.21. PullRequest has NEVER reconciled against GitHub -> first real
   # BuilderPublish is the live test (watch the PullRequest CR reach Available with NO PATCH on the 2nd
   # reconcile; a PATCH every pass = drift, the failure its jq transform exists to prevent).
-  version: 0.3.2
+  version: 0.3.1
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: portal
