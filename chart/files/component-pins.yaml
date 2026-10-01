@@ -6,6 +6,8 @@ components:
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
+  # 0.26.0: co-versioned with oasgen-provider; one tag publishes all three charts in that repo.
+  # Carries no CRD change of its own.
   # 0.25.1 (tag -> commit dd2c6b3, verified by ls-remote). Lockstep. Adds the knobs the render
   # preview service needed to be CONFIGURABLE from the installer: render.fullnameOverride,
   # render.service.port, render.resources and render.snowplowEndpoint.{enabled,name}. render itself
@@ -43,7 +45,7 @@ components:
   # compareScope `updatable` enum (CEL-guarded to an update verb) + a corrected oasPath/JQ ref
   # pattern. RestDefinition stays v1alpha1 served+storage (no conversion webhook); crds MUST match
   # the provider or the apiserver rejects compareScope:updatable at admission.
-  version: 0.25.1
+  version: 0.26.0
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -1761,7 +1763,41 @@ components:
   # ASYMMETRY WORTH KNOWING: this renderer is its own component and chart; the controller renderer is
   # a SUB-DEPLOYMENT of oasgen-provider. They share a naming convention but not a structure, so do
   # not go looking for a controller-render-service component here.
+- name: controller-render-service
+  # The controller renderer: previews the CRDs a set of RestDefinitions would generate (POST /render),
+  # backing the portal's Controller Builder Preview via the controller-render-draft RESTAction. Placed
+  # next to blueprint-render-service deliberately — these are the two render services and they are now
+  # packaged identically.
+  #
+  # WHY THIS PIN EXISTS. Until oasgen-provider 0.26.0 this was a conditional sub-deployment of the
+  # oasgen-provider chart, gated on six componentValues keys. That made it the ONLY Krateo render
+  # service needing install-time configuration: a fresh install left them unset, so there was no render
+  # service and Controller Builder Preview and Publish were simply off, while blueprint-render-service
+  # worked out of the box (installer#434). The chart's defaults are now correct for composition use
+  # (snowplowEndpoint.enabled true, name controller-render-endpoint, port 8080 on both the container and
+  # the Service), so this pin needs NO componentValues — exactly like its sibling.
+  #
+  # Version is the oasgen-provider TAG: keep it equal to the oasgen-provider and oasgen-provider-crd
+  # pins. feature: portal, not oasgenProvider — the consumer is the portal's Controller Builder, and it
+  # matches blueprint-render-service. No deps: it ships no CRDs and reads nothing from the cluster (the
+  # OAS documents arrive in the request), so it has nothing to wait for.
+  kind: ControllerRenderService
+  version: 0.26.0
+  tier: platform
+  feature: portal
+  chart: controller-render-service
 - name: oasgen-provider
+  # 0.26.0 is a BREAKING CHART CHANGE (oasgen-provider#165): `render.*` is gone from this chart's
+  # values and `render.enabled=true` is now REJECTED rather than ignored. The oasgen-render service it
+  # used to deploy conditionally now ships as its own chart, controller-render-service, pinned below.
+  # That repo now publishes THREE charts from one tag, so oasgen-provider, oasgen-provider-crd and
+  # controller-render-service are a co-versioned TRIPLE and must move together — the invariant
+  # installer#432 proposes enforcing in CI.
+  # componentValues.oasgen-provider.render is REMOVED from values.schema.json in this same change.
+  # componentValues.<component> is additionalProperties:false, so a cluster still carrying that key in
+  # its live spec has the upgrade REJECTED. On krateo-057 the key was dropped FIRST, by a separate
+  # `helm upgrade -f` on 0.3.359, which also deleted the old render objects — which is what makes the
+  # handover below collision-free.
   kind: OasgenProvider
   chart: oasgen-provider
   # 0.23.0 (0.21.1 -> 0.23.0, lockstep with oasgen-provider-crds): resolves the delete-finalizer
@@ -1769,7 +1805,7 @@ components:
   # Big-version wrapper-CRD jump (OasgenProvider v0-21-1 -> v0-23-0 CDC controllers) — may need a
   # cdc restart + CRD helm-ownership nudge on the live roll. oasgen is idle on 057 (0 RestDefinition
   # CRs), so data-plane blast radius is just this deployment's restart.
-  version: 0.25.1
+  version: 0.26.0
   deps:
   - oasgen-provider-crd
   tier: platform
