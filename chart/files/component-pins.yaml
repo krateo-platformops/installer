@@ -2094,6 +2094,24 @@ components:
   tier: observability
   feature: coreAgents
 - name: krateo-autopilot
+  # 0.6.4 (ANNOTATED tag -> commit 4daba2f..., = main HEAD).
+  # #144: the orchestrator prompt learns the controller flow — Autopilot drives the Controller
+  # Builder's six authoring verbs instead of being told to hand a whole RestDefinition over inline.
+  # PROMPT-ONLY: the prompt text lives in cm/krateo-prompts-eng, NOT in the Agent CR's
+  # spec.declarative.systemMessage (which is a short pointer), so that ConfigMap is where a roll is
+  # verified — see the agent-prompt-grep trap recorded earlier this session.
+  # MUST FOLLOW frontend 1.6.86, and does: that went live as installer 0.3.357, verified by the
+  # bundle going from ZERO occurrences of all six verb names to non-zero (7/6/6/8/4/4) with
+  # previewRestDef and publishRestDef as working non-zero controls on both sides. The reverse window
+  # fails safe — the prompt would name verbs the frontend does not serve — but nothing is written.
+  # Two-sided pre-roll baseline of cm/krateo-prompts-eng (4 keys, 52764 B), so neither half of the
+  # check can be vacuous:
+  #   presence side, must RISE above 0: "Authoring a controller" 0, controllerStart 0,
+  #     controllerRemoveKind 0
+  #   absence side, must FALL to 0: the retired inline-publish text — `"restDefinition":` 2 and
+  #     "Preview a complete draft" 1
+  # An absence check alone would pass against an empty or unrendered ConfigMap; pairing it with the
+  # presence side is what makes the pair meaningful.
   # 0.6.3 (#143) is PROMPT-ONLY: the orchestrator now publishes a controller as its own chart in a
   # repo named for the kind, and the retired krateo-oas target is dropped from the prompt. No image
   # or chart-structure change, so nothing to verify beyond the prompt text reaching the Agent CR.
@@ -2354,7 +2372,7 @@ components:
   # 'PageHeader or Paragraph' go 1 -> 0, checked by grepping both packaged trees. No template change, no
   # image move. VERIFY BY THE MOUNTED SECRET: config-hash on deploy/autopilot reads
   # 13533324902980676084 before this roll and must move.
-  version: 0.6.3
+  version: 0.6.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
