@@ -1280,6 +1280,21 @@ components:
   tier: platform
   feature: portal
 - name: github-provider-kog
+  # 0.3.2 (ANNOTATED tag -> commit 965d158 = main HEAD; note the LIGHTWEIGHT ref on the same tag
+  # resolves to 9af5ffe, so read the deref, not the bare ref, for THIS repo).
+  # Surfaces PullRequest `.status.merged` / `.merged_at`, which portal 1.8.63's #287 builder tables
+  # read. 057 ran 1.8.63 against 0.3.1 first and #287 FELL BACK CLEANLY, so this is additive, not a
+  # dependency — the column simply starts populating.
+  # SINGLE PIN BY DESIGN: this component carries its OWN CRDs, so there is no -crd sibling to keep in
+  # lockstep (unlike frontend/snowplow/authn/alert-troubleshooter/nightly-review).
+  # THE RISK THAT MATTERS ON A KOG ROLL, and the reason the post-checks are what they are: a kog bump
+  # regenerates the per-kind RestDefinitions. If one lands Ready=False its Repository CRs lose
+  # `status.default_branch`, the builder-publish gate closes, and every publish LocalResource is
+  # pruned — the 0.3.1 incident. So CHECK THE PER-KIND RestDefinitions, never the composition rollup,
+  # which stays green while the RDs underneath are broken.
+  # Pre-roll baseline, so none of that can be read as vacuous: RestDefinitions 30/30 Ready,
+  # Repository `status.default_branch` 24/24, LocalResources Synced 187/187, and PullRequest
+  # `.status.merged` present on 0/24 — the last is the one that must RISE.
   kind: GithubProviderKog
   # 0.3.0: restores github.krateo.io/PullRequest (served v2022-11-28) + PullRequestConfiguration (v1alpha1)
   # natively -> 29 kinds (was 28) and adds a rest-dynamic-controller Deployment for PullRequest (first
@@ -1289,7 +1304,7 @@ components:
   # are served+Ready before portal 1.8.21. PullRequest has NEVER reconciled against GitHub -> first real
   # BuilderPublish is the live test (watch the PullRequest CR reach Available with NO PATCH on the 2nd
   # reconcile; a PATCH every pass = drift, the failure its jq transform exists to prevent).
-  version: 0.3.1
+  version: 0.3.2
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: portal
