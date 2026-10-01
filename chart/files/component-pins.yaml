@@ -1263,6 +1263,21 @@ components:
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
 - name: portal
+  # 1.8.61 (tag -> commit 71e9754243910e47b9c3f71cb40fb0c393521969, verified by ls-remote; the tag is
+  # ANNOTATED, so the bare refs/tags/1.8.61 SHA is a tag object, not this commit).
+  # #281 ships the builder catalogue AS CLUSTER STATE: three Builder CRs
+  # (builders.templates.krateo.io/v1alpha1 — portal-builder, blueprint-builder, controller-builder) in
+  # krateo-system, plus Role+RoleBinding authenticated-get-list-builders granting system:authenticated
+  # get/list on `builders` ONLY. They render unconditionally — no feature flag.
+  # ORDER IS LOAD-BEARING: this pin MUST go live BEFORE frontend 1.6.85, which stops hardcoding the
+  # builder list and reads these CRs via snowplow GET /list?category=builders (#432). Ship them the other
+  # way round and every builder page reads "no Builder is installed in krateo-system".
+  # The Builder CRD is already served at v1alpha1 on 057, so the CRs apply without a frontend-crds bump.
+  # Pre-roll baseline captured so the post-checks cannot be vacuous: 0 Builder CRs in krateo-system, both
+  # RBAC objects ABSENT, and an impersonated read (--as=cyberjoker --as-group=devs
+  # --as-group=system:authenticated) returning Forbidden. Each must flip after this roll.
+  # #282 is copy only: the drafts card reads "Published", the Register step says "controller" for
+  # controllers, and the empty drafts list is hidden.
   # 1.8.59 (tag -> commit 85bbe19dd291cd62b5b125ea34e40a6e9f8ad0bf, verified by ls-remote).
   # #275: /controller-builder rebuilt on the blueprint-builder widget structure — drafts card, controller
   # deliverables (Registering/Installed/Failed/Configure credentials), RestDefinitions registry card. Its
@@ -1572,7 +1587,7 @@ components:
   # perturbed. Content-only: no snowplow restart.
   # Chart diff is Chart.yaml plus exactly those four restaction templates; userAccessFilter occurrences in
   # composition-detail go 3 -> 5.
-  version: 1.8.60
+  version: 1.8.61
   deps:
   - frontend
   - git-provider
