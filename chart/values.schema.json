@@ -8546,6 +8546,16 @@
                   "title": "Incident comparison ModelConfig",
                   "description": "kagent ModelConfig (a model-configs slot, default gemini-flash) whose model names, in one call per firing, the open Incident of an alert that covers the alert's current records."
                 },
+                "maxCompareCandidates": {
+                  "type": "integer",
+                  "title": "Incident comparison candidates",
+                  "description": "How many of an alert's newest open, analyzed Incidents one comparison weighs (default 50)."
+                },
+                "failedAnalysisHold": {
+                  "type": "integer",
+                  "title": "Failed-RCA hold (s)",
+                  "description": "Seconds an Incident whose RCA failed keeps taking its alert's firings (default 1800). Past it, a new Incident gets a fresh RCA."
+                },
                 "authnUrl": {
                   "type": "string",
                   "title": "authn URL",
