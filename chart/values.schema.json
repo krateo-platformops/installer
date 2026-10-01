@@ -5847,6 +5847,60 @@
               "type": "object",
               "description": "Kubernetes probe configuration (httpGet/tcpSocket/exec + timing). Empty/unset uses chart defaults.",
               "additionalProperties": false
+            },
+            "render": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "oasgen-render: the in-cluster CRD PREVIEW service. POST /render {restDefinitions, oas} returns the CRDs those RestDefinitions WOULD generate plus validation findings, applying nothing. Same image and generator as the manager, ClusterIP only, automountServiceAccountToken false. A SEPARATE Deployment rather than an endpoint on the manager because the manager's ServiceAccount holds customresourcedefinitions verbs ['*'] cluster-wide and /render parses untrusted user OpenAPI: a hostile spec crashing the manager would stop reconciliation for every RestDefinition. NO DEFAULT on any key below \u2014 a default on a componentValues passthrough leaf is applied into the composition CR spec, so it is a silent live override on every install, not documentation.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Create the render Deployment and Service. NO DEFAULT deliberately: the chart already defaults it false and a schema default would force the preview service on for every install, not only where the Controller Builder needs it."
+                },
+                "fullnameOverride": {
+                  "type": "string",
+                  "description": "Names the render Deployment and Service; controller-render-service matches the blueprint renderer's convention. ASYMMETRY: the blueprint renderer is its own component and chart, this is a sub-deployment of oasgen-provider \u2014 shared naming, different structure."
+                },
+                "service": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "port": {
+                      "type": "integer",
+                      "description": "Service port; 8080 to match the blueprint renderer. The container listens on 8081 and the Service maps 8080 to it."
+                    }
+                  }
+                },
+                "resources": {
+                  "type": "object",
+                  "description": "CPU/memory for the render pod. SET BEFORE ENABLING. 0.25.0 shipped {} \u2014 no ceiling \u2014 while the service accepts an untrusted multi-MiB OpenAPI body, so an unbounded pod consumes node memory until the kubelet evicts and takes neighbours. This platform has had that failure (portal OOMKilled chart-inspector at a shared 256Mi default). 0.25.1's 4 MiB body cap is sized against a 512Mi limit."
+                },
+                "env": {
+                  "type": "object",
+                  "description": "Extra env, e.g. OASGEN_RENDER_MAX_BODY_BYTES, OASGEN_RENDER_DEBUG."
+                },
+                "replicaCount": {
+                  "type": "integer",
+                  "description": "Render replicas. 1 means a restart briefly makes preview unavailable \u2014 acceptable for a preview surface, unlike chart-inspector which sits on the composition reconcile path (core-provider#148)."
+                },
+                "podAnnotations": {
+                  "type": "object"
+                },
+                "snowplowEndpoint": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "The endpoint Secret this renderer ships for snowplow's RESTActions to resolve. Each renderer owns its own, as the blueprint renderer does.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "Secret name; controller-render-endpoint, which portal 1.8.60's controller-render-draft RESTAction already names."
+                    }
+                  }
+                }
+              }
             }
           }
         },

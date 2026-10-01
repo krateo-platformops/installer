@@ -6,6 +6,19 @@ components:
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
+  # 0.25.1 (tag -> commit dd2c6b3, verified by ls-remote). Lockstep. Adds the knobs the render
+  # preview service needed to be CONFIGURABLE from the installer: render.fullnameOverride,
+  # render.service.port, render.resources and render.snowplowEndpoint.{enabled,name}. render itself
+  # arrived in 0.25.0; 0.25.1 is what makes it safe to turn on.
+  # WHY resources MATTERED: 0.25.0 shipped render.resources {} — no CPU or memory ceiling — while the
+  # service accepts an untrusted user-supplied OpenAPI body per request. An unbounded pod is not
+  # OOMKilled into a bounded blast radius, it consumes node memory until the kubelet evicts and takes
+  # neighbours with it. This platform has had that failure (portal OOMKilled chart-inspector at a
+  # shared 256Mi default, installer #65). 0.25.1 also lowers the body cap to 4 MiB to match a 512Mi
+  # limit, so the two now agree.
+  # render stays OFF in the chart default; it is enabled per-install via componentValues. All the new
+  # keys are typed in values.schema.json with NO default — a default on a componentValues passthrough
+  # leaf lands in the composition CR spec and would force the preview service on for every install.
   # 0.25.0 (two minors from 0.23.0; tag derefs to commit 9c93f45). Lockstep with oasgen-provider.
   # THE CHANGE THAT MATTERS: e4fc190 "a deleted RestDefinition must not own anything" (#137). A CRD
   # whose krateo.io/owned-by-restdefinition names a DELETED RestDefinition is now ADOPTED instead of
@@ -30,7 +43,7 @@ components:
   # compareScope `updatable` enum (CEL-guarded to an update verb) + a corrected oasPath/JQ ref
   # pattern. RestDefinition stays v1alpha1 served+storage (no conversion webhook); crds MUST match
   # the provider or the apiserver rejects compareScope:updatable at admission.
-  version: 0.25.0
+  version: 0.25.1
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -1659,7 +1672,7 @@ components:
   # Big-version wrapper-CRD jump (OasgenProvider v0-21-1 -> v0-23-0 CDC controllers) — may need a
   # cdc restart + CRD helm-ownership nudge on the live roll. oasgen is idle on 057 (0 RestDefinition
   # CRs), so data-plane blast radius is just this deployment's restart.
-  version: 0.25.0
+  version: 0.25.1
   deps:
   - oasgen-provider-crd
   tier: platform
