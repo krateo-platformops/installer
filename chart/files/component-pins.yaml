@@ -1324,6 +1324,25 @@ components:
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
 - name: portal
+  # 1.8.63 (tag -> commit 50ab390 = main HEAD; LIGHTWEIGHT tag — 1.8.62 was ANNOTATED, so a
+  # `refs/tags/X^{}` deref returns NOTHING here and reads as a false mismatch. Check both forms.
+  # The repo is moving to annotated from the next release; these two stay as published.)
+  # #285 NO RESTAction READS SECRETS — the headline. Settings>Users lists people from the User CRs
+  # plus managed-grant subjects; composition detail shows managed Secrets as "Unread"; the /resources
+  # Secret page says "Not read"; a new ra-secrets lint runs with an EMPTY allowlist, so the property is
+  # now enforced rather than asserted.
+  # #288 grows the controller-builder Builder CR's verbs.allowed from 8 to 12 — controllerBindId,
+  # controllerSetExcludedFields, controllerSetItemsPath, controllerSetConfigurationFields — for
+  # frontend 1.6.87. Verbs are DENY-BY-DEFAULT, so PORTAL FIRST again: the live CRD already admits
+  # these, the CR applies cleanly under the CURRENT frontend 1.6.86 (which never asks for verbs it
+  # does not know), and the reverse order would leave the new frontend offering verbs the cluster
+  # refuses. Verified before rolling: the published chart's files/builders/controller-builder.builder
+  # .yaml is sha256 bb3b1d10d5ede73be311bff98419dbc7e0d1be35976f83cf7da54c147b02189c, matching the
+  # frontend fixture, and carries exactly those 12 verbs.
+  # #286 adds a Source column to Settings>Users. #287 has builder tables read PullRequest
+  # .status.merged/.merged_at from github-provider-kog 0.3.2 — 057 is on 0.3.1 and #287 FALLS BACK
+  # CLEANLY, so this pin does NOT depend on that bump.
+  # No new schema defaults, no componentValues.
   # 1.8.62 (tag -> commit 6ad7a0367... dereferenced from the ANNOTATED tag, = main HEAD).
   # #283 fills in the controller-builder Builder CR for the authoring work landing in frontend 1.6.86:
   # spec.summarizer.plugin: controller-model (what Autopilot is told about a held controller) and
@@ -1665,7 +1684,7 @@ components:
   # perturbed. Content-only: no snowplow restart.
   # Chart diff is Chart.yaml plus exactly those four restaction templates; userAccessFilter occurrences in
   # composition-detail go 3 -> 5.
-  version: 1.8.62
+  version: 1.8.63
   deps:
   - frontend
   - git-provider
@@ -1708,6 +1727,8 @@ components:
   # 1.8.48: co-versioned with portal, as always.
   # 1.8.49: co-versioned with portal, as always.
 - name: portal-agents
+  # 1.8.63: co-versioned with portal, as always — one tag, every chart under helm/ (builder-publish
+  # also publishes at 1.8.63 but is registered by the portal chart, not pinned here).
   # 1.8.62: co-versioned with portal, as always — one tag, every chart under helm/. Carries none of
   # #283; it moves only to keep the pair equal.
   kind: PortalAgents
@@ -1734,7 +1755,7 @@ components:
   # (107 files, 470601 B on both), so portal-agents carries none of #281/#282 — it moves only to keep
   # the pair equal. Caught because the portal-only bump in 0.3.353 left this at 1.8.60, which breaks
   # the same-version invariant stated at the top of this block; 0.3.353 was therefore never deployed.
-  version: 1.8.62
+  version: 1.8.63
   deps: ['portal']
   tier: platform
   feature: portal
