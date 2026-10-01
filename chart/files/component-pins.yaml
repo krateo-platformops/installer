@@ -224,6 +224,8 @@ components:
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
   # rather than assumed. Lockstep only.
 - name: snowplow-crd
+  # 1.12.31: lockstep with snowplow, one tag. Verified byte-identical to 1.12.30 outside Chart.yaml
+  # (4 files, 19855 B on both), so it carries no CRD change and moves only to keep the pair equal.
   # 1.12.30 (tag -> annotated cbcb7eed9f9d9b9bcd5b8eb5c44f84fc41ba6913 -> commit 8a2b5aec70ecb488b368a8de325f51c0d9e8ee43,
   # verified by ls-remote against krateo-platformops/snowplow, not taken from the release report).
   # Lockstep with snowplow. Carries the content-staleness elimination (#315/#316), #282/#218, the landed
@@ -266,7 +268,7 @@ components:
   # 1.12.27: co-versioned with snowplow. Verified byte-identical to 1.12.24 outside Chart.yaml, so no
   # CRD surface change and no ordering constraint against the app. Skips 1.12.25 and 1.12.26, both of
   # which 1.12.27 contains by ancestry.
-  version: 1.12.30
+  version: 1.12.31
   tier: platform
   feature: portal
 - name: authn
@@ -310,6 +312,22 @@ components:
   # subjectaccessreviews ... Unauthorized" from snowplow in a single 24h window. Worth re-reading that
   # count after the roll — it is a free check on whether the fix landed.
 - name: snowplow
+  # 1.12.31 (ANNOTATED tag -> commit 133629a5..., = main HEAD).
+  # #218 the CRD-re-list warmth amplifier, now gated on two fingerprints; #367 boot-time env backing
+  # for the shadow-parity toggle (the toggle itself stays DARK); #382/#385 test-only de-flakes.
+  #
+  # CHART-DEFAULT CHANGE, found by diffing the PACKAGED trees rather than trusting the release note
+  # ("no chart-default changes"): snowplow/values.yaml gains `env.SHADOW_PARITY_ENABLED: "false"`.
+  # That is #367's env backing and it is explicitly OFF, so behaviour is unchanged — but it IS a new
+  # chart default and it is the reason the toggle now survives a restart, which it did not before.
+  # Everything else in the chart is byte-identical; values.schema.json is unchanged (28878 B both).
+  #
+  # SHADOW PARITY STAYS OFF HERE, and the flip is deliberately NOT part of this roll. The #368
+  # cross-identity wildcard collision probe (PR #373) lands in 1.12.32, NOT in this version, and v7
+  # certification is "collision 0 AND observed > 0 AND evicted 0" measured by that probe while parity
+  # is ON. Flipping on 1.12.31 would therefore open a parity window with no collision detector, which
+  # can certify nothing. HOLD the flip until 057 runs 1.12.32, then do it in a low-traffic window with
+  # the probe counters baselined first.
   kind: Snowplow
   chart: snowplow
   # 1.12.9: SKIPS 1.12.8, and that is safe — verified linear history with 1.12.8 an ancestor, so the
@@ -599,7 +617,7 @@ components:
   # this roll. Reading it here is exactly the error the owner corrected.
   # Both charts verified byte-identical to 1.12.24 outside Chart.yaml (26311 B and 6219 B), image is a
   # real multi-arch OCI index (amd64 + arm64).
-  version: 1.12.30
+  version: 1.12.31
   deps:
   - snowplow-crd
   - authn
