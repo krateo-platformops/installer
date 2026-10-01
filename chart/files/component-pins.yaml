@@ -1281,6 +1281,23 @@ components:
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
 - name: portal
+  # 1.8.62 (tag -> commit 6ad7a0367... dereferenced from the ANNOTATED tag, = main HEAD).
+  # #283 fills in the controller-builder Builder CR for the authoring work landing in frontend 1.6.86:
+  # spec.summarizer.plugin: controller-model (what Autopilot is told about a held controller) and
+  # spec.verbs.allowed grown from 2 entries to 8 — the six controller authoring verbs
+  # (controllerStart, controllerPlace, controllerMapVerb, controllerSetIdentifiers,
+  # controllerSetStatusFields, controllerRemoveKind) alongside previewRestDef and publishRestDef.
+  # Verbs are DENY-BY-DEFAULT per the CRD, so the frontend refuses any verb this list omits.
+  #
+  # ORDER: PORTAL FIRST, deliberately the reverse of how this pair was proposed. The live Builder CRD
+  # ALREADY defines verbs.allowed and summarizer.plugin (shipped before 1.6.84), so this CR applies
+  # cleanly under the CURRENT frontend 1.6.85 — which simply never asks for the six verbs it does not
+  # know, making the extra entries inert. Shipping frontend 1.6.86 first would instead open a window
+  # where it offers the verbs and the CR does not allow them, so every one is refused with "not
+  # allowed by the Controller Builder on this cluster": fail-safe, nothing written, but non-functional.
+  # Verified before rolling: CRD spec.verbs.properties.allowed and spec.summarizer.properties.plugin
+  # both present, and all 8 verb names match the CRD's ^[a-z][a-zA-Z]*$ item pattern, so nothing is
+  # pruned or rejected.
   # 1.8.61 (tag -> commit 71e9754243910e47b9c3f71cb40fb0c393521969, verified by ls-remote; the tag is
   # ANNOTATED, so the bare refs/tags/1.8.61 SHA is a tag object, not this commit).
   # #281 ships the builder catalogue AS CLUSTER STATE: three Builder CRs
@@ -1605,7 +1622,7 @@ components:
   # perturbed. Content-only: no snowplow restart.
   # Chart diff is Chart.yaml plus exactly those four restaction templates; userAccessFilter occurrences in
   # composition-detail go 3 -> 5.
-  version: 1.8.61
+  version: 1.8.62
   deps:
   - frontend
   - git-provider
@@ -1648,6 +1665,8 @@ components:
   # 1.8.48: co-versioned with portal, as always.
   # 1.8.49: co-versioned with portal, as always.
 - name: portal-agents
+  # 1.8.62: co-versioned with portal, as always — one tag, every chart under helm/. Carries none of
+  # #283; it moves only to keep the pair equal.
   kind: PortalAgents
   # MUST equal the portal tag that ships the split: release-oci versions every chart under helm/
   # from the same tag, so portal and portal-agents always carry the SAME version. 1.8.19 is the
@@ -1672,7 +1691,7 @@ components:
   # (107 files, 470601 B on both), so portal-agents carries none of #281/#282 — it moves only to keep
   # the pair equal. Caught because the portal-only bump in 0.3.353 left this at 1.8.60, which breaks
   # the same-version invariant stated at the top of this block; 0.3.353 was therefore never deployed.
-  version: 1.8.61
+  version: 1.8.62
   deps: ['portal']
   tier: platform
   feature: portal
