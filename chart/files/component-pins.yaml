@@ -1630,25 +1630,14 @@ components:
   # 0.4.0 (#19): /render accepts lookupStubs and returns a `lookups` report. LEG 1 OF 3 of the Preview
   # gate-stubs feature. A request without stubs renders exactly as before, and a parity test pins the
   # stubbed path to action.Install's output.
-- name: krateo-helm-render-service
-  kind: KrateoHelmRenderService
-  version: 0.4.0
-  tier: platform
-  feature: portal
-  chart: krateo-helm-render-service
-  # RUN 1 OF A TWO-RUN RENAME MIGRATION — this component is DELIBERATELY still here.
-  # The chart was renamed helm-render-service -> blueprint-render-service, which changes the crdgen
-  # kind (PascalCase(chart)) and therefore the CRD, the CompositionDefinition and the component
-  # identity. A chart rename is not a rename on a cluster: it is a delete-and-create under a
-  # different API type. Removing this entry in the SAME run as adding the new one would have helm
-  # prune the CD and the CR together, and helm does not order those — if the CD goes first its
-  # per-kind controller is gone and nothing can release the CR's composition.krateo.io/finalizer,
-  # leaving it Terminating and needing hand-edited finalizer surgery.
-  # So: run 1 ADDS only. Both renderers run; names do not collide (krateo-helm-render-service /
-  # helm-render-endpoint vs blueprint-render-service / blueprint-render-endpoint), so blueprint
-  # previews never break. Run 2 deletes the CR first, while its controller still runs, and only then
-  # drops this entry.
 - name: blueprint-render-service
+  # RUN 2 DONE: the old krateo-helm-render-service component is gone. Its CR was deleted FIRST, while
+  # krateohelmrenderservices-v0-4-0-controller was still running, so composition.krateo.io/finalizer was
+  # released and the leaf helm release uninstalled itself cleanly (CR 0, leaf 0, Deployment/Service 0,
+  # Secret helm-render-endpoint gone). Dropping this entry in the same run as adding the new one would
+  # have had helm prune the CD and the CR together with no ordering guarantee — CD first means the
+  # controller is gone and the finalizer can never be released, leaving a Terminating CR that needs
+  # hand-edited finalizer surgery. Two runs, CR-then-pin, avoided that.
   kind: BlueprintRenderService
   version: 0.5.0
   tier: platform
