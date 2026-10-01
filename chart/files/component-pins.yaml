@@ -2722,6 +2722,10 @@ components:
   # evidence source, and `empty` is re-described because it is no longer degradation on its own.
   # 0.1.15: BYTE-IDENTICAL, lockstep only — the range touches evidence.py and tests.
 - name: nightly-review-crd
+  # 0.1.29: lockstep with nightly-review, one tag. The CRDs DID change this time (proposal.crd.yaml
+  # and reviewrun.crd.yaml both differ, 47660 -> 49549 B) but gained only OPTIONAL fields — verified by
+  # diffing the packaged trees for any new `required` entry, of which there are none. That matters
+  # because a newly-required field would strand stored CRs on a rollback.
   kind: NightlyReviewCrds
   chart: nightly-review-crds
   # ReviewRun (an event, pruned) and Proposal (a decision record, kept). Separate CRDs because they
@@ -2794,7 +2798,7 @@ components:
   # 0.1.28: co-versioned with nightly-review. Verified byte-identical to 0.1.27 outside Chart.yaml, so no
   # CRD surface change this time and no ordering constraint — unlike 0.1.25 and 0.1.27, both of which
   # added structural status fields and had to go first.
-  version: 0.1.28
+  version: 0.1.29
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -2852,6 +2856,21 @@ components:
   # shifted — astimezone() on one assumes the host's local zone and slid the window two hours on the
   # machine this was written on, which a test caught before it shipped.
 - name: nightly-review
+  # 0.1.29 (tag -> commit c7d503295, = main HEAD; NOTE this repo uses LIGHTWEIGHT tags, unlike
+  # installer/portal/frontend which are annotated — a `refs/tags/X^{}` deref returns NOTHING here and
+  # reads as a false mismatch. Verify with the plain ref.)
+  # Adds the SYNC-STALL DETECTOR built from the review of today's outage: a nightly pass reporting
+  # objects in github.krateo.io and git.krateo.io that have been Synced=False for >=15 minutes,
+  # grouped by component and cause, as Documentation Proposals. That is the alert that would have
+  # caught this morning's git-provider-credentials expiry on its own — it sat at 0/24 Repositories
+  # Synced for hours and the only signal was a human noticing a publish had stalled.
+  # Also: a new read-only ClusterRole `<release>-sync-read` (get/list on those two groups ONLY, no
+  # Secrets access), and a destination mapping for blueprint-render-service so the drift check is green.
+  # NO componentValues needed: config.syncStall lives in the chart's values.yaml with no schema default.
+  # WATCH ON THIS ROLL: 057 DOES carry a componentValues.nightly-review.config override (authnUrl,
+  # autopilotA2aUrl, clickhouseUrl). Helm merges maps key-by-key so the chart's new config.syncStall
+  # default should survive — but "should" is not verification, so the post-check is that the CronJob
+  # actually carries SYNC_STALL_GROUPS in its env, not merely that the pin moved.
   kind: NightlyReview
   # 0.1.1: ships values.schema.json (see the -crd pin above).
   # 0.1.2: THE CLIENT NEVER READ THE AGENT'S ANSWER. ask() harvested result.message.parts and
@@ -3136,7 +3155,7 @@ components:
   # the fix failing.
   # TARGET_COMPONENTS reaches the CronJob via `dig`, so a values file without the map renders {} rather
   # than failing — verified by rendering the chart against the live componentValues.
-  version: 0.1.28
+  version: 0.1.29
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
