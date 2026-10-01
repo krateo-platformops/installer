@@ -53,6 +53,10 @@ components:
   # 1.6.70: BYTE-IDENTICAL to 1.6.69 — verified by diffing the packaged templates, not assumed.
   # 1.6.71: BYTE-IDENTICAL to 1.6.70, verified by diffing the packaged templates. Lockstep only.
 - name: frontend-crd
+  # 1.6.85: lockstep with frontend, carrying NO CRD change. Verified by diffing the packaged trees:
+  # 47 yaml files and 539848 bytes on BOTH 1.6.84 and 1.6.85, identical except Chart.yaml's version —
+  # so this pin moves only to keep the pair equal. #432 needs no new CRD; it reads Builder CRs whose
+  # CRD (builders.templates.krateo.io/v1alpha1) has been served since before this roll.
   # 1.6.84 (tag -> commit fd7f5cb11a195258602026b21066a49f5fda29c2, verified by ls-remote).
   # Lockstep with frontend. The Controller Builder front half: the composer host (#427), the builder at
   # /controller-builder/compose (#428), controller preview via controller-render-draft (#430), generic
@@ -210,7 +214,7 @@ components:
   # length — that is gzip variance, not content. The file diff is the instrument; tarball size is not.
   # 1.6.81: co-versioned with frontend. Verified byte-identical to 1.6.79 outside Chart.yaml (skipping
   # 1.6.80, which was never rolled), so no CRD surface change and no ordering constraint against the app.
-  version: 1.6.84
+  version: 1.6.85
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -643,6 +647,20 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+  # 1.6.85 (tag -> commit c10e10ef7c4ceb3ac28a5baa69b4d30806537002, verified by ls-remote; ANNOTATED tag,
+  # so the bare refs/tags/1.6.85 SHA is a tag object, not this commit).
+  # #432 stops hardcoding the builder list: the builder pages now READ the three Builder CRs from the
+  # cluster, as the SIGNED-IN USER, via snowplow GET /list?category=builders&ns=krateo-system. New config
+  # key BUILDERS_NAMESPACE (chart values.yaml, default krateo-system; typed in the chart schema with NO
+  # default of its own, so it cannot be forced on from the schema layer).
+  # ORDERING, and it is already satisfied: portal 1.8.61 must be LIVE FIRST because it ships those CRs
+  # plus the Role/RoleBinding that lets system:authenticated read them. It went live as installer 0.3.354
+  # and was verified there: 3 Builder CRs present, and an impersonated read (--as=cyberjoker
+  # --as-group=devs --as-group=system:authenticated) now lists all three where it was Forbidden before.
+  # Without that, every builder page reads "no Builder is installed in krateo-system".
+  # Chart diff 1.6.84 -> 1.6.85 is ONLY Chart.yaml + values.yaml + values.schema.json — the behaviour
+  # rides the image (appVersion 1.6.85), amd64 + arm64.
+  # #431 is singular/plural count copy.
   kind: Frontend
   chart: frontend
   # 1.5.27 adds the Autopilot voice/dictation control to the composer, gated ENTIRELY on the config
@@ -1109,7 +1127,7 @@ components:
   # that showed a JSON box for such a field now shows rows. Worth one glance at a blueprint install form.
   # Both charts verified byte-identical to the deployed 1.6.79 outside Chart.yaml, so the whole change
   # rides the image; image is a real multi-arch OCI index (amd64 + arm64).
-  version: 1.6.84
+  version: 1.6.85
   deps:
   - frontend-crd
   - authn
