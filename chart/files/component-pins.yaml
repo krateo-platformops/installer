@@ -53,6 +53,10 @@ components:
   # 1.6.70: BYTE-IDENTICAL to 1.6.69 — verified by diffing the packaged templates, not assumed.
   # 1.6.71: BYTE-IDENTICAL to 1.6.70, verified by diffing the packaged templates. Lockstep only.
 - name: frontend-crd
+  # 1.6.86: lockstep with frontend, no CRD change. Verified by diffing the packaged trees — 47 yaml
+  # files and 539848 bytes on BOTH 1.6.85 and 1.6.86, identical except Chart.yaml's version. The
+  # Builder CRD already defines spec.verbs.allowed and spec.summarizer.plugin, which is WHY portal
+  # 1.8.62 could land first without touching this pin.
   # 1.6.85: lockstep with frontend, carrying NO CRD change. Verified by diffing the packaged trees:
   # 47 yaml files and 539848 bytes on BOTH 1.6.84 and 1.6.85, identical except Chart.yaml's version —
   # so this pin moves only to keep the pair equal. #432 needs no new CRD; it reads Builder CRs whose
@@ -214,7 +218,7 @@ components:
   # length — that is gzip variance, not content. The file diff is the instrument; tarball size is not.
   # 1.6.81: co-versioned with frontend. Verified byte-identical to 1.6.79 outside Chart.yaml (skipping
   # 1.6.80, which was never rolled), so no CRD surface change and no ordering constraint against the app.
-  version: 1.6.85
+  version: 1.6.86
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -647,6 +651,25 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+  # 1.6.86 (ANNOTATED tag -> commit a02fe28..., = main HEAD).
+  # #433 lets Autopilot AUTHOR a controller through the Controller Builder's own kernels: six verbs
+  # (controllerStart, controllerPlace, controllerMapVerb, controllerSetIdentifiers,
+  # controllerSetStatusFields, controllerRemoveKind), each gated by the Builder CR's verbs.allowed —
+  # deny-by-default, so a verb the CR omits is refused. publishRestDef now publishes the held,
+  # PREVIEWED draft, and the legacy rail path is gone.
+  # It also CLOSES A WRITE PATH: RestDefinition writes are refused through applyResourceSet. And for
+  # every builder, an un-previewed draft is refused before the destination form.
+  # #431 is singular/plural count copy.
+  #
+  # ORDER, already satisfied: portal 1.8.62 ships the verbs.allowed list these verbs are gated on and
+  # went live FIRST as installer 0.3.356 — verified there, the controller-builder CR carries all 8
+  # verbs and summarizer.plugin controller-model where it previously had 2 verbs and no summarizer.
+  # Rolled in that order deliberately: the reverse leaves this frontend offering verbs the cluster's
+  # Builder CR does not allow, so each is refused as "not allowed by the Controller Builder on this
+  # cluster" — fail-safe, nothing written, but non-functional.
+  # Pre-roll bundle baseline, so the post-check cannot be vacuous: at 1.6.85 all six verb names occur
+  # ZERO times, while previewRestDef (7) and publishRestDef (4) occur — the two non-zero controls
+  # prove the search works, so the six zeros are real absences.
   # 1.6.85 (tag -> commit c10e10ef7c4ceb3ac28a5baa69b4d30806537002, verified by ls-remote; ANNOTATED tag,
   # so the bare refs/tags/1.6.85 SHA is a tag object, not this commit).
   # #432 stops hardcoding the builder list: the builder pages now READ the three Builder CRs from the
@@ -1127,7 +1150,7 @@ components:
   # that showed a JSON box for such a field now shows rows. Worth one glance at a blueprint install form.
   # Both charts verified byte-identical to the deployed 1.6.79 outside Chart.yaml, so the whole change
   # rides the image; image is a real multi-arch OCI index (amd64 + arm64).
-  version: 1.6.85
+  version: 1.6.86
   deps:
   - frontend-crd
   - authn
