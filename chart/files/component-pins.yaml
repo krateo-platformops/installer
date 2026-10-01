@@ -45,7 +45,7 @@ components:
   # compareScope `updatable` enum (CEL-guarded to an update verb) + a corrected oasPath/JQ ref
   # pattern. RestDefinition stays v1alpha1 served+storage (no conversion webhook); crds MUST match
   # the provider or the apiserver rejects compareScope:updatable at admission.
-  version: 0.26.0
+  version: 0.26.1
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -1764,6 +1764,15 @@ components:
   # a SUB-DEPLOYMENT of oasgen-provider. They share a naming convention but not a structure, so do
   # not go looking for a controller-render-service component here.
 - name: controller-render-service
+  # 0.26.1 fixes a defect in 0.26.0's NEW controller-render-service chart: its values.schema.json had
+  # `additionalProperties: false` on the `global` block, but the composition engine injects ten keys
+  # there at install time (compositionId/Name/Namespace/Group/Resource/ApiVersion/Kind/InstalledVersion,
+  # krateoNamespace, gracefullyPaused), so helm REFUSED the install — "at '/global': additional
+  # properties ... not allowed". Live effect on 057: the ControllerRenderService composition sat
+  # Ready=False (reason Creating) with NO helm release ever created, so the renderer never came up and
+  # Controller Builder Preview stayed down until this pin. blueprint-render-service omits that line for
+  # exactly this reason; 0.26.0 copied its structure but not the omission. Root stays strict; only
+  # `global` is permissive, and the reason is documented in the schema so it is not re-tightened.
   # The controller renderer: previews the CRDs a set of RestDefinitions would generate (POST /render),
   # backing the portal's Controller Builder Preview via the controller-render-draft RESTAction. Placed
   # next to blueprint-render-service deliberately — these are the two render services and they are now
@@ -1782,7 +1791,7 @@ components:
   # matches blueprint-render-service. No deps: it ships no CRDs and reads nothing from the cluster (the
   # OAS documents arrive in the request), so it has nothing to wait for.
   kind: ControllerRenderService
-  version: 0.26.0
+  version: 0.26.1
   tier: platform
   feature: portal
   chart: controller-render-service
@@ -1805,7 +1814,7 @@ components:
   # Big-version wrapper-CRD jump (OasgenProvider v0-21-1 -> v0-23-0 CDC controllers) — may need a
   # cdc restart + CRD helm-ownership nudge on the live roll. oasgen is idle on 057 (0 RestDefinition
   # CRs), so data-plane blast radius is just this deployment's restart.
-  version: 0.26.0
+  version: 0.26.1
   deps:
   - oasgen-provider-crd
   tier: platform
