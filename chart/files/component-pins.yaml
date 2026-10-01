@@ -1650,7 +1650,11 @@ components:
   # diffing the packaged trees, which is how the difference was noticed at all.
   # 1.8.57: co-versioned with portal. Verified byte-identical to 1.8.56 outside Chart.yaml (129998 B at
   # both), so portal-agents carries none of the fix — it moves only to keep the pair equal.
-  version: 1.8.60
+  # 1.8.61: co-versioned with portal, as always. Verified byte-identical to 1.8.60 outside Chart.yaml
+  # (107 files, 470601 B on both), so portal-agents carries none of #281/#282 — it moves only to keep
+  # the pair equal. Caught because the portal-only bump in 0.3.353 left this at 1.8.60, which breaks
+  # the same-version invariant stated at the top of this block; 0.3.353 was therefore never deployed.
+  version: 1.8.61
   deps: ['portal']
   tier: platform
   feature: portal
