@@ -2646,7 +2646,10 @@ components:
   #   ORDERING: goes with frontend 1.6.89 (installer 0.3.372, immediately before). No hard dependency
   #   between them - 1.6.89's #440 fixes the refused-chip ICON and this fixes the verb CONFIRMATION -
   #   but they are verified together by the verbs-check-5 run, so keep the pair on one order.
-  version: 0.6.6
+  # 0.6.7 (#139, #94): a platform-wide log filter also excludes krateo-alert-provider, and every
+  # Agent-type tool sets isolateSessions: true, so each delegation gets its own sub-agent session
+  # (kagent 0.10.1 otherwise shares one per tool across every caller). Honoured by runtime: go only.
+  version: 0.6.7
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
