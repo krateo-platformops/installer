@@ -2551,7 +2551,19 @@ components:
   # 'PageHeader or Paragraph' go 1 -> 0, checked by grepping both packaged trees. No template change, no
   # image move. VERIFY BY THE MOUNTED SECRET: config-hash on deploy/autopilot reads
   # 13533324902980676084 before this roll and must move.
-  version: 0.6.4
+  # 0.6.5: PROMPT ONLY (autopilot#145). Verified by unpacking both charts: the ONLY substantive diff is a
+  #   single line in files/prompts-eng.yaml under the "Authoring a controller" section (cm/krateo-prompts-eng);
+  #   Chart.lock differs only by its regenerated timestamp (no dependency moved) and Chart.yaml only by
+  #   version + sources URL. No image change, no template change.
+  #   The change: when the request asks to SEE the result (preview it, show me, render it, try it), the model
+  #   must END that same reply with {"verb":"previewRestDef"} after the last edit, instead of stopping at the
+  #   edits and offering chips for a step the person already asked for. publishRestDef is never added unless
+  #   the person asked to publish - a preview is not an approval. When a step needs the person's choice, it
+  #   emits no preview and no chips, asks the one question, and previews once answered.
+  #   ORDERING, load-bearing: this REQUIRES frontend >= 1.6.88. Before 1.6.88 the frontend silently drops a
+  #   trailing previewRestDef, so the new prompt would be harmless but inert. frontend 1.6.88 went in as
+  #   installer 0.3.368, immediately before this pin - do not roll this one ahead of it.
+  version: 0.6.5
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
