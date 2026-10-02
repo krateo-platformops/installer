@@ -79,7 +79,7 @@
      listeners (portal/HyperDX) move onto a SEPARATE platform Gateway whose Service is
      `<svcMatch>-platform` (a LoadBalancer). So the BROWSER-origin resolutions for the portal stack and
      HyperDX must target that -platform Service, while every IN-CLUSTER URL that talks to the agent
-     gateway :8080 (kagentapp.proxy.url, the model route, the incident-agent A2A URL) stays on
+     gateway :8080 (kagentapp.proxy.url, the model route, alert-provider's A2A URLs) stays on
      $gwComp.svcMatch. $portalSvc = the browser-origin Service name: -platform when internalDataPlane,
      else the primary Service unchanged (byte-identical when the knob is off). */}}
 {{- $portalSvc := $gwComp.svcMatch }}
@@ -422,7 +422,7 @@
 {{- $agw := dig "agentgateway-policies" "gateway" dict (default dict $top.Values.componentValues) -}}
 {{- $userClaim := dig "agentgateway-policies" "jwt" "userClaim" "sub" (default dict $top.Values.componentValues) -}}
 {{- /* The gateway's address, resolved ONCE: every URL below (the controller's proxy, the LLM hop,
-     alert-troubleshooter's A2A call) is built from these, so the defaults are stated in exactly one
+     alert-provider's A2A calls) is built from these, so the defaults are stated in exactly one
      place instead of being re-spelled at each site. */ -}}
 {{- $gwName := default "krateo-agent-gateway" $agw.name -}}
 {{- $gwPort := int (default 8080 $agw.port) -}}
@@ -565,11 +565,11 @@
 {{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "gatewayClass" "create") "value" false) -}}
 {{- end -}}
 {{- end -}}
-{{- /* alert-troubleshooter is a plain webhook (NOT a kagent agent), so it can't carry a caller's
-     token the way the agents above do — it has no caller; a HyperDX alert fires it. Instead it
+{{- /* alert-provider is a plain service (NOT a kagent agent), so it can't carry a caller's
+     token the way the agents above do — it has no caller; its own loop evaluates the alerts. Instead it
      exchanges its OWN projected SA token (audience "authn") at authn for a Krateo JWT and presents
-     THAT on its A2A call to incident-agent, so incident-agent can propagate it to its now-gated MCP
-     tools. So under the gateway we point config.authnUrl at authn's in-cluster Service (chart default
+     THAT on its A2A calls to incident-agent and autopilot, so incident-agent can propagate it to its
+     gated MCP tools. So under the gateway we point config.authnUrl at authn's in-cluster Service (chart default
      "" = disabled, which is exactly right when the gateway is OFF and nothing downstream is gated).
      Port follows authn's own exposePort by default, and the shared exposure.port ONLY in LB/NodePort
      modes ($isLB) — the SAME gate the peer-url/internalUrls wiring uses, because that shared port is a
@@ -578,7 +578,7 @@
      exposure.port (80 in path mode) clobbered it, pointing this URL at a dead :80 → authn token-exchange
      failed → tokenless A2A → incident-agent 403. Fill-if-absent so a componentValues override still wins.
      Requires authn's serviceaccount strategy, always present under specialistAgents (needs portal→authn). */ -}}
-{{- if eq $c.name "alert-troubleshooter" -}}
+{{- if eq $c.name "alert-provider" -}}
 {{- $authnPort := 8082 -}}
 {{- range $d := $components -}}{{- if eq $d.name "authn" -}}{{- $authnPort = $d.exposePort -}}{{- end -}}{{- end -}}
 {{- if and $isLB $top.Values.exposure.port -}}{{- $authnPort = $top.Values.exposure.port -}}{{- end -}}

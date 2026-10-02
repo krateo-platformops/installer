@@ -1821,7 +1821,11 @@ components:
   # perturbed. Content-only: no snowplow restart.
   # Chart diff is Chart.yaml plus exactly those four restaction templates; userAccessFilter occurrences in
   # composition-detail go 3 -> 5.
-  version: 1.8.63
+  # 1.8.64 (#244, #289): the incident pages read Incidents (header chip, the three scripts with their
+  # last exit codes, Close, check history from status.checks), and an alert's page gains Pause and
+  # Resume (krateo.io/paused). Its RESTActions read the Incident CRD, which incident-controller-crd
+  # installs.
+  version: 1.8.64
   deps:
   - frontend
   - git-provider
@@ -1892,7 +1896,8 @@ components:
   # (107 files, 470601 B on both), so portal-agents carries none of #281/#282 — it moves only to keep
   # the pair equal. Caught because the portal-only bump in 0.3.353 left this at 1.8.60, which breaks
   # the same-version invariant stated at the top of this block; 0.3.353 was therefore never deployed.
-  version: 1.8.63
+  # 1.8.64: co-versioned with portal.
+  version: 1.8.64
   deps: ['portal']
   tier: platform
   feature: portal
@@ -2018,7 +2023,9 @@ components:
   feature: portal
 - name: krateo-observability
   kind: KrateoObservability
-  version: 0.1.18
+  # 0.1.19 (observability#62): the log-scoped default alerts also exclude ServiceName
+  # 'krateo-alert-provider', so they never count the alert-provider's own logs.
+  version: 0.1.19
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -2639,7 +2646,10 @@ components:
   #   ORDERING: goes with frontend 1.6.89 (installer 0.3.372, immediately before). No hard dependency
   #   between them - 1.6.89's #440 fixes the refused-chip ICON and this fixes the verb CONFIRMATION -
   #   but they are verified together by the verbs-check-5 run, so keep the pair on one order.
-  version: 0.6.6
+  # 0.6.7 (#139, #94): a platform-wide log filter also excludes krateo-alert-provider, and every
+  # Agent-type tool sets isolateSessions: true, so each delegation gets its own sub-agent session
+  # (kagent 0.10.1 otherwise shares one per tool across every caller). Honoured by runtime: go only.
+  version: 0.6.7
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -2679,7 +2689,10 @@ components:
   # status.report instead of reports (alert->RCA loop dead). Matches clickstack-agent (already unbound).
   # Live toolNames should become ["list_databases","run_select_query","run_query"]. Not an mcpBackend
   # (no fleet bounce); served version migrates v0-1-11 -> v0-1-12.
-  version: 0.2.1
+  # 0.2.2 (#20): prompt-only. The RCA's how to fix is three scripts (precondition, apply, verify) plus an
+  # optional rollback, and the record is an Incident, matching alert-provider 0.2.45's output contract.
+  # No new values.
+  version: 0.2.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -2853,34 +2866,55 @@ components:
   # Its own deps (repo-mcp-server, kagent, model-configs) are already core, so nothing else moves.
   feature: coreAgents
   agent: true
-# alert-troubleshooter (krateo-platformops): the "auto-troubleshoot on fire" bridge — a HyperDX alert
-# fires a webhook -> incident-agent A2A root-cause analysis -> TroubleshootingReport CR the portal
-# renders. NOT a kagent Agent (a plain webhook service that CALLS incident-agent), so no `agent`. Needs
-# BOTH the observability stack (HyperDX API + the hyperdx-api-token secret, from krateo-observability) AND
-# incident-agent, so it deps both and rides the specialistAgents feature — the same portal cross-dep
-# pattern clickhouse-mcp-server uses. Public krateo-platformops chart, so no repo override.
-# Dedicated CRD composition (Alert + TroubleshootingReport). Every CRD-owning component ships a
+# incident-controller (krateo-platformops): runs each Incident's precondition and verify scripts in a
+# read-only check pod (its own krateo-incident-checks namespace, apiserver-only egress, no DNS) and moves
+# the incident Open -> Verifying -> Resolved on their exit codes. alert-provider opens the
+# Incidents; this component and a human close them. The Incident CRD ships in its own *-crds chart,
+# like every CRD-owning component, and installs first. Public krateo-platformops charts and images.
+- name: incident-controller-crd
+  kind: IncidentControllerCrds
+  chart: incident-controller-crds
+  version: 0.1.0
+  tier: observability
+  feature: specialistAgents
+- name: incident-controller
+  kind: IncidentController
+  version: 0.1.0
+  deps:
+  - incident-controller-crd
+  tier: observability
+  feature: specialistAgents
+# alert-provider (repo krateo-platformops/alert-troubleshooter): the "auto-troubleshoot on fire"
+# bridge. Every 60 s it reads each Alert's HyperDX state; while it is ALERT, a firing opens an Incident
+# with an incident-agent A2A root-cause analysis and its how-to-fix scripts, unless one LLM call on
+# the model-configs slot config.compareModelConfig names one of the alert's open Incidents as the
+# cause, which then counts it. NOT a kagent Agent (a plain service that CALLS incident-agent and a
+# ModelConfig's model), so no `agent`. Needs the observability stack (HyperDX API + the
+# hyperdx-api-token secret, from krateo-observability), incident-agent and model-configs, so it deps all three
+# and rides the specialistAgents feature — the same portal cross-dep pattern clickhouse-mcp-server
+# uses. It writes Incidents, so it deps incident-controller-crd. Public krateo-platformops chart, so
+# no repo override.
+# Dedicated CRD composition (Alert). Every CRD-owning component ships a
 # *-crds composition (cf. authn-crd/frontend-crd/snowplow-crd) so the CRD lifecycle is DECOUPLED from
 # the app's version churn — an app-only bump no longer migrates or (on a handover mis-fire) tears down
 # these CRDs (core-provider#89). crdgen kind = PascalCase(chart): crds -> Crds. Versioned in lockstep
-# with alert-troubleshooter (same repo tag). Public krateo-platformops chart.
-- name: alert-troubleshooter-crd
-  kind: AlertTroubleshooterCrds
-  chart: alert-troubleshooter-crds
+# with alert-provider (same repo tag). Public krateo-platformops chart.
+- name: alert-provider-crd
+  kind: AlertProviderCrds
+  chart: alert-provider-crds
   # 0.2.42: PURE LOCKSTEP, verified byte-identical to 0.2.41. Note this breaks the recent run of LOAD-BEARING
   # -crd bumps on this component (0.2.39 added the SpecDrift phase enum, 0.2.41 added Invalid — holding either
   # would have had the apiserver reject the status write and silently disable half the fix). The only way to
   # tell the two cases apart is to diff the charts; do not infer it from the component's history either way.
-  version: 0.2.43
+  # 0.2.45: LOAD-BEARING. Alert gains status.okSince. The chart ships no TroubleshootingReport CRD (no
+  # migration; the Incident CRD ships in incident-controller-crd). Its release takes over
+  # alerts.observability.krateo.io from the alert-troubleshooter-crd release, whose uninstall deletes
+  # the CRD and every Alert: follow docs/configuration.md#upgrading-from-alert-troubleshooter first.
+  version: 0.2.45
   tier: observability
   feature: specialistAgents
-- name: alert-troubleshooter
-  kind: AlertTroubleshooter
-  # 0.2.36 (#28): additive ClusterRole+ClusterRoleBinding for the observer thread, which reads
-  # auditrecords + troubleshootingreports CLUSTER-WIDE (a remediation write can target any namespace)
-  # and patches report status — the namespaced Role couldn't authorize the all-namespaces list, so
-  # every observe pass 403'd on GET /apis/audit.krateo.io/v1alpha1/auditrecords. App-only fix (RBAC in
-  # the app chart, CRDs unchanged) so the alert-troubleshooter-crd pin stays 0.2.35 per the decoupling.
+- name: alert-provider
+  kind: AlertProvider
   # 0.2.42 (#43): fixes a NameError that made the dashboard CREATE path unrunnable — ensure_dashboard_tile
   # built its tile from an inline literal referencing an undefined `source_id`, while the sibling _tile_for
   # helper that update_dashboard_tile already used had it right as source["id"]. Reached only when a tile must
@@ -2889,10 +2923,19 @@ components:
   # DELETING the duplicate and routing create through _tile_for, with a test asserting both call sites emit an
   # identical tile — so the two-copies-one-wrong shape that caused it cannot silently come back. Chart is
   # byte-identical; appVersion IS the image tag, so this line is what delivers the fix.
-  version: 0.2.44
+  # 0.2.45 (#48 #49 #51 #52): HyperDX alerts and webhooks key on the Alert's metadata.name, and the
+  # webhook triggers nothing. An alert has N Incidents: an Incident still Analyzing, or whose analysis
+  # failed, takes a firing without a comparison, and so does the latest one for one spec.interval after
+  # it is Resolved; the one a firing counts on gets status.firings++. The RCA writes status.howToFix
+  # {precondition, apply, verify} and an optional rollback. The service's authn identity
+  # (config.authnUrl) authenticates its A2A calls. The chart has no observer thread, and its schema
+  # rejects config.reportCooldown and config.snowplowUrl.
+  version: 0.2.45
   deps:
-  - alert-troubleshooter-crd
+  - alert-provider-crd
+  - incident-controller-crd
   - incident-agent
+  - model-configs
   - krateo-observability
   tier: observability
   feature: specialistAgents

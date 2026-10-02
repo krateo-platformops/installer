@@ -4878,6 +4878,81 @@
                 }
               },
               "description": "Upstream clickstack chart values, passed through opaquely."
+            },
+            "defaultAlerts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "alerts": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "displayName": {
+                        "type": "string"
+                      },
+                      "where": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "threshold": {
+                        "type": "integer",
+                        "description": "A row count. Typed integer, not number: crdgen types number as a string in the Installer CRD."
+                      },
+                      "thresholdType": {
+                        "type": "string",
+                        "enum": [
+                          "above",
+                          "below",
+                          "above_exclusive",
+                          "below_or_equal",
+                          "equal",
+                          "not_equal",
+                          "between",
+                          "not_between"
+                        ]
+                      },
+                      "interval": {
+                        "type": "string",
+                        "enum": [
+                          "1m",
+                          "5m",
+                          "15m",
+                          "30m",
+                          "1h",
+                          "6h",
+                          "12h",
+                          "1d"
+                        ]
+                      },
+                      "tier": {
+                        "type": "string",
+                        "enum": [
+                          "core",
+                          "extended"
+                        ],
+                        "description": "core ships whenever defaultAlerts.enabled; extended also requires defaultAlerts.extended. Absent is treated as core."
+                      }
+                    }
+                  }
+                },
+                "extended": {
+                  "type": "boolean",
+                  "description": "Also ship the extended tier: catch-all and baseline-relative alerts whose thresholds mean 'far above normal' rather than 'anything at all', and which need retuning per cluster."
+                }
+              },
+              "title": "Default alerts",
+              "description": "The Alert CRs the chart ships. `alerts` replaces the whole list; `enabled: false` ships none."
             }
           }
         },
@@ -8379,10 +8454,10 @@
             }
           }
         },
-        "alert-troubleshooter": {
+        "alert-provider": {
           "type": "object",
-          "title": "Alert Troubleshooter",
-          "description": "Bridges a HyperDX observability alert to an incident-agent root-cause analysis, written back as a TroubleshootingReport CR the portal renders. Full-coverage schema for the alert-troubleshooter chart (pinned 0.2.25). Every key of the chart's values.yaml is settable on the Composition spec; omitted keys use chart defaults.",
+          "title": "Alert Provider",
+          "description": "Turns each firing of an observability Alert into an Incident with an incident-agent root-cause analysis and its how-to-fix scripts. Full-coverage schema for the alert-provider chart (pinned 0.2.45). Every key of the chart's values.yaml is settable on the Composition spec; omitted keys use chart defaults.",
           "additionalProperties": false,
           "properties": {
             "global": {
@@ -8444,21 +8519,51 @@
                 }
               }
             },
+            "imagePullSecrets": {
+              "type": "array",
+              "description": "Required for the private image. Left unset the installer wires it from registryAuth; set it (including []) to override.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
             "config": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
                 "autopilotA2aUrl": {
                   "type": "string",
-                  "title": "RCA agent A2A URL"
+                  "title": "RCA agent A2A URL",
+                  "description": "A2A endpoint of the agent that runs an Incident's root-cause analysis (incident-agent). With features.agentGateway the installer fills it with the gateway's /api/a2a/<namespace>/incident-agent route."
+                },
+                "compareModelConfig": {
+                  "type": "string",
+                  "title": "Incident comparison ModelConfig",
+                  "description": "kagent ModelConfig (a model-configs slot, default gemini-flash) whose model names, in one call per firing, the open Incident of an alert that covers the alert's current records."
+                },
+                "maxCompareCandidates": {
+                  "type": "integer",
+                  "title": "Incident comparison candidates",
+                  "description": "How many of an alert's newest open, analyzed Incidents one comparison weighs (default 50)."
+                },
+                "failedAnalysisHold": {
+                  "type": "integer",
+                  "title": "Failed-RCA hold (s)",
+                  "description": "Seconds an Incident whose RCA failed keeps taking its alert's firings (default 1800). Past it, a new Incident gets a fresh RCA."
+                },
+                "authnUrl": {
+                  "type": "string",
+                  "title": "authn URL",
+                  "description": "Base URL of authn, where the service exchanges its ServiceAccount token for a Krateo JWT that authenticates its A2A calls through the agent gateway. Empty disables it. With features.agentGateway the installer fills it with authn's in-cluster Service."
                 },
                 "hyperdxApiUrl": {
                   "type": "string",
                   "title": "HyperDX API URL"
-                },
-                "reportCooldown": {
-                  "type": "integer",
-                  "title": "Report cooldown (s)"
                 },
                 "reconcileInterval": {
                   "type": "integer",
@@ -8483,7 +8588,8 @@
                         "type": "string"
                       },
                       "threshold": {
-                        "type": "number"
+                        "type": "integer",
+                        "description": "A row count. Typed integer, not number: crdgen types number as a string in the Installer CRD."
                       },
                       "thresholdType": {
                         "type": "string"
@@ -8493,6 +8599,464 @@
                       }
                     },
                     "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "incident-controller": {
+          "type": "object",
+          "title": "Incident controller",
+          "description": "Runs each Incident's precondition and verify scripts in a read-only check pod and moves the incident through Open, Verifying, Resolved and Closed. Full-coverage schema for the incident-controller chart (pinned 0.1.0). NOTE: no key here carries a `default` \u2014 a default on a componentValues leaf is applied into the live composition spec by core-provider and is therefore a silent override, not documentation.",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string",
+                  "description": "Empty means the chart appVersion, the release tag."
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "Always",
+                    "IfNotPresent",
+                    "Never"
+                  ]
+                }
+              }
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "serviceAccount": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            },
+            "controller": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "debug": {
+                  "type": "boolean"
+                },
+                "pollInterval": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(ns|us|ms|s|m|h)$",
+                  "description": "Time from the end of one check of an incident to the start of the next."
+                },
+                "settleWindow": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(ns|us|ms|s|m|h)$",
+                  "description": "How long, from entering Verifying, a verify exit 1 is retried before the incident goes back to Open."
+                },
+                "syncPeriod": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(ns|us|ms|s|m|h)$"
+                },
+                "maxReconcileRate": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "leaderElection": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  }
+                }
+              }
+            },
+            "podSecurityContext": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "runAsNonRoot": {
+                  "type": "boolean"
+                },
+                "runAsUser": {
+                  "type": "integer"
+                },
+                "runAsGroup": {
+                  "type": "integer"
+                },
+                "fsGroup": {
+                  "type": "integer"
+                },
+                "seccompProfile": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "RuntimeDefault",
+                        "Localhost",
+                        "Unconfined"
+                      ]
+                    },
+                    "localhostProfile": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "securityContext": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "allowPrivilegeEscalation": {
+                  "type": "boolean"
+                },
+                "readOnlyRootFilesystem": {
+                  "type": "boolean"
+                },
+                "runAsNonRoot": {
+                  "type": "boolean"
+                },
+                "runAsUser": {
+                  "type": "integer"
+                },
+                "runAsGroup": {
+                  "type": "integer"
+                },
+                "capabilities": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "add": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "drop": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "seccompProfile": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "RuntimeDefault",
+                        "Localhost",
+                        "Unconfined"
+                      ]
+                    },
+                    "localhostProfile": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "checks": {
+              "type": "object",
+              "title": "Check pods",
+              "description": "The pods that run the precondition and verify scripts.",
+              "additionalProperties": false,
+              "properties": {
+                "namespace": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The namespace holding only the check pods and their service account."
+                },
+                "createNamespace": {
+                  "type": "boolean"
+                },
+                "timeoutSeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Deadline of one check run (the pod's activeDeadlineSeconds)."
+                },
+                "serviceAccount": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "clusterRoles": {
+                  "type": "array",
+                  "description": "Cluster roles the check service account is bound to.",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "readApiGroups": {
+                  "type": "array",
+                  "description": "Krateo API groups the check service account reads (get, list, watch). A wildcard or the core group would include Secrets.",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)+$"
+                  }
+                },
+                "image": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "repository": {
+                      "type": "string"
+                    },
+                    "tag": {
+                      "type": "string",
+                      "description": "Empty means the chart appVersion, the release tag."
+                    },
+                    "pullPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "Always",
+                        "IfNotPresent",
+                        "Never"
+                      ]
+                    }
+                  }
+                },
+                "imagePullSecrets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "resources": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                        "x-kubernetes-int-or-string": true
+                      }
+                    },
+                    "requests": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                        "x-kubernetes-int-or-string": true
+                      }
+                    }
+                  }
+                },
+                "podSecurityContext": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "runAsUser": {
+                      "type": "integer"
+                    },
+                    "runAsGroup": {
+                      "type": "integer"
+                    },
+                    "fsGroup": {
+                      "type": "integer"
+                    },
+                    "seccompProfile": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "RuntimeDefault",
+                            "Localhost",
+                            "Unconfined"
+                          ]
+                        },
+                        "localhostProfile": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "nodeSelector": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "tolerations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "operator": {
+                        "type": "string",
+                        "enum": [
+                          "Exists",
+                          "Equal"
+                        ]
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "effect": {
+                        "type": "string"
+                      },
+                      "tolerationSeconds": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                },
+                "networkPolicy": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "apiServer": {
+                      "type": "array",
+                      "description": "The only egress of the check pods, e.g. [{cidr: 10.0.0.1/32, ports: [443]}]. Empty means the chart looks up the kubernetes Service and its EndpointSlice in the default namespace at render time.",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "cidr": {
+                            "type": "string"
+                          },
+                          "ports": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -13812,7 +14376,7 @@
                 "alerts": {
                   "type": "object",
                   "additionalProperties": false,
-                  "description": "Budget breaches as INCIDENTS. An Alert CR (observability.krateo.io) is reconciled into a HyperDX alert whose webhook fires incident-agent, which runs RCA and writes a TroubleshootingReport the portal shows under /incidents. These count the accessLog rows, so they need accessLog.enabled AND the alert-troubleshooter CRD (features.coreAgents). spec.where edits DO NOT PROPAGATE to the live HyperDX alert - change one by deleting and recreating the CR.",
+                  "description": "Budget breaches as INCIDENTS. An Alert CR (observability.krateo.io) is reconciled into a HyperDX alert; while it fires, alert-provider opens an Incident with an incident-agent RCA, which the portal shows under /incidents. These count the accessLog rows, so they need accessLog.enabled AND the Alert CRD (alert-provider-crd, features.specialistAgents). spec.where edits DO NOT PROPAGATE to the live HyperDX alert - change one by deleting and recreating the CR.",
                   "properties": {
                     "enabled": {
                       "type": "boolean",

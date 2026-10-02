@@ -58,7 +58,7 @@ later on the CR.
 | `portal` | `true` | The non-agent platform: `authn` → `snowplow` → `git-provider` → `frontend` → `portal` + `krateo-helm-render-service`, their `*-crd` charts, **and the observability tier** (clickhouse/mongodb operators, `krateo-observability`, both OTel collectors, `krateo-sse-proxy`). `git-provider` (ordered before `portal`) supplies the `git.krateo.io` CRDs the portal's Autopilot Builders publish through — [below](#git-provider--scm-agnostic-portal-builder-publishing). |
 | `oasgenProvider` | `true` | `oasgen-provider` + its CRD chart. |
 | `coreAgents` | `false` | The base agent layer: `kagent-crds` → `kagent` → `model-configs` + `repo-mcp-server` + `installer-agent` + `krateo-autopilot` + `incident-agent` + `core-provider-agent` (the sole blueprint author). `model-configs` owns the kagent ModelConfigs the whole fleet references by name — one place to pin a model or switch provider. `repo-mcp-server` is the grounding server every agent reads through, and a `deps:` prerequisite of each of them. |
-| `specialistAgents` | `false` | The 4 component specialist agents (`authn/snowplow/frontend/clickstack`) + `clickhouse-mcp-server`. Needs `coreAgents` (they all dep on `kagent`). |
+| `specialistAgents` | `false` | The 4 component specialist agents (`authn/snowplow/frontend/clickstack`) + `clickhouse-mcp-server`, the [alert and incident pipeline](#the-alert-and-incident-pipeline) (`alert-provider`, `incident-controller`, their `*-crd` charts) and `nightly-review`. Needs `coreAgents` (they all dep on `kagent`, and the pipeline's RCA runs on `incident-agent`). |
 | `structureGraph` | `false` | Opt-in **code-structure grounding**: `structure-graph-mcp-server` (a Graphify tree-sitter AST graph of the engine repos). Both consumers — `krateo-autopilot` and `core-provider-agent` — reference it off by default, so turning this on without also setting their `mcpServers.structureGraph.enabled` deploys a server nothing names. Needs `coreAgents`. |
 | `ingress` | `false` | Opt-in **edge layer**, dep-chained: `gateway-api-crds` (the Gateway API CRDs) → `agentgateway` (the Gateway API controller + CRDs + the platform `GatewayClass`/`Gateway`) → `cert-manager` (operator + CRDs) → `cert-manager-issuers` (ACME/CA Issuers) → `external-dns` (DNS records) — all **public** `oci://ghcr.io/krateo-blueprints/charts`. Off by default; the base install pulls nothing from `krateo-blueprints` unless enabled. Leave off if you front Krateo another way (an existing ingress controller / cloud LB / mesh, or your own Gateway). |
 | `agentGateway` | `false` | Opt-in **agent gateway**, dep-chained: `agentgateway-controller` (Gateway API CRDs + the agentgateway controller) → `agentgateway-policies` (the `GatewayClass`, the agent `Gateway`, the routes, the JWT/RBAC policies, and the guardrails on the fleet's LLM traffic) — both **private** `oci://ghcr.io/krateo-agentiko/charts`, so `registryAuth` applies. Needs `coreAgents`, and an issuer whose JWKS the gateway trusts (`authn`, via `portal`, by default) — below. |
@@ -208,6 +208,97 @@ orchestration fleet; when absent the installer **auto-derives** it from every
 feature-enabled `agent` component (excluding the autopilot itself), and
 either way the list is filtered to deployed agents — a reference to an absent Agent
 would fail kagent's compile.
+
+## The alert and incident pipeline
+
+Three components under `features.specialistAgents` turn a firing Alert into Incidents and close
+them again:
+
+- `alert-provider` (+ `alert-provider-crd`, the Alert CRD) reconciles each Alert into a HyperDX
+  alert (a ClickHouse `where`) and reads its state every 60 s. While the state is `ALERT`, each
+  pass is a firing:
+  - It opens a new Incident, with an `incident-agent` root-cause analysis and how-to-fix scripts,
+    unless `autopilot` judges one of the alert's open Incidents to be the same problem. That
+    Incident's `status.firings` counts up instead.
+  - An Incident still Analyzing, or whose analysis failed, takes the firing without a comparison.
+  - For one `spec.interval` after the alert's latest Incident is Resolved, firings count on it.
+
+  An alert therefore has any number of Incidents. The HyperDX webhook triggers nothing.
+- `incident-controller-crd` installs the Incident CRD (`observability.krateo.io/v1alpha1`) first;
+  `alert-provider` and `incident-controller` both dep on it.
+- `incident-controller` runs each Incident's precondition and verify scripts in a read-only check
+  pod and moves it through Open, Verifying, Resolved and Closed. A human runs the apply script, and
+  the optional rollback script to undo it.
+
+Values worth knowing:
+
+| Key | Notes |
+|---|---|
+| `componentValues.alert-provider.config.autopilotA2aUrl` | The agent that writes the root-cause analysis, `incident-agent`. With `features.agentGateway` the installer fills it with the gateway's `/api/a2a/<namespace>/incident-agent` route. |
+| `componentValues.alert-provider.config.compareModelConfig` | The ModelConfig slot whose model compares a firing with the alert's open Incidents, in one chat completion per firing: `gemini-flash` by default. Behind the agent gateway it runs on the gateway's `/llm/v1` route, like the agents. |
+| `componentValues.alert-provider.config.authnUrl` | Where the service exchanges its token for the Krateo JWT that authenticates its A2A calls through the agent gateway. With `features.agentGateway` the installer fills it. |
+| `componentValues.incident-controller.checks.readApiGroups` | The Krateo API groups check scripts may read (get/list/watch). The built-in `view` role covers no Krateo CRs; add a group here for scripts that read it. Never a wildcard: that includes Secrets. |
+| `componentValues.incident-controller.checks.networkPolicy.apiServer` | The check pods' only egress. Empty means the chart looks up the `kubernetes` Service and EndpointSlice in `default` while it renders; set it explicitly where that lookup is not allowed. |
+| `componentValues.incident-controller.controller.{pollInterval,settleWindow}` | Check cadence (`1m`) and how long a failing verify is retried (`5m`). |
+
+### Upgrading from `alert-troubleshooter`
+
+`alert-provider` and `alert-provider-crd` replace the `alert-troubleshooter` and
+`alert-troubleshooter-crd` components (same repository, renamed charts). Right before
+`helm upgrade`, in this order:
+
+1. **Move the overrides.** In the values file you upgrade with, rename
+   `componentValues.alert-troubleshooter` to `componentValues.alert-provider`, and drop
+   `config.reportCooldown` (a firing on an open Incident only counts) and `config.snowplowUrl`
+   (`apiRef` alerts are gone): the chart's schema is `additionalProperties: false` and rejects
+   both. The upgrade does not carry over overrides set only on the live Installer CR, so copy those
+   into the file too. Then remove the old key from the CR (skip this if the first command prints
+   `null`):
+
+   ```bash
+   kubectl get installer installer -n krateo-system -o json \
+     | jq '.spec.componentValues["alert-troubleshooter"]'
+   kubectl patch installer installer -n krateo-system --type json \
+     -p '[{"op":"remove","path":"/spec/componentValues/alert-troubleshooter"}]'
+   ```
+
+2. **Keep the Alert CRD.** A component's helm release is named after the component and lives in
+   its Composition's namespace, so the `alert-troubleshooter-crd` release in `krateo-system` owns
+   `alerts.observability.krateo.io` (a chart template, not a `crds/` file). The upgrade deletes the
+   `alert-troubleshooter-crd` Composition, and its controller then runs `helm uninstall`, which
+   deletes the CRD and every Alert with it. A `helm.sh/resource-policy: keep` annotation on the live
+   CRD does not stop that: `helm uninstall` reads the policy from the release's stored manifest.
+   Mark the Composition `orphan` instead, so its controller drops the finalizer without
+   uninstalling:
+
+   ```bash
+   kubectl annotate alerttroubleshootercrds alert-troubleshooter-crd -n krateo-system \
+     krateo.io/deletion-policy=orphan
+   # Expect ["composition.krateo.io/finalizer"] and nothing else:
+   kubectl get alerttroubleshootercrds alert-troubleshooter-crd -n krateo-system \
+     -o jsonpath='{.metadata.finalizers}'
+   ```
+
+   The CRD's helm ownership needs no hand edit: the composition controller installs with helm's
+   take-ownership, so the `alert-provider-crd` release adopts the CRD. Leave the
+   `alert-troubleshooter` Composition alone; its uninstall removes the old service.
+
+After the upgrade:
+
+```bash
+# alert-provider-crd owns the CRD, and every Alert is still there:
+kubectl get crd alerts.observability.krateo.io \
+  -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}'
+kubectl get alerts -A
+# The orphaned release's storage. Never `helm uninstall` it: that deletes the CRD.
+kubectl delete secret -n krateo-system -l owner=helm,name=alert-troubleshooter-crd
+# alert-provider-crd ships no TroubleshootingReport CRD; the orphaned release leaves it behind.
+kubectl delete crd troubleshootingreports.observability.krateo.io
+```
+
+`alert-provider` registers its own HyperDX webhook, so its first pass creates it and re-creates
+every HyperDX alert on it, a one-time churn. The old `krateo-autopilot` webhook stays in HyperDX,
+unused and harmless.
 
 ## Portal users, demo content, and a custom portal
 
@@ -444,7 +535,7 @@ There is no second copy of the policies chart's surface in this chart: every set
 name and port, the JWKS endpoint, the claims, all three RBAC layers and every guardrail knob — is
 `componentValues.agentgateway-policies`, with the defaults chosen by that chart. The installer
 reads `gateway.name`/`gateway.port`, `jwt.userClaim` and the `llm` block back out, so `proxy.url`,
-the controller's claim, `alert-troubleshooter`'s A2A URL and `model-configs`'
+the controller's claim, `alert-provider`'s A2A URLs and `model-configs`'
 `agentgateway.modelRoute` (both its `url` and, when `llm.enabled` is off, its `enabled`) all follow
 an override of them.
 

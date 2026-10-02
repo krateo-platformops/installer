@@ -28,10 +28,10 @@ componentValues:
                                 # chart default) lets one, so an install carrying its own route
                                 # policy is not surprised on upgrade
 
-    # Budget breaches as INCIDENTS: an Alert CR becomes a HyperDX alert whose webhook fires
-    # incident-agent, which runs RCA and writes a TroubleshootingReport the portal shows under
+    # Budget breaches as INCIDENTS: an Alert CR becomes a HyperDX alert; while it fires,
+    # alert-provider opens an Incident with an incident-agent RCA, which the portal shows under
     # /incidents. Off by default; needs accessLog.enabled (a render guard checks) AND the
-    # alert-troubleshooter CRDs, which features.coreAgents brings.
+    # Alert and Incident CRDs, which features.specialistAgents brings.
     observability:
       alerts:
         enabled: true
