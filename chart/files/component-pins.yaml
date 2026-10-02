@@ -222,7 +222,10 @@ components:
   # length — that is gzip variance, not content. The file diff is the instrument; tarball size is not.
   # 1.6.81: co-versioned with frontend. Verified byte-identical to 1.6.79 outside Chart.yaml (skipping
   # 1.6.80, which was never rolled), so no CRD surface change and no ordering constraint against the app.
-  version: 1.6.87
+  # 1.6.88: co-versioned with frontend (Diego's lockstep rule). Verified byte-identical to 1.6.87 outside
+  # Chart.yaml (its own version line only), so NO CRD surface change and no ordering constraint against the
+  # app - 1.6.88 is a composer-only change (#436/#435) that rides the frontend image.
+  version: 1.6.88
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1209,7 +1212,23 @@ components:
   # that showed a JSON box for such a field now shows rows. Worth one glance at a blueprint install form.
   # Both charts verified byte-identical to the deployed 1.6.79 outside Chart.yaml, so the whole change
   # rides the image; image is a real multi-arch OCI index (amd64 + arm64).
-  version: 1.6.87
+  # 1.6.88: TWO composer fixes; the whole change rides the IMAGE. Both charts verified byte-identical to
+  #   1.6.87 outside Chart.yaml (frontend: version/appVersion/sources URL only; frontend-crds: version only),
+  #   and the image is a real multi-arch OCI index (linux/amd64 + linux/arm64, plus the two buildx
+  #   attestation manifests).
+  #   #436 - a NEW controller now excludes a path param that is mapped from status, so the petstore
+  #     controller gets excludedSpecFields: [id, petId] and the create form stops asking for petId.
+  #     ALREADY-PUBLISHED controllers are deliberately untouched and instead carry an inspector note saying
+  #     why the field is still asked for. THAT NOTE IS A TEMPLATE LITERAL (ui/src/pages/ControllerComposer/
+  #     controllerModel.ts:282), so the bundle string to grep is the uninterpolated tail
+  #     ' is asked for on create because this controller was published before it was excluded'.
+  #     Grepping the interpolated form ('petId is asked for on create because') returns 0 on a SUCCESSFUL
+  #     roll - the first handoff gave that form and it would have read as a failed roll.
+  #   #435 - a controller compose run may end in a trailing previewRestDef: it runs last, is skipped WITH a
+  #     reason when an edit was refused, and publishRestDef never rides along. "skipped with a reason" and
+  #     "never emitted" are indistinguishable from outside, so a post-roll check must separate them.
+  #   No builder YAML change and no new schema defaults, so nothing propagates into the live CR.
+  version: 1.6.88
   deps:
   - frontend-crd
   - authn
