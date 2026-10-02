@@ -2629,7 +2629,17 @@ components:
   #   ORDERING, load-bearing: this REQUIRES frontend >= 1.6.88. Before 1.6.88 the frontend silently drops a
   #   trailing previewRestDef, so the new prompt would be harmless but inert. frontend 1.6.88 went in as
   #   installer 0.3.368, immediately before this pin - do not roll this one ahead of it.
-  version: 0.6.5
+  # 0.6.6: PROMPT ONLY (autopilot#146), closing the gap verbs-check-4 exposed. Chart-diffed against
+  #   0.6.5: only files/prompts-eng.yaml differs apart from Chart.yaml (2 lines each way), and
+  #   Chart.lock differs ONLY by its regenerated timestamp - no dependency moved. No image, no template.
+  #   THE GAP: when the person NAMES a verb and it comes back with a single candidate - petstore's
+  #   confirm-only collection PUT /pet is the case that surfaced it - the agent was asking a question
+  #   instead of confirming. The existing "ask one question when the request does not settle it" rule
+  #   was firing on a request that DID settle it. 0.6.6 makes it confirm in the same reply.
+  #   ORDERING: goes with frontend 1.6.89 (installer 0.3.372, immediately before). No hard dependency
+  #   between them - 1.6.89's #440 fixes the refused-chip ICON and this fixes the verb CONFIRMATION -
+  #   but they are verified together by the verbs-check-5 run, so keep the pair on one order.
+  version: 0.6.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
