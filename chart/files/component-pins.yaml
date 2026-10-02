@@ -229,7 +229,10 @@ components:
   # 1.6.88: co-versioned with frontend (Diego's lockstep rule). Verified byte-identical to 1.6.87 outside
   # Chart.yaml (its own version line only), so NO CRD surface change and no ordering constraint against the
   # app - 1.6.88 is a composer-only change (#436/#435) that rides the frontend image.
-  version: 1.6.88
+  # 1.6.89: co-versioned with frontend (Diego's lockstep rule). Verified byte-identical to 1.6.88
+  # outside Chart.yaml - 1.6.89 is a composer/design-system change that rides the image, with no widget
+  # schema surface, so this pin moves only to keep the pair on one version.
+  version: 1.6.89
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1232,7 +1235,28 @@ components:
   #     reason when an edit was refused, and publishRestDef never rides along. "skipped with a reason" and
   #     "never emitted" are indistinguishable from outside, so a post-roll check must separate them.
   #   No builder YAML change and no new schema defaults, so nothing propagates into the live CR.
-  version: 1.6.88
+  # 1.6.89: ONE behaviour fix riding a large cosmetic change. Source-diffed between the tags rather
+  #   than chart-diffed, because a chart diff cannot see any of this - the whole change rides the IMAGE
+  #   (both charts are byte-identical to 1.6.88 outside Chart.yaml). 47 files, +810/-475:
+  #   15 css, 14 tsx, 9 ts, 3 md, 2 snap, 2 py, 2 json.
+  #   THE FIX - #440 (closes #439): a REFUSED action chip in the Autopilot rail now renders a refusal
+  #     icon instead of the applied check. That mattered because verbs-check-4 produced exactly this
+  #     state - a previewRestDef emitted, delivered, then refused by the portal's publish lint - and it
+  #     still wore a green check, i.e. a refusal rendering as success.
+  #   THE REST - design-system work from another session (#437 debt ledgers only shrink, 446f3ee one
+  #     type scale retiring --font-size-*). Large in file count, small in behaviour: the tsx/ts edits
+  #     are overwhelmingly SYMMETRIC (9/9, 8/8, 6/6 across PalettePanel, CanvasPanel,
+  #     SessionResumeModal, Notifications, DataBindingModal), the signature of token substitution
+  #     rather than logic. The only asymmetric non-test files are #440's own.
+  #   CHECKED DELIBERATELY: design/lint/lint-css-tokens.py changed (+38) but is CI-only, and
+  #     hack/design-lint/lint-portal-consistency.py is NOT touched - that file is the authoritative
+  #     widget rename/removal mapping the UpgradePlan grounding depends on, and a silent change there
+  #     would have invalidated work in another repo.
+  #   VERIFICATION LIMIT, stated rather than papered over: there is no minification-safe literal for
+  #     #440, so the post-roll check is deployment image + gen == observedGeneration. That proves the
+  #     new bundle is SERVING; it does not prove the refusal icon renders. The behavioural check is the
+  #     verbs-check-5 run in the frontend session.
+  version: 1.6.89
   deps:
   - frontend-crd
   - authn
