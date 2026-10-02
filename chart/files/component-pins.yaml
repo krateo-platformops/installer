@@ -45,7 +45,11 @@ components:
   # compareScope `updatable` enum (CEL-guarded to an update verb) + a corrected oasPath/JQ ref
   # pattern. RestDefinition stays v1alpha1 served+storage (no conversion webhook); crds MUST match
   # the provider or the apiserver rejects compareScope:updatable at admission.
-  version: 0.26.1
+  # 0.27.0: co-versioned with oasgen-provider. Carries the append-only CEL rule on
+  # additionalStatusFields plus the maxItems:64 / maxLength:253 bounds the rule REQUIRES - without them
+  # the apiserver costs the comprehension as effectively infinite and rejects the WHOLE CRD. Also adds
+  # the new status.resourceHash property (see the oasgen-provider pin for why that matters on upgrade).
+  version: 0.27.0
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -1374,7 +1378,7 @@ components:
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: portal
-  # 28 GitHub RestDefinitions (incl. Repository) — REQUIRED by builder-publish >= 1.8.0 (registered by
+  # 29 GitHub RestDefinitions (incl. Repository) — REQUIRED by builder-publish >= 1.8.0 (registered by
   # the portal chart): builder-publish creates the destination repo as a github.krateo.io/Repository CR
   # and gates file-commits on its status.default_branch. Deliberately NOT a portal dep (mirrors
   # krateo-marketplace-catalog): the installer Ready-gates deps (compositions.yaml -> inst.depsReady ->
@@ -1907,7 +1911,9 @@ components:
   # matches blueprint-render-service. No deps: it ships no CRDs and reads nothing from the cluster (the
   # OAS documents arrive in the request), so it has nothing to wait for.
   kind: ControllerRenderService
-  version: 0.26.1
+  # 0.27.0: co-versioned with oasgen-provider (the triple moves together). Verified byte-identical to
+  # 0.26.1 outside Chart.yaml - the render split landed in 0.26.x and nothing in it changed here.
+  version: 0.27.0
   tier: platform
   feature: portal
   chart: controller-render-service
@@ -1930,7 +1936,29 @@ components:
   # Big-version wrapper-CRD jump (OasgenProvider v0-21-1 -> v0-23-0 CDC controllers) — may need a
   # cdc restart + CRD helm-ownership nudge on the live roll. oasgen is idle on 057 (0 RestDefinition
   # CRs), so data-plane blast radius is just this deployment's restart.
-  version: 0.26.1
+  # 0.27.0: TWO changes; the second is not in the release notes and is the one that moves cluster state.
+  #   (a) additionalStatusFields becomes APPEND-ONLY instead of immutable. The CEL is a prefix compare,
+  #       `size(self) >= size(oldSelf) && oldSelf.all(i, v, self[i] == v)`; entries may be added at the
+  #       END, and removing/renaming/reordering is still refused. This is what unblocks
+  #       github-provider-kog 0.3.2, whose PullRequest list goes ['number','html_url','state'] ->
+  #       + 'merged','merged_at' - verified a prefix-preserving append across all 29 rd-*.yaml.
+  #   (b) NEW: the provider now creates ONE MutatingAdmissionPolicy per distinct spec.resourceGroup to
+  #       stamp krateo.io/oas-version, and clusterrole.yaml grows create/get/list/watch on
+  #       admissionregistration.k8s.io mutatingadmissionpolicies + ...bindings. 057 is k8s 1.36 so this
+  #       ACTIVATES. Expected: 2 groups (github.krateo.io x29, petstore.example.io x1) -> 2 policies,
+  #       krateo-oas-version-{github-krateo-io,petstore-example-io}; cluster goes 2 -> 4.
+  #   UPGRADE NOTE, read before assuming this is quiet: status.resourceHash is NEW in 0.27.0 (absent from
+  #   0.26.1's types.go AND its CRD), and the regeneration gate is
+  #   `oasHash != Status.OASHash || resHash != Status.ResourceHash`. resourceHash() never returns empty,
+  #   so "" != <hash> is true for EVERY RestDefinition and all 30 regenerate on first reconcile - ~60
+  #   CRD re-applies against 77+ live CRs. Safe because nothing under internal/tools/oas2jsonschema or
+  #   internal/tools/crd changed between the tags, so the renders are byte-identical; but it is also the
+  #   ONLY reason the policies reach an existing install at all. Once resourceHash is populated,
+  #   generateAndApplyCRDs never runs again on a stable install and EnsureVersionPolicy is only called
+  #   from inside it - so no future policy change can reach this cluster until oasgen-provider#173 lands.
+  #   #172 (slug collision: [^a-z0-9]+ -> '-' collapses github.krateo.io and github-krateo.io onto one
+  #   object, second group silently never stamped) CANNOT fire here - the two groups do not collide.
+  version: 0.27.0
   deps:
   - oasgen-provider-crd
   tier: platform
