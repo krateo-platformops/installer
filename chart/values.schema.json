@@ -2639,11 +2639,11 @@
               "type": "object",
               "title": "Agent gateway",
               "additionalProperties": false,
-              "description": "Route the portal's Autopilot A2A calls through the agentgateway data plane instead of straight to kagent-ui, so the user Bearer they carry is validated and per-user RBAC applies. Injected fill-if-absent from features.agentGateway.",
+              "description": "Route the portal's Autopilot A2A calls through the agentgateway data plane instead of straight to kagent-ui, so the user Bearer they carry is validated and per-user RBAC applies. Injected fill-if-absent from features.agentGateway. NO `default` ON `enabled`, DELIBERATELY \u2014 see below.",
               "properties": {
                 "enabled": {
                   "type": "boolean",
-                  "default": false
+                  "description": "MUST NOT CARRY A `default`. compositions.yaml fills this with true via inst.fillPath (fill-if-ABSENT) when features.agentGateway is on, and core-provider applies this schema's defaults into the Installer CR spec \u2014 so `default: false` here is not documentation, it is a value that pre-occupies the key and silently blocks that fill. It shipped that way: every install with the gateway on served the bare gateway origin as AUTOPILOT_API_BASE_URL, the frontend chart appends /api/a2a/<ns>/autopilot only when this is true, so the rail POSTed to / and every Autopilot turn failed with 405. check-fill-defaults.py fails CI if a default returns on any fill-if-absent target."
                 }
               }
             }
@@ -15643,6 +15643,22 @@
                 "clickhouse": {
                   "type": "object",
                   "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "userKey": {
+                      "type": "string"
+                    },
+                    "passwordKey": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "kagentDb": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Credential for kagent's Postgres, which the review reads for session METADATA across EVERY user \u2014 a deliberate departure from the per-user RBAC the rest of this platform enforces. The role named here must hold SELECT on `session` and nothing else: conversation content lives in event.data and task and the role is revoked on both, so the limit is a database privilege rather than a promise the code makes. Verify it where the role is created (session=t, event=f, task=f) rather than trusting these keys. NO `default` ON ANY LEAF, DELIBERATELY, and this one bites harder than documentation: core-provider applies this schema's defaults into the Installer CR spec, so a default name would be set on EVERY install \u2014 and on any install where that Secret does not exist the CronJob's secretKeyRef cannot resolve and the pod fails with CreateContainerConfigError. Unset must mean unset: the source then reports not-configured and the run is PartiallyCompleted, which is visible and harmless.",
                   "properties": {
                     "name": {
                       "type": "string"

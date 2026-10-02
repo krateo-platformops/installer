@@ -1,0 +1,32 @@
+name: check-fill-defaults
+
+# Installer-specific guard: no componentValues leaf in chart/values.schema.json may carry a `default`
+# if chart/templates/compositions.yaml also writes that path with inst.fillPath (fill-if-ABSENT).
+# core-provider applies this schema's defaults into the Installer CR spec, so such a default is not
+# documentation — it pre-occupies the key and the fill silently no-ops. That shipped on
+# componentValues.frontend.agentgateway.enabled and broke the Autopilot rail with a 405 on every
+# install that had features.agentGateway on, with no render, lint or publish error anywhere.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "chart/values.schema.json"
+      - "chart/templates/compositions.yaml"
+      - ".github/scripts/check-fill-defaults.py"
+      - ".github/workflows/check-fill-defaults.yaml"
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  fill-defaults:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Assert no schema default blocks a fill-if-absent write
+        run: python3 .github/scripts/check-fill-defaults.py

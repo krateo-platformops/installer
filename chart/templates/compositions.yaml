@@ -508,6 +508,24 @@
      else has a reason to want CORS off here while the portal is calling the gateway directly. */ -}}
 {{- if eq $c.name "agentgateway-policies" -}}
 {{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "cors" "enabled") "value" true) -}}
+{{- /* AND THE ORIGIN, DERIVED — not left at the chart's `*`. The chart defaults allowOrigins to ["*"]
+     because, as its own schema says, the browser-facing origin is not knowable in-cluster; the
+     installer DOES know it, because exposure.tls.host is the single declared source the consumer URLs
+     and the voice endpoints are already built from. So derive it here rather than asking every operator
+     to re-spell their own hostname in componentValues, which is what the chart comment assumed would
+     happen and which on krateo-057 nobody did — the gateway ran with a wildcard origin for as long as
+     CORS has been wired.
+     Shares the `and $gwTLS $gwPortalHost` predicate with the consumer-URL block above on purpose: the
+     origin the browser is told to call and the origin the gateway accepts are the same fact, and two
+     templates deciding one fact separately is how they drift.
+     No TLS host => NOT written, so the chart default stands and a plain-HTTP install renders
+     byte-identically. componentValues still wins for anything unusual (multiple origins, a CDN in
+     front); this only replaces `*` with the host this install actually serves.
+     allowCredentials stays at the chart's false: narrowing the origin is not a licence to start
+     accepting cookies cross-site. */ -}}
+{{- if and $gwTLS $gwPortalHost -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "cors" "allowOrigins") "value" (list (printf "https://%s" $gwPortalHost))) -}}
+{{- end -}}
 {{- end -}}
 {{- /* exposure.voice (#118 dictation, #52 speak-back): derive the frontend transcribe + tts URLs from
      the TLS host (no hardcoded host) and enable the two gateway routes they point at (/stt/v1, /tts/v1).
@@ -584,8 +602,22 @@
      override still wins and it stays unset until the gateway Service has an address (next reconcile
      fills it — same eventual-consistency posture as AUTOPILOT). Gated on $gwPathMode + $gwComp.svcMatch:
      host/LB/NodePort and gateway-off installs never enter here, so their render is byte-identical. */ -}}
-{{- if and (eq $c.name "krateo-observability") $gwPathMode $gwComp.svcMatch -}}
-{{- $hdxOrigin := include "inst.peerurl" (list $top $portalSvc (int $c.gatewayPort)) -}}
+{{- /* Gated on $c.gatewayPort too: HyperDX is no longer publicly routed, and $gwComp.svcMatch is the
+     GATEWAY's service name, not this component's — so without the port check this block would still
+     fire and build an origin on port 0. No route => no external origin => no honest FRONTEND_URL, so
+     the installer sets none and the chart default stands. */ -}}
+{{- if and (eq $c.name "krateo-observability") $gwPathMode $gwComp.svcMatch $c.gatewayPort -}}
+{{- /* Under TLS the origin cannot be inst.peerurl's http://<lb-ip>: the scheme would be wrong (the
+     listener now terminates TLS) AND the certificate is issued for exposure.tls.host, so an IP origin
+     fails verification in the browser. Use the host the certificate names, on HyperDX's own listener
+     port. Plaintext installs keep inst.peerurl unchanged. */ -}}
+{{- $hdxOrigin := "" -}}
+{{- $tlsHost := dig "tls" "host" "" $top.Values.exposure -}}
+{{- if and $gwTLS $tlsHost -}}
+{{- $hdxOrigin = printf "https://%s:%v" $tlsHost (int $c.gatewayPort) -}}
+{{- else -}}
+{{- $hdxOrigin = include "inst.peerurl" (list $top $portalSvc (int $c.gatewayPort)) -}}
+{{- end -}}
 {{- if $hdxOrigin -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "clickstack" "hyperdx" "config" "FRONTEND_URL") "value" $hdxOrigin) -}}
 {{- end -}}
@@ -653,12 +685,29 @@
 {{/* Listener spec — normally the shared platform-http:$gwPlatformPort (or the component's own, e.g.
      HyperDX's platform-hdx:3000). Under path-mode TLS the DEFAULT (platform-http) routes move to the
      platform-https:443 HTTPS listener (protocol + Terminate tls → exposure.tls.certificateRef), so the
-     whole single-origin portal is served over TLS; a component pinned to its OWN listener (HyperDX)
-     is left untouched. */}}
+     whole single-origin portal is served over TLS.
+
+     EVERY platform listener follows, not just the shared one. They all land on the platform Gateway,
+     which the agentgateway controller gives ONE LoadBalancer Service — so they share a single public
+     IP. Leaving a component with its OWN listener on plaintext while the portal moved to :443 served
+     that component in the clear on the same public address as the HTTPS portal, and every template
+     still rendered correctly because each listener was individually valid. That is how HyperDX ended
+     up reachable over public HTTP on :3000: a Next.js root-asset app can't be path-prefixed, so it
+     gets its own listener, and only the shared listener was being upgraded. A component listener
+     keeps its own NAME and PORT and gains the same protocol + certificateRef — the certificate is
+     for exposure.tls.host, which is valid on any port. agentgateway-policies now refuses a mixed
+     posture outright, so this and that guard have to agree.
+
+     Off (no exposure.tls) => byte-identical: every listener stays plaintext, the documented HTTP
+     mode. */}}
 {{- $lname := default "platform-http" $d.gatewayListener }}
 {{- $lspec := dict "name" $lname "port" (int (default $gwPlatformPort $d.gatewayPort)) }}
-{{- if and $gwTLS (eq $lname "platform-http") }}
+{{- if $gwTLS }}
+{{- if eq $lname "platform-http" }}
 {{- $lspec = dict "name" "platform-https" "port" 443 "protocol" "HTTPS" "tls" (dict "certificateRef" $gwCertRef) }}
+{{- else }}
+{{- $lspec = dict "name" $lname "port" (int (default $gwPlatformPort $d.gatewayPort)) "protocol" "HTTPS" "tls" (dict "certificateRef" $gwCertRef) }}
+{{- end }}
 {{- end }}
 {{- $route := dict
      "name" $d.name

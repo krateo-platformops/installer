@@ -110,10 +110,6 @@ components:
   - uiTokenHop
   - image
   - pullSecrets
-- name: krateo-blueprint-agent
-  path:
-  - chartGate
-  - imagePullSecrets
 - name: alert-provider
   path:
   - imagePullSecrets

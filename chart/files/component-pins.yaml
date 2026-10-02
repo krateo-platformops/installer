@@ -6,16 +6,90 @@ components:
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
+  # 0.26.0: co-versioned with oasgen-provider; one tag publishes all three charts in that repo.
+  # Carries no CRD change of its own.
+  # 0.25.1 (tag -> commit dd2c6b3, verified by ls-remote). Lockstep. Adds the knobs the render
+  # preview service needed to be CONFIGURABLE from the installer: render.fullnameOverride,
+  # render.service.port, render.resources and render.snowplowEndpoint.{enabled,name}. render itself
+  # arrived in 0.25.0; 0.25.1 is what makes it safe to turn on.
+  # WHY resources MATTERED: 0.25.0 shipped render.resources {} — no CPU or memory ceiling — while the
+  # service accepts an untrusted user-supplied OpenAPI body per request. An unbounded pod is not
+  # OOMKilled into a bounded blast radius, it consumes node memory until the kubelet evicts and takes
+  # neighbours with it. This platform has had that failure (portal OOMKilled chart-inspector at a
+  # shared 256Mi default, installer #65). 0.25.1 also lowers the body cap to 4 MiB to match a 512Mi
+  # limit, so the two now agree.
+  # render stays OFF in the chart default; it is enabled per-install via componentValues. All the new
+  # keys are typed in values.schema.json with NO default — a default on a componentValues passthrough
+  # leaf lands in the composition CR spec and would force the preview service on for every install.
+  # 0.25.0 (two minors from 0.23.0; tag derefs to commit 9c93f45). Lockstep with oasgen-provider.
+  # THE CHANGE THAT MATTERS: e4fc190 "a deleted RestDefinition must not own anything" (#137). A CRD
+  # whose krateo.io/owned-by-restdefinition names a DELETED RestDefinition is now ADOPTED instead of
+  # blocking regeneration forever — previously that leftover was indistinguishable from a real second
+  # owner, so an ordinary OAS change could never be applied again without a human editing annotations.
+  # This platform HAS hit that: a kog bump drove an RD Ready=False, Repository CRs lost
+  # status.default_branch, the builder-publish gate closed and 35 LocalResources were pruned.
+  # Ownership is read ONLY in ApplyOrUpdateCRD for the one CRD a reconciling RestDefinition writes —
+  # there is no cluster-wide CRD List and no startup sweep (verified by reading apply.go at the tag,
+  # and independently by the oasgen session). An undetermined lookup (RBAC/transport) RETRIES rather
+  # than adopting, so a flaky check cannot hand a CRD to a second controller.
+  # 057 carries 6 CRDs owned by deleted tk-keycloak-kog RestDefinitions. They are INERT: no live RD
+  # produces any keycloak kind, no main keycloak CRD exists, 0 instances. Left in place deliberately —
+  # 0.25.0 is the fix for them, so deleting them is a production action for no remaining reason.
+  # Also: #110 changes generated status types for a kind with findby and no get — exactly ONE on 057,
+  # github-provider-kog-collaborator (Collaborator), with 0 instances, so only the schema moves.
+  # render.enabled DEFAULTS FALSE — no render Deployment until portal T6 wants one. Left off.
+  # Charts now declare kubeVersion ">=1.33.0-0" and helm REFUSES below it; 057 is v1.36.2-gke.2064000.
   kind: OasgenProviderCrds
   chart: oasgen-provider-crds
   # 0.23.0 (bumped in lockstep with oasgen-provider): additive RestDefinition schema only — the
   # compareScope `updatable` enum (CEL-guarded to an update verb) + a corrected oasPath/JQ ref
   # pattern. RestDefinition stays v1alpha1 served+storage (no conversion webhook); crds MUST match
   # the provider or the apiserver rejects compareScope:updatable at admission.
-  version: 0.23.0
+  # 0.27.0: co-versioned with oasgen-provider. Carries the append-only CEL rule on
+  # additionalStatusFields plus the maxItems:64 / maxLength:253 bounds the rule REQUIRES - without them
+  # the apiserver costs the comprehension as effectively infinite and rejects the WHOLE CRD. Also adds
+  # the new status.resourceHash property (see the oasgen-provider pin for why that matters on upgrade).
+  version: 0.27.0
   tier: platform
   feature: oasgenProvider
+  # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
+  # not against the previous tag. Lockstep only; no CRD change since 1.6.64.
+  # 1.6.68: BYTE-IDENTICAL, lockstep only — no CRD change since 1.6.64.
+  # 1.6.69: BYTE-IDENTICAL, lockstep only — still no CRD change since 1.6.64.
+  # 1.6.70: BYTE-IDENTICAL to 1.6.69 — verified by diffing the packaged templates, not assumed.
+  # 1.6.71: BYTE-IDENTICAL to 1.6.70, verified by diffing the packaged templates. Lockstep only.
 - name: frontend-crd
+  # 1.6.87: lockstep with frontend, NO CRD change — verified byte-identical to 1.6.86 by diffing the
+  # packaged trees. It moves only to keep the pair equal.
+  # 1.6.86: lockstep with frontend, no CRD change. Verified by diffing the packaged trees — 47 yaml
+  # files and 539848 bytes on BOTH 1.6.85 and 1.6.86, identical except Chart.yaml's version. The
+  # Builder CRD already defines spec.verbs.allowed and spec.summarizer.plugin, which is WHY portal
+  # 1.8.62 could land first without touching this pin.
+  # 1.6.85: lockstep with frontend, carrying NO CRD change. Verified by diffing the packaged trees:
+  # 47 yaml files and 539848 bytes on BOTH 1.6.84 and 1.6.85, identical except Chart.yaml's version —
+  # so this pin moves only to keep the pair equal. #432 needs no new CRD; it reads Builder CRs whose
+  # CRD (builders.templates.krateo.io/v1alpha1) has been served since before this roll.
+  # 1.6.84 (tag -> commit fd7f5cb11a195258602026b21066a49f5fda29c2, verified by ls-remote).
+  # Lockstep with frontend. The Controller Builder front half: the composer host (#427), the builder at
+  # /controller-builder/compose (#428), controller preview via controller-render-draft (#430), generic
+  # draft records (#426). Supersedes 1.6.83.
+  # frontend-crds renders 45 CRDs, set BYTE-IDENTICAL to 1.6.83 — the CRD chart moves only to stay in
+  # lockstep, it adds nothing. (Builder CRD arrived in 1.6.82 and is unchanged.)
+  # MUST land BEFORE portal 1.8.59: portal #275's buttons link to /controller-builder/compose, which
+  # does not exist until this version.
+  # 1.6.83 SUPERSEDES 1.6.82 (which was staged but never rolled). Carries a SECURITY fix:
+  # #424 — form fields marked `format: password` or `writeOnly: true` render masked and are no
+  # longer sent to snowplow /jq; they leave the browser only in the /call write body, are masked in
+  # the review step and blast-radius confirm, are never drafted or prefilled, and the AuditRecord
+  # keeps only the status. Two adversarial security reviews, blockers fixed. Plus #422, the composer
+  # engine reading the Builder spec (behaviour-preserving).
+  # 1.6.82 (#421) adds ONE new CRD to this chart: builders.builders.templates.krateo.io
+  # (group builders.templates.krateo.io, namespaced) — the Builder CR contract plus a plugin
+  # registry. Renders 45 CRDs, 44 widgets + Builder; verified against the published chart, not
+  # inferred from CI. Also in the tag: #419 KOG RestDefinition validator now checks oasgen 0.23
+  # fields, #420 controller kernels. NO visible UI change in any of it.
+  # frontend and frontend-crd move TOGETHER because the CRD chart changed — a new CRD served by a
+  # stale -crds pin would leave the app's contract unbacked.
   kind: FrontendCrds
   chart: frontend-crds
   # 1.6.0: MINOR — adds the new widget kind PageHeader (pageheaders.widgets.templates.krateo.io) + additive
@@ -117,10 +191,66 @@ components:
   # (md5 288885fc1ec30268c1f830a4afb26cf5 at 1.6.53 and 1.6.55). Lockstep with frontend only.
   # 1.6.56: ELEVENTH consecutive byte-identical bump, verified by pulling both charts: only Chart.yaml's
   # own version line differs, CRD templates md5 288885fc1ec30268c1f830a4afb26cf5 at both. Lockstep only.
-  version: 1.6.56
+  # 1.6.58: BYTE-IDENTICAL, verified rather than assumed — no commit between 1.6.56 and 1.6.58 touches
+  # helm/frontend-crds/. Lockstep with the app pin only. (1.6.57 SKIPPED: its charts never published.)
+  # 1.6.62: A REAL CRD CHANGE, so this is a genuine pair-bump rather than the usual lockstep. FlowChart
+  # gains optional data.items fields for the architecture variant — state (enum done/waiting/withheld/
+  # unreadable/unavailable/unknown), detail, and exception{label,message,reason}. Verified additive by
+  # diffing the PACKAGED CRDs 1.6.58->1.6.62: 77 -> 84 fields, no field removed, no existing enum
+  # changed. It also RELAXES: data.items.required drops from [date,kind,name,namespace,resourceVersion,
+  # uid,version] to [kind,name,uid], so existing FlowChart CRs stay valid twice over. frontend-crds
+  # 1.6.62 is byte-identical to 1.6.61 apart from its version line.
+  # 1.6.66: BACK TO LOCKSTEP ONLY. Verified against what is LIVE rather than against the previous
+  # release: the packaged frontend-crds templates at 1.6.66 are byte-identical to the 1.6.62 copy
+  # taken when 1.6.62 was rolled, and the whole 1.6.62...1.6.66 range touches 0 files under helm/.
+  # Four releases of UI work, no CRD surface: the pair moves together only to keep the two pins equal.
+  # 1.6.72: co-versioned with frontend, which ships only ui/ changes. Verified rather than assumed:
+  # the packaged frontend-crds templates at 1.6.72 are byte-identical to 1.6.71 outside Chart.yaml,
+  # so this pin moves only to keep the pair equal — there is no CRD surface change in it.
+  # 1.6.73: co-versioned with frontend. Verified byte-identical to 1.6.72 outside Chart.yaml.
+  # 1.6.75: ADDS Listy .spec.widgetData.itemTemplate.rowActionsDisplay, and THIS PIN MUST BE LIVE BEFORE
+  # portal 1.8.53. Checked rather than taken from the handoff: the field is absent in 1.6.73, and the
+  # Listy CRD's six x-kubernetes-preserve-unknown-fields subtrees are all elsewhere (resourcesRefs and
+  # actions payloads, widgetData.dataSource[], .status) — itemTemplate is STRUCTURAL. So under the old
+  # CRD the portal's drafts Listys would be applied with the field SILENTLY PRUNED: no error, no event,
+  # just row actions that never render. That is why the order is load-bearing and not a preference.
+  # 1.6.75's -crds chart is byte-identical to 1.6.74's outside Chart.yaml, verified.
+  # 1.6.76: co-versioned with frontend. Verified byte-identical to 1.6.75 outside Chart.yaml.
+  # 1.6.78: co-versioned with frontend. Verified byte-identical to 1.6.76 outside Chart.yaml (its own
+  # version line only), so NO CRD surface change and no ordering constraint against the app this time —
+  # unlike the 1.6.75 pair above, where itemTemplate.rowActionsDisplay made the order load-bearing.
+  # Checked rather than taken from the handoff, which said only 'unchanged in substance': the whole
+  # packaged tree was diffed, not just the schema for the fields the PRs mention.
+  # 1.6.79: co-versioned with frontend. Verified byte-identical to 1.6.78 outside Chart.yaml. NOTE the
+  # packaged tarball is 6 BYTES LARGER (41959 -> 41965) even though the version string is the same
+  # length — that is gzip variance, not content. The file diff is the instrument; tarball size is not.
+  # 1.6.81: co-versioned with frontend. Verified byte-identical to 1.6.79 outside Chart.yaml (skipping
+  # 1.6.80, which was never rolled), so no CRD surface change and no ordering constraint against the app.
+  # 1.6.88: co-versioned with frontend (Diego's lockstep rule). Verified byte-identical to 1.6.87 outside
+  # Chart.yaml (its own version line only), so NO CRD surface change and no ordering constraint against the
+  # app - 1.6.88 is a composer-only change (#436/#435) that rides the frontend image.
+  # 1.6.89: co-versioned with frontend (Diego's lockstep rule). Verified byte-identical to 1.6.88
+  # outside Chart.yaml - 1.6.89 is a composer/design-system change that rides the image, with no widget
+  # schema surface, so this pin moves only to keep the pair on one version.
+  version: 1.6.89
   tier: platform
   feature: portal
+  # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
+  # rather than assumed. Lockstep only.
 - name: snowplow-crd
+  # 1.12.32: lockstep with snowplow, one tag. Byte-identical to 1.12.31 outside Chart.yaml (4 files,
+  # 19855 B both), so no CRD change; it moves only to keep the pair equal.
+  # 1.12.31: lockstep with snowplow, one tag. Verified byte-identical to 1.12.30 outside Chart.yaml
+  # (4 files, 19855 B on both), so it carries no CRD change and moves only to keep the pair equal.
+  # 1.12.30 (tag -> annotated cbcb7eed9f9d9b9bcd5b8eb5c44f84fc41ba6913 -> commit 8a2b5aec70ecb488b368a8de325f51c0d9e8ee43,
+  # verified by ls-remote against krateo-platformops/snowplow, not taken from the release report).
+  # Lockstep with snowplow. Carries the content-staleness elimination (#315/#316), #282/#218, the landed
+  # batch (#178/#341/#328/#344/#326/#260/#345), and #239's DIRTY-MARK ATTRIBUTION INSTRUMENT.
+  # #239 matters beyond this bump: on 1.12.27 NO dirty/stale/mark gauge exists anywhere in expvar (searched
+  # all keys; the three name-matches are other subsystems and two never move), so any dirty-mark rate quoted
+  # before 1.12.30 is an ESTIMATE, not a measurement. 1.12.30 makes it directly readable.
+  # ROLL IN ISOLATION: a snowplow pin flip prunes and recreates the leaf, and snowplow is the content API the
+  # whole portal reads. Confirm 057 is quiet first — do not stack it on another component's convergence window.
   kind: SnowplowCrds
   chart: snowplow-crds
   # 1.12.10: byte-identical for the NINTH consecutive time — verified by pulling both charts, not
@@ -135,7 +265,26 @@ components:
   # 1.12.13: byte-identical again, verified by pulling both charts — only Chart.yaml's own version line
   # differs, CRD templates md5 370adc5f5ec20ada604e4f1dd3931382 at both. NOTE THE CHART IS PUBLISHED AS
   # `snowplow-crds`, PLURAL; `charts/snowplow-crd` does not exist, though the COMPONENT here is singular.
-  version: 1.12.13
+  # 1.12.16: co-versioned with snowplow. Verified rather than assumed: the packaged snowplow-crds
+  # templates at 1.12.16 are byte-identical to 1.12.15 outside Chart.yaml, so this moves only to
+  # keep the pair equal — no CRD surface change.
+  # 1.12.17: co-versioned with snowplow. Verified byte-identical to 1.12.16 outside Chart.yaml.
+  # 1.12.19: co-versioned with snowplow. Verified byte-identical to 1.12.17 outside Chart.yaml, so no
+  # CRD change and no ordering constraint against the app.
+  # 1.12.21: co-versioned with snowplow. Verified byte-identical through 1.12.19 -> 1.12.20 -> 1.12.21
+  # outside Chart.yaml (its own version line only), so no CRD surface change and no ordering constraint
+  # against the app. SKIPS 1.12.20, and that skip is safe for the reason above: the packaged templates
+  # are identical at all three, so there is no CRD migration to have stepped over.
+  # 1.12.22: co-versioned with snowplow. Verified byte-identical to 1.12.21 outside Chart.yaml (its own
+  # version line only), so no CRD surface change and no ordering constraint against the app.
+  # 1.12.24: co-versioned with snowplow. Verified byte-identical to 1.12.22 outside Chart.yaml. SKIPS
+  # 1.12.23, and that skip is safe AND deliberate: 1.12.23 was published but its tag dereferences to
+  # b991ac3 (the #279 hardening only) and `git merge-base --is-ancestor 23af561 b991ac3` is FALSE, so it
+  # does NOT contain the #292 leak fix. 1.12.24 contains both. Checked by ancestry, not by release note.
+  # 1.12.27: co-versioned with snowplow. Verified byte-identical to 1.12.24 outside Chart.yaml, so no
+  # CRD surface change and no ordering constraint against the app. Skips 1.12.25 and 1.12.26, both of
+  # which 1.12.27 contains by ancestry.
+  version: 1.12.32
   tier: platform
   feature: portal
 - name: authn
@@ -164,7 +313,60 @@ components:
   gatewayPath: /auth
   gatewayRewrite: true
   gatewayAuth: public
+  # 1.12.15: A SECURITY FIX — cross-user identity leaks on the SA-serve path. #268 (branch-E SA-endpoint
+  # dial), #269 (getFromAPIServer using the SA rest.Config, reachable live through a widget apiRef) and
+  # #267 (a ServiceAccount token cached forever). Also carries #256 (internal-REST-config apiserver
+  # reads re-gated with per-user RBAC) and #264 (per-namespace RBAC verdicts memoized within a refilter
+  # pass). Supersedes the abandoned 1.12.14, which would have UNMASKED #268 on a fresh pod.
+  #
+  # THE CHART DIFF IS THE WRONG INSTRUMENT HERE and would report a no-op: 1.12.13...1.12.15 is 39 files
+  # with ZERO under helm/. All of it rides the image, which resolves off .Chart.AppVersion. The
+  # reviewable surface is the commit range, not the chart.
+  #
+  # IT SHOULD ALSO CLOSE SOMETHING THE NIGHTLY REVIEW FOUND: #267 is the stale SA token behind
+  # sar_viewCompositions 401s, and the review recorded 13,707 "api call response failure ...
+  # subjectaccessreviews ... Unauthorized" from snowplow in a single 24h window. Worth re-reading that
+  # count after the roll — it is a free check on whether the fix landed.
 - name: snowplow
+  # 1.12.32 (ANNOTATED tag: refs/tags/1.12.32 is the tag OBJECT 46fd39dc, which PEELS to commit
+  # 759a59d9 = main HEAD. snowplow is annotated; portal/frontend went LIGHTWEIGHT at 1.8.63/1.6.87,
+  # where no peeled ref exists at all. Rule: peeled `^{}` if present, ELSE the bare ref.)
+  # #376 CHANGES WHAT A METRIC MEANS, which is the thing to carry forward: internal reads no longer
+  # stamp warmth or count as hits/misses, so raw miss_total is CUSTOMER-ONLY from 1.12.32 on. STOP
+  # subtracting refresher_skipped_no_entry_total. Consequence for any pre/post comparison across this
+  # boundary: pre = hit/(hit + miss - skipped), post = hit/(hit + miss). Same MEANING, different
+  # COMPUTATION — label it, or the next reader re-derives it and finds an apparent arithmetic error.
+  # #375 stores-and-immediately-re-marks a resolve that read data which changed mid-resolve, so it is
+  # never accepted as fresh; new detector snowplow_deps_unguarded_put_total, which MUST read 0.
+  # #397 is the instrumentation that came out of mis-diagnosing 1.12.31's readiness: a WARN-level
+  # `prewarm.phase1.readiness_exit` line carrying outcome/elapsed/per-step timings, plus reason and
+  # elapsed_s in the /readyz warming body, and snowplow_phase1_deadline_released_total. Production
+  # runs LOG_LEVEL=warn, which is exactly why the old INFO-level latch events were invisible and two
+  # successive inferences from log VOLUME were wrong.
+  # Also #374, #394, #380, #351, #311/#386, and #368's dark wildcard collision probe
+  # (shadow_wildcard_digest_* counters) — the detector that makes a shadow-parity window certifiable.
+  # SHADOW PARITY STAYS OFF in this roll: the flip is a separate change in a low-traffic window, so
+  # the parity signal stays attributable.
+  # Chart diff verified against the PACKAGED trees rather than the release note: ONLY Chart.yaml
+  # differs on both charts (87281 B and 19855 B byte-identical either side), values.yaml and
+  # values.schema.json unchanged. 1.12.31's note claimed the same and was WRONG — it added
+  # env.SHADOW_PARITY_ENABLED — which is why this is checked every time.
+  # 1.12.31 (ANNOTATED tag -> commit 133629a5..., = main HEAD).
+  # #218 the CRD-re-list warmth amplifier, now gated on two fingerprints; #367 boot-time env backing
+  # for the shadow-parity toggle (the toggle itself stays DARK); #382/#385 test-only de-flakes.
+  #
+  # CHART-DEFAULT CHANGE, found by diffing the PACKAGED trees rather than trusting the release note
+  # ("no chart-default changes"): snowplow/values.yaml gains `env.SHADOW_PARITY_ENABLED: "false"`.
+  # That is #367's env backing and it is explicitly OFF, so behaviour is unchanged — but it IS a new
+  # chart default and it is the reason the toggle now survives a restart, which it did not before.
+  # Everything else in the chart is byte-identical; values.schema.json is unchanged (28878 B both).
+  #
+  # SHADOW PARITY STAYS OFF HERE, and the flip is deliberately NOT part of this roll. The #368
+  # cross-identity wildcard collision probe (PR #373) lands in 1.12.32, NOT in this version, and v7
+  # certification is "collision 0 AND observed > 0 AND evicted 0" measured by that probe while parity
+  # is ON. Flipping on 1.12.31 would therefore open a parity window with no collision detector, which
+  # can certify nothing. HOLD the flip until 057 runs 1.12.32, then do it in a low-traffic window with
+  # the probe counters baselined first.
   kind: Snowplow
   chart: snowplow
   # 1.12.9: SKIPS 1.12.8, and that is safe — verified linear history with 1.12.8 an ancestor, so the
@@ -266,7 +468,195 @@ components:
   # history, so every counter starts at zero and the first captures REFUSE to report: the #253 gate
   # makes INADMISSIBLE a distinct verdict from a real reading, and it needs >=2 distinct rbacSubGen
   # values resident before any number means anything. That is the instrument working.
-  version: 1.12.13
+  # 1.12.16 = the v7 Step 2 DARK subsystem (#266: requester-profile / projection-digest /
+  # shadow-parity) on top of the SA-serve fix already in 1.12.15, and it carries #267/#268/#269
+  # unchanged. Entirely dark: no ComputeKey change, no served-byte change, a default-off
+  # process-local toggle, so deploying it changes nothing observable. Verified: the packaged chart
+  # is byte-identical to 1.12.15 outside Chart.yaml, and the image moves via appVersion because
+  # values.image.tag is empty — so this pin bump IS the image bump. Enabling shadow-parity for the
+  # Step-E correctness measurement is a separate runtime /debug toggle, not a chart or env change.
+  # NOTE: snowplow is a declared dep of frontend, so this flip opens a window where frontend's
+  # dep gate sees it absent; the comparable window on the 0.3.311 roll ran ~400s.
+  # 1.12.17 (#272): ships the /debug/shadow-parity toggle route — the runtime surface that makes the
+  # v7 Step-E measurement reachable at all. 1.12.16 shipped the dark subsystem but its ONLY callers of
+  # SetShadowParityEnabled were tests and every /debug/* route was a GET, so there was no way to turn
+  # it on; that gap was found and disclosed by the snowplow session after 1.12.16 had already rolled.
+  # Still DARK: default-off, no env backing, no boot flip, so the roll changes nothing observable
+  # until an operator POSTs. Verified byte-identical to 1.12.16 outside Chart.yaml.
+  # THE FLIP IS A SEPARATE DECISION and is gated on two things that cannot be proven from the chart:
+  # an unauthenticated call to the toggle route must return 401 on the live pod (a 503 means the
+  # pod's JWKS is misconfigured — the #271 failure mode — and the measurement would be void), and the
+  # counters are per-pod process-local expvars, so read them from ONE pod, never through the ingress
+  # at replicas > 1.
+  # 1.12.19 (#277/#278): THE FIRST OF THIS RUN THAT IS NOT DARK — a live user-facing correctness fix.
+  # Shared-RA widgets, the compositions-datagrid among them, served STALE rows for up to ~1h after a
+  # backing mutation, because the fast-path serve recorded no invalidation edge. That was active on 057
+  # while 1.12.18 and 1.12.19 sat published and unrolled — I was waiting on a handoff message instead of
+  # checking the registry, which is a bad reason for a correctness fix to wait. Check the registry.
+  # It also carries forward the 1.12.17 /debug/shadow-parity toggle route and the 1.12.18 allow/deny
+  # split, both still DARK and inert: they change nothing until their toggles are flipped, and the v7
+  # parity measurement they exist for is on hold pending a populate-side hook (#275), because the #266
+  # hook turned out to be live-serve only and fires zero checks on the prewarm path.
+  # Chart verified byte-identical to 1.12.17 outside Chart.yaml, so the entire fix is the image.
+  # Ships a metadata-only JWT-gated /debug/deps endpoint; ?filter=missing-backing-edges spot-checks that
+  # the defect class is gone. Not needed for the roll.
+  # 1.12.21 (Refs #271), which CARRIES 1.12.20. Rolled as one flip rather than two; see the last
+  # paragraph for why that was the deciding factor.
+  # THE REASON TO ROLL IS 1.12.20's DIAGNOSTIC, not a fix: an `sa_dial` bool on the three
+  # api-call-failure log sites in dispatchOneCall, so the recurring 057 "subjectaccessreviews ...
+  # Unauthorized" lines name their own root cause instead of leaving it to be guessed. sa_dial=true
+  # means candidate a' (a stale SA-endpoint token, the #267 gap); sa_dial=false means candidate b (a
+  # rejected per-user clientconfig). Those are different fixes, which is the whole point of the split.
+  # HOW TO READ IT, and this is the part that has already burned me once: the 057 SAR-401s arrive in
+  # BURSTS of exactly 170 or 340 lines with 2-39 minute gaps between them. A per-minute rate off a short
+  # sample measures which phase of a burst you sampled, not the level — I reported "plateaued at 85/min",
+  # then "zero", then "2.5x higher" off exactly that mistake and had to withdraw the figure. Report the
+  # true/false split as COUNTS over a stated window spanning several bursts, never as a rate.
+  # WHAT 1.12.21 ADDS OVER 1.12.20, and why it is inert: the v7 Step 2E populate-side shadow-parity hook.
+  # It is an atomic.Bool defaulting OFF, flipped from exactly ONE non-test call site — the RefreshAuth-
+  # gated /debug/shadow-parity route — with ZERO references anywhere under helm/ and no boot-time env
+  # read. So there is no values.schema.json leaf for a `default:` to pin, which matters because a
+  # defaulted componentValues leaf is a SILENT LIVE OVERRIDE (core-provider applies schema defaults into
+  # the composition CR spec) and that exact mechanism caused today's Autopilot 405. Enabling the parity
+  # measurement window is a RUNTIME act against a live pod, not a redeploy: nothing here changes until
+  # someone makes an authenticated call, and nobody makes that call by accident.
+  # Both charts verified byte-identical to 1.12.19 outside Chart.yaml at BOTH 1.12.20 and 1.12.21, so the
+  # entire change at either tag rides the image and a chart diff is the wrong instrument. Image is a real
+  # multi-arch OCI index (linux/amd64 + linux/arm64) at both; digests 1.12.19 a3ef1536, 1.12.20 802e7c65.
+  # WHY ONE FLIP AND NOT TWO: 1.12.21 is a strict superset of 1.12.20, and a pin flip is never free even
+  # when the chart is byte-identical — the version IS the apiVersion, so each flip prunes and recreates
+  # the leaf and opens a window where dependents can sit unready. Paying that twice for content that is
+  # inert on the first pass buys nothing. An earlier revision of this bump pinned 1.12.20 and said "NOT
+  # 1.12.21" because its artifacts did not exist yet; they were published before this merged, the three
+  # objections (single manifest, neither chart present) were re-checked first-hand and are cleared.
+  # 1.12.22 (commit 443c54cf, tag obj 0d6a9608): FOUR fixes, and the first of them is a CREDENTIAL LEAK,
+  # so this is the one pin in this bump with an exposure clock on it rather than a correctness argument.
+  #   #271 — CLOSES the SAR-401 that 1.12.20's sa_dial diagnostic was built to explain, and the mechanism
+  #     is not what the diagnostic's own label implied. A nil-endpointRef PREWARM stage carrying the
+  #     cohort's Krateo authn JWT resolved to the SA endpoint; bearerAppendForStage appended that JWT,
+  #     and client-go's bearer round-tripper WILL NOT OVERWRITE an existing Authorization header
+  #     (transport/round_trippers.go) — so the SA's BearerTokenFile token was never presented. The
+  #     apiserver received a Krateo RS256 JWT instead of a k8s token => 401, AND the user's JWT reached
+  #     the apiserver, which audit-logs it. Fix = provenance-gate the append on isSA; isSA=false paths
+  #     (clientconfig cert-auth, #57 loopback) byte-identical.
+  #     MEASURED BEFORE THE FIX on 057: 720 SAR-401s in a 20-minute window across 5 bursts, all from the
+  #     access-preview RestAction's 10 SubjectAccessReview POSTs. So 720 JWT presentations to the
+  #     apiserver in 20 minutes, from one pod.
+  #     CORRECTING MY OWN EARLIER READ, recorded so the next person does not repeat it: I reported this
+  #     as content-only severity, on the grounds that every access-preview step sets continueOnError so
+  #     nothing fails. That was right about FUNCTION and wrong about EXPOSURE. I also read sa_dial=true
+  #     as cause a′ (a stale SA token) and had to withdraw it — at that dial site the SAME marker that is
+  #     logged is the one that switches the transport onto the token FILE, so sa_dial=true means the #267
+  #     fix is ACTIVE and can never mean a stale static token. The token was fresh; it just never reached
+  #     the wire, because the JWT was already in the header.
+  #   #216 — fire the gone-forget hook on a confirmed-404 self-eviction, so a degraded-probe deletion
+  #     drops the harvested copy. This is the "stops serving deleted content" fix; user-visible.
+  #   #279 — record the fanned LIST edge on an iterator-empty resolve, so a cold empty fan is
+  #     invalidated (no cold stale-negative). SHIPS CORRECTNESS-SAFE BUT NOT YET BULLETPROOF: the ns=""
+  #     scope over-marks and is never wrong, and Diego has directed a design hardening (decline a
+  #     templated namespace to the fence, never record a guessed cluster-wide edge) to land separately.
+  #     Rolling this now rather than waiting for that was a deliberate call: the hardening improves a
+  #     design, it does not fix a live defect, and #271 does.
+  #   #288 — the empty-interpolation / DNS-invalid dial guard, plus a verb-aware empty-name
+  #     collection-mutation safety gate. This is the snowplow HALF of a two-sided bug whose SOURCE is
+  #     portal content: three portal RestActions build a path by concatenating a `//` fallback, then dial
+  #     it (review-proposal `(.name // "")` -> /…/builderpublishes/review-, x601; blueprint-detail
+  #     `(.compdef.status.* // "none.krateo.io/v1")` -> /apis/none.krateo.io/v1/none, x358; and an
+  #     empty-namespace /api/v1/namespaces//configmaps/-architecture, x67 — about 1026 futile apiserver
+  #     round trips per 20 minutes from one pod, all swallowed by continueOnError). THE GUARD CLOSES TWO
+  #     OF THE THREE and cannot close the sentinel one: `none.krateo.io/v1` and `none` are valid
+  #     DNS-1123 segments, and snowplow must not refuse them, because it cannot distinguish a deliberate
+  #     fake GVR from a legitimate GVR that is not yet discovered (the pre-CRD case it correctly dials
+  #     and retries). So do NOT read #288 as closing the class — the sentinel shape is portal's alone.
+  # Both charts verified byte-identical to 1.12.21 outside Chart.yaml, so the whole change rides the
+  # image; a chart diff is the wrong instrument. Image is a real multi-arch OCI index (amd64 + arm64),
+  # and git ls-remote confirms the tag dereferences to 443c54cf as the handoff claimed.
+  # AFTER THE ROLL: the access-preview 401s should go to ~0. That is the check, and it is a falsifiable
+  # one — 720 in 20 minutes beforehand is a loud baseline.
+  # THAT CHECK PASSED: 0 SAR-401s over a 45-minute window and across three subsequent installer rolls,
+  # with 333 sa_dial lines in the window as the positive control proving the path was live rather than
+  # idle. But read the next paragraph before concluding the class was closed, because I did and was wrong.
+  #
+  # 1.12.24 (tag obj a1337e41 -> commit 81805acf), TWELVE fixes. ROLLED FOR #292, and the reason is that
+  # #271 CLOSED ONLY HALF THE BUG. One defect, two carriers, and only one of them is observable:
+  #   TOKEN-AUTH (#271, shipped 1.12.22) — a nil-endpointRef stage resolves to snowplow's SA endpoint.
+  #     The stray Krateo JWT sits in Authorization and client-go's BearerTokenFile round-tripper will not
+  #     overwrite an existing header, so the SA token never attaches => apiserver 401. LOUD, and what the
+  #     720-per-20-minutes baseline was measuring.
+  #   CERT-AUTH (#292, this version) — a nil-endpointRef stage resolves to the user's <user>-clientconfig,
+  #     so isSA=false and #271's gate DOES NOT FIRE. A clientconfig authenticates by CLIENT CERT, so there
+  #     is no bearer round-tripper to suppress the stray header: `Authorization: Bearer <user-JWT>` is
+  #     PRESENTED ON THE WIRE and THE DIAL SUCCEEDS. Silent. It does not 401, so a SAR-401 count cannot
+  #     see it by construction. A live user-credential leak to an apiserver that audit-logs requests,
+  #     live on 057 from before 1.12.22 until this roll.
+  #   The fix drops the bare `EndpointRef == nil` disjunct outright: a nil ref is an apiserver-credential
+  #   dial that never wants a Krateo JWT. The two legitimate targets remain — an explicit ExportJWT
+  #   opt-in, and the self-loopback at snowplow's own JWT-gated /call (a NAMED ref matched by
+  #   parsedHostEqualsSelf, so #57 is unaffected).
+  # DO NOT EXPECT A POST-ROLL MEASUREMENT FOR #292. There is none available, and that is not laziness: a
+  # successful dial carrying a stray header is externally indistinguishable from a clean one, so neither
+  # the logs nor the authenticated access-preview check can see it. Acceptance is the diff plus the
+  # real-transport exact-equality leak-absence falsifier shipped with it. The deploy IS the fix.
+  # THE GENERAL LESSON, worth more than this pin: a metric that counts only FAILURES is blind to the
+  # variant of the same bug that SUCCEEDS. Before calling a class closed from a count, ask what the bug's
+  # other failure modes would look like in that instrument.
+  # SUBSTANTIAL CONTENT BESIDES #292:
+  #   #217 three-state servable confirmation — the keystone. A transient discovery blip used to retract
+  #     confirmation and degrade eviction for ~10% of minutes; it now RETAINS confirmation
+  #     (fail-open-not-fail-stuck) while an authoritative 404 still retracts.
+  #   #206 stop+join the leaked resolved-cache summary goroutine (the -count=3 flake root).
+  #   #293 skip garbage RESTAction dials (unrendered ${...} and failed-jq paths) with per-reason
+  #     attribution — the SNOWPLOW half of the malformed-dial class. ITS COUNTERS WILL READ ~0 ON 057 AND
+  #     THAT IS NOT A FAILURE: portal 1.8.56 gated all 19 RestActions at source, so there are no garbage
+  #     dials left here to skip. A live signal would need a pre-1.8.56 cluster or a synthetic; acceptance
+  #     is its falsifier (RED garbage-dialed -> GREEN skipped). Do not read the zero as #293 not working.
+  #   #279 the ns="" hardening Diego directed — declines a templated-namespace empty fan to the #285
+  #     fence instead of recording a guessed cluster-wide edge. Corpus-INDEPENDENT by construction, so it
+  #     needs no measured-corpus check; this is also why skipping 1.12.23 loses nothing.
+  #   plus #238 /debug/reconcile ?dryRun, #246 ownsInformer test-pin, #215 unserved-group skip counter,
+  #   #249 lastEventAgeSeconds doc, #221 stoppable dispatch-summary goroutine, #232 AWS nil-verb guard,
+  #   #251 lazy diag EvaluateRBAC, #179 inspect nonReadVerb flag.
+  # Both charts verified byte-identical to 1.12.22 outside Chart.yaml (26315 B and 6219 B), image is a
+  # real multi-arch OCI index (amd64 + arm64), and ancestry confirms 23af561 (#292), b991ac3 (#279) and
+  # 443c54c (#288) are all IN this tag — checked by merge-base, not taken from the handoff.
+  # NOT IN THIS VERSION, expected in 1.12.25: #248 the UAF-decline-freeze reaper (described as the
+  # dominant live L1 gap), #260/#257 RBAC substrate + role-rules skip, #189 resurrection guard, #204.
+  # 1.12.27 (tag -> commit 55b256c). COLLAPSES THREE UNROLLED RELEASES INTO ONE ROLL: 1.12.25 and
+  # 1.12.26 were both tagged and published while 057 sat on 1.12.24, and I only noticed because I went
+  # looking rather than waiting to be handed each one — the same lapse as 1.12.18/1.12.19 sitting
+  # unrolled earlier. VERIFIED BY ANCESTRY, not from the handoff: merge-base confirms 1.12.25 (2db77eb)
+  # and 1.12.26 (70ad881) are both ancestors of 1.12.27 (55b256c), so deploying this gets everything.
+  # Safe to collapse: all forward cache-correctness / detector / test fixes. No schema migration, no
+  # key-version bump — v7 is 1.13.0 and is in NONE of these — nothing irreversible.
+  # CARRIES #248, the read-independent maxEntryAge REAPER for UAF-decline-FROZEN L1 cells (in 1.12.25,
+  # therefore here; reapPastMaxEntryAge present x3 at this tag).
+  # HOW TO VERIFY #248, and I got this wrong twice before the owner corrected me, so read it carefully:
+  #   #248 does NOT reduce the UAF decline rate. The gate that declines Puts because the restactions L1
+  #   key cannot separate UAF scope is UNTOUCHED until the v7 UAF-scope digest in 1.13.0. What #248 does
+  #   is BOUND THE STALENESS of a cell that was cached and then frozen, by evicting it past maxEntryAge
+  #   without waiting for a read. So the discriminators are:
+  #     evict_max_age_total        0 -> non-zero   (real before-state; unambiguous from exactly zero,
+  #                                                 though the counter is SHARED with the Get-lazy path)
+  #     widget_content_evict_total 0 -> non-zero   (the frozen-fraction PROXY, and the better signal)
+  #   WATCH THE PAIR: if evict_max_age_total climbs while widget_content_evict_total stays 0, the reaper
+  #   is evicting something but NOT the frozen widget-content set — technically working, practically not.
+  #   DO NOT plan to read suppressed_resident: it exists as a struct field from 1.12.25 but was never
+  #   added to the expvar map, so it never reaches /debug/vars in any released version. Filed upstream as
+  #   #345, lands 1.12.28+. I nearly reported the whole mechanism as fabricated after grepping a working
+  #   tree checked out at 1.12.21 — verify symbols BY COMMIT, not by whatever the checkout happens to be.
+  # THE BASELINE THIS ROLLS AGAINST, captured on 1.12.24 BEFORE rolling, at
+  # scratchpad/uaf-baseline-1.12.24.txt:
+  #   evict_max_age_total 0, widget_content_evict_total 0, widget_content_store_total 9805,
+  #   evict_lru_total 0 (cache at 337MB of a 2GB cap, so no LRU pressure), entries 4095,
+  #   hit_total/miss_total 2309550/3732074 (38.2%)
+  #   9805 widget-content cells stored and ZERO ever evicted, with no LRU pressure and no TTL path
+  #   reaching them, IS the unbounded-staleness population #248 exists to bound. That number is a far
+  #   better argument for the release than the decline rate, and the owner is putting it in the issue.
+  # The ~14k/hour UAF decline baseline is parked for the 1.13.0 v7 read and must NOT be read against
+  # this roll. Reading it here is exactly the error the owner corrected.
+  # Both charts verified byte-identical to 1.12.24 outside Chart.yaml (26311 B and 6219 B), image is a
+  # real multi-arch OCI index (amd64 + arm64).
+  version: 1.12.32
   deps:
   - snowplow-crd
   - authn
@@ -295,7 +685,74 @@ components:
     peer: snowplow
   - path: env.URL_AUTHN
     peer: authn
+  # 1.6.67: three PRs, all UI and kernel — 48 files across 1.6.66...1.6.67, none under helm/ and none
+  # outside ui/. #380 a highlighter fix for wrapped lines plus composer focus and inert palette fields
+  # while an edge is drawn; #381 drift between declared dependencies and generated gates now shows as a
+  # lint problem with a "Regenerate gates" action; #382 the S12a status-projection compile kernel,
+  # which nothing calls at runtime yet. No new ordering constraint: core-provider-agent and
+  # krateo-autopilot already sit at versions that assume >= 1.6.66.
+  # 1.6.68 (#383): S12 status projection, frontend half. A blueprint whose descriptor compiles a
+  # projection also publishes status-projection.json, and its compositiondefinition.yaml carries apiRef
+  # plus statusDataTemplate. Safe alone: without portal 1.8.45 the extra file is simply ignored by
+  # Install, so the two halves can roll in either order.
+  # 1.6.69 (#384): the Blueprint Composer's Conditions strip (mockup 8b/8c). UI only. CONTAINS 1.6.68,
+  # so 057 goes 1.6.67 -> 1.6.69 in one step and the S12 frontend half rides along; 1.6.68 was pinned
+  # here and tagged as installer 0.3.296 but never rolled, because rolling it would have been a trip to
+  # a version superseded before it landed. Range against what is LIVE: 1.6.67...1.6.69 is 15 files,
+  # none under helm/.
+  # 1.6.70 (#385): the blueprint draft lint refuses a workload whose image: is still the empty
+  # placeholder. That is the defect the Blueprint Builder E2E hit on 057 — e2e-comp-a rendered and then
+  # failed to apply with `Deployment.apps ... spec.template.spec.containers[0].image: Required value`,
+  # because a parameter-less blueprint left the composer's placeholder in place and Preview could not
+  # show it (the Deployment was gated). 1.6.69...1.6.70 is 3 files, all under ui/, none under helm/.
+  # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
+  # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+  # 1.6.87 (tag -> commit 672b22b = main HEAD; LIGHTWEIGHT tag, where 1.6.86 was ANNOTATED — check
+  # both ref forms or a deref returns nothing and reads as a false mismatch).
+  # #434: Controller Builder round 2 — the authoring verbs added in portal 1.8.63's Builder CR
+  # (controllerBindId, controllerSetExcludedFields, controllerSetItemsPath,
+  # controllerSetConfigurationFields) become usable here.
+  # ORDER, already satisfied: portal 1.8.63 shipped verbs.allowed 8 -> 12 FIRST, live as installer
+  # 0.3.363 and verified there (all four new verbs present on the controller-builder CR,
+  # installed-version v1-8-63). Verbs are deny-by-default, so the reverse order leaves this frontend
+  # offering verbs the cluster refuses.
+  # Pre-roll bundle baseline, so the post-check cannot be vacuous: at 1.6.86 all four verb names and
+  # `source-spec-version` occur ZERO times, while controllerStart (7) and publishRestDef (7) DO occur
+  # — those two non-zero controls are what make the zeros real absences rather than a broken grep.
+  # 1.6.86 (ANNOTATED tag -> commit a02fe28..., = main HEAD).
+  # #433 lets Autopilot AUTHOR a controller through the Controller Builder's own kernels: six verbs
+  # (controllerStart, controllerPlace, controllerMapVerb, controllerSetIdentifiers,
+  # controllerSetStatusFields, controllerRemoveKind), each gated by the Builder CR's verbs.allowed —
+  # deny-by-default, so a verb the CR omits is refused. publishRestDef now publishes the held,
+  # PREVIEWED draft, and the legacy rail path is gone.
+  # It also CLOSES A WRITE PATH: RestDefinition writes are refused through applyResourceSet. And for
+  # every builder, an un-previewed draft is refused before the destination form.
+  # #431 is singular/plural count copy.
+  #
+  # ORDER, already satisfied: portal 1.8.62 ships the verbs.allowed list these verbs are gated on and
+  # went live FIRST as installer 0.3.356 — verified there, the controller-builder CR carries all 8
+  # verbs and summarizer.plugin controller-model where it previously had 2 verbs and no summarizer.
+  # Rolled in that order deliberately: the reverse leaves this frontend offering verbs the cluster's
+  # Builder CR does not allow, so each is refused as "not allowed by the Controller Builder on this
+  # cluster" — fail-safe, nothing written, but non-functional.
+  # Pre-roll bundle baseline, so the post-check cannot be vacuous: at 1.6.85 all six verb names occur
+  # ZERO times, while previewRestDef (7) and publishRestDef (4) occur — the two non-zero controls
+  # prove the search works, so the six zeros are real absences.
+  # 1.6.85 (tag -> commit c10e10ef7c4ceb3ac28a5baa69b4d30806537002, verified by ls-remote; ANNOTATED tag,
+  # so the bare refs/tags/1.6.85 SHA is a tag object, not this commit).
+  # #432 stops hardcoding the builder list: the builder pages now READ the three Builder CRs from the
+  # cluster, as the SIGNED-IN USER, via snowplow GET /list?category=builders&ns=krateo-system. New config
+  # key BUILDERS_NAMESPACE (chart values.yaml, default krateo-system; typed in the chart schema with NO
+  # default of its own, so it cannot be forced on from the schema layer).
+  # ORDERING, and it is already satisfied: portal 1.8.61 must be LIVE FIRST because it ships those CRs
+  # plus the Role/RoleBinding that lets system:authenticated read them. It went live as installer 0.3.354
+  # and was verified there: 3 Builder CRs present, and an impersonated read (--as=cyberjoker
+  # --as-group=devs --as-group=system:authenticated) now lists all three where it was Forbidden before.
+  # Without that, every builder page reads "no Builder is installed in krateo-system".
+  # Chart diff 1.6.84 -> 1.6.85 is ONLY Chart.yaml + values.yaml + values.schema.json — the behaviour
+  # rides the image (appVersion 1.6.85), amd64 + arm64.
+  # #431 is singular/plural count copy.
   kind: Frontend
   chart: frontend
   # 1.5.27 adds the Autopilot voice/dictation control to the composer, gated ENTIRELY on the config
@@ -648,7 +1105,158 @@ components:
   # previewPageV2.test.ts +66/-0). No CRD, no schema, no widget kind. applyWithReclaim confirmed present
   # in the 1.6.56 tag's tree and ABSENT in 1.6.55's — checked two independent ways (git and the compare
   # API), because skipping exactly that check is how 1.6.54 was tagged carrying nothing.
-  version: 1.6.56
+  # 1.6.58: SKIP 1.6.57 — its image shipped but its charts never did (a test fixture Chart.yaml added by
+  # #365 broke the org release-oci push; #368 fixes it), so 1.6.57 is unpinnable: verified, the registry
+  # serves no frontend or frontend-crds 1.6.58-minus-one. Three PRs land here, not the two the handoff
+  # listed: #366 held-draft fixes (previews route to the right surface, Close draft really discards the
+  # sandbox too, every draft is linted); #367 ONE PUBLISH PATH — every builder publishes through a single
+  # BuilderPublish claim with no file-count limit and the legacy GitHub PR path is gone; and #365, which
+  # the handoff omitted, adding ui/src/pages/BlueprintComposer/architecture.ts (+301 lines), its tests and
+  # the builder-publish fixture that caused the publish breakage above.
+  # INSTALL IMPACT of #367: config key AUTOPILOT_PUBLISH_VIA_GIT_PROVIDER is GONE. The chart already
+  # defaulted it true and config accepts unknown string keys, so a CR still setting it keeps rendering and
+  # the key is ignored. Publishing now always needs git-provider + the builder-publish composition, which
+  # was already the default path — so no CR edit is required, but a CR that relied on setting it FALSE
+  # silently loses that opt-out.
+  # 1.6.62: the blueprint publish chain and the composer, four releases in one bump (1.6.59 composer
+  # route + render-gated drafts; 1.6.60 publish chain — compositiondefinition.yaml written at publish,
+  # scaffold seeding from krateo-blueprints/builder-scaffold, one repo per artifact; 1.6.61 palette,
+  # architecture nodes, the FlowChart architecture variant; 1.6.62 a graph canvas no longer steals the
+  # page's first Tab stops). Until now no builder publish had ever got past an open PR.
+  # THREE CONFIG DEFAULTS MOVE, and none needs an installer change: AUTOPILOT_BLUEPRINT_BUILDER_TEMPLATE
+  # (new) and AUTOPILOT_PAGE_BUILDER_TEMPLATE both become krateo-blueprints/builder-scaffold, and
+  # AUTOPILOT_BLUEPRINT_BUILDER_REPO becomes krateo-blueprints/<chart>. componentValues.frontend.config
+  # is OPEN (additionalProperties string|null) and types none of them, so the chart defaults apply.
+  # Typing them HERE with a default would freeze them — that is the #203 localhost class of bug, whose
+  # evidence is still the four localhost defaults under that same subschema. 057 overrides only
+  # AUTOPILOT_PAGE_BUILDER_REPO, which is a different key and stays pinned.
+  # 1.6.66: four releases of Blueprint Builder work, UI-only (57 files across 1.6.62...1.6.66, none
+  # under helm/, CRDs byte-identical to what is live). 1.6.63 S4b generates a gate for each declared
+  # edge; 1.6.64 makes a chart Autopilot proposes carry the gate every declared edge needs, so those
+  # dependencies are enforced; 1.6.65 adds the draft-only agent verbs chartPut/chartDelete/chartLink;
+  # 1.6.66 has chartPut regenerate dependency gates, sends the open chart's files as page context, and
+  # lets a refused chart action reach the agent.
+  #
+  # THIS PIN IS NOW AN ORDERING CONSTRAINT FOR TWO OTHERS, which it never used to be. core-provider-agent
+  # 0.60.0+ pins its gate kernel to the 1.6.64 frontend and reports declared edges as enforced, and
+  # krateo-autopilot 0.6.0's prompt teaches the chart verbs 1.6.65 introduced — so both assume a
+  # frontend at >= 1.6.66 and must roll AFTER this one. Rolled before it, the gate would pass charts as
+  # "edges enforced" that the live frontend does not gate, and the agent would edit an open chart blind.
+  # Checked rather than assumed in the other direction too: 1.6.64...1.6.66 touches nothing matching
+  # lint, schema, gate or verb, so a frontend AHEAD of the gate's pinned kernel introduces no skew.
+  # 1.6.72 (#387): a Form schema with no fields that carries a title or description now renders as an
+  # info message instead of "Error while rendering widget". That is what DISPLAYS portal 1.8.50's
+  # "still being registered" state, so the two move together; with portal alone the create form shows
+  # the generic nothing-to-render error, which is still better than failing to resolve. Diff is ui/ only.
+  # 1.6.73 (#388): the caller half of the portal 1.8.52 draft-render path. Two CHART changes, not just
+  # an image: the sandbox Role gains ConfigMaps (create/get/list/watch/delete) in krateo-preview only,
+  # and preview-sandbox/resourcequota.yaml is REMOVED — so this upgrade DELETES
+  # ResourceQuota/preview-widget-count in krateo-preview. That deletion is intended.
+  # No ordering constraint: the frontend falls back to the old path until the portal RA and the
+  # ConfigMap grant are both live, so Preview degrades rather than breaking.
+  # Checked before rolling, because it would have broken the render: 1.6.73 drops the values
+  # previewSandbox.quota and previewSandbox.widgetPlurals and its chart schema is
+  # additionalProperties:false, declaring only authors/enabled/namespace. Neither dropped key carries a
+  # default in this installer's schema, so core-provider injects neither, and the live Frontend CR
+  # carries exactly {enabled, namespace} — both still accepted. Also verified agentgateway.enabled
+  # still yields /api/a2a/<ns>/autopilot in 1.6.73, so the 405 fix survives the bump.
+  # 1.6.75: the draft-records kernel — every preview is stored and can be restored when abandoned
+  # (#389 kernel, #390 owner-scoped preview names, #392 the Listy rowActionsDisplay field, #393 autosave
+  # + resume + adopt + legacy discard), plus #394 so Enter on a row's control acts on the control rather
+  # than opening the row. Supersedes 1.6.73 and 1.6.74, which it contains.
+  # CHART change, not just an image: the sandbox author Role's configmaps verbs gain update and patch
+  # (create/get/list/watch/update/patch/delete), which the draft records need to rewrite in place.
+  # This is what finally answers the 229 orphaned sandbox drafts. They are NOT deleted — they surface as
+  # 'Unowned drafts' with Adopt and Discard, which is the right ending for a delete that was nearly run
+  # against them this morning before it turned out the Portal Builder offers them for resume.
+  # 1.6.76 (#395): a draft composed BY HAND was labelled 'Autopilot thread'. Attribution now requires an
+  # Autopilot proposal to have actually changed the draft. Narrow, but it is a provenance claim: saying an
+  # agent touched something it did not erodes trust in every other label on the page.
+  # Supersedes 1.6.75. Diff since it is 4 files under ui/src only, so frontend-crds is unchanged and
+  # there is no ordering constraint with portal this time — unlike the 1.6.75 pair.
+  # Released after the draft-records E2E passed on 057: autosave, kill-and-resume, Adopt of one legacy
+  # draft set and a full-set Discard of another (229 -> 225, exactly those two sets), keyboard resume,
+  # and clean-up leaving zero records behind. I verified that 225 and the two named sets myself.
+  # 1.6.78, which SUPERSEDES 1.6.77 (never rolled — it was staged, Diego had not cleared it, and 1.6.78
+  # landed first, so this is one flip instead of two). Three PRs, and TWO of them change things outside
+  # the feature they shipped with. Recording that here because a filming pass followed immediately and
+  # 'my tag only touched the composer' is the kind of claim that costs a re-shoot:
+  #   #396 — the Autopilot rail's live-activity label no longer collapses into a one-letter column
+  #     beside a long request. This was the ENTIRE content of 1.6.77.
+  #   #397 — the composer's canvas tag is truthful, the Publish form's copy fits both origins, and the
+  #     page strip and the form both name the slug repo. SIDE EFFECT: it raises the dark blue/geekblue
+  #     tag seeds to meet AA, which changes darkTheme TOKENS — so EVERY blue tag in dark mode gets
+  #     brighter, not only the composer's.
+  #   #398 — the live preview: an edit PATCHes unchanged widgets in place instead of delete-then-create,
+  #     which removes the 'Not found' flash (the author Role already grants patch, so no chart change
+  #     needed — contrast 1.6.75, which did need one); only removed names are deleted, and last;
+  #     RESTActions are off the canvas; the Files tab no longer squeezes it. SIDE EFFECT: virtual tables
+  #     at >=100 rows now truncate cells with the full text on hover, which AFFECTS THE COMPOSITIONS
+  #     LIST too, not just the preview.
+  # Chart verified byte-identical to 1.6.76 outside Chart.yaml at both frontend and frontend-crds, so the
+  # entire change rides the image and a chart diff is the wrong instrument. Image is a real multi-arch
+  # OCI index (linux/amd64 + linux/arm64).
+  # 1.6.79 (#399): ONE CSS file. The Autopilot rail's "asking <agent>" label gets 8px before the brief
+  # (margin-inline-end: var(--spacing-sm)). Supersedes 1.6.78, which was rolled — so unlike the 1.6.77
+  # case this is a second flip on purpose, not a skipped one: 1.6.78 was already live for the demo takes.
+  # Charts byte-identical to 1.6.78 outside Chart.yaml; image is a real multi-arch index.
+  # 1.6.81, which SUPERSEDES 1.6.80 — never rolled, so this is one flip instead of two. Supersession
+  # CHECKED BY ANCESTRY rather than taken from the handoff: GitHub compare of 1.6.80's commit c1c3a7c
+  # against 1.6.81's cf181cf returns status=ahead, ahead_by=1, behind_by=0, so #400 is genuinely in it.
+  # Two changes, 14 files, all under ui/src:
+  #   #400 — useMeasuredWidth attached its ResizeObserver only AT MOUNT, so a PieChart or LineChart that
+  #     first rendered its empty state never measured and stayed BLANK after data arrived. That is the
+  #     Portal Builder's place-then-bind order: the pod-sizing pie resolved 4 slices from snowplow and
+  #     drew nothing. Now a callback ref. USER-VISIBLE FOR EVERYONE, not a demo-only defect — any chart
+  #     placed before its data arrived was silently blank.
+  #   #401 — composer binding: the Data modal offers the draft's own RESTActions ("In this draft") before
+  #     the cluster ones, the template row starts on the kind's data field, and PieChart colorMap is
+  #     editable as key -> palette rows.
+  # THE PART THAT REACHES BEYOND THE COMPOSER, and the reason to look after rolling: SchemaFields now
+  # renders ANY array-of-objects field as add/remove rows carrying the item's own fields, and typed maps
+  # as key -> value rows, where it previously showed a JSON TEXTAREA. That applies to EVERY schema-driven
+  # form, blueprint install and create forms included (Form.module.css +20 lines is consistent). So a form
+  # that showed a JSON box for such a field now shows rows. Worth one glance at a blueprint install form.
+  # Both charts verified byte-identical to the deployed 1.6.79 outside Chart.yaml, so the whole change
+  # rides the image; image is a real multi-arch OCI index (amd64 + arm64).
+  # 1.6.88: TWO composer fixes; the whole change rides the IMAGE. Both charts verified byte-identical to
+  #   1.6.87 outside Chart.yaml (frontend: version/appVersion/sources URL only; frontend-crds: version only),
+  #   and the image is a real multi-arch OCI index (linux/amd64 + linux/arm64, plus the two buildx
+  #   attestation manifests).
+  #   #436 - a NEW controller now excludes a path param that is mapped from status, so the petstore
+  #     controller gets excludedSpecFields: [id, petId] and the create form stops asking for petId.
+  #     ALREADY-PUBLISHED controllers are deliberately untouched and instead carry an inspector note saying
+  #     why the field is still asked for. THAT NOTE IS A TEMPLATE LITERAL (ui/src/pages/ControllerComposer/
+  #     controllerModel.ts:282), so the bundle string to grep is the uninterpolated tail
+  #     ' is asked for on create because this controller was published before it was excluded'.
+  #     Grepping the interpolated form ('petId is asked for on create because') returns 0 on a SUCCESSFUL
+  #     roll - the first handoff gave that form and it would have read as a failed roll.
+  #   #435 - a controller compose run may end in a trailing previewRestDef: it runs last, is skipped WITH a
+  #     reason when an edit was refused, and publishRestDef never rides along. "skipped with a reason" and
+  #     "never emitted" are indistinguishable from outside, so a post-roll check must separate them.
+  #   No builder YAML change and no new schema defaults, so nothing propagates into the live CR.
+  # 1.6.89: ONE behaviour fix riding a large cosmetic change. Source-diffed between the tags rather
+  #   than chart-diffed, because a chart diff cannot see any of this - the whole change rides the IMAGE
+  #   (both charts are byte-identical to 1.6.88 outside Chart.yaml). 47 files, +810/-475:
+  #   15 css, 14 tsx, 9 ts, 3 md, 2 snap, 2 py, 2 json.
+  #   THE FIX - #440 (closes #439): a REFUSED action chip in the Autopilot rail now renders a refusal
+  #     icon instead of the applied check. That mattered because verbs-check-4 produced exactly this
+  #     state - a previewRestDef emitted, delivered, then refused by the portal's publish lint - and it
+  #     still wore a green check, i.e. a refusal rendering as success.
+  #   THE REST - design-system work from another session (#437 debt ledgers only shrink, 446f3ee one
+  #     type scale retiring --font-size-*). Large in file count, small in behaviour: the tsx/ts edits
+  #     are overwhelmingly SYMMETRIC (9/9, 8/8, 6/6 across PalettePanel, CanvasPanel,
+  #     SessionResumeModal, Notifications, DataBindingModal), the signature of token substitution
+  #     rather than logic. The only asymmetric non-test files are #440's own.
+  #   CHECKED DELIBERATELY: design/lint/lint-css-tokens.py changed (+38) but is CI-only, and
+  #     hack/design-lint/lint-portal-consistency.py is NOT touched - that file is the authoritative
+  #     widget rename/removal mapping the UpgradePlan grounding depends on, and a silent change there
+  #     would have invalidated work in another repo.
+  #   VERIFICATION LIMIT, stated rather than papered over: there is no minification-safe literal for
+  #     #440, so the post-roll check is deployment image + gen == observedGeneration. That proves the
+  #     new bundle is SERVING; it does not prove the refusal icon renders. The behavioural check is the
+  #     verbs-check-5 run in the frontend session.
+  version: 1.6.89
   deps:
   - frontend-crd
   - authn
@@ -691,15 +1299,42 @@ components:
 # git-provider-credentials Secret (key: token = a GitHub PAT with repo push scope) in the release namespace
 # out-of-band; until it exists the branch push fails even though every CR applies. A non-github host would
 # need a portal->builder-publish git.host passthrough (not present today).
+  # 0.15.6: CATCHING UP A LOCKSTEP THAT WAS BROKEN HERE, not shipping anything new. git-provider moved
+  # 0.15.4 -> 0.15.5 -> 0.15.6 in two separate bumps and this pin was left behind in both; the block
+  # above says the two must move together and that is exactly the rule that was missed. Harmless today,
+  # verified rather than assumed: 0.15.4...0.15.6 is 7 files with ZERO under helm/, and the packaged
+  # git-provider-crds templates are byte-identical between the two versions. The rule exists so a FUTURE
+  # CRD change cannot ship a controller expecting fields the CRDs lack — and a skew that is harmless is
+  # precisely the state in which the rule gets forgotten again.
+  # NOTE it is still an operational event despite identical content: version IS the API version here, so
+  # the leaf is pruned and recreated at v0-15-6.
 - name: git-provider-crd
   kind: GitProviderCrds
   chart: git-provider-crds
   # 0.15.0 adds status.templatingErrors to LocalResource+Repo — must move in lockstep with the
   # provider (was skewed 0.14.2 vs provider 0.14.1 for 10 days). 0.15.1 = security-only (no CRD
   # change); kept in lockstep with the provider to preserve the no-skew invariant.
-  version: 0.15.4
+  version: 0.15.6
   tier: platform
   feature: portal
+  # 0.15.5 (#27, fixes #26): a Repo whose PUSH LANDED but whose status write afterwards hit a 409 stayed
+  # stuck on krateo.io/external-create-pending forever. Both status writes in the Repo sync path now
+  # retry on conflict with a re-read, the external name is preserved, and Observe falls back to the
+  # external name when targetCommitId is empty. This is the RIGHT SHAPE of fix: the standing rule is
+  # that cdc must self-recover from a stuck handshake and that those annotations are never removed by
+  # hand, so the repair belongs in the reconciler's conflict handling, which is exactly where it went.
+  # It does NOT unstick Repos already wedged (#22) — those stay as they are, deliberately.
+  # 0.15.6 (#25): bumps provider-runtime to v1.4.0, which RECOVERS a stuck create. Inside a 2-minute
+  # grace it keeps re-observing; after that, if the resource is still absent, the RUNTIME clears
+  # external-create-pending itself and the create runs again. That keeps the never-by-hand rule intact —
+  # nothing external reaches in. Checked the blast radius before accepting it: git-provider manages
+  # repoes AND localresources, and LocalResource.Observe asks the forge (it walks the branch for a
+  # commit whose footer names the resource), so a create that landed is found and grace-then-clear is
+  # never reached; only a genuinely absent commit re-commits, which is correct rather than duplicate.
+  # LIVE CHECK AFTER THIS ROLLS, and it is falsifiable: exactly TWO Repos are pending-WITHOUT-succeeded
+  # (publish-e2e-bp-0928-source, publish-pod-sizing-v1b-source) and they should converge. The other 18
+  # Repos and all 146 marker-carrying LocalResources carry -succeeded too and must NOT move; movement
+  # there is a stop signal, not a success.
 - name: git-provider
   kind: GitProvider
   chart: git-provider
@@ -711,12 +1346,50 @@ components:
   # advisories: agent-constraint drop, key-constraint enforcement, VerifiedPublicKeyCallback skew,
   # @revoked auth bypass), go-git 5.19.2, moby/spdystream 0.5.1 (HIGH CRI DoS). git-provider speaks
   # SSH/git to forges so these matter here; 0.15.0 (running on 057) has them unpatched.
-  version: 0.15.4
+  version: 0.15.6
   deps:
   - git-provider-crd
   tier: platform
   feature: portal
 - name: github-provider-kog
+  # HISTORICAL (resolved by oasgen-provider 0.27.0 — see the 0.3.2 note below). REVERTED TO 0.3.1 at
+  # the time because: 0.3.2 COULD NOT BE INSTALLED IN PLACE and this was not a transient — it was
+  # rejected on every cluster that has already generated the PullRequest CRD, which is every existing
+  # install. It succeeds only on a fresh one.
+  #   RestDefinition "github-provider-kog-pullrequest" is invalid:
+  #   spec.resource.additionalStatusFields: AdditionalStatusFields are immutable, you cannot change
+  #   them once the CRD has been generated
+  # 0.3.2 grows that list 3 -> 5 (adds `merged`, `merged_at`). oasgen-provider treats it as immutable
+  # post-generation, so helm refuses, the release stays on the OLD chart, and the composition retries
+  # forever at Ready=False/Synced=False.
+  # NOTE THE TRAP, because it is why this looked fine at first: the CompositionDefinition reported
+  # 0.3.2 Ready=True — Pass A registration succeeded. Only the COMPOSITION CR was failing. A check on
+  # the CD, or on the composition rollup, reads GREEN here while the component never upgraded. The
+  # honest signals were the helm release still on 0.3.1 rev33 (three weeks old) and the field that had
+  # to rise, PullRequest .status.merged, still at 0/24.
+  # Reverting is a no-op on the cluster — the 0.3.1 release is what is actually deployed — so this
+  # only clears the stuck composition. Nothing depends on 0.3.2: portal 1.8.63's #287 reads `merged`
+  # only when present and shows "-" otherwise.
+  # The fix belongs in oasgen-provider: let additionalStatusFields grow by APPEND ONLY, keeping
+  # removals and renames immutable. Adding optional status properties to a generated CRD is safe for
+  # stored CRs; removing them is what breaks. A new kind/version would instead make every existing
+  # PullRequest CR a migration, and deleting the CRD to force regeneration would destroy 24 publish
+  # records.
+  # 0.3.2 (ANNOTATED tag -> commit 965d158 = main HEAD; note the LIGHTWEIGHT ref on the same tag
+  # resolves to 9af5ffe, so read the deref, not the bare ref, for THIS repo).
+  # Surfaces PullRequest `.status.merged` / `.merged_at`, which portal 1.8.63's #287 builder tables
+  # read. 057 ran 1.8.63 against 0.3.1 first and #287 FELL BACK CLEANLY, so this is additive, not a
+  # dependency — the column simply starts populating.
+  # SINGLE PIN BY DESIGN: this component carries its OWN CRDs, so there is no -crd sibling to keep in
+  # lockstep (unlike frontend/snowplow/authn/alert-troubleshooter/nightly-review).
+  # THE RISK THAT MATTERS ON A KOG ROLL, and the reason the post-checks are what they are: a kog bump
+  # regenerates the per-kind RestDefinitions. If one lands Ready=False its Repository CRs lose
+  # `status.default_branch`, the builder-publish gate closes, and every publish LocalResource is
+  # pruned — the 0.3.1 incident. So CHECK THE PER-KIND RestDefinitions, never the composition rollup,
+  # which stays green while the RDs underneath are broken.
+  # Pre-roll baseline, so none of that can be read as vacuous: RestDefinitions 30/30 Ready,
+  # Repository `status.default_branch` 24/24, LocalResources Synced 187/187, and PullRequest
+  # `.status.merged` present on 0/24 — the last is the one that must RISE.
   kind: GithubProviderKog
   # 0.3.0: restores github.krateo.io/PullRequest (served v2022-11-28) + PullRequestConfiguration (v1alpha1)
   # natively -> 29 kinds (was 28) and adds a rest-dynamic-controller Deployment for PullRequest (first
@@ -726,11 +1399,24 @@ components:
   # are served+Ready before portal 1.8.21. PullRequest has NEVER reconciled against GitHub -> first real
   # BuilderPublish is the live test (watch the PullRequest CR reach Available with NO PATCH on the 2nd
   # reconcile; a PATCH every pass = drift, the failure its jq transform exists to prevent).
-  version: 0.3.1
+  # 0.3.2 RE-ROLLED, and this time it installs. The blocker was never kog: oasgen-provider treated
+  #   additionalStatusFields as immutable post-generation. oasgen 0.27.0 makes it APPEND-ONLY (a CEL
+  #   prefix compare), and PullRequest's list grows ['number','html_url','state'] -> + 'merged',
+  #   'merged_at', which is a pure append. Verified across ALL 29 rd-*.yaml templates before rolling,
+  #   not just the one named in the handoff: exactly one file differs and its change is prefix-preserving.
+  #   ORDERING: requires oasgen-provider >= 0.27.0, which went in as installer 0.3.370 immediately
+  #   before this. Rolling this pin against 0.26.1 reproduces the original wedge exactly.
+  #   ASSERT ON THE RIGHT THING when checking this landed. The CompositionDefinition read 0.3.2
+  #   Ready=True last time while the helm release never moved — Pass A registration succeeds
+  #   independently of the composition. The honest signals are the kog helm release's CHART VERSION
+  #   going 0.3.1 -> 0.3.2, and PullRequest .status.merged rising off its 0/24 baseline. (The pin
+  #   comment above says 'rev33'; the release is on rev 35 now from ordinary reconciles, so the
+  #   revision NUMBER is not the instrument — the chart version is.)
+  version: 0.3.2
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: portal
-  # 28 GitHub RestDefinitions (incl. Repository) — REQUIRED by builder-publish >= 1.8.0 (registered by
+  # 29 GitHub RestDefinitions (incl. Repository) — REQUIRED by builder-publish >= 1.8.0 (registered by
   # the portal chart): builder-publish creates the destination repo as a github.krateo.io/Repository CR
   # and gates file-commits on its status.default_branch. Deliberately NOT a portal dep (mirrors
   # krateo-marketplace-catalog): the installer Ready-gates deps (compositions.yaml -> inst.depsReady ->
@@ -741,7 +1427,111 @@ components:
   # served before a BuilderPublish claim (publish-time) needs them. Private krateo-blueprints chart =>
   # inherits the default registryAuth creds like marketplace-catalog (no registries[] entry needed).
   # spec.resourceGroup defaults to github.krateo.io in the chart's own values (installer emits spec: {}).
+  # 1.8.45 (#249): S12 status projection, portal half. Install reads the status bundle from the
+  # publish claim; when one is present a single confirmed submit writes TWO objects — the
+  # <chart>-status RESTAction first, then the CompositionDefinition carrying the apiRef. Every other
+  # install keeps its one plain write, byte for byte, so installs without a bundle are unaffected.
+  # Pairs with frontend 1.6.68 and is safe in either order: with no bundle present this behaves exactly
+  # as 1.8.44 did.
+  # 1.8.46 (#250): adds the BuilderPublish `review` builder value — the schema enum gains it, passed
+  # through like the other three with the same chain and gates, the label becomes krateo.io/builder:
+  # review, commits read feat(review): add <path>, and the default PR body says "Proposed by the Krateo
+  # nightly review". The portal's cross-builder change-request feed skips it. This is what lets
+  # nightly-review publish through builder-publish WITHOUT its proposals being indistinguishable from a
+  # person's authored blueprint on every list that selects by that label. CONTAINS 1.8.45, so 057 goes
+  # 1.8.44 -> 1.8.46 in one step and the S12 portal half rides along; 1.8.45 was tagged as installer
+  # 0.3.297 and never rolled for the same reason as frontend 1.6.68.
+  # NOTE: builderpublishes' CRD comes from THIS chart, so the review value is only usable once this is live.
+  # 1.8.47 (#251): FIXES A LIVE REGRESSION THAT 1.8.45 SHIPPED. Since S12c, the marketplace Install
+  # form failed to render for EVERY blueprint on 057 — "actions.rest[1].ops[1].payloadToOverride[3]
+  # .value: Invalid value: object". The Form CRD types payloadToOverride values as strings; the S12c
+  # widgetDataTemplate resolved [3] to an object and [4] to an array via `${ .projection.apiRef // {} }`
+  # and `${ .projection.statusDataTemplate // [] }`, and those fallbacks fire on EVERY install, not only
+  # a projecting one. Reproduced from the live Form CR before accepting the report. 1.8.47 makes every
+  # templated override value a string, with the projection embedded as a JSON literal inside one ${ }.
+  # The authored Form validated fine all along — it is the RESOLVED widgetData snowplow checks, which is
+  # the same shape as the lookup-vacuous-render trap: what was validated was not what runs.
+  # 1.8.48 (#252): the SECOND S12c defect, narrower than the first. A PROJECTING blueprint's Install is
+  # two writes — the <chart>-status RESTAction, then the CompositionDefinition carrying apiRef — and the
+  # first POSTed with metadata.name: "" because the frontend's buildPayload merged the resource ref's
+  # payload base (which carries an empty name) over the op's payload. The set stops at the first
+  # failure, so nothing was written; verified on 057 that no empty-named RESTAction and no 0928c
+  # artifacts exist. A plain install was never affected, and only e2e-bp-0928c projects today.
+  # 1.8.49 (#253): LEG 2 OF 3. The blueprint-render RESTAction forwards lookupStubs — only when the array
+  # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
+  # One RESTAction changed.
 - name: portal
+  # 1.8.63 (tag -> commit 50ab390 = main HEAD; LIGHTWEIGHT tag — 1.8.62 was ANNOTATED, so a
+  # `refs/tags/X^{}` deref returns NOTHING here and reads as a false mismatch. Check both forms.
+  # The repo is moving to annotated from the next release; these two stay as published.)
+  # #285 NO RESTAction READS SECRETS — the headline. Settings>Users lists people from the User CRs
+  # plus managed-grant subjects; composition detail shows managed Secrets as "Unread"; the /resources
+  # Secret page says "Not read"; a new ra-secrets lint runs with an EMPTY allowlist, so the property is
+  # now enforced rather than asserted.
+  # #288 grows the controller-builder Builder CR's verbs.allowed from 8 to 12 — controllerBindId,
+  # controllerSetExcludedFields, controllerSetItemsPath, controllerSetConfigurationFields — for
+  # frontend 1.6.87. Verbs are DENY-BY-DEFAULT, so PORTAL FIRST again: the live CRD already admits
+  # these, the CR applies cleanly under the CURRENT frontend 1.6.86 (which never asks for verbs it
+  # does not know), and the reverse order would leave the new frontend offering verbs the cluster
+  # refuses. Verified before rolling: the published chart's files/builders/controller-builder.builder
+  # .yaml is sha256 bb3b1d10d5ede73be311bff98419dbc7e0d1be35976f83cf7da54c147b02189c, matching the
+  # frontend fixture, and carries exactly those 12 verbs.
+  # #286 adds a Source column to Settings>Users. #287 has builder tables read PullRequest
+  # .status.merged/.merged_at from github-provider-kog 0.3.2 — 057 is on 0.3.1 and #287 FALLS BACK
+  # CLEANLY, so this pin does NOT depend on that bump.
+  # No new schema defaults, no componentValues.
+  # 1.8.62 (tag -> commit 6ad7a0367... dereferenced from the ANNOTATED tag, = main HEAD).
+  # #283 fills in the controller-builder Builder CR for the authoring work landing in frontend 1.6.86:
+  # spec.summarizer.plugin: controller-model (what Autopilot is told about a held controller) and
+  # spec.verbs.allowed grown from 2 entries to 8 — the six controller authoring verbs
+  # (controllerStart, controllerPlace, controllerMapVerb, controllerSetIdentifiers,
+  # controllerSetStatusFields, controllerRemoveKind) alongside previewRestDef and publishRestDef.
+  # Verbs are DENY-BY-DEFAULT per the CRD, so the frontend refuses any verb this list omits.
+  #
+  # ORDER: PORTAL FIRST, deliberately the reverse of how this pair was proposed. The live Builder CRD
+  # ALREADY defines verbs.allowed and summarizer.plugin (shipped before 1.6.84), so this CR applies
+  # cleanly under the CURRENT frontend 1.6.85 — which simply never asks for the six verbs it does not
+  # know, making the extra entries inert. Shipping frontend 1.6.86 first would instead open a window
+  # where it offers the verbs and the CR does not allow them, so every one is refused with "not
+  # allowed by the Controller Builder on this cluster": fail-safe, nothing written, but non-functional.
+  # Verified before rolling: CRD spec.verbs.properties.allowed and spec.summarizer.properties.plugin
+  # both present, and all 8 verb names match the CRD's ^[a-z][a-zA-Z]*$ item pattern, so nothing is
+  # pruned or rejected.
+  # 1.8.61 (tag -> commit 71e9754243910e47b9c3f71cb40fb0c393521969, verified by ls-remote; the tag is
+  # ANNOTATED, so the bare refs/tags/1.8.61 SHA is a tag object, not this commit).
+  # #281 ships the builder catalogue AS CLUSTER STATE: three Builder CRs
+  # (builders.templates.krateo.io/v1alpha1 — portal-builder, blueprint-builder, controller-builder) in
+  # krateo-system, plus Role+RoleBinding authenticated-get-list-builders granting system:authenticated
+  # get/list on `builders` ONLY. They render unconditionally — no feature flag.
+  # ORDER IS LOAD-BEARING: this pin MUST go live BEFORE frontend 1.6.85, which stops hardcoding the
+  # builder list and reads these CRs via snowplow GET /list?category=builders (#432). Ship them the other
+  # way round and every builder page reads "no Builder is installed in krateo-system".
+  # The Builder CRD is already served at v1alpha1 on 057, so the CRs apply without a frontend-crds bump.
+  # Pre-roll baseline captured so the post-checks cannot be vacuous: 0 Builder CRs in krateo-system, both
+  # RBAC objects ABSENT, and an impersonated read (--as=cyberjoker --as-group=devs
+  # --as-group=system:authenticated) returning Forbidden. Each must flip after this roll.
+  # #282 is copy only: the drafts card reads "Published", the Register step says "controller" for
+  # controllers, and the empty drafts list is hidden.
+  # 1.8.59 (tag -> commit 85bbe19dd291cd62b5b125ea34e40a6e9f8ad0bf, verified by ls-remote).
+  # #275: /controller-builder rebuilt on the blueprint-builder widget structure — drafts card, controller
+  # deliverables (Registering/Installed/Failed/Configure credentials), RestDefinitions registry card. Its
+  # buttons link to /controller-builder/compose, which exists only from frontend 1.6.84 — SO 1.6.84 MUST
+  # BE LIVE FIRST, and it is (installer 0.3.348). Shipping these in the other order gives dead links.
+  # #277: the controller-render-draft RestAction + endpoint Secret oasgen-render-endpoint pointing at
+  # http://oasgen-provider-render.<ns>.svc:80.
+  # NOTE the Secret ships REGARDLESS of whether that service exists. render.enabled is still OFF and is
+  # currently UNREACHABLE — componentValues.oasgen-provider.render is not typed in this chart's schema, so
+  # helm REJECTS it ("additional properties 'render' not allowed"). Diego has decided to KEEP the render
+  # service, so typing that key (with NO default — a default would force render on for every install) is a
+  # separate follow-up. Until then controller Preview reports it needs oasgen-render and Publish stays off.
+  # 1.8.58 (#276) CLOSES A LIVE EXPOSURE: Settings -> Users -> New's password field is now
+  # `format: password` + `writeOnly: true` and reviewBeforeSubmit is GONE, so the value renders masked
+  # and never reaches snowplow /jq — only the /call write body. Verified in the PUBLISHED chart
+  # (templates/form.settings-user-create.yaml lines 54-55, 0 occurrences of reviewBeforeSubmit).
+  # REQUIRES frontend >= 1.6.83, which honours those two keys; 1.6.83 is live on 057 (installer
+  # 0.3.343), so the dependency is satisfied — this pin is inert without it.
+  # Also #274: the my-drafts RestAction serves every builder from one list, plus a controller drafts
+  # card widget that NO page mounts yet. Page and blueprint drafts byte-identical.
   kind: Portal
   # 1.8.2 (#135): fixes the alert detail page — the alert-detail/alert-editdef RESTActions built the
   # apiserver path with a brace placeholder `{name}` but snowplow only substitutes `${ }` jq exprs, so
@@ -901,11 +1691,141 @@ components:
   # change that snowplow missed, serving a v1-8-36 body for two releases. If /portal-builder still
   # reads "Your unfinished drafts" after this lands, that is the CACHE and not the roll: poke
   # krateo.io/cache-poke on card.your-drafts rather than re-rolling.
-  # 1.8.41 (#244): the incident pages read Incidents — header chip with the alert's state, okSince and
-  # "#N of this alert", the three scripts with their last exit codes, I applied it, Close, and a check
-  # history from status.checks. Its RESTActions read the Incident CRD, which incident-controller-crd
+  # 1.8.44: three changes in one release — the publish-chain Register (#246), the palette RESTAction
+  # (#247), and S11c, the composition topology (#248). 1.8.41-1.8.43 are contained in it.
+  #
+  # TWO PRECONDITIONS, BOTH CHECKED ON 057 RATHER THAN TAKEN ON TRUST.
+  # (1) S11c reads FlowChart's architecture fields. The live CRD serves widgetData.data[] with state,
+  #     detail and exception, required [kind,name,uid] — met by frontend-crd 1.6.62, already rolled.
+  # (2) THE RBAC ONE IS THE RISK, and a live `auth can-i` CANNOT answer it before the pin lands: the
+  #     v1-8-44 ServiceAccount does not exist yet, and the CURRENT builderpublishes-v1-8-40 SA — which
+  #     does exist and runs the live controller — answers `no` to creating configmaps too. The real
+  #     instrument is the DERIVED ClusterRole, which today grants configmaps get/list/watch and NO
+  #     create, while granting secrets create because the chart renders a Secret. Those rules are
+  #     derived from what the chart renders, so 1.8.44's new templates/architecture.yaml (a ConfigMap
+  #     per composition, and ungated — the chart's other five templates all sit behind a lookup, this
+  #     one does not, so every render path sees it) should widen that rule the same way. VERIFY
+  #     ClusterRole/builderpublishes-v1-8-44 grants configmaps create IMMEDIATELY AFTER this lands; if
+  #     it does not, every composition's architecture ConfigMap fails to apply and the detail page has
+  #     nothing to read. Do not hand-patch the RBAC — that is a chart fix.
+  #
+  # Helm prunes four objects S3c retired on upgrade: Card author-blueprint-card, Form author-blueprint,
+  # Flex blueprint-builder-ask-cta and RESTAction page-composable.
+  # 1.8.50 (#254): closes the three known Blueprint Builder bugs. (1) A composition-detail node whose
+  # gate is open but which was never created no longer reads "waits for <a parent that is done>"; it
+  # says it was not created and why, carrying the composition's NotSynced exception when that is the
+  # cause. (2) blueprint-create no longer fails with `split cannot be applied to: null` before
+  # core-provider has generated the kind — it reports that the blueprint is still being registered.
+  # Measured on 057 BEFORE this roll, so the fix is checkable after it: that defect produced 48
+  # malformed-path 401s in 30 minutes on snowplow's prewarm path (logged with the template error
+  # sitting in the request path), and nightly-review independently counted 8,459 observations
+  # overnight. (3) CI now validates every resolved Form in test-builder-install against the released
+  # Form CRD, which caught a null stringSchema fixed in the same release.
+  # 1.8.51 (#255): fixes the marketplace-detail filter. The prewarm resolves that RESTAction with no
+  # ?extras.name, so its own `.name` is null and `.entries[$n]` fails — gojq renders that identically
+  # to a null key in from_entries, which is why the log text alone could not localise it (jq says
+  # "Cannot index object with null"). An absent name is now found:false, nameless compdef entries are
+  # dropped defensively, and a named resolve is unchanged. Five widgets were failing: the four
+  # marketplace-detail-* and blueprint-install-page-header. Baseline before this roll, so it is
+  # checkable after: 336 occurrences per 30 minutes on 1.8.50, all with an empty traceId (prewarm
+  # path only, nothing user-facing). Confirmed NOT a snowplow cache artifact — they survived a cold
+  # cache when snowplow 1.12.16 replaced the pod.
+  # 1.8.52 (#256): adds the RESTAction blueprint-render-draft, and supersedes 1.8.51 (which it
+  # contains, marketplace-detail filter fix included). Preview used to send the WHOLE chart in
+  # blueprint-render's ?extras on a GET, and the gateway refuses HTTP/2 requests whose headers exceed
+  # 16 KB — core-provider-agent's 12.4 KB chart becomes 20.3 KB of URL, so Preview 431'd on any
+  # realistic chart. The draft is now written to krateo-preview as one ConfigMap, POSTed in a body as
+  # the user, rendered BY NAME through this RA, and deleted as soon as the render answers.
+  # 1.8.53 (#257): STEP 2 of the ordered pair — frontend-crd 1.6.75 had to be live first, and was,
+  # confirmed not by reading the pin but by writing itemTemplate.rowActionsDisplay to a probe Listy on
+  # 057 and reading the value back. That distinction matters: the field's path is structural, so under
+  # the old CRD the apply SUCCEEDS with the field pruned — a read-back is the only check that separates
+  # 'served' from 'silently dropped'.
+  # Adds the RESTActions my-drafts and unowned-drafts plus Listy lists on /blueprint-builder and
+  # /portal-builder, and REMOVES restaction.preview-drafts, table.preview-drafts, card.your-drafts and
+  # paragraph.your-drafts, which helm prunes on upgrade.
+  # The 229 legacy sandbox objects are NOT touched: they appear as 'Unowned drafts' with Adopt and
+  # Discard. Nothing is deleted by this roll.
+  # 1.8.55 (#258): the Platform Review — /reviews with Proposals and Runs tabs, admin-tier detail routes,
+  # 70 review templates and the decision forms. Reject and 'record as change request open' write
+  # spec.decision with the caller's token.
+  # STEP 2 of an ordered pair. nightly-review-crd 0.1.23 had to serve spec.decision first, and did —
+  # proven by WRITING a probe Proposal with spec.decision and reading it back, not by comparing pins,
+  # because spec is structural and a prune returns 200. Against the old CRD a Reject would have been
+  # reported by the page and never recorded by the cluster.
+  # The probe also proved the MutatingAdmissionPolicy is live and unspoofable: decidedBy was written as
+  # 'probe-user' and came back stamped with the real authenticated identity, with decidedAt added.
+  # Effective phase is decision-first (only Merged status overrides), actions are gated by phase
+  # (Proposed both, PrOpen reject-only, otherwise none), and Reject's reason is optional.
+  # 1.8.56 (#259): fixes AT THE SOURCE the malformed-dial class I measured on 057 — 19 RestActions that
+  # built an apiserver path by concatenating a `//` fallback and then dialled it. snowplow 1.12.21 has no
+  # step `condition`, so the fix is a dependsOn.iterator that returns [] when the input is missing, which
+  # means THE STEP DOES NOT RUN rather than running against a placeholder. That is the right shape and
+  # the only one that works for the sentinel case: changing the fallback string would just move the 404.
+  #   review-proposal      `(.name // "")`      -> /…/builderpublishes/review-        measured x601/20min
+  #   blueprint-detail     sentinel fake GVR    -> /apis/none.krateo.io/v1/none       measured x358/20min
+  #   composition-arch.    empty ns + suffix    -> /api/v1/namespaces//configmaps/-…  measured x67/20min
+  # Root causes per the author: review-proposal was the phase-1 prewarm resolving with extras=nil
+  # (phase1_walk.go:1610); blueprint-detail/comps had NO dependsOn at all and RACED compdef on map order
+  # (sort.go:28) — that race, not a missing value, is why the sentinel fired.
+  # WHY THIS PIN AND snowplow 1.12.22's #288 GUARD ARE NOT REDUNDANT, and the measurement that proved it:
+  # the guard rejects DNS-invalid path segments, so it closes the review- and -architecture shapes but
+  # CANNOT close the sentinel — `none.krateo.io/v1` and `none` are valid DNS-1123, and snowplow must not
+  # refuse them, because it cannot tell a deliberate fake GVR from a legitimate one not yet discovered
+  # (the pre-CRD case it correctly dials and retries). Measured on 1.12.22 BEFORE this pin, 45-minute
+  # window: review- 0, -architecture 0, none.krateo.io STILL 95. Exactly as predicted, and the 95 also
+  # served as the positive control proving the log was not merely quiet. This pin closes the third.
+  # TWO BEHAVIOUR CHANGES TO KNOW:
+  #  (a) composition-detail/-editdef/-events/-resources `found` read `/namespaces//<plural>`, i.e. an
+  #      ALL-NAMESPACES list, so the #72/#74 scoping never applied. Now truly namespaced, same output,
+  #      needs strictly less privilege. NOTE it is NOT a chart-RBAC change — #259 touches no Role, and
+  #      portal grants users nothing here; the list ran under the CALLER's rights. So on 057, where
+  #      admins are cluster-admin, it worked before and works after: 057 CANNOT demonstrate this fix.
+  #      Its real effect is on installs where users are not cluster-admin, where that step was 403ing all
+  #      along and continueOnError hid it — i.e. this is likely a functional fix for those installs, not
+  #      a privilege reduction for this one.
+  #  (b) resource-detail `object` now runs after `disco`, and alert-editdef DEGRADES with "The Alert
+  #      schema could not be read" instead of failing the resolve. Verify (b) by finding that STRING: a
+  #      resolve that no longer fails is indistinguishable from one that was never exercised.
+  # Also: portal now ships scripts/lint-ra-paths.py, so this class has a lint rather than only a fix.
+  # 1.8.57 (#260): FIXES A LIVE USER-FACING REGRESSION THAT 1.8.56 INTRODUCED AND THAT I ROLLED AND
+  # "VERIFIED" AS 0.3.333. Every composition detail page resolved nothing — "composition · Unknown",
+  # empty architecture — for any caller able to list cluster-wide, i.e. admins. Measured by the author
+  # over real 057 data: 1 of 44 compositions resolving before, 44 of 44 after.
+  # THE MECHANISM, and it is a good trap to know: 1.8.56 made composition-detail, -editdef, -events and
+  # -resources fan out `found` as PER-NAMESPACE LISTs over 46 kinds. snowplow's cluster-list collapse
+  # (resolvers/restactions/api/cluster_list.go:156, GVR taken from the FIRST element only at :664)
+  # replaces an iterator of namespaced lists with ONE cluster list of the first element's kind, for a
+  # caller allowed to list it cluster-wide. So every other kind went unread. A CLUSTER-SCOPE path is not
+  # collapsed (:715), which is the fix: one cluster-scope list per kind, plus a userAccessFilter so a
+  # namespace-scoped tenant still resolves only its own (#72). The snowplow side is filed as #351, and
+  # the author confirms per-kind cluster-scope is the right shape REGARDLESS of #351 — portal's README
+  # now forbids fanning out per-namespace LISTs over different kinds, so nobody reverts it later.
+  # MY VERIFICATION FAILURE, recorded because the lesson outlives the bug: on 0.3.333 I flagged this very
+  # behaviour change and concluded "057 CANNOT demonstrate this fix; it worked before and works after."
+  # Wrong in the worst direction — on 057 it worked before and BROKE after, for exactly the
+  # cluster-wide-capable callers I said were unaffected. I verified that the INTENDED fix landed (the
+  # sentinel dials went 352 -> 0 on the same pod either side of the content landing) and never checked
+  # that anything else still worked. CONFIRMING A FIX AND CONFIRMING NO REGRESSION ARE DIFFERENT TESTS.
+  # For a change touching the four RestActions that serve the composition pages, "does a composition page
+  # still resolve" was the obvious second test. The author's 1.8.56 test had the same gap: it asserted the
+  # requests were BUILT; 1.8.57's asserts the composition RESOLVES.
+  # KNOWN COST, accepted: the userAccessFilter puts these four high-traffic RestActions into the
+  # UAF-declaring set, so snowplow DECLINES their L1 puts — the cache key does not fold UAF scope until
+  # v7/1.13.0. The widgets carrier of that decline already runs ~10,100/hour on 057. So the composition
+  # pages are now UNCACHED, correctness over cache, and the author has noted it on #351 so the
+  # decline-rate rise is not later read as a regression.
+  # Rolled INSIDE an agreed benchmark hold, on Diego's direct go, after telling the benchmark owner first
+  # — a live user-facing regression outranks a baseline that can be re-run. Confirmed with them that the
+  # run only builds pages in /portal-builder and never touches these four RestActions, so it is not
+  # perturbed. Content-only: no snowplow restart.
+  # Chart diff is Chart.yaml plus exactly those four restaction templates; userAccessFilter occurrences in
+  # composition-detail go 3 -> 5.
+  # 1.8.64 (#244, #289): the incident pages read Incidents (header chip, the three scripts with their
+  # last exit codes, Close, check history from status.checks), and an alert's page gains Pause and
+  # Resume (krateo.io/paused). Its RESTActions read the Incident CRD, which incident-controller-crd
   # installs.
-  version: 1.8.41
+  version: 1.8.64
   deps:
   - frontend
   - git-provider
@@ -942,7 +1862,16 @@ components:
 # releases. The portal's agents.enabled flag (below, componentValues) defaults FALSE in the chart,
 # so during the gap the sidebar entry is HIDDEN rather than pointing at pages that 404 — a clean
 # disappearance instead of a broken link.
+  # 1.8.45: co-versioned with portal, as always.
+  # 1.8.46: co-versioned with portal, as always.
+  # 1.8.47: co-versioned with portal, as always.
+  # 1.8.48: co-versioned with portal, as always.
+  # 1.8.49: co-versioned with portal, as always.
 - name: portal-agents
+  # 1.8.63: co-versioned with portal, as always — one tag, every chart under helm/ (builder-publish
+  # also publishes at 1.8.63 but is registered by the portal chart, not pinned here).
+  # 1.8.62: co-versioned with portal, as always — one tag, every chart under helm/. Carries none of
+  # #283; it moves only to keep the pair equal.
   kind: PortalAgents
   # MUST equal the portal tag that ships the split: release-oci versions every chart under helm/
   # from the same tag, so portal and portal-agents always carry the SAME version. 1.8.19 is the
@@ -951,19 +1880,98 @@ components:
   # 1.8.38: co-versioned with portal, as always.
   # 1.8.39: co-versioned with portal; content-only, no CRD change, no image.
   # 1.8.40: co-versioned with portal; content-only, no CRD change, no image.
-  # 1.8.41: co-versioned with portal; byte-identical here, lockstep only.
-  version: 1.8.41
+  # 1.8.44: co-versioned with portal, as always.
+  # 1.8.50: co-versioned with portal, as always. Verified byte-identical to 1.8.49 outside Chart.yaml.
+  # 1.8.51: co-versioned with portal, as always. Verified byte-identical to 1.8.50 outside Chart.yaml.
+  # 1.8.52: co-versioned with portal, as always. Verified byte-identical to 1.8.51 outside Chart.yaml.
+  # 1.8.53: co-versioned with portal, as always. Verified byte-identical to 1.8.52 outside Chart.yaml.
+  # 1.8.55: co-versioned with portal. Verified byte-identical to 1.8.54 outside Chart.yaml.
+  # 1.8.56: co-versioned with portal, but NOT byte-identical this time — breaking the run of co-version
+  # notes above, so do not skim it as one. templates/restaction.agent-detail.yaml gains an input gate of
+  # the same #259 class (gated on the ?extras name; without one the step does not run). Checked by
+  # diffing the packaged trees, which is how the difference was noticed at all.
+  # 1.8.57: co-versioned with portal. Verified byte-identical to 1.8.56 outside Chart.yaml (129998 B at
+  # both), so portal-agents carries none of the fix — it moves only to keep the pair equal.
+  # 1.8.61: co-versioned with portal, as always. Verified byte-identical to 1.8.60 outside Chart.yaml
+  # (107 files, 470601 B on both), so portal-agents carries none of #281/#282 — it moves only to keep
+  # the pair equal. Caught because the portal-only bump in 0.3.353 left this at 1.8.60, which breaks
+  # the same-version invariant stated at the top of this block; 0.3.353 was therefore never deployed.
+  # 1.8.64: co-versioned with portal.
+  version: 1.8.64
   deps: ['portal']
   tier: platform
   feature: portal
   chart: portal-agents
-- name: krateo-helm-render-service
-  kind: KrateoHelmRenderService
-  version: 0.3.2
+  # 0.4.0 (#19): /render accepts lookupStubs and returns a `lookups` report. LEG 1 OF 3 of the Preview
+  # gate-stubs feature. A request without stubs renders exactly as before, and a parity test pins the
+  # stubbed path to action.Install's output.
+- name: blueprint-render-service
+  # RUN 2 DONE: the old krateo-helm-render-service component is gone. Its CR was deleted FIRST, while
+  # krateohelmrenderservices-v0-4-0-controller was still running, so composition.krateo.io/finalizer was
+  # released and the leaf helm release uninstalled itself cleanly (CR 0, leaf 0, Deployment/Service 0,
+  # Secret helm-render-endpoint gone). Dropping this entry in the same run as adding the new one would
+  # have had helm prune the CD and the CR together with no ordering guarantee — CD first means the
+  # controller is gone and the finalizer can never be released, leaving a Terminating CR that needs
+  # hand-edited finalizer surgery. Two runs, CR-then-pin, avoided that.
+  kind: BlueprintRenderService
+  version: 0.5.0
   tier: platform
   feature: portal
-  chart: krateo-helm-render-service
+  chart: blueprint-render-service
+  # Same image (ghcr.io/krateo-platformops/helm-render-service) — only the CHART was renamed.
+  # Release name blueprint-render-service makes the fullname collapse to blueprint-render-service,
+  # so no fullnameOverride and no componentValues are needed. Renders Deployment + Service on :8080
+  # and ships its OWN endpoint Secret blueprint-render-endpoint with
+  # server-url=http://blueprint-render-service.krateo-system.svc:8080 (verified by helm template).
+  # ASYMMETRY WORTH KNOWING: this renderer is its own component and chart; the controller renderer is
+  # a SUB-DEPLOYMENT of oasgen-provider. They share a naming convention but not a structure, so do
+  # not go looking for a controller-render-service component here.
+- name: controller-render-service
+  # 0.26.1 fixes a defect in 0.26.0's NEW controller-render-service chart: its values.schema.json had
+  # `additionalProperties: false` on the `global` block, but the composition engine injects ten keys
+  # there at install time (compositionId/Name/Namespace/Group/Resource/ApiVersion/Kind/InstalledVersion,
+  # krateoNamespace, gracefullyPaused), so helm REFUSED the install — "at '/global': additional
+  # properties ... not allowed". Live effect on 057: the ControllerRenderService composition sat
+  # Ready=False (reason Creating) with NO helm release ever created, so the renderer never came up and
+  # Controller Builder Preview stayed down until this pin. blueprint-render-service omits that line for
+  # exactly this reason; 0.26.0 copied its structure but not the omission. Root stays strict; only
+  # `global` is permissive, and the reason is documented in the schema so it is not re-tightened.
+  # The controller renderer: previews the CRDs a set of RestDefinitions would generate (POST /render),
+  # backing the portal's Controller Builder Preview via the controller-render-draft RESTAction. Placed
+  # next to blueprint-render-service deliberately — these are the two render services and they are now
+  # packaged identically.
+  #
+  # WHY THIS PIN EXISTS. Until oasgen-provider 0.26.0 this was a conditional sub-deployment of the
+  # oasgen-provider chart, gated on six componentValues keys. That made it the ONLY Krateo render
+  # service needing install-time configuration: a fresh install left them unset, so there was no render
+  # service and Controller Builder Preview and Publish were simply off, while blueprint-render-service
+  # worked out of the box (installer#434). The chart's defaults are now correct for composition use
+  # (snowplowEndpoint.enabled true, name controller-render-endpoint, port 8080 on both the container and
+  # the Service), so this pin needs NO componentValues — exactly like its sibling.
+  #
+  # Version is the oasgen-provider TAG: keep it equal to the oasgen-provider and oasgen-provider-crd
+  # pins. feature: portal, not oasgenProvider — the consumer is the portal's Controller Builder, and it
+  # matches blueprint-render-service. No deps: it ships no CRDs and reads nothing from the cluster (the
+  # OAS documents arrive in the request), so it has nothing to wait for.
+  kind: ControllerRenderService
+  # 0.27.0: co-versioned with oasgen-provider (the triple moves together). Verified byte-identical to
+  # 0.26.1 outside Chart.yaml - the render split landed in 0.26.x and nothing in it changed here.
+  version: 0.27.0
+  tier: platform
+  feature: portal
+  chart: controller-render-service
 - name: oasgen-provider
+  # 0.26.0 is a BREAKING CHART CHANGE (oasgen-provider#165): `render.*` is gone from this chart's
+  # values and `render.enabled=true` is now REJECTED rather than ignored. The oasgen-render service it
+  # used to deploy conditionally now ships as its own chart, controller-render-service, pinned below.
+  # That repo now publishes THREE charts from one tag, so oasgen-provider, oasgen-provider-crd and
+  # controller-render-service are a co-versioned TRIPLE and must move together — the invariant
+  # installer#432 proposes enforcing in CI.
+  # componentValues.oasgen-provider.render is REMOVED from values.schema.json in this same change.
+  # componentValues.<component> is additionalProperties:false, so a cluster still carrying that key in
+  # its live spec has the upgrade REJECTED. On krateo-057 the key was dropped FIRST, by a separate
+  # `helm upgrade -f` on 0.3.359, which also deleted the old render objects — which is what makes the
+  # handover below collision-free.
   kind: OasgenProvider
   chart: oasgen-provider
   # 0.23.0 (0.21.1 -> 0.23.0, lockstep with oasgen-provider-crds): resolves the delete-finalizer
@@ -971,7 +1979,29 @@ components:
   # Big-version wrapper-CRD jump (OasgenProvider v0-21-1 -> v0-23-0 CDC controllers) — may need a
   # cdc restart + CRD helm-ownership nudge on the live roll. oasgen is idle on 057 (0 RestDefinition
   # CRs), so data-plane blast radius is just this deployment's restart.
-  version: 0.23.0
+  # 0.27.0: TWO changes; the second is not in the release notes and is the one that moves cluster state.
+  #   (a) additionalStatusFields becomes APPEND-ONLY instead of immutable. The CEL is a prefix compare,
+  #       `size(self) >= size(oldSelf) && oldSelf.all(i, v, self[i] == v)`; entries may be added at the
+  #       END, and removing/renaming/reordering is still refused. This is what unblocks
+  #       github-provider-kog 0.3.2, whose PullRequest list goes ['number','html_url','state'] ->
+  #       + 'merged','merged_at' - verified a prefix-preserving append across all 29 rd-*.yaml.
+  #   (b) NEW: the provider now creates ONE MutatingAdmissionPolicy per distinct spec.resourceGroup to
+  #       stamp krateo.io/oas-version, and clusterrole.yaml grows create/get/list/watch on
+  #       admissionregistration.k8s.io mutatingadmissionpolicies + ...bindings. 057 is k8s 1.36 so this
+  #       ACTIVATES. Expected: 2 groups (github.krateo.io x29, petstore.example.io x1) -> 2 policies,
+  #       krateo-oas-version-{github-krateo-io,petstore-example-io}; cluster goes 2 -> 4.
+  #   UPGRADE NOTE, read before assuming this is quiet: status.resourceHash is NEW in 0.27.0 (absent from
+  #   0.26.1's types.go AND its CRD), and the regeneration gate is
+  #   `oasHash != Status.OASHash || resHash != Status.ResourceHash`. resourceHash() never returns empty,
+  #   so "" != <hash> is true for EVERY RestDefinition and all 30 regenerate on first reconcile - ~60
+  #   CRD re-applies against 77+ live CRs. Safe because nothing under internal/tools/oas2jsonschema or
+  #   internal/tools/crd changed between the tags, so the renders are byte-identical; but it is also the
+  #   ONLY reason the policies reach an existing install at all. Once resourceHash is populated,
+  #   generateAndApplyCRDs never runs again on a stable install and EnsureVersionPolicy is only called
+  #   from inside it - so no future policy change can reach this cluster until oasgen-provider#173 lands.
+  #   #172 (slug collision: [^a-z0-9]+ -> '-' collapses github.krateo.io and github-krateo.io onto one
+  #   object, second group silently never stamped) CANNOT fire here - the two groups do not collide.
+  version: 0.27.0
   deps:
   - oasgen-provider-crd
   tier: platform
@@ -1001,22 +2031,28 @@ components:
   - mongodb-operator
   tier: observability
   feature: portal
-  # HyperDX behind the agentgateway in Gateway path mode (#100). Unlike the portal APIs
-  # (authn/snowplow/sse-proxy) which share the :80 platform-http listener under a /path, HyperDX is a
-  # Next.js root-asset app (hardcoded /_next, /assets) so it CANNOT live under a path prefix — it gets
-  # its OWN listener (platform-hdx:3000), a public route at /, no rewrite. svcMatch is the live HyperDX
-  # app Service (the clickstack chart's fullnameOverride krateo-clickstack), resolved by inst.svcname for
-  # the route backend. gatewayListener/gatewayPort are the FIRST use of a per-component listener: the four
-  # portal pins carry neither, so the platformRoutes generator's default-fallbacks keep them on
-  # platform-http:$platformPort byte-identically. No expose:true, so no service-flip / host HTTPRoute —
-  # HyperDX is reached only through the gateway route. FRONTEND_URL is computed from the gateway :3000
-  # origin into clickstack.hyperdx.config (compositions.yaml), replacing the interim 057 override.
+  # HyperDX IS NOT PUBLICLY ROUTED, deliberately. It was: a Next.js root-asset app (hardcoded /_next,
+  # /assets) cannot live under a path prefix, so it had its OWN listener (platform-hdx:3000) with a
+  # public route at /. That put the whole trace search over ClickHouse on the platform LoadBalancer,
+  # and — because the TLS upgrade only moved the SHARED listener — it sat there on plaintext HTTP
+  # beside the HTTPS portal, with HyperDX's own login as the entire perimeter and the login itself
+  # crossing the internet in the clear.
+  #
+  # An operator console is not an end-user surface. The portal already reads the same ClickHouse
+  # through snowplow's RestActions, which is what users are meant to see; HyperDX is for operators and
+  # is reached in-cluster (kubectl port-forward svc/krateo-clickstack 3000). Nothing in the portal
+  # depends on the public route: the alert-detail deep-links are gated on a console URL that is unset,
+  # so they render inert either way.
+  #
+  # Restoring it means BOTH a listener and the TLS block that listener needs — agentgateway-policies
+  # refuses a mixed TLS posture, so a plaintext re-add fails the render rather than shipping quietly.
+  # And prefer gatewayAuth: authenticated over public if it ever comes back.
+  #
+  # svcMatch stays: it names the live HyperDX app Service (the clickstack chart's fullnameOverride) for
+  # anything that still resolves it. No expose:true, so no service-flip / host HTTPRoute either.
+  # FRONTEND_URL is consequently NOT set by the installer — with no external origin there is no honest
+  # value to compute, and the chart default stands (compositions.yaml gates on gatewayPort).
   svcMatch: krateo-clickstack
-  gatewayPath: /
-  gatewayRewrite: false
-  gatewayAuth: public
-  gatewayListener: platform-hdx
-  gatewayPort: 3000
 - name: otel-collector-deployment
   kind: OtelCollectorDeployment
   version: 0.3.7
@@ -1149,8 +2185,20 @@ components:
   tier: observability
   feature: coreAgents
 - name: model-configs
+  # 0.1.2 adds an optional per-slot `reasoningEffort` and the slot `flashLow`
+  # (ModelConfig gemini-flash-low, gemini-3.8-flash at reasoningEffort: low), for the Autopilot
+  # page-building A/B whose baseline put 69% of the chain's reasoning tokens on snowplow-agent.
+  # INERT until an agent's componentValues.<agent>.modelConfig.name is set to gemini-flash-low —
+  # nothing references the new slot, so the pin bump alone changes no agent's behaviour, and
+  # gemini-flash/gemini-pro render byte-identically (verified against 057's live values).
+  # reasoningEffort is emitted ONLY on the agentgateway route path (kagent sends it as OpenAI
+  # reasoning_effort, agentgateway maps it to Gemini 3 thinkingLevel); on the vertexAI/local paths
+  # the field does not exist and the chart drops it. 057 IS on the route path (live gemini-flash
+  # has provider OpenAI + the /llm/v1 baseUrl), so the effort lands here. A bare `helm template`
+  # with chart defaults takes the vertexAI branch and shows NO effort — that render is the wrong
+  # instrument for this question, not evidence the feature is broken.
   kind: ModelConfigs
-  version: 0.1.1
+  version: 0.1.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
@@ -1298,6 +2346,27 @@ components:
   tier: observability
   feature: coreAgents
 - name: krateo-autopilot
+  # 0.6.4 (ANNOTATED tag -> commit 4daba2f..., = main HEAD).
+  # #144: the orchestrator prompt learns the controller flow — Autopilot drives the Controller
+  # Builder's six authoring verbs instead of being told to hand a whole RestDefinition over inline.
+  # PROMPT-ONLY: the prompt text lives in cm/krateo-prompts-eng, NOT in the Agent CR's
+  # spec.declarative.systemMessage (which is a short pointer), so that ConfigMap is where a roll is
+  # verified — see the agent-prompt-grep trap recorded earlier this session.
+  # MUST FOLLOW frontend 1.6.86, and does: that went live as installer 0.3.357, verified by the
+  # bundle going from ZERO occurrences of all six verb names to non-zero (7/6/6/8/4/4) with
+  # previewRestDef and publishRestDef as working non-zero controls on both sides. The reverse window
+  # fails safe — the prompt would name verbs the frontend does not serve — but nothing is written.
+  # Two-sided pre-roll baseline of cm/krateo-prompts-eng (4 keys, 52764 B), so neither half of the
+  # check can be vacuous:
+  #   presence side, must RISE above 0: "Authoring a controller" 0, controllerStart 0,
+  #     controllerRemoveKind 0
+  #   absence side, must FALL to 0: the retired inline-publish text — `"restDefinition":` 2 and
+  #     "Preview a complete draft" 1
+  # An absence check alone would pass against an empty or unrendered ConfigMap; pairing it with the
+  # presence side is what makes the pair meaningful.
+  # 0.6.3 (#143) is PROMPT-ONLY: the orchestrator now publishes a controller as its own chart in a
+  # repo named for the kind, and the retired krateo-oas target is dropped from the prompt. No image
+  # or chart-structure change, so nothing to verify beyond the prompt text reaching the Agent CR.
   kind: KrateoAutopilot
   # 0.4.8 adds ONE thing to the chart: generic Kubernetes knowledge (files/knowledge/*.md) appended
   # to the K8S-AGENT's system prompt, gated on knowledge.kubernetes.playbook / .architecture — both
@@ -1516,7 +2585,68 @@ components:
   # BYTE-IDENTICAL, so there are no new installer CR keys — a straight pin bump. No image moves.
   # VERIFY BY THE MOUNTED SECRET: markers "delegation itself" 0->1 and "Markdown" 0->1 in the pulled
   # chart. config-hash on deploy/autopilot reads 13945332610198519870 before this roll.
-  version: 0.5.13
+  # 0.6.0: PROMPT ONLY again. It teaches the chart verbs the frontend introduced at 1.6.65
+  # (chartPut/chartDelete/chartLink), makes core-provider-agent the sole blueprint author, and moves
+  # registration to the Install step on /blueprint-builder. So it carries the SAME frontend >= 1.6.66
+  # ordering constraint as core-provider-agent above: on an older frontend the agent edits an open
+  # chart blind. Moved in the SAME installer version as core-provider-agent on purpose — that pin is
+  # mcpBackend, so it re-rolls the whole fleet through mcpBackendHash, and pairing them spends one
+  # fleet restart instead of two.
+  # The chart's appVersion reads 0.1.0 and that is the convention here, not a mistake: 0.5.13, the
+  # version live today, reads 0.1.0 as well. No image moves.
+  # VERIFY BY THE MOUNTED SECRET, not the ConfigMap: config-hash reads 14017113924344901936 on
+  # deploy/autopilot and 10290822186941988922 on deploy/core-provider-agent before this roll.
+  # 0.6.1 (#140, tag 182ee5b): ONE prompt paragraph in files/prompts-eng.yaml. The orchestrator now
+  # briefs a page to frontend-agent IN THE PERSON'S WORDS, not in widget kinds — "a heading that reads
+  # Krateo pods", "a table of the pods in krateo-system" — and leaves the choice of kind to
+  # frontend-agent, whose own prompt (1.5.3) knows that a page heading is a PageHeader.
+  # A GREP WILL LOOK LIKE A REGRESSION HERE, so read the diff not the match: the string "PageHeader or
+  # Paragraph/Typography heading" is ADDED by this version, not removed. It is added as a QUOTED EXAMPLE
+  # OF THE MISTAKE ("a brief that offered ... invited the wrong one, and a page heading is a
+  # PageHeader"), directly under the new instruction. The old text offered the choice; the new text cites
+  # having offered it as the bug.
+  # Chart diff is Chart.yaml, Chart.lock (dependency digest refresh) and files/prompts-eng.yaml — no
+  # template change, no image move, and no ADK braces introduced. Pairs with frontend-agent 1.5.3,
+  # already live: 0.6.1 stops naming kinds, 1.5.3 makes the specialist pick the right one.
+  # VERIFY BY THE MOUNTED SECRET as above — config-hash on deploy/autopilot must move. It moved:
+  # 6129930329762181307 -> 13533324902980676084.
+  # 0.6.2 (#141): supersedes 0.6.1 and exists because of a LESSON, not a bug in the rule. 0.6.1 said the
+  # right thing and then QUOTED the wrong phrasing as an example — "a brief that offered 'PageHeader or
+  # Paragraph/Typography heading' invited the wrong one". I flagged that quote in the 0.6.1 note as a GREP
+  # hazard (a search looks like a regression because the bad string is ADDED). The real hazard was worse:
+  # rr-20260930-0200's analyse stage caught AUTOPILOT COPYING THE QUOTED ANTI-PATTERN into a brief
+  # (proposal p-d3d9b5b145ffbafd). 0.6.2 states the rule without quoting the counter-example.
+  # CARRY THIS BEYOND THIS CHART: do not put an anti-pattern verbatim in a prompt, even labelled as
+  # wrong. The model has the string and the salience, and the label is the weakest part of the context.
+  # This is also the first fleet change that the nightly review found rather than a human — the analyse
+  # stage (nightly-review 0.1.25) read the agent's own conversations and named it.
+  # Chart diff is Chart.yaml, Chart.lock (dependency digest) and files/prompts-eng.yaml; occurrences of
+  # 'PageHeader or Paragraph' go 1 -> 0, checked by grepping both packaged trees. No template change, no
+  # image move. VERIFY BY THE MOUNTED SECRET: config-hash on deploy/autopilot reads
+  # 13533324902980676084 before this roll and must move.
+  # 0.6.5: PROMPT ONLY (autopilot#145). Verified by unpacking both charts: the ONLY substantive diff is a
+  #   single line in files/prompts-eng.yaml under the "Authoring a controller" section (cm/krateo-prompts-eng);
+  #   Chart.lock differs only by its regenerated timestamp (no dependency moved) and Chart.yaml only by
+  #   version + sources URL. No image change, no template change.
+  #   The change: when the request asks to SEE the result (preview it, show me, render it, try it), the model
+  #   must END that same reply with {"verb":"previewRestDef"} after the last edit, instead of stopping at the
+  #   edits and offering chips for a step the person already asked for. publishRestDef is never added unless
+  #   the person asked to publish - a preview is not an approval. When a step needs the person's choice, it
+  #   emits no preview and no chips, asks the one question, and previews once answered.
+  #   ORDERING, load-bearing: this REQUIRES frontend >= 1.6.88. Before 1.6.88 the frontend silently drops a
+  #   trailing previewRestDef, so the new prompt would be harmless but inert. frontend 1.6.88 went in as
+  #   installer 0.3.368, immediately before this pin - do not roll this one ahead of it.
+  # 0.6.6: PROMPT ONLY (autopilot#146), closing the gap verbs-check-4 exposed. Chart-diffed against
+  #   0.6.5: only files/prompts-eng.yaml differs apart from Chart.yaml (2 lines each way), and
+  #   Chart.lock differs ONLY by its regenerated timestamp - no dependency moved. No image, no template.
+  #   THE GAP: when the person NAMES a verb and it comes back with a single candidate - petstore's
+  #   confirm-only collection PUT /pet is the case that surfaced it - the agent was asking a question
+  #   instead of confirming. The existing "ask one question when the request does not settle it" rule
+  #   was firing on a request that DID settle it. 0.6.6 makes it confirm in the same reply.
+  #   ORDERING: goes with frontend 1.6.89 (installer 0.3.372, immediately before). No hard dependency
+  #   between them - 1.6.89's #440 fixes the refused-chip ICON and this fixes the verb CONFIRMATION -
+  #   but they are verified together by the verbs-check-5 run, so keep the pair on one order.
+  version: 0.6.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -1669,7 +2799,14 @@ components:
   #   kubectl get deploy frontend-agent -o jsonpath='{.spec.template.metadata.annotations.kagent\.dev/config-hash}'
   # It reads 3492187988851374085 before this roll, and the marker goes 0 -> 1 in secret/frontend-agent
   # config.json. If the hash does not move, bounce the pod.
-  version: 1.5.2
+  # 1.5.3 (#16): a prompt fix, and its own pin line rather than a ride on the frontend chart — the fix
+  # ships in the AGENTIKO frontend-agent chart (oci://ghcr.io/krateo-agentiko/charts/frontend-agent),
+  # NOT in krateo-platformops/frontend. Worth stating because the two move together in conversation and
+  # a prompt fix that quietly did not land is invisible: the page renders, just wrongly.
+  # The rule: a page's heading or title is a PageHeader, the FIRST CHILD of the root Flex — never a
+  # Paragraph, never a Card title. Same verify-by-the-field instruction as above applies; the prompt
+  # reaches the pod through secret/frontend-agent, so read the config-hash annotation, not a ConfigMap.
+  version: 1.5.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -1694,7 +2831,25 @@ components:
   agent: true
 - name: core-provider-agent
   kind: CoreProviderAgent
-  version: 0.57.0
+  # 0.58.0 (#29): it states it is the SOLE blueprint author and no longer claims it can apply or publish —
+  # the prompt catching up with the retirement of krateo-blueprint-agent. Render diff is the Agent
+  # description/a2aConfig plus the prompt ConfigMap; tool grants unchanged; the example chart is now
+  # gate-tested in CI.
+  # THIS RE-ROLLS THE FLEET, deliberately and with sign-off: the pin carries mcpBackend: true, so the
+  # version change moves gateway.mcpBackendHash and therefore every agent's rollGuard. Expect every agent
+  # pod to restart, and expect to bounce autopilot-bench by hand (it is not installer-managed).
+  # 0.59.0/0.60.0/0.61.0: descriptor-first authoring, then a gate that ingests the way the 1.6.64
+  # frontend does (so a chart's declared edges are reported as ENFORCED), then an edit mode for an open
+  # chart. 0.61.0 contains the other two. Prompt and gate only — no values changes, so no new installer
+  # CR keys.
+  #
+  # ORDERING: THIS MUST ROLL AFTER frontend 1.6.66, and that is new as of 0.60.0. Earlier I recorded
+  # this component as having no ordering dependency, which was true of 0.58.0/0.59.0 — I checked
+  # 1.6.61...1.6.63 for lint or schema drift and found none. It stopped being true when the gate kernel
+  # was pinned to the 1.6.64 frontend: ahead of the frontend, the gate passes charts as "edges enforced"
+  # that the live frontend does not gate. The reverse skew was checked too — 1.6.64...1.6.66 touches
+  # nothing matching lint, schema, gate or verb — so a frontend AHEAD of the pinned kernel is fine.
+  version: 0.61.0
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
@@ -1802,7 +2957,19 @@ components:
 # reviews the platform, writes Proposal objects you can read, and opens nothing. Two switches have to
 # be thrown deliberately before it can reach a repository.
 # ---------------------------------------------------------------------------------------------
+  # 0.1.12: NOT byte-identical — description text only. `Refused` stays in the Proposal phase enum and
+  # `refused` stays on ReviewRun status, both re-described as historical, because two Proposal objects
+  # on 057 sit in exactly that phase and removing the value would invalidate them on their next status
+  # write. A schema that cannot represent what is already stored under it is the worse outcome.
+  # 0.1.13: BYTE-IDENTICAL, lockstep only.
+  # 0.1.14: NOT byte-identical — ReviewRun gains truncated/truncatedAtChars/droppedChars per
+  # evidence source, and `empty` is re-described because it is no longer degradation on its own.
+  # 0.1.15: BYTE-IDENTICAL, lockstep only — the range touches evidence.py and tests.
 - name: nightly-review-crd
+  # 0.1.29: lockstep with nightly-review, one tag. The CRDs DID change this time (proposal.crd.yaml
+  # and reviewrun.crd.yaml both differ, 47660 -> 49549 B) but gained only OPTIONAL fields — verified by
+  # diffing the packaged trees for any new `required` entry, of which there are none. That matters
+  # because a newly-required field would strand stored CRs on a rollback.
   kind: NightlyReviewCrds
   chart: nightly-review-crds
   # ReviewRun (an event, pruned) and Proposal (a decision record, kept). Separate CRDs because they
@@ -1813,10 +2980,141 @@ components:
   # (not Ready=False), which a sweep filtering on Ready==False misses entirely.
   # 0.1.2: BYTE-IDENTICAL here, verified rather than assumed — the single commit between the tags
   # touches autopilot.py, evidence.py and main.py and neither helm/ directory. Lockstep only.
-  version: 0.1.2
+  # 0.1.5: NOT byte-identical this time — both CRDs changed and the two pins MUST move as a pair.
+  # Proposal.status.phase is a strict enum and gained Refused; ReviewRun.status.proposals gained a
+  # `refused` counter. Without these the apiserver would REJECT the phase write (failing the run) and
+  # silently PRUNE the counter, because neither CRD sets x-kubernetes-preserve-unknown-fields.
+  # 0.1.6: CRD-ONLY — ReviewRun.status.evidence gains empty/note/shape per source. The collector already
+  # wrote them and the apiserver was PRUNING all three (no x-kubernetes-preserve-unknown-fields), so the
+  # run still could not say WHY a source came back with nothing. Pair-bump again: the app is unchanged.
+  # 0.1.7: BYTE-IDENTICAL here — verified, not assumed: the commit range touches autopilot.py, the
+  # nightly-review chart and its tests, and nothing under helm/nightly-review-crds/. Lockstep only.
+  # 0.1.8: BYTE-IDENTICAL again, and this time that is load-bearing rather than incidental — the
+  # release it accompanies implements `superseded` and writes a Superseded phase, both of which the
+  # SHIPPED schema already declares. Checked before relying on it: the Proposal phase enum has carried
+  # Superseded, and ReviewRun.status.proposals.superseded has been an integer, since 0.1.5.
+  # 0.1.9: BYTE-IDENTICAL, lockstep only — the range touches prompt.py and the app chart's agent
+  # template, nothing under helm/nightly-review-crds/.
+  # 0.1.10: BYTE-IDENTICAL, lockstep only. The new AgentResponse condition needs no schema change —
+  # conditions[].type is a free-form string and message already exists, checked against the SHIPPED
+  # CRD before being relied on.
+  # 0.1.11: BYTE-IDENTICAL, lockstep only — the range touches prompt.py and tests.
+  # 0.1.16: co-versioned with nightly-review; the -crd half is unchanged in content.
+  # 0.1.17: NOT byte-identical — #14 reworded three descriptions in the Proposal CRD (confidence,
+  # observedCount, and evidence[].query, which is now marked historical and KEPT rather than deleted:
+  # the schema is structural, so removing it would prune the value from every stored proposal on its
+  # next write, and 17 entries on 057 still carry one). Checked rather than assumed, as for 0.1.14.
+  # 0.1.18: declares scope / sessions / createdInWindow on ReviewRun.status.evidence. NOT cosmetic and
+  # not optional: that schema is structural, so without these the new source's stats are PRUNED on
+  # write and the run would claim a scope it never recorded — the same silent-pruning bug that hid the
+  # truncation fields in 0.1.14.
+  # 0.1.19: declares agentsDeployed / agentsNeverUsed / agentsIdle7d / agentsActiveInWindow. Structural
+  # schema, so undeclared fields are pruned on write and the run would report counters it never kept.
+  # 0.1.20: co-versioned with nightly-review; no schema change in this one.
+  # 0.1.22: adds spec.subject, ReviewRun status.steps/summary, evidence.*.queries and the
+  # TargetResolved condition incl. reason NotFoundOrPrivate. MUST be Ready before the app, which now
+  # writes all of those — under the 0.1.20 schema they were absent and structural pruning dropped them
+  # silently. The deps below give that ordering inside one installer version, and the app is a CronJob
+  # that will not run until 02:00, so there is no window where it writes against the old schema.
+  # evidence.*.queries is the fix for a LIVE bug: the service has recorded the real bound SQL since
+  # 0.1.15 and the apiserver has been eating it on every write for want of a declaration.
+  # 0.1.23: adds spec.decision {claim, decidedAt, decidedBy, phase, reason}. MUST be Ready before portal
+  # 1.8.55, which writes that field from 24 templates: spec is structural, so against the 0.1.22 CRD the
+  # PATCH returns 200 and stores NOTHING — a Reject the page reports and the cluster never recorded.
+  # Also fixes a latent CRD bug: a null-valued key in runRef's description that strict decoding refused.
+  # Supersedes 0.1.21 and 0.1.22.
+  # 0.1.25 (via 0.1.24): STEP 1 of an ordered pair again, and for the same reason the last one existed.
+  # status gains agentAnalysis and usage, and evidence[*] gains questionsFolded, droppedAgents, skipped
+  # and agents. status is structural, so against the 0.1.23 CRD every one of those is PRUNED ON WRITE
+  # with a 200 back — the run would report a shape it never recorded. That is the exact bug that ate
+  # evidence[*].queries for seven releases, so it is checked rather than assumed: verified by unpacking
+  # the 0.1.25 chart and reading the ReviewRun schema, not by trusting the release note.
+  # The app's deps below give the ordering inside one installer version, and the app is a CronJob that
+  # does not run until 02:00, so there is no window where it writes against the old schema.
+  # 0.1.24 is skipped and superseded; nothing between it and 0.1.25 touches the CRD surface.
+  # 0.1.27: STEP 1 of an ordered pair again. status gains `coverage` — agentsSkipped, charsRead,
+  # charsTotal, charsTotalIsLowerBound, complete, conversationsRead, conversationsTotal, sentence,
+  # sourcesCut, sourcesFailed. status is structural, so against the 0.1.25 CRD every one of those is
+  # PRUNED ON WRITE with a 200 back and the run would claim a coverage it never recorded — the same bug
+  # that ate evidence[*].queries for seven releases. Verified by unpacking the 0.1.27 chart and reading
+  # the ReviewRun schema, not from the release note.
+  # Skips 0.1.26, which is superseded and must not be rolled.
+  # 0.1.28: co-versioned with nightly-review. Verified byte-identical to 0.1.27 outside Chart.yaml, so no
+  # CRD surface change this time and no ordering constraint — unlike 0.1.25 and 0.1.27, both of which
+  # added structural status fields and had to go first.
+  version: 0.1.29
   tier: observability
   feature: specialistAgents
+  # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
+  # could name, and existed because target.repo is model-chosen from a corpus containing user chat
+  # while this service held a GitHub write credential. Both premises are going: publishing moves to the
+  # platform's own chain so the credential becomes git-provider's, and every proposal becomes a pull
+  # request on a branch that a human reads before anything merges — a proposal blocked before it can
+  # become one teaches nobody anything, including the next night's review, which is meant to learn from
+  # what was merged and what was rejected. THE COST, stated rather than left to be discovered: the
+  # reviewer may now name any repository the install-level git credentials can write to. dryRun is the
+  # single remaining switch.
+  # 0.1.13: PUBLISHES THROUGH THE PLATFORM'S OWN CHAIN AND NO LONGER HOLDS A GITHUB TOKEN. It used to
+  # branch, GET the file, PUT it with its sha and POST a pull request over the REST API with its own
+  # credential; it now creates ONE BuilderPublish claim per proposal and stops, and the chain
+  # (Repository -> Repo -> LocalResource -> PullRequest) does the rest — the same one portal-builder and
+  # blueprint-builder use. The credential becomes git-provider's, the readiness gate that prevents
+  # GitHub's 422 is the chain's, and PullRequest is level-based so re-asserting a claim cannot open a
+  # second one. GITHUB_TOKEN is gone from the chart, its values entry and its schema entry.
+  #
+  # REQUIRES portal >= 1.8.46, which is where the builderpublishes CRD and its `builder: review` enum
+  # value ship. Publishing as `blueprint` would have made an overnight machine suggestion
+  # indistinguishable from a person's authored blueprint on every list selecting krateo.io/builder, and
+  # in the commit messages. Verified server-side on 057 at v1-8-46: a claim with builder: review is
+  # accepted and one with builder: blueprint still is, so the enum was widened, not replaced.
+  #
+  # Publishing is ASYNCHRONOUS now: the run creates a claim and exits, and the pull request appears on
+  # the chain's own reconcile. So the run no longer writes phase PrOpen or status.pullRequest — both
+  # would be guesses — and records the claim as a LABEL, because the Proposal CRD is structural and an
+  # undeclared status key is pruned silently. Reading the outcome back is the next piece of work.
+  #
+  # RBAC: the namespaced Role gains get/list/create/patch on builderpublishes, and a ClusterRole grants
+  # exactly one verb on exactly one resourceName (the BuilderPublish CRD) for version discovery, gated
+  # on dryRun. The version is discovered because the kind is version-pinned per portal release; note
+  # that the CRD's STORAGE version is `vacuum` (served:false, no schema), so discovery reads SERVED
+  # versions only — preferring storage returns a kind the apiserver will not serve.
+  # 0.1.14: four of the eight findings filed against this component, all about what the run RECORDS.
+  # Every successful run used to report PartiallyCompleted forever, because kagent scopes A2A sessions
+  # per caller so this service's identity sees none of its own — an empty source that EXPLAINS itself is
+  # no longer degradation, and a status that is always the same is a status nobody reads. An unwindowed
+  # ClickHouse query is now refused rather than run (the window is a disclosure control, not a cost
+  # one). Truncation is recorded on the run instead of only marked inside the corpus, where the model
+  # could see it and the record could not. And the redaction denylist gained glpat-, xox[abposr]-,
+  # AIza..., user:pass@host and generic api_key/client_secret/access_token/password.
+  # The pull request also now quotes the queries the SERVICE issued rather than the model's paraphrase
+  # of them — the first real proposals cited SQL with no window clause that matched nothing that ran.
+  # 0.1.15: ONE LINE, AND IT WAS THE WHOLE OF THE CLICKHOUSE TIMEOUT. The run records its window as
+  # ISO-8601 (right for the CR, whose schema types it date-time) and the same string went straight into
+  # SQL — so ClickHouse compared a DateTime64 column to '2026-09-27T14:17:43.745807+00:00', could not
+  # prune by primary-key range, and full-scanned 13.9M rows every night. Measured on 057 with the same
+  # predicate and the same 96k matching rows: the ISO literal takes 167 SECONDS against a 120s read
+  # timeout; 'YYYY-MM-DD HH:MM:SS' takes 15.7s and the full grouped query 2.3s. It also explains what
+  # never added up — this query failed on half the runs while the other two, reading the SAME window,
+  # never did: they scan far less, so the same handicap stayed inside budget.
+  # Only what enters SQL is converted; the ReviewRun keeps its ISO window. A NAIVE timestamp is not
+  # shifted — astimezone() on one assumes the host's local zone and slid the window two hours on the
+  # machine this was written on, which a test caught before it shipped.
 - name: nightly-review
+  # 0.1.29 (tag -> commit c7d503295, = main HEAD; NOTE this repo uses LIGHTWEIGHT tags, unlike
+  # installer/portal/frontend which are annotated — a `refs/tags/X^{}` deref returns NOTHING here and
+  # reads as a false mismatch. Verify with the plain ref.)
+  # Adds the SYNC-STALL DETECTOR built from the review of today's outage: a nightly pass reporting
+  # objects in github.krateo.io and git.krateo.io that have been Synced=False for >=15 minutes,
+  # grouped by component and cause, as Documentation Proposals. That is the alert that would have
+  # caught this morning's git-provider-credentials expiry on its own — it sat at 0/24 Repositories
+  # Synced for hours and the only signal was a human noticing a publish had stalled.
+  # Also: a new read-only ClusterRole `<release>-sync-read` (get/list on those two groups ONLY, no
+  # Secrets access), and a destination mapping for blueprint-render-service so the drift check is green.
+  # NO componentValues needed: config.syncStall lives in the chart's values.yaml with no schema default.
+  # WATCH ON THIS ROLL: 057 DOES carry a componentValues.nightly-review.config override (authnUrl,
+  # autopilotA2aUrl, clickhouseUrl). Helm merges maps key-by-key so the chart's new config.syncStall
+  # default should survive — but "should" is not verification, so the post-check is that the CronJob
+  # actually carries SYNC_STALL_GROUPS in its env, not merely that the pin moved.
   kind: NightlyReview
   # 0.1.1: ships values.schema.json (see the -crd pin above).
   # 0.1.2: THE CLIENT NEVER READ THE AGENT'S ANSWER. ask() harvested result.message.parts and
@@ -1827,13 +3125,288 @@ components:
   # SA identity: old parser 0 texts, new parser 4, newest exactly {"proposals": []}. The same release
   # stops a terminal `failed` task reporting as silence, and marks an empty kagent session list
   # `degraded` instead of a bare returned: 0 that three different causes all produce.
-  version: 0.1.2
-  # Reads ClickHouse (krateo-observability), kagent sessions through kagent's own API — which is why
+  # 0.1.5: makes a dry run produce something to read, which the shipped default did not. An EMPTY
+  # proposalAllowlist refused every proposal by DROPPING it, so zero Proposal objects were created while
+  # values.yaml promised a review "you can read"; refusals are now stored in phase Refused and still
+  # never published (the gate moved next to the credential, as is_publishable()). Also: per-item schema
+  # validation, so one wrong enum no longer discards the whole batch and fails the night — the cheapest
+  # way an injected instruction could suppress the review; and the evidence fence carries a per-run
+  # nonce, because a corpus line containing </evidence> used to escape the quoted region and speak as
+  # the harness. 0.1.3 shipped these with a red test suite and 0.1.4 was tagged at the same commit as
+  # 0.1.3 by mistake — 0.1.5 is the first of the three that is both correct and green.
+  # 0.1.6: no app change; moves in lockstep with the -crd pin above, whose schema is what lets the run
+  # record why an evidence source was empty.
+  # 0.1.7: STOPS ASKING AN ORCHESTRATOR TO DO THE REVIEW, and that is why krateo-autopilot leaves the
+  # dep list below. `autopilot` carries twelve tools of which NINE are sibling agents, so delegation is
+  # its declared capability list, not a behaviour a system prompt can suppress: the 02:00 run on
+  # 2026-09-26 handed the review to incident-agent at 02:04:15 and that agent was still calling tools at
+  # 03:32, an hour after the client had given up, and the run Failed at 42m49s with nothing to show.
+  # The chart now creates its OWN reviewer, `nightly-review-agent`, holding a model and NO tools —
+  # which is all a review needs, because evidence.py gathers everything in code BEFORE the agent is
+  # called. A reviewer with no tools cannot delegate, cannot wander, and cannot reach a repository.
+  # Checked against this cluster rather than assumed: tk-swarm-ro runs today with zero tools, is Ready,
+  # and gets its own Deployment and Service on :8080, so kagent already supports the shape.
+  # Second defect in the same release: A2A_TIMEOUT was passed to requests alongside stream=True, where
+  # it bounds SILENCE BETWEEN READS rather than duration — the runaway task never went quiet, so a
+  # 900s budget never fired. It is now the total wall-clock budget, with A2A_READ_TIMEOUT (180s) for
+  # silence, and on expiry the client stops READING rather than trying to stop the agent, so the
+  # session stays inspectable while the run gets its window back.
+  # 0.1.8: THREE CHECKS THAT REPORTED SOMETHING OTHER THAN WHAT THEY MEASURED, each fixed against a
+  # failing test written first — nine went red before any fix existed; the suite is 42 green.
+  # `redaction_count` zipped two JSON strings positionally and a trailing `> 0` reduced it to a bool,
+  # so it could not answer the question in its own name, and nothing called it. Dedup compared bodies
+  # literally, so a reworded comment or two reordered YAML keys re-proposed a suggestion already open,
+  # while `superseded` was reported as a hardcoded 0 beside a docstring describing a mechanism that did
+  # not exist; YAML is now compared as parsed data with mappings sorted, and a same-target
+  # different-body proposal supersedes rather than duplicates. The phase vocabulary was bare strings
+  # matched across two functions — agreeing today, and silently re-proposing the entire backlog the day
+  # one was renamed. None of the three could fail loudly: they reported, and the report was wrong.
+  # The allowlist is now asked BEFORE anything is superseded, so a refused proposal cannot retire a
+  # legitimately open one — a quieter attack than the one the allowlist exists to stop.
+  # 0.1.9: THE REVIEWER WAS INSTRUCTED INTO SILENCE AND OBEYED. Three successful nights on 0.1.8 each
+  # completed in ~2 minutes, called the model once, and returned ZERO proposals — and nothing
+  # downstream was eating them: created 0, refused 0, deduplicated 0, no ValidationNotes condition, so
+  # no item was dropped in validation. The prompt said "PROPOSING NOTHING IS A VALID AND FREQUENT
+  # OUTCOME ... return an empty list", the Agent CR's systemMessage repeated it, and the evidence was
+  # aggregate counts, so an empty list was the obedient answer rather than a model failure.
+  # The caution was calibrated for a reviewer whose proposals become pull requests; this one ships
+  # inert (dryRun true, empty allowlist), so a weak proposal costs one object to read while silence
+  # costs the whole component. Rebalanced, NOT loosened: every anti-fabrication and anti-injection
+  # guard stays and the fabrication warning is sharper, withholding is named as a failure too, and low
+  # confidence is given its purpose. Evidence was the other half and is already fixed in
+  # componentValues (samples instead of counts, live since 0.3.288 rev 216) — that alone did NOT change
+  # the outcome, which is what isolates the prompt.
+  # 0.1.10: 0.1.9 WORKED, AND IMMEDIATELY EXPOSED A BLIND SPOT. The first run on the rebalanced prompt
+  # stopped returning an empty list and instead returned something that was not the contract, failing
+  # with "response has no `proposals` array" — better than silence, but the run recorded only the
+  # exception, so what actually arrived was undiagnosable from the cluster. An unusable response is now
+  # stored on the run as an AgentResponse condition and printed once, REDACTED FIRST through the same
+  # path a proposal takes: it is model output over a corpus that has held JWTs and an AWS key, and a
+  # diagnostic that copies a credential into a CR and a pod log is worse than the failure it explains.
+  # 0.1.11: AND IT PAID FOR ITSELF THE SAME HOUR. With refusals finally legible, the first run showed
+  # the reviewer producing FIVE findings, every one discarded with "Additional properties are not
+  # allowed ('description','id','priority','type' were unexpected)". Not silence, not an empty list —
+  # an invented field vocabulary, because the prompt ended with "Return ONLY a JSON object matching the
+  # response contract" and NEVER SENT THE CONTRACT. RESPONSE_SCHEMA lived in the same file and was used
+  # for validation only. The schema is now rendered into the message from the same object that
+  # validates, so it cannot drift, and two tests assert it still reaches the model.
+  # 0.1.16: the model no longer authors the query a proposal carries. evidence[].query was removed
+  # from the response contract because the model filled it with a plausible reconstruction — the
+  # first real proposals cited SQL with no window clause that matched nothing this service had
+  # issued. The service records what it actually asked in stats["queries"] and publish.py renders
+  # those into the pull request instead; a paraphrase beside the real thing is worse than its
+  # absence, because a reviewer cannot tell which they are reading.
+  # 0.1.17 (#14): `confidence` keeps its name and stops pretending to be checked. The cap demoted
+  # high unless two evidence items or a summed observedCount of two backed it — arithmetic on the
+  # model's own unbounded field, so any number it wrote satisfied the check. Across the first nine
+  # real proposals on 057 it never once fired: four carried a single evidence item and all four kept
+  # high on counts of 636/612/8459/4403. The CRD now states the field is the model's own estimate.
+  # 0.1.18: kagent-sessions finally returns something. It read /api/sessions as itself, and kagent
+  # 0.10.x scopes that to the calling principal with no flag and no authorizer that could widen it, so
+  # the service saw only sessions it owns and it owns none — its own A2A traffic is filed under
+  # synthetic A2A_USER_<contextId> ids. The controller's log for the 02:00 run read
+  # `userID: nightly-review, count: 0` while 3,223 sessions existed, so the review has been reasoning
+  # on two sources of three since it shipped.
+  # It now reads kagent's Postgres with a role granted SELECT on `session` and nothing else. The
+  # boundary is a PRIVILEGE, not a promise: content lives in event.data and task and the role is
+  # revoked on both — verified live as session=t event=f task=f feedback=f, and again by connecting as
+  # the role (3,223 sessions readable, `permission denied for table event`). It emits aggregate counts
+  # and never user_id values, because this corpus reaches a model and then a pull-request body.
+  # REQUIRES componentValues.nightly-review.secrets.kagentDb.name to be set per install, and there is
+  # deliberately NO schema default for it: a default would be injected into every Installer CR, and on
+  # any install lacking that Secret the CronJob's secretKeyRef could not resolve and the pod would fail
+  # with CreateContainerConfigError. Unset means the source reports not-configured and the run is
+  # PartiallyCompleted — visible and harmless.
+  # 0.1.19: kagent-sessions reports what ISN'T happening. 0.1.18 made it return data and it still
+  # produced nothing — the manual run on 057 handed the model four rows and a total and zero proposals
+  # cited any of it, correctly: ClickHouse gives error patterns (problem-shaped), Kubernetes gives
+  # existing Alerts (coverage-shaped), and a census of things that worked is neither.
+  # The window was the bug. Filtering rows by updated_at means an agent idle three weeks has NO ROW, so
+  # the fact that makes it interesting is what excludes it; a GROUP BY over rows that exist can never
+  # report absence. The window now only MARKS in-window rows, never restricts them.
+  # On 057 that surfaces: authn-agent with 1 session in its whole life 20 days ago, tk-swarm-ro deployed
+  # and NEVER used, and 4 bench agents idle 21-23 days holding 1,531 sessions between them.
+  # CARRIES A NEW CLUSTER-SCOPED GRANT: list on kagent.dev/agents, because an agent with no session has
+  # no row to group and the deployed set is the only way to see it. Rolling the pin is what delivers
+  # that ClusterRole — without it the deployed-set read 403s and the never-used signal is silently lost,
+  # which is the alert-troubleshooter#31 shape.
+  # Two candidate signals were measured and DROPPED rather than built: `source` holds two values across
+  # 3,224 rows and separates nothing, and created_at = updated_at occurs zero times, so an abandonment
+  # field would have been permanently empty.
+  # 0.1.20: a RETIRED agent kept generating findings from its leftover session rows. Session rows
+  # outlive the agent that made them, so staleness derived from sessions alone reports 'IDLE 21d'
+  # forever for something that no longer exists — not a stale finding but a permanent false one, and it
+  # accumulates as agents are retired. 0.1.19 gated only `never` on the deployed set (it had to: an
+  # agent with no sessions has no row); stale/rare/active still came from session rows alone. Surfaced
+  # by the bench agents being removed: after deletion they would have gone on being reported as idle
+  # indefinitely, and the proposal to prune them would have kept being made after it was carried out.
+  # An idle agent that is not deployed is history, not a problem. If the deployed set cannot be read the
+  # source over-reports WITH the existing note rather than reporting nothing — a hidden live problem is
+  # worse than a noisy dead one.
+  # 0.1.22: the Platform Review service half — stable spec.subject for dedup, Alert proposals forced to
+  # observability.krateo.io/v1alpha1 (closes #24; others are dropped with a note), a TargetResolved
+  # condition, status.steps/summary, and status.model carrying real token counts from kagent usage
+  # metadata (its empty `name` field removed rather than left permanently blank).
+  # THREE FINDINGS FIXED BEFORE THIS ROLLED, two of them mine from checking it against 057:
+  # (a) TargetResolved used an anonymous GitHub HEAD, and anonymous GitHub returns 404 for a PRIVATE
+  #     repo and a nonexistent one alike — krateo-agentiko/krateo-autopilot and incident-agent are
+  #     private, and a Prompt proposal aiming at one would have been marked invented when it was right.
+  #     Now reason NotFoundOrPrivate, saying it cannot be distinguished anonymously. No token added.
+  # (b) the check-3 test could not discriminate: group `admins` already has patch on proposals/status
+  #     via cluster-admin-binding-krateo-system, so can-i says yes with or without the new rule.
+  # (c) theirs: the target index is Proposed-only, so a same-file replacement cannot supersede a PrOpen
+  #     proposal and orphan its open PR.
+  # Ships a ClusterRole+Binding nightly-review-portal-admin (proposals/status get/patch/update, Group
+  # admins) so Reject works through /call with the caller's token. REDUNDANT ON 057, where admins is
+  # already cluster-admin — it exists for installs that do not grant that, which is most of them. Do not
+  # read a passing can-i on 057 as proof the new rule is what allowed it.
+  # 0.1.23: the decision surface plus the questions read.
+  # #33 ships a ValidatingAdmissionPolicy (only spec.decision is mutable by anyone but the service SA;
+  # PrOpen->Rejected only; decidedBy must equal the requester) and a MutatingAdmissionPolicy that stamps
+  # decidedBy/decidedAt. The MAP is gated on .Capabilities — 057 is k8s v1.36.2-gke and serves
+  # MutatingAdmissionPolicy at admissionregistration.k8s.io/v1, checked, so it renders. Without it the
+  # portal's Reject would be REFUSED, because the portal does not send decidedBy itself.
+  # #32 reads the TEXT of user-authored kagent messages from event.data, window-bounded and redacted.
+  # THAT IS A DELIBERATE WIDENING OF THIS SERVICE'S REACH, decided by Diego against my recommendation,
+  # and it is recorded here because the code cannot record it: until now the role held SELECT on
+  # `session` alone, so it was STRUCTURALLY unable to read a conversation, which was the whole argument
+  # for the design. It now holds SELECT on event too (verified t|t|f|f — task and feedback stay
+  # revoked). Real prompts therefore enter the corpus, the model, and pull-request bodies; redact()
+  # strips secret-shaped strings, it does not anonymise. The role also carries admin's password, at
+  # Diego's direction, so that one Secret now yields admin's credentials AND every conversation.
+  # I argued for a separate event-only role with its own password so the content reader would be
+  # revocable independently; that was declined. Recording it so the next person reads a decision rather
+  # than an accident.
+  # The run's scope field states the wider access honestly (0.1.23 rewrote it); a run BEFORE the grant
+  # records that scope with ok:false and 'permission denied for table event', which reads as
+  # attempted-and-refused rather than as a false claim.
+  # New RBAC: list flexes (page-* roots census) and get/patch on proposals for portal-admin.
+  # 0.1.25 (#35), which CARRIES 0.1.24 (#34). 0.1.24 is superseded and must not be rolled on its own.
+  # 0.1.24 = the `analyse` stage: one call per agent with sessions in the window, through the same
+  # tool-less reviewer, reading FULL conversations plus that agent's own prompt resolved from the
+  # *-prompts-eng ConfigMaps. config.agentAnalysis bounds it: maxAgents 8, excludeAgents ["*-bench"],
+  # corpusMaxChars 16000, timeoutSeconds 300 per call, totalSeconds 1500. New RBAC is get on
+  # agents.kagent.dev (list was already there) and get on configmaps IN THE RELEASE NAMESPACE ONLY,
+  # never Secrets.
+  # BEHAVIOUR CHANGE, expect the proposals to look different on the first run and do not read it as a
+  # regression: kagent 0.10.1 IGNORES params.metadata.systemPrompt, so the main review had NEVER
+  # received prompt.SYSTEM — the alert-kind and subject rules. It now travels as the first message
+  # part. The shape shift is the correction landing, not drift.
+  # It also closes a redaction gap I found while reading 0.1.23: the denylist matched on \b, which does
+  # not fire after an underscore, so DB_PASSWORD=, KAGENT_DB_PASSWORD=, PGPASSWORD=, MY_API_KEY= and
+  # CLICKHOUSE_PASSWORD= all passed through. That was latent at 0.1.23 and would have become live at
+  # 0.1.24, which is the first release to put tool-call content in front of the model. A test now runs
+  # the real analyse() against a fake reviewer and asserts no raw secret reaches it.
+  # 0.1.25 = the bound that 0.1.24 was missing, and it is the reason this waited for a second tag rather
+  # than rolling 0.1.24: jobDeadlineSeconds (default 3600, schema MINIMUM 600) becomes the Job's
+  # activeDeadlineSeconds, with terminationGracePeriodSeconds 60, and main.py handles SIGTERM by marking
+  # the running step AND the run Failed with the reason. Without it an analyse call that hangs on an
+  # external service holds the night's slot forever and concurrencyPolicy: Forbid (already present) then
+  # skips every LATER night — one hang would have silently ended the nightly review. The SIGTERM half
+  # matters as much as the deadline: a killed run left Running is indistinguishable from a running one.
+  # COST ON 057: about 3 analysis calls and 75-115k input tokens a night, and the job may run ~25 min
+  # longer than before.
+  # NOTE the stale claim two lines below, corrected here rather than left to mislead: there IS now a
+  # Postgres reader. The kagent-sessions source reads kagent's database directly through a dedicated
+  # role, and agent-analysis reads agent replies and tool output through it too. The API-path argument
+  # in that comment described 0.1.13 and has not been true since 0.1.19.
+  # 0.1.27 (#36 + #37), which CARRIES 0.1.26. Rolled because it closes three separate gaps that the
+  # FIRST analyse run exposed — this is the release where the nightly review's own findings came back as
+  # fixes.
+  #   #36 FIXED DESTINATIONS: config.targets maps a proposal kind to {repo, pathPrefix}, and for a listed
+  #     kind the service REPLACES the model's target.repo and the directory of target.path. Alert ->
+  #     krateo-platformops/observability, pathPrefix charts/krateo-observability/templates. That is the
+  #     right shape: the destination is a FIXED FACT, and the model was guessing it. It emitted
+  #     `krateo-observability` — wrong twice, no owner prefix and the wrong repo name — so all three Alert
+  #     proposals failed TargetResolved with "'krateo-observability' is not a GitHub owner/name", a FORMAT
+  #     rejection that never reached GitHub. Nothing about repo ownership was ever the blocker; I had told
+  #     Diego it was and had to correct that.
+  #   STATED COVERAGE: the service now says what it actually read. It matters because run
+  #     rr-20260930-0200 dropped 2,469,686 chars with truncated=true and folded all 40 questions, so for
+  #     incident-agent (1.21M chars, 425 messages dropped) and autopilot (35 of 45 conversations dropped)
+  #     the assessments rest on a small slice. charsTotalIsLowerBound and complete are the honest fields:
+  #     an unstated limitation reads as comprehensiveness.
+  #   #37 REDACTION: my denylist finding, and it was a REAL gap rather than theoretical. A genuine PAT was
+  #     already caught by its ghp_ shape under any env-var name, but `*_TOKEN=<value of no known shape>`
+  #     PASSED, because the key list knew access_token and not token. `token` and `secret_key` now join
+  #     the key pattern. This is the same \b-boundary class as the DB_PASSWORD= gap I found at 0.1.23.
+  #     It matters now and not before because of the credential change below.
+  # CREDENTIAL CHANGE, and state the property precisely rather than as unchanged: the repo check uses
+  # gh-token/token via env valueFrom.secretKeyRef, optional:true. The SERVICEACCOUNT still has no Secret
+  # RBAC — that property holds. But the token IS now in the pod's process environment, so "the service
+  # cannot reach credentials" is NO LONGER TRUE. It is a weaker property than before, deliberately traded
+  # for definitive RepoFound/RepoNotFound instead of the honest-but-useless "an anonymous check cannot
+  # tell those apart". Diego's call; I had recommended delegating the check to git-provider instead, and
+  # this is the better outcome for the proposals.
+  # WHAT THE TOKEN WILL AND WILL NOT FIX, resolved by authenticated lookup before the roll so the first
+  # run is not misread: of the five NotFoundOrPrivate proposals, TWO are genuinely private and become
+  # actionable (krateo-agentiko/autopilot, krateo-agentiko/installer-agent, both pushed within the week).
+  # THREE TARGETS DO NOT EXIST AT ALL — krateo-platformops/kagent, /installer-chart-inspector and
+  # /github-provider all 404 WITH authentication. The model builds `krateo-platformops/<component>` and
+  # assumes it exists; it was wrong 3 times in 5. So expect those three to flip from "cannot tell" to
+  # "definitely wrong target", which is an improvement but is a correctness problem in the proposals, not
+  # a validation one. The general fix (derive the target from component-pins `repo:`, or refuse to emit a
+  # guessed one) is with the owner as the next change.
+  # ONE-OFF ON THE FIRST RUN: #36 also fixes a stale fingerprint left by #34's retarget, so existing Alert
+  # proposals get SUPERSEDED BY SUBJECT rather than deduped. Expect churn in the proposal list once, and
+  # do not read it as the retarget failing.
+  # A CORRECTION TO THE HANDOFF, benign but worth pinning: it said the new schema keys carry no defaults
+  # with a test enforcing it. One does — config.targetCheckApiUrl = https://api.github.com. That is the
+  # CHART's own values.schema.json, where a default is normal, NOT the installer's passthrough schema
+  # where core-provider writes defaults into the composition CR spec. So it does not trigger the
+  # silent-override mechanism. It would if targetCheckApiUrl were ever exposed through installer
+  # componentValues — pinning it now rather than rediscovering it then.
+  # 0.1.28 (#38): proposal destinations now come ONLY from values — config.destinations.components, 63
+  # entries, each repo/dir/prompt-file verified by the author with authenticated gh; config.targets per
+  # kind still wins. The annotation retarget and every hardcoded repo are GONE from the code. No
+  # destination => target cleared, TargetResolved False/NoDestination, never published.
+  # THIS FIXES A CORRECTNESS BUG, not plumbing. Before it the model built
+  # `krateo-platformops/<component>` and assumed it existed; I resolved the five NotFoundOrPrivate targets
+  # with an authenticated lookup and THREE DID NOT EXIST. All three are now right, verified authenticated:
+  #   krateo-platformops/kagent                     404 -> krateo-agentiko/kagent            (exists, private)
+  #   krateo-platformops/installer-chart-inspector  404 -> krateo-platformops/core-provider   (exists, public)
+  #   krateo-platformops/github-provider            404 -> krateo-blueprints/github-provider-kog (exists, private)
+  # The chart-inspector mapping has corroboration the handoff did not cite: chart-inspector:2.13.18 and
+  # core-provider:2.13.18 ship at the SAME version tag, consistent with one repo.
+  # THE DRIFT JOB IS THE REAL DELIVERABLE, and it is sharper than the check I asked for.
+  # .github/workflows/drift.yaml runs on PRs, on main, AND DAILY at 05:17 UTC — because the installer
+  # drifts WITHOUT opening a nightly-review PR, so PR-time checking alone would go stale silently. That
+  # was the author's insight, not mine. It fails on: a pin with no entry and no reviewed allowlist reason;
+  # an org mismatch (against `repo:`, or the default ociRepo org for unpinned-registry components); a
+  # stale allowlist line; and a FAILED FETCH, which never silently skips. It forced 11 entries nobody
+  # would have added by hand (the *-crd charts, kagent-crds, the otel collectors,
+  # agentgateway-controller) and 5 upstream wrappers are allowlisted with stated reasons.
+  # A POSITION I TOOK AND WITHDREW, recorded because the reasoning matters more than the outcome: I argued
+  # the map should NOT carry components that wrap third-party software — 13 of the 63 do (kagent x3,
+  # agentgateway x3, otel x4, clickhouse/mongodb operators, clickhouse-mcp-server) — on the grounds that a
+  # PR against a packaging wrapper cannot fix upstream behaviour. Diego overruled it: wrapping something
+  # means owning its exposure, and the wrapper can set a better default, expose a knob, ship an alert or
+  # document the trap. My own worked example proved him right — the kagent PVC exhaustion was fixed
+  # ENTIRELY in Krateo's layer, by installer 0.3.202 typing
+  # kagentapp.database.postgres.bundled.storage. Nothing upstream was needed.
+  # THE REFINEMENT THAT SURVIVES, not worth blocking on: destination ACCURACY, not existence. That kagent
+  # fix landed in the INSTALLER, not in krateo-agentiko/kagent, so for some components the Krateo-side
+  # surface is the chart wrapper and for others it is the installer's pins and values. Where they differ a
+  # proposal lands in the right org and the wrong repo. The first real proposals will show this better
+  # than reasoning will.
+  # A CORRECTION TO THE HANDOFF, benign and the same one as 0.1.27: "no schema defaults (tested)" means no
+  # defaults on the NEW keys. The chart's own values.schema.json carries 25 (jobDeadlineSeconds,
+  # clickhouseQueries, targetCheckApiUrl, the kagentQuestions and agentAnalysis blocks). All fine — these
+  # are CHART defaults, not installer passthrough leaves where core-provider writes them into the
+  # composition CR spec.
+  # EXPECT ON THE FIRST RUN: existing NotFoundOrPrivate proposals are NOT retargeted retroactively, only
+  # new runs are. So the three bad targets stay wrong in the list until superseded. Do not read that as
+  # the fix failing.
+  # TARGET_COMPONENTS reaches the CronJob via `dig`, so a values file without the map renders {} rather
+  # than failing — verified by rendering the chart against the live componentValues.
+  version: 0.1.29
+  # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
-  # a direct database read would have had none of — and consults krateo-autopilot over A2A.
+  # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
+  # reviewer it talks to is created by its own chart, so that dependency would now be a false statement
+  # about the graph rather than a stale but harmless one.
   deps:
   - nightly-review-crd
-  - krateo-autopilot
   - kagent
   - krateo-observability
   tier: observability
@@ -1962,8 +3535,63 @@ components:
   #     (http.status=429), never the bare number.
   # ALSO CORRECTED HERE: an earlier reading of this same incident blamed a slow snowplow-agent for a 341s
   # A2A call. It was a call that took 310s to FAIL. Nothing is slow about the specialist.
-  # 0.2.13: incidentCompare, the rate-limited route for alert-provider's comparison calls to autopilot.
-  version: 0.2.13
+  # 0.2.12 (#64): drops krateo-blueprint-agent — its MCP route (krateo-chart-gate-mcp-server) and its
+  # sub-agent delegation entry — and keeps core-provider-chart-gate-mcp-server. Safe only AFTER the drain
+  # rolled out (0.3.279 on 057), which is why it was held back a release; against live 057 it is a NO-OP,
+  # verified: gateway objects there already name blueprint-agent zero times. Policies hot-load, so no
+  # fleet bounce.
+  # 0.2.13 (#67): the LLM request guardrail was silently CORRUPTING relayed content. regex.pii used
+  # agentgateway's PhoneNumber builtin, which is libphonenumber — any run of 7+ digits and separators
+  # that validates as a number in US/GB/DE/IL/IN/CA/BR. On the REQUEST path it rewrote a chart the
+  # orchestrator relayed: json-schema.org/draft/2020-12/schema became draft/<PHONE_NUMBER>/schema and
+  # Preview's render failed, and a chart named catalog-service-09291152 became
+  # catalog-service-phonenumber. Anything with version-like or date-like digits was exposed: charts,
+  # dates, SHAs. PhoneNumber is out; two explicit patterns replace it (international with a leading +,
+  # and US (415) 555-2671).
+  # TRADE-OFF, recorded because it is a real narrowing and not a pure fix: national-format numbers
+  # WITHOUT a leading + are no longer masked, so 415 555 2671 now passes through unmasked.
+  # Verified independently rather than from the handoff: the rendered policy contains PhoneNumber zero
+  # times (it survives only as a comment and an opt-in schema enum), and both reported corruptions plus
+  # 2026-09-29T10:32:21Z / 1.12.17 / installer-0.3.317 test clean against the two new patterns while
+  # +1 415 555 2671 and (415) 555-2671 still mask. Also checked the hazard that would have made this
+  # bump a no-op: no installer schema default exists on the guardrails/regex/pii path, and the live CR
+  # does not override it, so the chart default is what applies.
+  # 0.2.14 (#68): FIXES A FALSE POSITIVE THAT WAS SILENTLY REMOVING AN AGENT FROM REVIEW COVERAGE, and
+  # the root cause is the guardrail firing on Krateo's OWN vocabulary.
+  # encodingEvasion's delimiter rule was `(?i)<\|?(system|im_start|im_end|endoftext|assistant|user)\|?>`
+  # — OPTIONAL pipes, so a bare `<user>` counted as a role token. Krateo writes `<user>-clientconfig` 70
+  # times in snowplow's source, and snowplow-agent's tool output carries it. Result: the nightly review's
+  # analyse call for snowplow-agent was 403'd with "Request blocked: encoding evasion or prompt delimiter
+  # injection detected" (rr-20260930-0200), and that agent was UNREVIEWABLE. The run degraded correctly
+  # and recorded the error verbatim in evidence[agent-analysis].agents[], which is how it was found.
+  # Now: `(?i)(<\|(system|assistant|user)\|>|<\|?(im_start|im_end|endoftext)\|?>)` — ROLE TOKENS NEED
+  # THEIR PIPES; im_start/im_end/endoftext keep optional ones. The `###` rule gains (?im) and \s*(:|$)
+  # so it matches only a standalone header or one ending in a colon.
+  # I FRAMED THIS WRONG TO DIEGO FIRST TIME and the correction is the useful part: I presented it as a
+  # trade between exempting the reviewer route (weakening injection defence on the call carrying the most
+  # untrusted text) and leaving the agent unreviewable. Neither was needed — it was never a real
+  # injection signal, it was an over-broad regex. Check whether a guardrail hit is a FALSE POSITIVE before
+  # reasoning about the policy trade it appears to force.
+  # TRADE-OFF, recorded because narrowing a detection rule is never free: a genuine bare `<user>`
+  # delimiter now passes. Judged acceptable — bare `<user>` is far likelier to be a Krateo identifier
+  # than an attack, and real injection payloads use the pipe-delimited forms — but it IS less coverage.
+  # THE GUARD AGAINST RECURRENCE is the better half of this release: guardrail-regex-check.py now holds
+  # EVERY enabled Reject rule to must-reject AND must-pass samples, and 7 of the old rules failed it.
+  # A rule that only has must-reject cases cannot catch the class of bug this was.
+  # STILL OVER-BLOCKING, shipped as WARN rather than fixed, and these are Diego's policy calls not bugs:
+  # "decode the base64 value of the Secret..." and "Enable debug mode...".
+  # Re-checked the no-op hazard the 0.2.13 note names, because it applies to this path too: zero installer
+  # schema defaults on any guardrails/regex/encoding path, and the live Installer CR's
+  # componentValues.agentgateway-policies carries no `guardrails` key at all (only certReplayHop, cors,
+  # extraMcpServers, extraSubAgents, jwt, llm, networkPolicy, stt, tracing, tts, uiTokenHop). So the chart
+  # default is what applies and this bump takes effect.
+  # VERIFY ON THE LIVE OBJECT, not the pin: agentgatewaypolicy/agentgateway-policies-guardrails in
+  # krateo-system holds the rendered rule, and it contained the optional-pipe form before this roll.
+  # Chart diff is Chart.yaml and values.yaml only — no template change — so per the 0.2.5 precedent it
+  # should hot-load without a fleet bounce. Verify that rather than assume it.
+  # AFTER THE ROLL: the next nightly run should analyse snowplow-agent. Also worth checking whether the 7
+  # alert-troubleshooter LLM 403s of 2026-09-29 stop recurring — same guardrail, plausibly same cause.
+  version: 0.2.16
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
@@ -1993,32 +3621,3 @@ components:
   # sibling of internalUrls: compositions.yaml sets this to exposure.port when it is set.
   internalPorts:
   - path: jwt.jwks.port
-# ---- krateo-blueprint-agent (DRAINING — retired, do not re-enable) ---------------------
-# The blueprint-authoring agent, now LEGACY: core-provider-agent is the sole blueprint author and
-# autopilot's routing has pointed there since 2026-08-12, so nothing delegates here any more. It had been
-# PROMOTED from the (now-retired) codegen group to coreAgents in #144 — "it is a core agent" — Deploys with the base agent layer (kagent + the model-configs-owned
-# ModelConfigs) and joins the autopilot fleet as an A2A sub-agent. Its chart bundles the
-# krateo-chart-gate-mcp-server (render-and-validate gate) whose image ships from the SAME release
-# tag, so the pin version must name a chart whose gate image is published: 0.2.7 (fix #9 unblocked
-# the promotion + a clean tag builds the image); 0.2.3/0.2.6 are pre-fix (0.2.6's gate image is
-# `manifest unknown`). Kind is crdgen PascalCase(chart).
-# (The four codegen/conversion specialists code-analysis / ansible-to-operator / tf-provider-to-
-# operator / tf-to-helm were RETIRED in #144; features.codegenAgents is kept hard-defaulted false.)
-- name: krateo-blueprint-agent
-  kind: KrateoBlueprintAgent
-  # 0.2.10 (#12): modelConfig.name gemini-pro -> gemini-flash (+ the create=true branch's modelConfig.model
-  # 2.5-pro -> 3.8-flash) — closes the fleet flash-repoint (label correction; both slots resolve to
-  # gemini-3.8-flash on Vertex). Chart-default only; the agent pod rolls, NOT an mcpBackend so no fleet
-  # bounce. Served version migrates v0-2-9 -> v0-2-10 (schema unchanged, clean rename).
-  version: 0.2.10
-  repo: oci://ghcr.io/krateo-agentiko/charts
-  deps:
-  - kagent
-  tier: observability
-  # DRAINING (2026-09-25). coreAgents -> codegenAgents, which is hard-defaulted false, so this stops
-  # being emitted and the cdc tears it down. NOT deleted from this file in the same change: it is
-  # deployed, and a pin that vanishes while its Composition still exists fails the unknown-name check
-  # on every existing install. The block goes, and the name joins retired-components.yaml, only once
-  # the Composition AND its CompositionDefinition are gone on every cluster.
-  feature: codegenAgents
-  agent: true
