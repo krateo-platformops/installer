@@ -3608,7 +3608,9 @@ components:
   # should hot-load without a fleet bounce. Verify that rather than assume it.
   # AFTER THE ROLL: the next nightly run should analyse snowplow-agent. Also worth checking whether the 7
   # alert-troubleshooter LLM 403s of 2026-09-29 stop recurring — same guardrail, plausibly same cause.
-  version: 0.2.16
+  # 0.2.17 (#71): drops the connection-string response rule, which rejected any database URL as a
+  # live credential and cut off RCAs whose fix sets one (e.g. DATABASE_URL=postgres://...).
+  version: 0.2.17
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
