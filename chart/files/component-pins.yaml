@@ -232,7 +232,10 @@ components:
   # 1.6.89: co-versioned with frontend (Diego's lockstep rule). Verified byte-identical to 1.6.88
   # outside Chart.yaml - 1.6.89 is a composer/design-system change that rides the image, with no widget
   # schema surface, so this pin moves only to keep the pair on one version.
-  version: 1.6.89
+  # 1.6.90: co-versioned with frontend (lockstep rule). Verified byte-identical to 1.6.89 outside
+  # Chart.yaml — a Table rendering fix with no widget-schema surface, so this pin moves only to keep the
+  # pair on one version.
+  version: 1.6.90
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1256,7 +1259,18 @@ components:
   #     #440, so the post-roll check is deployment image + gen == observedGeneration. That proves the
   #     new bundle is SERVING; it does not prove the refusal icon renders. The behavioural check is the
   #     verbs-check-5 run in the frontend session.
-  version: 1.6.89
+  # 1.6.90: ONE commit (#441), ui/src/widgets/Table/ only — 4 files, zero outside that directory.
+  #   In a truncating Table (fitContent or virtual), a column of kind: tag cells gets a fixed width that
+  #   fits its longest label and the table scrolls sideways when it cannot fit; before, tags were clipped
+  #   mid-word. New tableColumnWidths.ts plus 146 lines of tests in Table.tagColumns.test.tsx.
+  #   Source-diffed between the tags, not chart-diffed: both charts are byte-identical to 1.6.89 outside
+  #   Chart.yaml, so the change rides the IMAGE and a chart diff would have shown nothing either way.
+  #   CHECKED: hack/design-lint/lint-portal-consistency.py untouched (the widget mapping the UpgradePlan
+  #   grounding depends on), and no CRD change.
+  #   VERIFICATION LIMIT: no minification-safe literal exists for this fix, so the post-roll check is
+  #   deployment image + gen == observedGeneration + a changed asset hash. That proves the bundle is
+  #   SERVING, not that tags stop clipping; the behavioural check is the frontend session's PB V2 dry run.
+  version: 1.6.90
   deps:
   - frontend-crd
   - authn
