@@ -1328,7 +1328,8 @@ components:
   tier: platform
   feature: portal
 - name: github-provider-kog
-  # REVERTED TO 0.3.1. 0.3.2 CANNOT BE INSTALLED IN PLACE and this is not a transient — it is
+  # HISTORICAL (resolved by oasgen-provider 0.27.0 — see the 0.3.2 note below). REVERTED TO 0.3.1 at
+  # the time because: 0.3.2 COULD NOT BE INSTALLED IN PLACE and this was not a transient — it was
   # rejected on every cluster that has already generated the PullRequest CRD, which is every existing
   # install. It succeeds only on a fresh one.
   #   RestDefinition "github-provider-kog-pullrequest" is invalid:
@@ -1374,7 +1375,20 @@ components:
   # are served+Ready before portal 1.8.21. PullRequest has NEVER reconciled against GitHub -> first real
   # BuilderPublish is the live test (watch the PullRequest CR reach Available with NO PATCH on the 2nd
   # reconcile; a PATCH every pass = drift, the failure its jq transform exists to prevent).
-  version: 0.3.1
+  # 0.3.2 RE-ROLLED, and this time it installs. The blocker was never kog: oasgen-provider treated
+  #   additionalStatusFields as immutable post-generation. oasgen 0.27.0 makes it APPEND-ONLY (a CEL
+  #   prefix compare), and PullRequest's list grows ['number','html_url','state'] -> + 'merged',
+  #   'merged_at', which is a pure append. Verified across ALL 29 rd-*.yaml templates before rolling,
+  #   not just the one named in the handoff: exactly one file differs and its change is prefix-preserving.
+  #   ORDERING: requires oasgen-provider >= 0.27.0, which went in as installer 0.3.370 immediately
+  #   before this. Rolling this pin against 0.26.1 reproduces the original wedge exactly.
+  #   ASSERT ON THE RIGHT THING when checking this landed. The CompositionDefinition read 0.3.2
+  #   Ready=True last time while the helm release never moved — Pass A registration succeeds
+  #   independently of the composition. The honest signals are the kog helm release's CHART VERSION
+  #   going 0.3.1 -> 0.3.2, and PullRequest .status.merged rising off its 0/24 baseline. (The pin
+  #   comment above says 'rev33'; the release is on rev 35 now from ordinary reconciles, so the
+  #   revision NUMBER is not the instrument — the chart version is.)
+  version: 0.3.2
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: portal
