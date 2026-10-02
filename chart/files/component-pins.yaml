@@ -287,7 +287,9 @@ components:
   # 1.12.27: co-versioned with snowplow. Verified byte-identical to 1.12.24 outside Chart.yaml, so no
   # CRD surface change and no ordering constraint against the app. Skips 1.12.25 and 1.12.26, both of
   # which 1.12.27 contains by ancestry.
-  version: 1.12.32
+  # 1.12.33: co-versioned with snowplow (lockstep). Verified byte-identical to 1.12.32 outside
+  # Chart.yaml - no CRD surface change; the security fix rides the app image.
+  version: 1.12.33
   tier: platform
   feature: portal
 - name: authn
@@ -659,7 +661,30 @@ components:
   # this roll. Reading it here is exactly the error the owner corrected.
   # Both charts verified byte-identical to 1.12.24 outside Chart.yaml (26311 B and 6219 B), image is a
   # real multi-arch OCI index (amd64 + arm64).
-  version: 1.12.32
+  # 1.12.33: SECURITY HOTFIX. Rolled on Diego's direct go. Closes three cross-user L1 cache leaks that
+  #   were LIVE on 057 under 1.12.32:
+  #     #423 shared resolved-output cells (restactions, widgets, raFullList) were keyed by the FIRST-MATCH
+  #       binding, so a co-bound user could receive another user's RESTAction/widget output - including
+  #       Secret or ConfigMap data they cannot read. Now keyed on a digest of ALL the requester's
+  #       bindings, with drift and TOCTOU guards on every write.
+  #     #425/#427 the cohort seed and the refresher could cache objects fetched with the SNOWPLOW SA's
+  #       credentials under a group or tenant-SA key. The SA exemption is now snowplow's own SA only,
+  #       matched by its token's `sub`.
+  #     #429 with CACHE_ENABLED=false every restactions/widgets /call panicked, so cache-off was NOT an
+  #       available rollback lever on 1.12.32. It works again.
+  #   DOES NOT CLOSE #432 - a narrower same-class leak where the seed/keepwarm memo can carry an
+  #   old-class body into a new-class cell if one identity's RBAC changes mid-pass. #432 is present in
+  #   1.12.32 TOO, so this is not a regression; the fix lands in 1.12.34. Chosen deliberately: the leaks
+  #   above are reachable in STEADY STATE, #432 needs an admin to change a human's binding during a
+  #   keepwarm pass covering that user.
+  #   Charts verified byte-identical to 1.12.32 outside Chart.yaml (both of them) - the whole change
+  #   rides the image. Image index sha256:e58ccc93..., amd64 + arm64, digests matched against the
+  #   snowplow session's independently.
+  #   ROLLOUT, do NOT misread it: the L1 key version moves v6 -> v7, so EVERY cell re-prewarms on boot
+  #   and /readyz gates on prewarm. Expect snowplow at 0/1 for ~9-10 min (last cold prewarm measured
+  #   528,806 ms); PHASE1_TIMEOUT is 900s. DO NOT RESTART THE POD during that window - a restart resets
+  #   prewarm and makes it worse. See the readyz-backstop note in the 1.12.2x history above.
+  version: 1.12.33
   deps:
   - snowplow-crd
   - authn
