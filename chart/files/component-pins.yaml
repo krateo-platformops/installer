@@ -239,7 +239,9 @@ components:
   # 1.6.90: co-versioned with frontend (lockstep rule). Verified byte-identical to 1.6.89 outside
   # Chart.yaml — a Table rendering fix with no widget-schema surface, so this pin moves only to keep the
   # pair on one version.
-  version: 1.6.90
+  # 1.6.91: co-versioned with frontend (lockstep). Templates byte-identical to 1.6.90 — a Table
+  # rendering fix with no widget-schema surface.
+  version: 1.6.91
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1314,7 +1316,26 @@ components:
   #   VERIFICATION LIMIT: no minification-safe literal exists for this fix, so the post-roll check is
   #   deployment image + gen == observedGeneration + a changed asset hash. That proves the bundle is
   #   SERVING, not that tags stop clipping; the behavioural check is the frontend session's PB V2 dry run.
-  version: 1.6.90
+  # 1.6.91: ONE user-facing change (#449) plus a refactor; the rest of the tag is a NEW SERVICE that is
+  #   deliberately NOT pinned. 3 commits, 70 files — but only 7 touch ui/src:
+  #     #449  a virtual Table (100+ rows) fits its container again instead of scrolling behind a hidden
+  #           scrollbar. Tag columns keep full width and the other columns ellipsize, so verdict tags
+  #           are not cut off in the narrow preview pane. Table.tsx +8 lines plus its test — that is the
+  #           ENTIRE deployed-frontend behaviour change.
+  #     #445  the page-draft lint extracted into a pure module (pageLint.ts, +195) that a Node service
+  #           can import; previewSandbox.ts drops 121 lines in favour of it, +264 lines of tests. No
+  #           behaviour change.
+  #     #446  a NEW chart and image `builder-gate`, published at 1.6.91 because every Chart.yaml ships
+  #           on a tag. 57 of the 70 files are this service. DO NOT PIN OR DEPLOY IT — per Diego's D11
+  #           it goes in only once snowplow 1.12.36 (snowplow#443) is live. Released, not rolled.
+  #   frontend-crds templates byte-identical to 1.6.90.
+  #   VERIFICATION LIMIT, stated by the author rather than guessed: there is NO grep-safe bundle literal
+  #   for #449 — it is a numeric scroll-prop change. The check is deployment image + gen ==
+  #   observedGeneration + a changed asset hash, which proves the bundle is SERVING, not that the table
+  #   fits. The behavioural check is the frontend session's PB V2 dry run. The author declining to
+  #   invent a literal is the right call: three invented markers in two days would each have read a
+  #   successful roll as a failure.
+  version: 1.6.91
   deps:
   - frontend-crd
   - authn
