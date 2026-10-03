@@ -291,7 +291,8 @@ components:
   # which 1.12.27 contains by ancestry.
   # 1.12.33: co-versioned with snowplow (lockstep). Verified byte-identical to 1.12.32 outside
   # Chart.yaml - no CRD surface change; the security fix rides the app image.
-  version: 1.12.33
+  # 1.12.34: co-versioned with snowplow (lockstep). Byte-identical to 1.12.33 outside Chart.yaml.
+  version: 1.12.34
   tier: platform
   feature: portal
 - name: authn
@@ -686,7 +687,21 @@ components:
   #   and /readyz gates on prewarm. Expect snowplow at 0/1 for ~9-10 min (last cold prewarm measured
   #   528,806 ms); PHASE1_TIMEOUT is 900s. DO NOT RESTART THE POD during that window - a restart resets
   #   prewarm and makes it worse. See the readyz-backstop note in the 1.12.2x history above.
-  version: 1.12.33
+  # 1.12.34: SECURITY, closes the LAST known cross-user L1 leak. Exactly 1.12.33 + PR #415 — verified
+  #   as a one-commit range (1.12.33..1.12.34 contains only d0b29c57), and both charts byte-identical
+  #   to 1.12.33 outside Chart.yaml, so the change rides the image.
+  #   #432: the seed/keepwarm memo could carry an old-RBAC-class body into a new-class cell when one
+  #     identity's RBAC changed mid-pass. Confirmed live on 1.12.33 by byte-level probes — present in
+  #     1.12.32 too, so 1.12.33 was never a regression; it simply did not fix this one.
+  #   #411: a memo hit no longer reuses a body whose deps moved since it was produced.
+  #   GATE CAVEAT: the suite was 27/28 on d0b29c57. The failure is the known restactions/api
+  #     RBAC-snapshot flake (#422/#385) under load — 5/5 vs 5/5 in a quiet period, 30/30 isolated.
+  #     A known-flaky gate, not a clean one.
+  #   ROLLOUT: NO OUTAGE. RollingUpdate maxSurge=1/maxUnavailable=0, so the OLD pod serves while the
+  #     new one prewarms at 0/1 for ~10 min. Measured on the 1.12.33 roll: exactly one ready endpoint
+  #     throughout, portal 200 the whole time, new pod Ready at 9.8 min. DO NOT RESTART during it.
+  #     L1 key stays v7, so the in-process cache starts empty but no key migration occurs.
+  version: 1.12.34
   deps:
   - snowplow-crd
   - authn
