@@ -2965,7 +2965,19 @@ components:
   #     'allowedResources lives ONLY at spec.widgetData.allowedResources'   (1.5.3=0, 1.5.4=1)
   #   The handoff proposed 'allowedResources lives only under' — that is 0 in BOTH versions and would
   #   have read a successful roll as a failure. Third such marker today; always grep the artifact.
-  version: 1.5.4
+  # 1.5.5 (frontend-agent): PROMPT ONLY. Chart-diffed against 1.5.4 — only Chart.yaml and
+  #   files/prompts-eng.yaml differ; no template, tool or model change.
+  #   Generic authoring rules, none of them widget-kind-specific:
+  #     - every authored object is named <page-name>-<role>, so a page's objects are identifiable and
+  #       two pages cannot collide on a generic name like `main-table`;
+  #     - numbers are formatted with units;
+  #     - numeric Table columns use numeric cells, with rows pre-sorted on the RAW number (not the
+  #       formatted string, which would sort "1,000" before "9").
+  #   MARKER: 'NAMES CARRY THE PAGE NAME' — 1.5.4=0, 1.5.5=2. Grepped from both PACKAGED charts by the
+  #   author and confirmed independently here. Worth noting the author grepped the artifact this time
+  #   rather than writing a marker from memory; the three previous handoff markers were each 0 on a
+  #   SUCCESSFUL roll and would have been read as failures.
+  version: 1.5.5
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
