@@ -2896,7 +2896,25 @@ components:
   # The rule: a page's heading or title is a PageHeader, the FIRST CHILD of the root Flex — never a
   # Paragraph, never a Card title. Same verify-by-the-field instruction as above applies; the prompt
   # reaches the pod through secret/frontend-agent, so read the config-hash annotation, not a ConfigMap.
-  version: 1.5.3
+  # 1.5.4 (frontend-agent#17): PROMPT ONLY. Chart-diffed against 1.5.3 — only Chart.yaml and
+  #   files/prompts-eng.yaml differ (+74/-33); no template, tool or model change.
+  #   Fixes the failure that blocked PB V2 twice on autopilot 0.6.7: the agent emitted a Flex carrying
+  #   spec.allowedResources at the TOP LEVEL, which validation rejected. Verified against the LIVE
+  #   CRDs: across all 44 served widget kinds, allowedResources exists at
+  #   spec.widgetData.allowedResources on 14 kinds and at spec top level on ZERO.
+  #   WHY THE REJECTION WAS LUCK, and the reason to keep every builder apply path strict: spec has no
+  #   x-kubernetes-preserve-unknown-fields, so under a structural schema an unknown
+  #   spec.allowedResources is normally PRUNED SILENTLY — giving a Flex that applies cleanly, reports
+  #   healthy and renders nothing. The path that hit this applies with strict validation; any path
+  #   that does not turns the same mistake into a silent blank widget.
+  #   Also in it: lean cold start (no repo research for a fully-specified page), all validations in one
+  #   turn, returns exactly what it validated, jq module functions + tag-cell shape + colour names in
+  #   the prompt, and data sources resolve to an existing RESTAction else delegate to snowplow-agent.
+  #   POST-ROLL MARKER, copied from the ARTIFACT not the handoff:
+  #     'allowedResources lives ONLY at spec.widgetData.allowedResources'   (1.5.3=0, 1.5.4=1)
+  #   The handoff proposed 'allowedResources lives only under' — that is 0 in BOTH versions and would
+  #   have read a successful roll as a failure. Third such marker today; always grep the artifact.
+  version: 1.5.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
