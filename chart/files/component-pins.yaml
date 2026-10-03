@@ -49,7 +49,9 @@ components:
   # additionalStatusFields plus the maxItems:64 / maxLength:253 bounds the rule REQUIRES - without them
   # the apiserver costs the comprehension as effectively infinite and rejects the WHOLE CRD. Also adds
   # the new status.resourceHash property (see the oasgen-provider pin for why that matters on upgrade).
-  version: 0.27.0
+  # 0.28.0: co-versioned with oasgen-provider. Carries the same kubeVersion '>=1.36.0-0' floor, so it
+  # refuses below 1.36 rather than installing a label-selector mechanism nothing can satisfy.
+  version: 0.28.0
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -1995,7 +1997,9 @@ components:
   kind: ControllerRenderService
   # 0.27.0: co-versioned with oasgen-provider (the triple moves together). Verified byte-identical to
   # 0.26.1 outside Chart.yaml - the render split landed in 0.26.x and nothing in it changed here.
-  version: 0.27.0
+  # 0.28.0: co-versioned with oasgen-provider (the triple moves together). Declares NO kubeVersion
+  # floor — it ships no CRDs and no controller, so it installs anywhere.
+  version: 0.28.0
   tier: platform
   feature: portal
   chart: controller-render-service
@@ -2040,7 +2044,36 @@ components:
   #   from inside it - so no future policy change can reach this cluster until oasgen-provider#173 lands.
   #   #172 (slug collision: [^a-z0-9]+ -> '-' collapses github.krateo.io and github-krateo.io onto one
   #   object, second group silently never stamped) CANNOT fire here - the two groups do not collide.
-  version: 0.27.0
+  # 0.28.0: BREAKING — raises the Kubernetes floor. Supersedes 0.27.1 (its #172/#173 fixes are
+  #   included); 0.27.1 was never rolled here.
+  #   THE FLOOR: oasgen-provider and -crds now declare kubeVersion '>=1.36.0-0' and REFUSE to install
+  #     below it (verified against the published charts: 1.33/1.35 refuse, 1.36 accepts).
+  #     057 is v1.36.2-gke.2064000, read from the API, so it passes. controller-render-service keeps
+  #     NO floor — it ships no CRDs and no controller.
+  #     Why the floor moved: rest-dynamic-controller now watches ONLY the instances its own CRD
+  #     version owns, selecting on krateo.io/oas-version with exact equality. The
+  #     MutatingAdmissionPolicy that writes that label is GA from 1.36. Below 1.36 nothing writes it,
+  #     the selector matches nothing, and the install comes up GREEN while reconciling no instance at
+  #     all. A refused install is the better failure.
+  #   THE BACKFILL: the policy stamps only on CREATE/UPDATE, so instances untouched since the policy
+  #     landed carry no label and would be orphaned by an exact-equality selector. The provider
+  #     backfills them before deploying the selecting controller.
+  #     ON 057 THE BACKFILL IS A NO-OP, measured pre-roll: of 87 github.krateo.io CRs, 29 lacked the
+  #     label and ALL 29 are *Configuration* kinds — which are fetched by reference, never
+  #     version-scope-watched, so they cannot be orphaned. ZERO resource instances were unlabelled.
+  #     DO NOT test this with `-l '!krateo.io/oas-version'` across all 58 served kinds: that lists the
+  #     unlabelled Configurations, never returns empty, and reads as a failed backfill on a correct
+  #     release. 58 = 2 x 29 because each RestDefinition generates a resource CRD AND a Configuration
+  #     CRD. The correct check is the 29 RESOURCE kinds only; empty there is the pass.
+  #     So a clean roll here proves "no instance required the backfill, and none was orphaned" — NOT
+  #     that the migration path works. The real population lives on krateo-installer-release (oasgen
+  #     0.9.8, no oas-version policy ever): 36 unlabelled RESOURCE instances there.
+  #   RELEASE-GATE CAVEAT: the chart-images CI gate was FAIL-OPEN for this release — raising the floor
+  #     above the CI runner's helm made both charts unrenderable there and the workflow warns rather
+  #     than fails, so it checked one image of three. Both images were verified by hand instead
+  #     (amd64+arm64, org.opencontainers.image.revision=6cc364f4059c). Fix: krateo-platformops/.github#25,
+  #     unmerged — every release until it lands inherits the same silent downgrade.
+  version: 0.28.0
   deps:
   - oasgen-provider-crd
   tier: platform
