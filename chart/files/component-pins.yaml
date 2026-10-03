@@ -51,7 +51,9 @@ components:
   # the new status.resourceHash property (see the oasgen-provider pin for why that matters on upgrade).
   # 0.28.0: co-versioned with oasgen-provider. Carries the same kubeVersion '>=1.36.0-0' floor, so it
   # refuses below 1.36 rather than installing a label-selector mechanism nothing can satisfy.
-  version: 0.28.0
+  # 0.28.1: co-versioned with oasgen-provider. Same k8s >= 1.36 floor; carries no part of the
+  # regression fix, which is provider-side only.
+  version: 0.28.1
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -2014,7 +2016,8 @@ components:
   # 0.26.1 outside Chart.yaml - the render split landed in 0.26.x and nothing in it changed here.
   # 0.28.0: co-versioned with oasgen-provider (the triple moves together). Declares NO kubeVersion
   # floor — it ships no CRDs and no controller, so it installs anywhere.
-  version: 0.28.0
+  # 0.28.1: co-versioned with oasgen-provider (the triple moves together). No kubeVersion floor.
+  version: 0.28.1
   tier: platform
   feature: portal
   chart: controller-render-service
@@ -2088,7 +2091,34 @@ components:
   #     than fails, so it checked one image of three. Both images were verified by hand instead
   #     (amd64+arm64, org.opencontainers.image.revision=6cc364f4059c). Fix: krateo-platformops/.github#25,
   #     unmerged — every release until it lands inherits the same silent downgrade.
-  version: 0.28.0
+  # 0.28.1: FIXES A 0.28.0 REGRESSION THAT WEDGED EVERY RestDefinition AT Ready=False/Creating.
+  #   Symptom on 057: all 30 RestDefinitions flipped to Creating 3 minutes after the 0.28.0 roll and
+  #   stayed there for 3 hours. Nothing was functionally broken — 58 generated CRDs Established=True,
+  #   30 rest-dynamic-controllers 1/1, 0 unlabelled resource instances, no API churn — but
+  #   GithubProviderKog and Petstore never went Ready, so the INSTALLER UMBRELLA reported a permanent
+  #   false-RED. That is the dangerous half: anything gating on installer readiness could not tell
+  #   this from a real failure.
+  #   CAUSE: three `deploy.DeployOptions` literals in restdefinition.go and LabelSelector was set on
+  #   only two. Observe (:436) rendered the controller deployment WITHOUT the version-scoped selector;
+  #   Create (:621) and Update (:909) rendered it WITH. So Observe computed digest A, the write paths
+  #   stored digest B, A != B every pass, Observe returned ResourceUpToDate:false, Update re-stored the
+  #   value it already had, and Available() at :523 — downstream of the comparison — was never reached.
+  #   THE SIGNATURE, worth recognising again: "Rendered resources digest changed" ~36x/5min while
+  #   status.digest stayed CONSTANT and resourceVersion never moved. A stable stored digest with a
+  #   churning rendered one means the two code paths disagree, NOT that persistence is failing.
+  #   FIX: one `deployOptions()` constructor serving all three call sites, dry-run the only permitted
+  #   difference — verified in the 0.28.1 source (1 literal, 3 call sites, constructor present).
+  #   Restoring the missing field alone would have fixed this instance and left the next added field
+  #   free to diverge identically.
+  #   PASS CRITERION: the RestDefinitions must reach Ready=True with NOTHING deleting or editing them,
+  #   and the composition rollup must return to full. If any needs a nudge, the digests still disagree.
+  #   Nothing else from 0.28.0 changes: the k8s>=1.36 floor, the version-scoped watch, the policy
+  #   requirement and the label backfill are all unchanged and all worked.
+  #   RELEASE-GATE CAVEAT, same as 0.28.0: the chart-images gate was FAIL-OPEN again (the 1.36 floor
+  #   makes both charts unrenderable on the CI runner, and the workflow warns rather than fails).
+  #   Images verified by hand instead. The .github fix is still unmerged and now blocks core-provider's
+  #   tag too — the issue number was cited as #25 once and #24 once, so confirm which before chasing.
+  version: 0.28.1
   deps:
   - oasgen-provider-crd
   tier: platform
