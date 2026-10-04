@@ -2972,7 +2972,20 @@ components:
   #   order. The receiving side must understand the request before the asking side starts making it.
   #   MARKER (note the backticks — grep the exact bytes, not a paraphrase):
   #     'jq `sort_by` IS ASCENDING'   (1.2.2=0, 1.2.3=1)
-  version: 1.2.3
+  # 1.2.4: CORRECTS 1.2.3 — same day, and the correction is about PLACEMENT, not about the rule.
+  #   1.2.3's observation was right (jq sort_by is ascending, so "worst first" needs descending keys)
+  #   but it put the ordering INSIDE the RESTAction. That violates Diego's rule that a RESTAction is
+  #   completely agnostic of the widget calling it: the widget orders and formats through its own
+  #   widgetDataTemplate. It also dragged back repo research — 5-11 calls and a ~12-minute turn.
+  #   1.2.4 removes the ordering rule entirely (the 'jq `sort_by` IS ASCENDING' line is GONE, 1 -> 0)
+  #   and states the principle instead.
+  #   ORDERING, and why snowplow-agent goes FIRST despite appearances: dropping RESTAction ordering
+  #   before frontend-agent stops asking for it looks like it leaves a window with nothing sorting. It
+  #   does not — frontend-agent 1.5.7 ALREADY orders in widgetDataTemplate (13 references) and merely
+  #   delegates AS WELL, not INSTEAD. So this leaves no gap, and the reverse order would only
+  #   double-sort on the same key, which is idempotent. Checked rather than assumed.
+  #   MARKER: 'WIDGET-AGNOSTIC -- A RESTACTION IS DATA'   (1.2.3=0, 1.2.4=1)
+  version: 1.2.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
