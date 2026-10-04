@@ -296,7 +296,8 @@ components:
   # 1.12.33: co-versioned with snowplow (lockstep). Verified byte-identical to 1.12.32 outside
   # Chart.yaml - no CRD surface change; the security fix rides the app image.
   # 1.12.34: co-versioned with snowplow (lockstep). Byte-identical to 1.12.33 outside Chart.yaml.
-  version: 1.12.34
+  # 1.12.35: co-versioned with snowplow (lockstep). Byte-identical to 1.12.34 outside Chart.yaml.
+  version: 1.12.35
   tier: platform
   feature: portal
 - name: authn
@@ -705,7 +706,33 @@ components:
   #     new one prewarms at 0/1 for ~10 min. Measured on the 1.12.33 roll: exactly one ready endpoint
   #     throughout, portal 200 the whole time, new pod Ready at 9.8 min. DO NOT RESTART during it.
   #     L1 key stays v7, so the in-process cache starts empty but no key migration occurs.
-  version: 1.12.34
+  # 1.12.35: SECURITY. Supersedes 1.12.34 entirely — contains everything in it, so there is no
+  #   intermediate step. Both charts byte-identical to 1.12.34 outside Chart.yaml; the change rides the
+  #   image. 12 commits (1.12.34 was a one-commit range — this is materially larger), suite 28/28 on
+  #   c7533929, a clean gate unlike 1.12.34's 27/28 flake.
+  #   #435 — a raFullList CROSS-MEMBER leak that was live in BOTH 1.12.33 and 1.12.34, i.e. live on 057
+  #     until this roll. A Role-rules revoke was not honoured for raFullList-backed widgets for up to
+  #     ONE HOUR, and a grant-then-revoke mid-resolve could cache a transient row for the whole class.
+  #     Fix folds the RBAC sub-gen into the raFullList key -> key version v8.
+  #     NOTE THE PATTERN: this is the same shape as #423 and #432 — a revoked permission continuing to
+  #     serve cached data to the wrong members — on a THIRD code path. Closing the class twice did not
+  #     close it; treat "cache key must fold every identity input" as the invariant, not a per-bug fix.
+  #   Also: boot-seed freshness (#408), refresher drops non-resident keys (#383), reseed after an RBAC
+  #     shift (#258), layered raFullList convergence (#406), raFullList refresh under its class
+  #     representative (#431), learned identity classes from authn clientconfig certs (#262/#436),
+  #     no-SA-endpoint readiness fix (#401), readiness-exit record in /readyz (#407), SSE key parity
+  #     (#426), test de-flakes.
+  #   ROLLOUT: no outage (RollingUpdate maxSurge=1/maxUnavailable=0 — the OLD pod serves throughout;
+  #     measured twice now, 9.8 min on 1.12.33 and 7.5 min on 1.12.34, one ready endpoint the whole
+  #     time). New pod ~10 min at 0/1. DO NOT RESTART. Key v8, but the cache is in-process so it is
+  #     cold regardless. Learned identity classes are admitted pre-latch only within the PHASE1
+  #     backstop budget; 057 is group-only users so expect ~0 classes and no extra time.
+  #   POST-ROLL: /readyz outcome=latch, and the new body carries step timings (*_ms).
+  #     The /debug/vars counters stay UNMEASURED without an authn credential — including the ALARM
+  #     condition worth recording: snowplow_learned_clientconfig_secrets > 0 with _from_secrets == 0
+  #     means authn's cert format changed. Third release running where a security fix ships with its
+  #     own verification out of reach; the authenticated read is still owed.
+  version: 1.12.35
   deps:
   - snowplow-crd
   - authn
