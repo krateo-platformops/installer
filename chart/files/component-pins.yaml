@@ -242,7 +242,8 @@ components:
   # 1.6.91: co-versioned with frontend (lockstep). Templates byte-identical to 1.6.90 — a Table
   # rendering fix with no widget-schema surface.
   # 1.6.92: co-versioned with frontend (lockstep). Templates byte-identical to 1.6.91.
-  version: 1.6.92
+  # 1.6.93: co-versioned with frontend (lockstep). Templates byte-identical to 1.6.92.
+  version: 1.6.93
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1382,7 +1383,14 @@ components:
   #   VERIFICATION LIMIT: no safe bundle literal for either change (a layout fix and a loop that lives
   #     in behaviour). Check = image + gen == observedGeneration + changed asset hash, which proves the
   #     bundle is SERVING only. Behaviour is the frontend session's PB V2 dry run.
-  version: 1.6.92
+  # 1.6.93: smallest release of this run — ONE commit (#453), 3 files, all under ui/src. The Autopilot
+  #   rail's READ-ONLY chip badge no longer wraps beside a long chip label. A CSS/layout fix.
+  #   frontend-crds templates byte-identical to 1.6.92 (only the version line differs) — checked, not
+  #   taken from the handoff.
+  #   builder-gate republished at 1.6.93 and NOT pinned (D11) — fourth release running.
+  #   VERIFICATION LIMIT: no safe bundle literal for a CSS fix. Check = image + gen ==
+  #   observedGeneration + changed asset hash, which proves the bundle is SERVING and nothing more.
+  version: 1.6.93
   deps:
   - frontend-crd
   - authn
