@@ -2834,7 +2834,19 @@ components:
   # 0.6.7 (#139, #94): a platform-wide log filter also excludes krateo-alert-provider, and every
   # Agent-type tool sets isolateSessions: true, so each delegation gets its own sub-agent session
   # (kagent 0.10.1 otherwise shares one per tool across every caller). Honoured by runtime: go only.
-  version: 0.6.7
+  # 0.6.8: PROMPT ONLY. Chart-diffed against 0.6.7 — files/prompts-eng.yaml, Chart.yaml and
+  #   Chart.lock. The LOCK DIFF IS ONLY THE REGENERATED TIMESTAMP (2026-10-02T15:54:21Z ->
+  #   2026-10-04T09:43:44Z); no dependency moved. The author asked me to check that rather than
+  #   asserting it, which is the right way round.
+  #   The prompt teaches the agent that a page is finished only once its preview SHOWS DATA, which is
+  #   the model half of frontend #448's read-back loop.
+  #   ORDERING, load-bearing and already satisfied: this prompt reads `previewRender`, a field ONLY
+  #   frontend 1.6.92 sends. 1.6.92 went in as installer 0.3.386 immediately before this. Rolled the
+  #   other way round the prompt is INERT rather than broken — it would wait for a field nothing emits
+  #   — so a dry run against the wrong order measures nothing and looks like a prompt failure.
+  #   MARKER, grepped from both packaged charts by the author and confirmed here:
+  #     'A PAGE IS DONE WHEN ITS PREVIEW SHOWS DATA'   (0.6.7=0, 0.6.8=1)
+  version: 0.6.8
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
