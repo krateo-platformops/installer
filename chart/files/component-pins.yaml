@@ -2962,7 +2962,17 @@ components:
   #   kubectl get deploy snowplow-agent -o jsonpath='{.spec.template.metadata.annotations.kagent\.dev/config-hash}'
   # It reads 16245247268778634987 before this roll (it moved from 12276131171719429138 on the 1.2.1
   # roll, so the mechanism is confirmed working). If it does not move, bounce the pod.
-  version: 1.2.2
+  # 1.2.3: PROMPT ONLY. Chart-diffed against 1.2.2 — only Chart.yaml and files/prompts-eng.yaml.
+  #   THE RULE IS A REAL DEFECT CLASS, not polish: jq's `sort_by` is ASCENDING, so "worst first"
+  #   requires every magnitude key to DESCEND. Get it backwards and the page is well-formed, renders
+  #   cleanly and ranks exactly wrong — which is why it survives review. The prompt now states the
+  #   direction explicitly, and an unstated threshold must be chosen, written into the RESTAction and
+  #   reported rather than left implicit.
+  #   ORDERING: goes BEFORE frontend-agent 1.5.7, whose delegation asks snowplow-agent for an explicit
+  #   order. The receiving side must understand the request before the asking side starts making it.
+  #   MARKER (note the backticks — grep the exact bytes, not a paraphrase):
+  #     'jq `sort_by` IS ASCENDING'   (1.2.2=0, 1.2.3=1)
+  version: 1.2.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
