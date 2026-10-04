@@ -241,7 +241,8 @@ components:
   # pair on one version.
   # 1.6.91: co-versioned with frontend (lockstep). Templates byte-identical to 1.6.90 — a Table
   # rendering fix with no widget-schema surface.
-  version: 1.6.91
+  # 1.6.92: co-versioned with frontend (lockstep). Templates byte-identical to 1.6.91.
+  version: 1.6.92
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1362,7 +1363,26 @@ components:
   #   fits. The behavioural check is the frontend session's PB V2 dry run. The author declining to
   #   invent a literal is the right call: three invented markers in two days would each have read a
   #   successful roll as a failure.
-  version: 1.6.91
+  # 1.6.92: 3 commits. 20 files under ui/src; the rest is builder-gate, which stays UNPINNED (D11).
+  #   #451 Table: headers wrap to two lines, numeric columns size to their content and right-align,
+  #     and a placeholder no longer turns a number column into a text column.
+  #   #448 PREVIEW READ-BACK LOOP — read this before assuming it is cosmetic. After Agentiko previews
+  #     a specialist-authored page, the rail reads back WHAT ACTUALLY RENDERED and, on problems, sends
+  #     ONE hidden follow-up. So the agent acts on its own output with no human in the turn.
+  #     THE BOUND IS ENFORCED IN CODE, not just documented — verified in the 1.6.92 source:
+  #       MAX_PREVIEW_FIX_ROUNDS === 3 (asserted in its own test), attempts 1-3 are 'fix' mode, then a
+  #       report turn; an early report fires on no progress ('repeated'); the terminal message is
+  #       'fix rounds are used up'. Stop cancels it and it never opens a second stream.
+  #     Its ONLY writes are Agentiko's own next previewPage through the UI — it authors nothing to the
+  #     cluster. Diego approved this explicitly after being shown the bound.
+  #   ORDERING, load-bearing: krateo-autopilot 0.6.8's prompt reads `previewRender`, which ONLY 1.6.92
+  #     sends. Roll frontend FIRST. Rolled the other way the prompt is inert, not broken, but the
+  #     frontend session's dry run would measure nothing.
+  #   frontend-crds 1.6.92 templates byte-identical to 1.6.91.
+  #   VERIFICATION LIMIT: no safe bundle literal for either change (a layout fix and a loop that lives
+  #     in behaviour). Check = image + gen == observedGeneration + changed asset hash, which proves the
+  #     bundle is SERVING only. Behaviour is the frontend session's PB V2 dry run.
+  version: 1.6.92
   deps:
   - frontend-crd
   - authn
