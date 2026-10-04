@@ -3060,7 +3060,16 @@ components:
   #   columns actually apply to specialist-authored pages.
   #   MARKER, grepped from both packaged charts by the author and confirmed here:
   #     'EVERY column whose values are numbers MUST be a NUMERIC cell'   (1.5.5=0, 1.5.6=1)
-  version: 1.5.6
+  # 1.5.7: PROMPT ONLY. Chart-diffed against 1.5.6 — only Chart.yaml and files/prompts-eng.yaml.
+  #   Pairs with snowplow-agent 1.2.3: the delegation now asks snowplow-agent for an EXPLICIT sort
+  #   order rather than leaving it implicit, and adds tie-breakers so the ordering is DETERMINISTIC
+  #   rather than incidentally stable. Without tie-breakers two runs over equal keys can rank
+  #   differently while both look correct — the same well-formed-but-wrong shape as the ascending
+  #   sort_by bug this pair exists to close.
+  #   ORDERING: snowplow-agent 1.2.3 went in FIRST (installer 0.3.390). The receiving side must
+  #   understand the explicit-order request before this side starts making it.
+  #   MARKER: 'tie-breakers included'   (1.5.6=0, 1.5.7=2)
+  version: 1.5.7
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
