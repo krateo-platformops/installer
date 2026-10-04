@@ -3024,7 +3024,13 @@ components:
   #   author and confirmed independently here. Worth noting the author grepped the artifact this time
   #   rather than writing a marker from memory; the three previous handoff markers were each 0 on a
   #   SUCCESSFUL roll and would have been read as failures.
-  version: 1.5.5
+  # 1.5.6: PROMPT ONLY. Chart-diffed against 1.5.5 — only Chart.yaml and files/prompts-eng.yaml.
+  #   Carries the numeric-cell rule forward from 1.5.5's table work: every column whose values are
+  #   numbers must be a NUMERIC cell, which is what makes #451's right-aligned, content-sized numeric
+  #   columns actually apply to specialist-authored pages.
+  #   MARKER, grepped from both packaged charts by the author and confirmed here:
+  #     'EVERY column whose values are numbers MUST be a NUMERIC cell'   (1.5.5=0, 1.5.6=1)
+  version: 1.5.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
