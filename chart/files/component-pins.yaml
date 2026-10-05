@@ -243,7 +243,9 @@ components:
   # rendering fix with no widget-schema surface.
   # 1.6.92: co-versioned with frontend (lockstep). Templates byte-identical to 1.6.91.
   # 1.6.93: co-versioned with frontend (lockstep). Templates byte-identical to 1.6.92.
-  version: 1.6.95
+  # 1.6.96: co-versioned with frontend (lockstep). Packaged trees BYTE-IDENTICAL to 1.6.95 across all
+  #   48 files — only Chart.yaml's version line moves. Diffed, not assumed. #455 is UI-only.
+  version: 1.6.96
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1413,7 +1415,22 @@ components:
   #   builder-gate republished at 1.6.93 and NOT pinned (D11) — fourth release running.
   #   VERIFICATION LIMIT: no safe bundle literal for a CSS fix. Check = image + gen ==
   #   observedGeneration + changed asset hash, which proves the bundle is SERVING and nothing more.
-  version: 1.6.95
+  # 1.6.96 (#455, tag -> commit 7fb2263 = main HEAD; ANNOTATED, derefs to 7fb2263f — check BOTH ref
+  #   forms: five of this repo's 1.0.x tags are LIGHTWEIGHT and a deref-only read returns nothing,
+  #   which reads as a false mismatch).
+  #   "The Controller Composer excludes only fields spec carries." oasgen builds a kind's spec from the
+  #   create body plus each held verb's OPERATION-level parameters, so a parameter declared on the PATH
+  #   ITEM (Typeform's {form_id}) never reaches spec, and excluding it raised a spurious "set in
+  #   excludedSpecFields not found in schema" warning. New specCarriesField asks oasgen's own question
+  #   before excluding, reading doc.paths[path][method].parameters — OPERATION level only.
+  #   The GitHub-provider RestDefinitions on 057 (hook_id, release_id) declare their path parameters at
+  #   operation level, so they still answer true and are UNCHANGED; a naive "body properties only" check
+  #   would have broken them. Fails open (no document => true), preserving current behaviour.
+  #   SCOPE: four source files + two test files, all under ui/ — controllerModel.ts, controllerChart.ts,
+  #   KindInspector.tsx, draftStructure.ts. NOT the one file the handoff claimed; read the PR, not it.
+  #   VERIFICATION LIMIT: the fix lives in composer behaviour against an imported OAS, so the roll check
+  #   is image + Ready ONLY. Behaviour needs a Typeform-shaped OAS driven through the Controller Composer.
+  version: 1.6.96
   deps:
   - frontend-crd
   - authn
