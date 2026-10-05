@@ -299,7 +299,8 @@ components:
   # Chart.yaml - no CRD surface change; the security fix rides the app image.
   # 1.12.34: co-versioned with snowplow (lockstep). Byte-identical to 1.12.33 outside Chart.yaml.
   # 1.12.35: co-versioned with snowplow (lockstep). Byte-identical to 1.12.34 outside Chart.yaml.
-  version: 1.12.35
+  # 1.12.36: co-versioned with snowplow (lockstep). Version-only change.
+  version: 1.12.36
   tier: platform
   feature: portal
 - name: authn
@@ -734,7 +735,29 @@ components:
   #     condition worth recording: snowplow_learned_clientconfig_secrets > 0 with _from_secrets == 0
   #     means authn's cert format changed. Third release running where a security fix ships with its
   #     own verification out of reach; the authenticated read is still owed.
-  version: 1.12.35
+  # 1.12.36: 10 commits. Chart touches a TEMPLATE this time, not just versions — the handoff said so
+  #   rather than letting it be discovered: deployment.yaml gains ONE env, SNOWPLOW_SERVICE_VERSION,
+  #   from fieldRef metadata.labels['app.kubernetes.io/version']. snowplow-crds changes by version only.
+  #   #462 FIXES A DEFECT I FOUND ON 1.12.35 FROM CLICKSTACK: snowplow was exporting TWO service.version
+  #     values from the SAME pod — the chart version AND the commit SHA (5940 rows on the SHA, 1680 on
+  #     1.12.35). The post-roll checklist took {version} as a PARAMETER, so a reader typing the chart
+  #     version — what every other tool here calls the version — selected a row set that might not
+  #     contain snowplow_build_info at all, and step 0 then returned no rows and read as a CLEAN PASS.
+  #     From 1.12.36 service.version is "1.12.36" and the git commit lives on vcs.ref.head.revision.
+  #     Step 0 now FAILS on an empty roster instead of passing. ACTION FOR ANY SAVED CLICKSTACK QUERY
+  #     OR ALERT filtering service.version on a SHA: switch it to vcs.ref.head.revision or it goes
+  #     QUIET — not erroring, just matching nothing.
+  #   #398 SECURITY: Secret bodies are never informed on or cached; reads go live as the caller. Same
+  #     family as the four cache-identity leaks, but on the Secret path rather than the key path.
+  #   #449 STRUCTURAL: a single source for the identity class of every cache key, enforced by a gate —
+  #     this is the guard proposed after #435 turned out to be the THIRD leak of one shape (#423, #432,
+  #     #435). Fixing per-bug did not close the class; this is the attempt to close it by construction.
+  #   Also #443 (/call/dry-run, fieldValidation, raw=true, /capabilities), #444 (re-pick a drifted
+  #     refresh representative), #448/#455 (security counters on OTLP), #450 (pagination drain sinks).
+  #   GATE: full race suite on f1f18fcc, 30/30 packages ok, 0 DATA RACE.
+  #   ROLLOUT: no outage (RollingUpdate 1/0 — the old pod serves throughout, measured three times now).
+  #     New pod ~8-10 min at 0/1. DO NOT RESTART during it.
+  version: 1.12.36
   deps:
   - snowplow-crd
   - authn
