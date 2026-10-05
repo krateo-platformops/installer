@@ -245,7 +245,9 @@ components:
   # 1.6.93: co-versioned with frontend (lockstep). Templates byte-identical to 1.6.92.
   # 1.6.96: co-versioned with frontend (lockstep). Packaged trees BYTE-IDENTICAL to 1.6.95 across all
   #   48 files — only Chart.yaml's version line moves. Diffed, not assumed. #455 is UI-only.
-  version: 1.6.96
+  # 1.6.97: co-versioned with frontend (lockstep). Packaged trees BYTE-IDENTICAL to 1.6.96 across all
+  #   48 files — only Chart.yaml's version line moves. Diffed, not assumed. #464 is UI-only.
+  version: 1.6.97
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1430,7 +1432,24 @@ components:
   #   KindInspector.tsx, draftStructure.ts. NOT the one file the handoff claimed; read the PR, not it.
   #   VERIFICATION LIMIT: the fix lives in composer behaviour against an imported OAS, so the roll check
   #   is image + Ready ONLY. Behaviour needs a Typeform-shaped OAS driven through the Controller Composer.
-  version: 1.6.96
+  # 1.6.97 (#464, tag -> commit f27cc4f = main HEAD; ANNOTATED, object 04fd053, tagger Diego Braga).
+  #   A chart started in the CONTROLLER Composer now carries the Krateo brand icon, so its release can
+  #   reach the Marketplace. The Marketplace blueprints index (krateo-blueprints/charts
+  #   publish-chart.yaml) REFUSES a chart with no https icon: the release's index job is skipped with
+  #   "not added to the Marketplace's blueprints index: it needs an https icon in Chart.yaml", so every
+  #   started controller was published to GHCR and silently left out of the Marketplace — un-Installable
+  #   from there, and the Builder hub's "Next step: Register" pointed at a tile that did not exist.
+  #   #454 (in 1.6.96) fixed exactly this for the BLUEPRINT Composer but touched only
+  #   BlueprintComposer/startChart.ts; the Controller Composer writes its OWN Chart.yaml, and nothing
+  #   pinned that file, which is why #454 left this behind. Verified in the patch: controllerStart.ts
+  #   adds chart.icon = the brand logo.svg under krateo-platformops/.github.
+  #   SCOPE: controllerStart.ts (+11), a new controllerStart.test.ts (+42), and 4 regenerated lines in
+  #   ControllerComposer.test.tsx.snap — all under ui/. Matches the handoff; read from the PR.
+  #   frontend-crds 1.6.97 byte-identical to 1.6.96 across all 48 packaged files — diffed, not assumed.
+  #   VERIFICATION LIMIT: the roll check is image + Ready. Proving the fix needs a chart STARTED in the
+  #   Controller Composer after the roll, then its release reaching the index. Pre-1.6.97 charts (e.g.
+  #   acme-feedback 0.1.0) still lack the icon and need re-releasing — that is not fixed by this roll.
+  version: 1.6.97
   deps:
   - frontend-crd
   - authn
