@@ -3976,7 +3976,7 @@ components:
   kind: KrateoGcpConfigconnectorCrds
   chart: krateo-gcp-configconnector-crds
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.1.1
+  version: 0.1.2
   tier: platform
   feature: configConnector
 - name: gcp-configconnector
@@ -3992,7 +3992,7 @@ components:
   kind: KrateoGcpConfigconnector
   chart: krateo-gcp-configconnector
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.1.1
+  version: 0.1.2
   deps:
     - gcp-configconnector-crd
   tier: platform
