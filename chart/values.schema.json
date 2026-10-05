@@ -8613,7 +8613,7 @@
         "incident-controller": {
           "type": "object",
           "title": "Incident controller",
-          "description": "Runs each Incident's precondition and verify scripts in a read-only check pod and moves the incident through Open, Verifying, Resolved and Closed. Full-coverage schema for the incident-controller chart (pinned 0.1.0). NOTE: no key here carries a `default` \u2014 a default on a componentValues leaf is applied into the live composition spec by core-provider and is therefore a silent override, not documentation.",
+          "description": "Runs each Incident's precondition and verify scripts in a read-only check pod and moves the incident through Open, Verifying, Resolved and Closed, and runs an IncidentApply's apply script as the user who created it. Full-coverage schema for the incident-controller chart (pinned 0.2.0). NOTE: no key here carries a `default` \u2014 a default on a componentValues leaf is applied into the live composition spec by core-provider and is therefore a silent override, not documentation.",
           "additionalProperties": false,
           "properties": {
             "global": {
@@ -8860,6 +8860,27 @@
                       "type": "string"
                     }
                   }
+                }
+              }
+            },
+            "apply": {
+              "type": "object",
+              "description": "Run apply: each IncidentApply runs its incident's apply script in a check pod, with the client certificate authn issued the user who created it.",
+              "additionalProperties": false,
+              "properties": {
+                "timeoutSeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Deadline of one run (the apply pod's activeDeadlineSeconds)."
+                },
+                "ttl": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(ns|us|ms|s|m|h)$",
+                  "description": "How long a finished IncidentApply is kept before the controller deletes it (e.g. 720h)."
+                },
+                "credentialsNamespace": {
+                  "type": "string",
+                  "description": "Namespace of the <username>-clientconfig Secrets authn writes at login. Empty means the release namespace."
                 }
               }
             },

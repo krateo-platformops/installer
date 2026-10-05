@@ -1993,7 +1993,11 @@ components:
   # last exit codes, Close, check history from status.checks), and an alert's page gains Pause and
   # Resume (krateo.io/paused). Its RESTActions read the Incident CRD, which incident-controller-crd
   # installs.
-  version: 1.8.66
+  # 1.8.67: an incident whose fix is only a script gets Run apply (creates an IncidentApply as the
+  # clicking user; incident-controller runs the apply script with that user's own rights) and an
+  # Apply runs tab. Needs incident-controller 0.2.0 for the IncidentApply CRD; without it the button
+  # stays hidden.
+  version: 1.8.67
   deps:
   - frontend
   - git-provider
@@ -2066,7 +2070,8 @@ components:
   # the pair equal. Caught because the portal-only bump in 0.3.353 left this at 1.8.60, which breaks
   # the same-version invariant stated at the top of this block; 0.3.353 was therefore never deployed.
   # 1.8.64: co-versioned with portal.
-  version: 1.8.66
+  # 1.8.67: co-versioned with portal.
+  version: 1.8.67
   deps: ['portal']
   tier: platform
   feature: portal
@@ -3194,15 +3199,19 @@ components:
 # the incident Open -> Verifying -> Resolved on their exit codes. alert-provider opens the
 # Incidents; this component and a human close them. The Incident CRD ships in its own *-crds chart,
 # like every CRD-owning component, and installs first. Public krateo-platformops charts and images.
+# 0.2.0: IncidentApply, a request to run an incident's apply script as the user who creates it. The
+# CRD chart also ships the incidentapply-requested-by MutatingAdmissionPolicy (GA in Kubernetes 1.36)
+# that stamps who asked; the controller reads the <username>-clientconfig Secrets authn writes in the
+# release namespace, and deletes a finished IncidentApply after apply.ttl (30 days).
 - name: incident-controller-crd
   kind: IncidentControllerCrds
   chart: incident-controller-crds
-  version: 0.1.0
+  version: 0.2.0
   tier: observability
   feature: specialistAgents
 - name: incident-controller
   kind: IncidentController
-  version: 0.1.0
+  version: 0.2.0
   deps:
   - incident-controller-crd
   tier: observability
