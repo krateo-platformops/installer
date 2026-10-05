@@ -243,8 +243,6 @@ components:
   # rendering fix with no widget-schema surface.
   # 1.6.92: co-versioned with frontend (lockstep). Templates byte-identical to 1.6.91.
   # 1.6.93: co-versioned with frontend (lockstep). Templates byte-identical to 1.6.92.
-  # 1.6.95: co-versioned with frontend (lockstep). Packaged tree identical to 1.6.94 except Chart.yaml's
-  # version line.
   version: 1.6.95
   tier: platform
   feature: portal
@@ -1415,10 +1413,6 @@ components:
   #   builder-gate republished at 1.6.93 and NOT pinned (D11) — fourth release running.
   #   VERIFICATION LIMIT: no safe bundle literal for a CSS fix. Check = image + gen ==
   #   observedGeneration + changed asset hash, which proves the bundle is SERVING and nothing more.
-  # 1.6.95 (#456): actions that wait for an Event (onEventNavigateTo) open the sse-proxy stream with
-  #   ?access_token= (sse-proxy answered 401 without it, so every such wait timed out), and the wait
-  #   outlives the button's unmount. Needed by portal 1.8.67's Run apply, which waits for the run's
-  #   ApplyFinished Event. Verified on kind-krateo with 1.6.90 plus these two changes.
   version: 1.6.95
   deps:
   - frontend-crd
@@ -1999,10 +1993,6 @@ components:
   # last exit codes, Close, check history from status.checks), and an alert's page gains Pause and
   # Resume (krateo.io/paused). Its RESTActions read the Incident CRD, which incident-controller-crd
   # installs.
-  # 1.8.67: an incident whose fix is only a script gets Run apply (creates an IncidentApply as the
-  # clicking user; incident-controller runs the apply script with that user's own rights) and an
-  # Apply runs tab. Needs incident-controller 0.2.0 for the IncidentApply CRD; without it the button
-  # stays hidden.
   version: 1.8.67
   deps:
   - frontend
@@ -2076,7 +2066,6 @@ components:
   # the pair equal. Caught because the portal-only bump in 0.3.353 left this at 1.8.60, which breaks
   # the same-version invariant stated at the top of this block; 0.3.353 was therefore never deployed.
   # 1.8.64: co-versioned with portal.
-  # 1.8.67: co-versioned with portal.
   version: 1.8.67
   deps: ['portal']
   tier: platform
@@ -3205,10 +3194,6 @@ components:
 # the incident Open -> Verifying -> Resolved on their exit codes. alert-provider opens the
 # Incidents; this component and a human close them. The Incident CRD ships in its own *-crds chart,
 # like every CRD-owning component, and installs first. Public krateo-platformops charts and images.
-# 0.2.0: IncidentApply, a request to run an incident's apply script as the user who creates it. The
-# CRD chart also ships the incidentapply-requested-by MutatingAdmissionPolicy (GA in Kubernetes 1.36)
-# that stamps who asked; the controller reads the <username>-clientconfig Secrets authn writes in the
-# release namespace, and deletes a finished IncidentApply after apply.ttl (30 days).
 - name: incident-controller-crd
   kind: IncidentControllerCrds
   chart: incident-controller-crds
