@@ -3082,7 +3082,22 @@ components:
   #   ORDERING: snowplow-agent 1.2.3 went in FIRST (installer 0.3.390). The receiving side must
   #   understand the explicit-order request before this side starts making it.
   #   MARKER: 'tie-breakers included'   (1.5.6=0, 1.5.7=2)
-  version: 1.5.7
+  # 1.5.8: PAIRED CORRECTION with snowplow-agent 1.2.4 — 1.5.7 stops ASKING for an order, 1.2.4 stops
+  #   PROVIDING one. Both rolled the same day as the 1.2.3/1.5.7 pair they correct.
+  #   Diego's rule: a RESTAction is completely agnostic of the widget that calls it. The widget orders
+  #   and formats through its own widgetDataTemplate. 1.5.7 pushed the ordering into the delegation,
+  #   which put it in the RESTAction and brought back repo research (5-11 calls, ~12-min turn).
+  #   1.5.8 adds a self-check on the order instead of a request for one.
+  #   ORDERING: snowplow-agent 1.2.4 went FIRST (installer 0.3.392). That looks backwards — dropping
+  #   the provider before the consumer stops asking — but 1.5.7 ALREADY orders in widgetDataTemplate
+  #   (13 refs) and only delegates AS WELL, so no window exists where nothing sorts. Verified before
+  #   rolling, not assumed; the reverse order would merely double-sort on one key, which is idempotent.
+  #   MARKER: 'SELF-CHECK THE ORDER'   (1.5.7=0, 1.5.8=1)
+  #   NOTE FOR WHOEVER READS THIS NEXT: the 1.2.3/1.5.7 pin comments called that design sound. They
+  #   were wrong about PLACEMENT, not about the jq-ascending observation. Every check run on that pair
+  #   asked "did the stated change land?" and none asked "is this the right place for it?" — a chart
+  #   diff cannot answer the second question, and for a prompt change it is the only one that matters.
+  version: 1.5.8
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
