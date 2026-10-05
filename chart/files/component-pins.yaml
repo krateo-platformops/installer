@@ -243,7 +243,7 @@ components:
   # rendering fix with no widget-schema surface.
   # 1.6.92: co-versioned with frontend (lockstep). Templates byte-identical to 1.6.91.
   # 1.6.93: co-versioned with frontend (lockstep). Templates byte-identical to 1.6.92.
-  version: 1.6.93
+  version: 1.6.94
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1413,7 +1413,7 @@ components:
   #   builder-gate republished at 1.6.93 and NOT pinned (D11) — fourth release running.
   #   VERIFICATION LIMIT: no safe bundle literal for a CSS fix. Check = image + gen ==
   #   observedGeneration + changed asset hash, which proves the bundle is SERVING and nothing more.
-  version: 1.6.93
+  version: 1.6.94
   deps:
   - frontend-crd
   - authn
@@ -1993,7 +1993,7 @@ components:
   # last exit codes, Close, check history from status.checks), and an alert's page gains Pause and
   # Resume (krateo.io/paused). Its RESTActions read the Incident CRD, which incident-controller-crd
   # installs.
-  version: 1.8.65
+  version: 1.8.66
   deps:
   - frontend
   - git-provider
@@ -2066,7 +2066,7 @@ components:
   # the pair equal. Caught because the portal-only bump in 0.3.353 left this at 1.8.60, which breaks
   # the same-version invariant stated at the top of this block; 0.3.353 was therefore never deployed.
   # 1.8.64: co-versioned with portal.
-  version: 1.8.65
+  version: 1.8.66
   deps: ['portal']
   tier: platform
   feature: portal
@@ -2253,7 +2253,7 @@ components:
   kind: KrateoObservability
   # 0.1.19 (observability#62): the log-scoped default alerts also exclude ServiceName
   # 'krateo-alert-provider', so they never count the alert-provider's own logs.
-  version: 0.1.19
+  version: 0.1.20
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -2889,7 +2889,7 @@ components:
   #   — so a dry run against the wrong order measures nothing and looks like a prompt failure.
   #   MARKER, grepped from both packaged charts by the author and confirmed here:
   #     'A PAGE IS DONE WHEN ITS PREVIEW SHOWS DATA'   (0.6.7=0, 0.6.8=1)
-  version: 0.6.8
+  version: 0.6.9
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -3175,7 +3175,7 @@ components:
   # was pinned to the 1.6.64 frontend: ahead of the frontend, the gate passes charts as "edges enforced"
   # that the live frontend does not gate. The reverse skew was checked too — 1.6.64...1.6.66 touches
   # nothing matching lint, schema, gate or verb — so a frontend AHEAD of the pinned kernel is fine.
-  version: 0.61.0
+  version: 0.62.0
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
@@ -3233,7 +3233,7 @@ components:
   # migration; the Incident CRD ships in incident-controller-crd). Its release takes over
   # alerts.observability.krateo.io from the alert-troubleshooter-crd release, whose uninstall deletes
   # the CRD and every Alert: follow docs/configuration.md#upgrading-from-alert-troubleshooter first.
-  version: 0.2.45
+  version: 0.2.46
   tier: observability
   feature: specialistAgents
 - name: alert-provider
@@ -3253,7 +3253,7 @@ components:
   # {precondition, apply, verify} and an optional rollback. The service's authn identity
   # (config.authnUrl) authenticates its A2A calls. The chart has no observer thread, and its schema
   # rejects config.reportCooldown and config.snowplowUrl.
-  version: 0.2.45
+  version: 0.2.46
   deps:
   - alert-provider-crd
   - incident-controller-crd
