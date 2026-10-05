@@ -243,7 +243,7 @@ components:
   # rendering fix with no widget-schema surface.
   # 1.6.92: co-versioned with frontend (lockstep). Templates byte-identical to 1.6.91.
   # 1.6.93: co-versioned with frontend (lockstep). Templates byte-identical to 1.6.92.
-  version: 1.6.94
+  version: 1.6.95
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1413,7 +1413,7 @@ components:
   #   builder-gate republished at 1.6.93 and NOT pinned (D11) — fourth release running.
   #   VERIFICATION LIMIT: no safe bundle literal for a CSS fix. Check = image + gen ==
   #   observedGeneration + changed asset hash, which proves the bundle is SERVING and nothing more.
-  version: 1.6.94
+  version: 1.6.95
   deps:
   - frontend-crd
   - authn
@@ -1993,7 +1993,7 @@ components:
   # last exit codes, Close, check history from status.checks), and an alert's page gains Pause and
   # Resume (krateo.io/paused). Its RESTActions read the Incident CRD, which incident-controller-crd
   # installs.
-  version: 1.8.66
+  version: 1.8.67
   deps:
   - frontend
   - git-provider
@@ -2066,7 +2066,7 @@ components:
   # the pair equal. Caught because the portal-only bump in 0.3.353 left this at 1.8.60, which breaks
   # the same-version invariant stated at the top of this block; 0.3.353 was therefore never deployed.
   # 1.8.64: co-versioned with portal.
-  version: 1.8.66
+  version: 1.8.67
   deps: ['portal']
   tier: platform
   feature: portal
@@ -3197,12 +3197,12 @@ components:
 - name: incident-controller-crd
   kind: IncidentControllerCrds
   chart: incident-controller-crds
-  version: 0.1.0
+  version: 0.2.0
   tier: observability
   feature: specialistAgents
 - name: incident-controller
   kind: IncidentController
-  version: 0.1.0
+  version: 0.2.0
   deps:
   - incident-controller-crd
   tier: observability
