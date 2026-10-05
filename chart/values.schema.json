@@ -249,6 +249,11 @@
         "repoGraph": {
           "type": "boolean",
           "description": "Opt-in the repo-mcp-server DOMAIN-graph / OKF tools (graph_find, graph_map, graph_neighbors, graph_path, knowledge_lookup) \u2014 multi-hop structural, reverse-impact and curated-provenance answers grep cannot give. Unlike structureGraph this deploys NO new component: it flips a config layer on three EXISTING coreAgents components in LOCKSTEP \u2014 the server (repo-mcp-server graph.enabled) and its consumers' toolNames (krateo-autopilot, incident-agent, via each pin's graphToggle) \u2014 so it can never half-enable into the silent Accepted-but-empty server/agent mismatch the repo-mcp-server chart warns about. Distinct from structureGraph (the separate code-STRUCTURE AST server). Needs coreAgents. Default false: more grounding tools is not always better \u2014 measure (the repo-mcp-server grounding eval harnesses / a bench A/B) before defaulting on."
+        },
+        "configConnector": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in Google Config Connector: the operator and its two CRDs (components gcp-configconnector-crd + gcp-configconnector, from oci://ghcr.io/krateo-blueprints/charts), letting Compositions provision real Google Cloud resources. Runs in CLUSTER mode by default, which means ONE Google service account for the entire cluster and a controller that watches every namespace -- namespaced mode exists but requires Workload Identity and cannot use a key Secret. Needs a Google service-account key in the Secret named by componentValues.gcp-configconnector.configConnector.credentialSecretName, created in cnrm-system after the operator first runs. Applying the ConfigConnector CR makes the operator install ~635 further CRDs, so this measurably grows the cluster's API surface."
         }
       }
     },
@@ -15624,6 +15629,156 @@
             },
             "resources": {
               "type": "object"
+            }
+          }
+        },
+        "gcp-configconnector-crd": {
+          "type": "object",
+          "title": "Config Connector CRDs",
+          "description": "Dedicated CRD chart for Config Connector (golden rule: CRDs in a separate chart, separate lifecycle). No tunable values.",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "gcp-configconnector": {
+          "type": "object",
+          "title": "Config Connector operator",
+          "description": "The Google Config Connector operator and its cluster-scoped ConfigConnector CR.",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            },
+            "operator": {
+              "type": "object",
+              "additionalProperties": false,
+              "title": "Operator",
+              "properties": {
+                "image": {
+                  "type": "string",
+                  "minLength": 1,
+                  "title": "Operator image",
+                  "description": "Container image for the Config Connector operator."
+                }
+              }
+            },
+            "configConnector": {
+              "type": "object",
+              "additionalProperties": false,
+              "title": "ConfigConnector",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Create the ConfigConnector CR",
+                  "description": "When false, installs the operator only and creates no ConfigConnector."
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "cluster",
+                    "namespaced"
+                  ],
+                  "title": "Mode",
+                  "description": "cluster uses one Google service account for the whole cluster. namespaced uses a ConfigConnectorContext per namespace and requires Workload Identity."
+                },
+                "credentialSecretName": {
+                  "type": "string",
+                  "title": "Credential Secret name",
+                  "description": "Secret in cnrm-system holding the Google service-account key. Cluster mode only, and mutually exclusive with googleServiceAccount."
+                },
+                "googleServiceAccount": {
+                  "type": "string",
+                  "title": "Workload Identity service account",
+                  "description": "Google service account to impersonate via Workload Identity. Mutually exclusive with credentialSecretName."
+                }
+              }
             }
           }
         }

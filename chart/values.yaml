@@ -236,6 +236,11 @@ features:
                                   #   credentials env + domainFilters); pairs with exposure.tls.host (the platform gateway is annotated
                                   #   with that host so external-dns publishes a record following the LB IP — DNS-follows-LB, no static IP).
   agentGateway: false              # OPT-IN: agentgateway in front of the kagent fleet — JWT auth + per-user RBAC over
+  configConnector: false          # OPT-IN Google Config Connector (operator + CRDs), for provisioning GCP
+                                  #   resources from Compositions. Cluster mode by default: ONE Google service
+                                  #   account for the whole cluster, authenticating with the key Secret named by
+                                  #   componentValues.gcp-configconnector.configConnector.credentialSecretName.
+                                  #   Namespaced mode needs Workload Identity and is NOT selectable with a key.
                                   #   agents, MCP tools and A2A delegation, PLUS guardrails on their LLM traffic (PII
                                   #   and secret masking, prompt-injection blocking, and optional OpenAI moderation /
                                   #   Google Model Armor / AWS Bedrock Guardrails / your own webhook). A valid token

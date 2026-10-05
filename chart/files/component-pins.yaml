@@ -3964,3 +3964,36 @@ components:
   # sibling of internalUrls: compositions.yaml sets this to exposure.port when it is set.
   internalPorts:
   - path: jwt.jwks.port
+- name: gcp-configconnector-crd
+  # 0.1.0: the ConfigConnector and ConfigConnectorContext CRDs, repackaged verbatim from the
+  # upstream Config Connector operator release bundle (1.99.0). Published from the NEW
+  # krateo-blueprints/krateo-gcp-blueprint repo, hence the repo override — same pattern as
+  # cert-manager, external-dns and gateway-api-crds, which already pull from that registry.
+  # A DEDICATED -crds composition so the CRDs land before anything creates a ConfigConnector.
+  # The ~635 Google RESOURCE CRDs are NOT here: the operator installs those itself at runtime,
+  # once a ConfigConnector CR exists. So this pin stays small and the cluster's CRD count jumps
+  # only after the operator runs.
+  kind: KrateoGcpConfigconnectorCrds
+  chart: krateo-gcp-configconnector-crds
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.1.0
+  tier: platform
+  feature: configConnector
+- name: gcp-configconnector
+  # 0.1.0: the Config Connector operator plus the cluster-scoped ConfigConnector CR.
+  # Diego chose CLUSTER mode (2026-10-05) because 057 has no Workload Identity and namespaced
+  # mode has no key-based option at all: ConfigConnectorContext accepts ONLY googleServiceAccount,
+  # while credentialSecretName exists solely on the cluster-scoped ConfigConnector. The trade is
+  # scope -- cluster mode watches every namespace, not just demo-system.
+  # credentialSecretName points at a Secret the operator reads from cnrm-system, which the
+  # OPERATOR creates when it first reconciles the ConfigConnector. The Secret is therefore
+  # created after this lands, and the controller manager recovers once it appears; a
+  # controller-manager CrashLoop before that is expected, not a failed roll.
+  kind: KrateoGcpConfigconnector
+  chart: krateo-gcp-configconnector
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.1.0
+  deps:
+    - gcp-configconnector-crd
+  tier: platform
+  feature: configConnector
