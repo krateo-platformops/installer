@@ -1,3 +1,7 @@
+# PINS-ONLY CI PROBE (remove with this branch): a comment-only change confined to this file,
+# to confirm every required status check reports on a pins-only PR after installer#457 removed the
+# pull_request paths filters. Before #457, fill-defaults and no-unknowns never started here and the
+# PR hung on "Expected - waiting for status to be reported" forever.
 components:
 - name: authn-crd
   kind: AuthnCrds
