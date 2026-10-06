@@ -3299,7 +3299,7 @@ components:
   # migration; the Incident CRD ships in incident-controller-crd). Its release takes over
   # alerts.observability.krateo.io from the alert-troubleshooter-crd release, whose uninstall deletes
   # the CRD and every Alert: follow docs/configuration.md#upgrading-from-alert-troubleshooter first.
-  version: 0.2.47
+  version: 0.2.48
   tier: observability
   feature: specialistAgents
 - name: alert-provider
@@ -3319,7 +3319,7 @@ components:
   # {precondition, apply, verify} and an optional rollback. The service's authn identity
   # (config.authnUrl) authenticates its A2A calls. The chart has no observer thread, and its schema
   # rejects config.reportCooldown and config.snowplowUrl.
-  version: 0.2.47
+  version: 0.2.48
   deps:
   - alert-provider-crd
   - incident-controller-crd
