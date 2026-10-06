@@ -9,11 +9,13 @@ name: check-feature-keys
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "chart/files/component-pins.yaml"
-      - "chart/values.schema.json"
-      - ".github/scripts/check-feature-keys.py"
-      - ".github/workflows/check-feature-keys.yaml"
+    # NO `paths:` filter, deliberately. This job is a REQUIRED status check on main (org ruleset
+    # installer-required-checks requires lint, pin-kinds, fill-defaults, feature-keys, no-unknowns).
+    # A path-filtered workflow never STARTS on a PR that misses its paths, so the required context
+    # is never reported and the PR sits on "Expected - waiting for status to be reported" forever,
+    # unmergeable. A pins-only release PR hits exactly that. The guard is a cheap python script, so
+    # it runs on every PR rather than being filtered. Do not reintroduce `paths:` here while this
+    # context stays required.
   push:
     branches: [main]
   workflow_dispatch: {}
