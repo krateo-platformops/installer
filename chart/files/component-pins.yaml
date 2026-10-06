@@ -3299,7 +3299,9 @@ components:
   # migration; the Incident CRD ships in incident-controller-crd). Its release takes over
   # alerts.observability.krateo.io from the alert-troubleshooter-crd release, whose uninstall deletes
   # the CRD and every Alert: follow docs/configuration.md#upgrading-from-alert-troubleshooter first.
-  version: 0.2.47
+  # 0.2.48: LOAD-BEARING. Alert gains status.conditions, the Ready and Synced conditions alert-provider
+  # 0.2.48 writes; without it the apiserver prunes them.
+  version: 0.2.48
   tier: observability
   feature: specialistAgents
 - name: alert-provider
@@ -3319,7 +3321,10 @@ components:
   # {precondition, apply, verify} and an optional rollback. The service's authn identity
   # (config.authnUrl) authenticates its A2A calls. The chart has no observer thread, and its schema
   # rejects config.reportCooldown and config.snowplowUrl.
-  version: 0.2.47
+  # 0.2.48 (#58): a Go controller on provider-runtime replaces the Python loop, with the same values,
+  # Alert and Incident contracts and webhook. The Role adds events.k8s.io Events; the bootstrap Job
+  # runs /bin/alert-provider bootstrap.
+  version: 0.2.48
   deps:
   - alert-provider-crd
   - incident-controller-crd
