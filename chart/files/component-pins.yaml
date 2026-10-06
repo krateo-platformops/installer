@@ -306,7 +306,9 @@ components:
   # 1.12.36: co-versioned with snowplow (lockstep). Version-only change.
   # 1.12.37: co-versioned with snowplow (lockstep). Packaged trees BYTE-IDENTICAL to 1.12.36 apart
   #   from Chart.yaml's version line. Diffed, not assumed.
-  version: 1.12.37
+  # 1.12.38: co-versioned with snowplow (lockstep). Packaged trees BYTE-IDENTICAL to 1.12.37 apart
+  #   from Chart.yaml's version line. Diffed, not assumed.
+  version: 1.12.38
   tier: platform
   feature: portal
 - name: authn
@@ -791,7 +793,38 @@ components:
   #   NOT fixed here: #504 — no CompositionDefinition with spec.apiRef can reconcile on any 1.12.3x.
   #   Equally broken at 1.12.36, so this roll makes nothing worse; demo-system/event-site is failing on
   #   exactly that class right now and is NOT installer-managed (no ownerRefs, not pinned).
-  version: 1.12.37
+  # 1.12.38 (tag -> commit 856bc952 via the PEELED ref refs/tags/1.12.38^{}; the BARE ref is 85fed304,
+  #   the annotated tag OBJECT, not the commit — read both forms).
+  #   #504: no CompositionDefinition carrying spec.apiRef could reconcile on ANY 1.12.3x. #288's DIAL
+  #     verdict was being consumed by the dispatch-free read-set ENUMERATION: core-provider calls
+  #     GET /rbac BEFORE any composition instance exists, so every status-projection stage rendered
+  #     with a collapsed namespace, the dial guard correctly refused that malformed path, and the
+  #     shared plan builder made the option vanish. The read-set is now derived from the stage
+  #     TEMPLATE instead of the collapsed render.
+  #   #508: /list?category= could silently return the WRONG KIND. Every discovered GVR was built with
+  #     no group and no version, so KindFor resolved by PLURAL alone; with two CRDs sharing a plural
+  #     the response carried the winner DUPLICATED and the loser ABSENT — at HTTP 200, with no error,
+  #     counter or log. Another status-alone false pass.
+  #   THE ROLL IS NOT THE PROOF. The hermetic arms cannot cover the real blueprint end to end because
+  #   core-provider mints RBAC from whatever /rbac returns. The decisive check is the live
+  #   reproduction on 057: demo-system/event-site reaching Synced=True with no "RESTAction read-set is
+  #   incomplete" 422, AND the eventsites-v0-1-0-controller Deployment appearing.
+  #   PRE-ROLL BASELINE captured so the check is answerable rather than inferred: event-site was
+  #   Ready=False Creating / Synced=False ReconcileError on that 422, and no eventsites Deployment
+  #   existed anywhere in the cluster.
+  #   RESIDUALS SHIPPING WITH IT, none a regression, all with open issues: #519 (Ruling 3 covers one
+  #     authoring idiom only); #520 (a literal path with a TEMPLATED QUERY still 422s — fails loud,
+  #     needs an unusual shape, one-line fix deliberately not rushed into this cut); and
+  #     core-provider#164 — the read-set's new namespaceUnknown field is DROPPED AT DECODE, so the
+  #     Phase 3 justification given for it does not hold as shipped. Flagged because that is a fix
+  #     whose stated rationale is not true of the artifact, even though nothing regresses.
+  #   Post-roll readings unchanged from 1.12.37 and still gated: the max-age family
+  #   (evict_max_age_total, evict_max_age_warm_customer_total, remint_total, remint_refused_cold_total)
+  #   is UNDECIDABLE for ~24h because maxEntryAge is 86400s — a zero means "not exercised", not
+  #   "healthy". Read them only past maxAge-L = 82800s. The L1 hit ratio is not comparable across a
+  #   roll (residency changes the denominators). All readable at /content/debug/vars with a Bearer
+  #   token; /debug/vars WITHOUT /content returns 200 serving the SPA's index.html, a false pass.
+  version: 1.12.38
   deps:
   - snowplow-crd
   - authn
