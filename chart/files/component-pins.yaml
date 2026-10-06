@@ -304,7 +304,9 @@ components:
   # 1.12.34: co-versioned with snowplow (lockstep). Byte-identical to 1.12.33 outside Chart.yaml.
   # 1.12.35: co-versioned with snowplow (lockstep). Byte-identical to 1.12.34 outside Chart.yaml.
   # 1.12.36: co-versioned with snowplow (lockstep). Version-only change.
-  version: 1.12.36
+  # 1.12.37: co-versioned with snowplow (lockstep). Packaged trees BYTE-IDENTICAL to 1.12.36 apart
+  #   from Chart.yaml's version line. Diffed, not assumed.
+  version: 1.12.37
   tier: platform
   feature: portal
 - name: authn
@@ -761,7 +763,35 @@ components:
   #   GATE: full race suite on f1f18fcc, 30/30 packages ok, 0 DATA RACE.
   #   ROLLOUT: no outage (RollingUpdate 1/0 — the old pod serves throughout, measured three times now).
   #     New pod ~8-10 min at 0/1. DO NOT RESTART during it.
-  version: 1.12.36
+  # 1.12.37 (tag -> commit 669c1923 via the PEELED ref refs/tags/1.12.37^{}; the BARE ref is
+  #   0f27e86b, the annotated tag OBJECT, not the commit — read both forms).
+  #   TWO unreleased SECURITY fixes, which is why this should not sit:
+  #   #490 (#487): the debug-level "resolved api" log dumped every stage body, Secret data included,
+  #     into otel_logs.
+  #   #502 (#499 + #489): never log or span a URL with its credentials. logServerURL was a NO-OP for a
+  #     schemeless URL (url.Parse reads "u:" as the scheme, so there was no User to clear and the
+  #     password round-tripped verbatim); outbound client spans recorded url.full with the query.
+  #   Also #495 (#378 P1) + #505 (#496): the refresher terminal re-mints a WARM cell inside the lead
+  #   window so it never crosses the C5 cap under a customer, and the re-mint is gated on warmth so a
+  #   COLD cell stays reclaimable. #491 (#484): live-refresh no longer loses a quiet key's last change.
+  #   #492 (#354 P3): measures the invalidation-to-fresh window of an L1 cell.
+  #   NO PORTAL GAP on this roll, checked in the chart rather than assumed: strategy is maxSurge 1 /
+  #   maxUnavailable 0 with /readyz gated on prewarm-complete, so the OLD warm pod serves ALL traffic
+  #   until the new pod is Ready+warm. The ~9.5min 0/1 prewarm figure is a COLD FRESH install, not a
+  #   rolling upgrade. Matters because snowplow serves all portal content.
+  #   POST-ROLL READING CHANGES (four, two of which look like regressions otherwise):
+  #     - evict_max_age_total RISES by design: cold cells the ungated re-mint kept immortal are finally
+  #       reclaimed. That rise IS the #259/#191 bound working.
+  #     - the L1 hit ratio is NOT comparable across this roll — residency changes, so the denominators
+  #       differ. Do not quote a pre/post delta.
+  #     - remint_total's acceptance rule is INVERTED: 0 is CORRECT when nothing is customer-warm. Read
+  #       it paired with the new remint_refused_cold_total; BOTH zero past maxAge-L is the inert case.
+  #     - evict_max_age_warm_customer_total may show a small non-zero: the documented #506 late-first-
+  #       read residual, not a P5. Only a sustained or traffic-scaling rise escalates.
+  #   NOT fixed here: #504 — no CompositionDefinition with spec.apiRef can reconcile on any 1.12.3x.
+  #   Equally broken at 1.12.36, so this roll makes nothing worse; demo-system/event-site is failing on
+  #   exactly that class right now and is NOT installer-managed (no ownerRefs, not pinned).
+  version: 1.12.37
   deps:
   - snowplow-crd
   - authn
