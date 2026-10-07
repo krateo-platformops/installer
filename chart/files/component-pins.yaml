@@ -3472,7 +3472,9 @@ components:
   # 0.1.28: co-versioned with nightly-review. Verified byte-identical to 0.1.27 outside Chart.yaml, so no
   # CRD surface change this time and no ordering constraint — unlike 0.1.25 and 0.1.27, both of which
   # added structural status fields and had to go first.
-  version: 0.1.30
+  # 0.1.31: co-versioned with nightly-review (lockstep). Packaged trees BYTE-IDENTICAL to 0.1.30 apart
+  #   from Chart.yaml's version line. Diffed, not assumed.
+  version: 0.1.31
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -3839,7 +3841,25 @@ components:
   # the fix failing.
   # TARGET_COMPONENTS reaches the CronJob via `dig`, so a values file without the map renders {} rather
   # than failing — verified by rendering the chart against the live componentValues.
-  version: 0.1.30
+  # 0.1.31 (#44/#45, tag -> commit 4beeda3b via the PEELED ref; the bare ref is 19967b7b, the annotated
+  #   tag OBJECT). NO blueprint finding had EVER been able to resolve a destination. failures._blueprint_text
+  #   renders a blueprint in the compositions evidence as "blueprint <name>", and prompt.py tells the model
+  #   to spell the subject's component exactly as the evidence spells it; normalise_subject folds the space,
+  #   so destination() received "blueprint-<name>" while register_blueprints had keyed the registry on the
+  #   BARE "<name>". The lookup was BLUEPRINTS.get("blueprint-meetup-site") against a dict holding
+  #   "meetup-site" — an unconditional miss, for any kind, any org policy, any evidence.
+  #   The fix registers BOTH spellings (blueprint_keys returns ['blueprint-<name>', '<name>'] — checked
+  #   behaviourally, not read), so it ADDS a lookup that could never hit rather than moving one that can;
+  #   no existing subject changes how it resolves.
+  #   Nothing noticed for so long because no krateo-blueprints composition had ever existed, let alone
+  #   failed, inside a review window. rr-20261006-2222 was the first that did: it produced exactly the
+  #   finding the prompt asks for, about a real refused order, and discarded it. Proven on the LIVE
+  #   proposal p-b10834a10d78bca1 (subject blueprint-meetup-site/cpu-request-exceeds-limit), which went
+  #   from repo=None "no destination configured" to repo=krateo-blueprints/meetup-site.
+  #   Chart diff 0.1.30 -> 0.1.31 is Chart.yaml only (version + appVersion); image.tag is "" so appVersion
+  #   moves the image. Both chart and image published at 0.1.31 — verified with a NUMERIC tag sort, because
+  #   a lexical sort puts 0.1.9 above 0.1.31 and reads as "stuck at 0.1.9".
+  version: 0.1.31
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
