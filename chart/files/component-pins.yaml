@@ -2538,7 +2538,34 @@ components:
   modelOwner: true
 - name: installer-agent
   kind: InstallerAgent
-  version: 0.3.2
+  # 0.3.3 (tag -> commit f7100f4 via the PEELED ref; the bare ref is 7f77c583, the annotated tag
+  #   OBJECT). Four issues, and one of them closes a LIVE RBAC gap on 057.
+  #   #14: `patch` DROPPED from the installer-driver Role, and three read-only skills added. Verified
+  #     in the chart diff: verbs [get,list,watch,patch] -> [get,list,watch] on installers. Verified on
+  #     the cluster too — Role krateo-system/installer-driver currently grants patch, so this pin is
+  #     what removes it. (Note the Role is named installer-driver, not installer-agent; grepping for
+  #     the component name finds nothing and reads as "no such grant".) The agent has held no mutating
+  #     tool since 2026-09-16, so this is latent authority with nothing to use it — but an audit of 057
+  #     today sees a write verb on an agent whose card, prompt and docs all say it holds none.
+  #   #15: match Helm releases by NAME, not by chart. Keying by chart reported four healthy components
+  #     as drifted, and on a rebuilt cluster offers six candidate releases for portal.
+  #   #25: establish a component is platform-managed BEFORE comparing versions. Five of 52 declared
+  #     components are feature-disabled by design, and cert-manager has an out-of-band release at
+  #     chart v1.21.1 against a declared 0.10.0. Helm metadata cannot express ownership; the
+  #     CompositionDefinition can.
+  #   #26: detect which of the three Krateo lines a cluster is on before asserting anything, and lift
+  #     the agent from assessing a migration to generating an ordered plan for the UpgradePlan handler.
+  #   SKILLS 3 -> 7. The four newly routable: upgrade-preflight, rollback-advisor,
+  #   migration-assessment, upgrade-plan — confirmed added in the chart's agent.yaml. No autopilot
+  #   change is needed: installer-agent is already in krateo-autopilot's extraAgents and the
+  #   orchestrator routes on the A2A card, which is rendered from this chart. The pin is the only lever.
+  #   NO IMAGE to verify: this chart ships prompts, RBAC and the Agent CR over the kagent runtime.
+  #   ghcr.io/krateo-agentiko/installer-agent does not exist as an image — a manifest probe returns 404
+  #   for 0.3.2, 0.3.3 AND a planted nonexistent tag, so that probe proves nothing either way.
+  #   VERIFICATION LIMIT, from the handoff and not re-tested here: the 2.7 and 3.0 line-detection
+  #   branches are UNVERIFIED — no cluster on either line was reachable. Only the 4.0 branch is
+  #   confirmed. Do not trust a generated plan from an older cluster until a real 3.0 cluster exists.
+  version: 0.3.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
