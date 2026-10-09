@@ -512,6 +512,32 @@ componentValues:
     modelConfig:
       name: gemini-flash
 
+  # The Config Connector operator image. SEEDED HERE DELIBERATELY, even though the
+  # krateo-gcp-configconnector chart already defaults it correctly.
+  #
+  # The live CR already carries this key, and the self-bootstrap hook applies componentValues as an
+  # RFC-7386 MERGE patch, so object fields DEEP-MERGE: a key once written to the CR is never removed
+  # by a later patch that simply omits it. krateo-057 carried operator:cb81985 (the 1.99.0 commit-SHA
+  # tag) long after the chart default moved to 1.158.0, and it silently SHADOWED it -- the StatefulSet
+  # picked up GOMEMLIMIT and the 8 new CRDs from the new chart while still running the old binary, so
+  # the upgrade looked clean and changed nothing that mattered.
+  #
+  # Diagnosing that is harder than it sounds: there is no schema `default` to find, and this file did
+  # not mention the component at all. What gave it away was GOMEMLIMIT being PRESENT while the image
+  # was not -- which rules out "the chart did not apply" and points at a value-level override.
+  #
+  # CONSEQUENCE: bump this IN LOCKSTEP with the gcp-configconnector / gcp-configconnector-crd pins in
+  # chart/files/component-pins.yaml. If the two disagree, this value wins and the pin does nothing.
+  #
+  # Clearing the key instead (image: null, so the component chart's default wins and there is nothing
+  # to keep in step) was tried and REJECTED: values.schema.json types this leaf as a string, so helm
+  # refuses it with "at '/componentValues/gcp-configconnector/operator/image': got null, want string".
+  # Allowing null would mean widening a typed leaf on a surface check-no-unknowns exists to keep
+  # closed, to save a lockstep bump. Not worth it.
+  gcp-configconnector:
+    operator:
+      image: gcr.io/gke-release/cnrm/operator:1.158.0
+
 # ---------------------------------------------------------------------------
 # Component DAG. `deps` = component names whose Compositions must be Ready=True
 # before this one's Composition is emitted. Versions pinned to installer 2.7.0.
