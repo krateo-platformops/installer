@@ -4122,7 +4122,13 @@ components:
   kind: KrateoGcpConfigconnectorCrds
   chart: krateo-gcp-configconnector-crds
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.1.2
+  # 0.1.5: Config Connector operator 1.99.0 -> 1.158.0, 59 minor releases. THE CRD COUNT CHANGES:
+  #   this chart went from 2 CRDs to 8. 1.158.0 adds six customization CRDs in
+  #   customize.core.cnrm.cloud.google.com (controllerreconcilers, controllerresources, the two
+  #   namespaced* variants, and the two webhook-configuration-customization ones), each serving
+  #   v1alpha1 and v1beta1. A bare appVersion bump would have shipped an operator unable to serve
+  #   its own kinds, so this is not a version bump.
+  version: 0.1.5
   tier: platform
   feature: configConnector
 - name: gcp-configconnector
@@ -4138,7 +4144,25 @@ components:
   kind: KrateoGcpConfigconnector
   chart: krateo-gcp-configconnector
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.1.2
+  # 0.1.5: Config Connector operator 1.99.0 -> 1.158.0. Repackaged from the upstream GCS release
+  #   bundle (storage.googleapis.com/configconnector-operator/1.158.0/release-bundle.tar.gz) —
+  #   recent CC releases ship NO GitHub release assets, so looking for one 404s and reads as "that
+  #   version does not exist".
+  #   Besides the CRDs (see gcp-configconnector-crd): ClusterRole rules grew, cnrm-viewer 54 -> 167
+  #   and manager-role 12 -> 16; the StatefulSet gains GOMEMLIMIT=900MiB and an explicit
+  #   replicas: 1; and the image moves off a commit-SHA tag (operator:cb81985, which is what 057
+  #   runs today) onto a version tag (operator:1.158.0).
+  #   THE RISK THAT MATTERED IS MEASURED AND CLEARED. The 206 GCP blueprints were generated against
+  #   1.99.0's RESOURCE CRDs, which the operator installs at RUNTIME, so a served version could have
+  #   moved under them. All 206 checked against upstream v1.158.0 (623 resource CRDs, indexed
+  #   group+kind -> served versions): 206/206 still served, 0 CRDs missing, 0 versions gone. Proven
+  #   non-vacuous — a planted v9beta9 reports NOT-SERVED and a planted kind reports NO-CRD.
+  #   STILL UNTESTED, and this roll is the test: the IN-PLACE operator upgrade has never been
+  #   exercised. 8 CRDs replace 2 and a ClusterRole triples. Rolled now deliberately because 057's
+  #   operator is idle — 1 KCC object cluster-wide, the ConfigConnector CR itself — so the blast
+  #   radius is as small as it will ever be. Post-roll, check: operator pod at 1.158.0, 8 CRDs
+  #   present, cnrm-viewer at 167 rules, all five cnrm-system pods Running.
+  version: 0.1.5
   deps:
     - gcp-configconnector-crd
   tier: platform
