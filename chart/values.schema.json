@@ -8613,7 +8613,7 @@
         "incident-controller": {
           "type": "object",
           "title": "Incident controller",
-          "description": "Runs each Incident's precondition and verify scripts in a read-only check pod and moves the incident through Open, Verifying, Resolved and Closed, and runs an IncidentApply's apply script as the user who created it. Full-coverage schema for the incident-controller chart (pinned 0.2.0). NOTE: no key here carries a `default` \u2014 a default on a componentValues leaf is applied into the live composition spec by core-provider and is therefore a silent override, not documentation.",
+          "description": "Runs each Incident's precondition and verify scripts in a read-only check pod and moves the incident through Open, Verifying, Resolved and Closed, and runs an IncidentApply's apply script as the user who created it. Full-coverage schema for the incident-controller chart (pinned 0.3.0). NOTE: no key here carries a `default` \u2014 a default on a componentValues leaf is applied into the live composition spec by core-provider and is therefore a silent override, not documentation.",
           "additionalProperties": false,
           "properties": {
             "global": {
