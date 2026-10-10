@@ -247,7 +247,7 @@ components:
   #   48 files — only Chart.yaml's version line moves. Diffed, not assumed. #455 is UI-only.
   # 1.6.97: co-versioned with frontend (lockstep). Packaged trees BYTE-IDENTICAL to 1.6.96 across all
   #   48 files — only Chart.yaml's version line moves. Diffed, not assumed. #464 is UI-only.
-  version: 1.6.97
+  version: 1.8.0
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1512,7 +1512,7 @@ components:
   #   VERIFICATION LIMIT: the roll check is image + Ready. Proving the fix needs a chart STARTED in the
   #   Controller Composer after the roll, then its release reaching the index. Pre-1.6.97 charts (e.g.
   #   acme-feedback 0.1.0) still lack the icon and need re-releasing — that is not fixed by this roll.
-  version: 1.6.97
+  version: 1.8.0
   deps:
   - frontend-crd
   - authn
@@ -2165,7 +2165,7 @@ components:
   # the pair equal. Caught because the portal-only bump in 0.3.353 left this at 1.8.60, which breaks
   # the same-version invariant stated at the top of this block; 0.3.353 was therefore never deployed.
   # 1.8.64: co-versioned with portal.
-  version: 1.8.67
+  version: 1.8.68
   deps: ['portal']
   tier: platform
   feature: portal
@@ -3015,7 +3015,7 @@ components:
   #   — so a dry run against the wrong order measures nothing and looks like a prompt failure.
   #   MARKER, grepped from both packaged charts by the author and confirmed here:
   #     'A PAGE IS DONE WHEN ITS PREVIEW SHOWS DATA'   (0.6.7=0, 0.6.8=1)
-  version: 0.6.9
+  version: 0.7.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
