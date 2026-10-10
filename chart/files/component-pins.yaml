@@ -308,7 +308,7 @@ components:
   #   from Chart.yaml's version line. Diffed, not assumed.
   # 1.12.38: co-versioned with snowplow (lockstep). Packaged trees BYTE-IDENTICAL to 1.12.37 apart
   #   from Chart.yaml's version line. Diffed, not assumed.
-  version: 1.12.38
+  version: 1.12.41
   tier: platform
   feature: portal
 - name: authn
@@ -824,7 +824,7 @@ components:
   #   "healthy". Read them only past maxAge-L = 82800s. The L1 hit ratio is not comparable across a
   #   roll (residency changes the denominators). All readable at /content/debug/vars with a Bearer
   #   token; /debug/vars WITHOUT /content returns 200 serving the SPA's index.html, a false pass.
-  version: 1.12.38
+  version: 1.12.41
   deps:
   - snowplow-crd
   - authn
