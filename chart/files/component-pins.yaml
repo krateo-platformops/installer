@@ -308,7 +308,9 @@ components:
   #   from Chart.yaml's version line. Diffed, not assumed.
   # 1.12.38: co-versioned with snowplow (lockstep). Packaged trees BYTE-IDENTICAL to 1.12.37 apart
   #   from Chart.yaml's version line. Diffed, not assumed.
-  version: 1.12.41
+  # 1.12.42: co-versioned with snowplow (lockstep). Packaged trees BYTE-IDENTICAL to 1.12.41 apart
+  #   from Chart.yaml's version line. Diffed, not assumed.
+  version: 1.12.42
   tier: platform
   feature: portal
 - name: authn
@@ -824,7 +826,27 @@ components:
   #   "healthy". Read them only past maxAge-L = 82800s. The L1 hit ratio is not comparable across a
   #   roll (residency changes the denominators). All readable at /content/debug/vars with a Bearer
   #   token; /debug/vars WITHOUT /content returns 200 serving the SPA's index.html, a false pass.
-  version: 1.12.41
+  # 1.12.42: #561 — userAccessFilter-narrowed bodies are cached AGAIN on the identity-BOUND classes
+  #   (restactions, widgets, raFullList) and still declined on the identity-FREE one (widgetContent),
+  #   where one cell is shared by every requester. The Put-decline was written against the pre-#423
+  #   key and outlived its reason; with no cache cell there was no x-snowplow-refresh-key, so no SSE
+  #   subscription, so every composition-data widget in the portal was keyless (19 of 43 detail
+  #   widgets carried a key). Measured cost on 057 before the fix: p95 1,814ms uncached vs 166ms
+  #   cached across 44% of /content/call, split BY POPULATION — a blended p95 moves partly because
+  #   the denominator moves, so it is not the number to quote.
+  #   Also: #574 the refresher reads as the cell's cohort, not snowplow's SA; #587 the arming quartet
+  #   tells a refusal from a healthy idle stream; #588 falsifier for #423 on the carrier it never
+  #   covered; #585 the identity-key guard learns a second dimension category; #283 OTel log family
+  #   to v0.21.0.
+  #   REMOVES a published counter: snowplow_phase1_seed_widget_uaf_preresolve_skip_total (expvar AND
+  #   OTLP), because the #403 pre-resolve seed skip it counted is deleted. IT DOES NOT 404 — expvar is
+  #   ONE JSON document and the key is simply ABSENT at 200; the OTLP query returns NO ROWS, not a 0.
+  #   A consumer keyed on the name gets a blank panel, never an error and never an alert. Swept clean
+  #   on 057: 0 references in ConfigMaps, alertproviders, GCP alert policies, all 18 OTel collector
+  #   configs, and the repos. NOT swept, deliberately: HyperDX's own saved store (25 alerts and a
+  #   non-empty dashboard set) lives outside Kubernetes and needs its API key. Cosmetic either way.
+  #   No CRD change, no new env key, no chart-values change.
+  version: 1.12.42
   deps:
   - snowplow-crd
   - authn
