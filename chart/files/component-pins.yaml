@@ -1778,6 +1778,23 @@ components:
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
 - name: portal
+  # 1.8.70 (ANNOTATED tag -> commit cc7241f; the lightweight ref is d236a20b — check both forms).
+  # cc7241f is EXACTLY the portal#300 merge commit: `compare/cc7241f...1.8.70` reports identical,
+  # ahead_by 0, behind_by 0. So the gap called out on the 1.8.69 pin is now closed.
+  # TWO FILES vs 1.8.69, verified by unpacking both and diffing the trees: Chart.yaml and
+  # templates/restaction.composition-events.yaml. composition-architecture is UNCHANGED and still
+  # carries the readyWhen fix (pathOf 0 / condType 3 / readyBy 2 / readyValue 2), so this bump does
+  # not disturb what 1.8.69 just fixed.
+  # #300 stops the composition-events RESTAction listing the whole CRD registry to resolve event
+  # plurals: it resolves them from per-group discovery instead. Chart greps allcrds 4 -> 0 and
+  # apiresources 0 -> 4. Measured on 057 before the fix: the CRD list is 15.3 MB on the wire
+  # (1.9 MB gzipped) of which 49.3 KB is retained — 18x the entire 55-way event fan-out, which is why
+  # it was the lever and the fan-out was not.
+  # NOT a readyWhen change and NOT an EventSite fix: the demo-system EventSites stay at
+  # architectureLevel 0 until event-site-status is re-emitted by the composer, which no pin can do.
+  # Three 'customresourcedefinitions' strings remain in the template at lines 43, 134 and 142 — all
+  # inside Helm {{/* */}} comments, historical rationale, no live path: line. A raw grep reads 3 in
+  # BOTH versions; do not read that as the fix not landing.
   # 1.8.69 (ANNOTATED tag -> commit f51be045; the lightweight ref is 02f0df87 — check both forms).
   # TWO FILES, verified by unpacking 1.8.68 and 1.8.69 and diffing the trees: Chart.yaml and
   # templates/restaction.composition-architecture.yaml. 625 files on both sides, +1018 bytes.
@@ -2171,7 +2188,7 @@ components:
   # last exit codes, Close, check history from status.checks), and an alert's page gains Pause and
   # Resume (krateo.io/paused). Its RESTActions read the Incident CRD, which incident-controller-crd
   # installs.
-  version: 1.8.69
+  version: 1.8.70
   deps:
   - frontend
   - git-provider
@@ -2214,6 +2231,8 @@ components:
   # 1.8.48: co-versioned with portal, as always.
   # 1.8.49: co-versioned with portal, as always.
 - name: portal-agents
+  # 1.8.70: co-versioned with portal, as always — one tag, every chart under helm/. Verified
+  # Chart.yaml-only vs 1.8.69 by diffing the unpacked trees; it moves to keep the pair equal.
   # 1.8.69: co-versioned with portal, as always — one tag, every chart under helm/. Verified
   # Chart.yaml-only vs 1.8.68 by diffing the unpacked trees; it moves to keep the pair equal.
   # 1.8.65: co-versioned with portal, as always — one tag, every chart under helm/.
@@ -2246,7 +2265,7 @@ components:
   # the pair equal. Caught because the portal-only bump in 0.3.353 left this at 1.8.60, which breaks
   # the same-version invariant stated at the top of this block; 0.3.353 was therefore never deployed.
   # 1.8.64: co-versioned with portal.
-  version: 1.8.69
+  version: 1.8.70
   deps: ['portal']
   tier: platform
   feature: portal
