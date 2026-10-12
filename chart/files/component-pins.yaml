@@ -310,7 +310,18 @@ components:
   #   from Chart.yaml's version line. Diffed, not assumed.
   # 1.12.42: co-versioned with snowplow (lockstep). Packaged trees BYTE-IDENTICAL to 1.12.41 apart
   #   from Chart.yaml's version line. Diffed, not assumed.
-  version: 1.12.42
+  # 1.12.43 (#595 + #597): #597 is a CHART change — the ClusterRole finally grants the `impersonate`
+  # verb, WITHOUT which #574's Go half (shipped in 1.12.42) is INERT. Verified on 057 before this
+  # bump: `kubectl auth can-i impersonate users|groups|serviceaccounts` as the snowplow SA answered
+  # no/no/no, and the pod counted 9,433 refused background refreshes in 6h (4,870 branch-E SA dial
+  # re-gates + 4,563 getFromAPIServer denials). Effect while inert: a permission grant or revoke
+  # does NOT propagate in the background — a button stays wrong until the cached answer hits TTL.
+  # An IMAGE-ONLY bump would not fix this; the chart must move, which this pin does.
+  # #595 (image side) orders external-endpoint-backed seed units LAST so a pipGlobalTimeout cut
+  # loses cells that cannot publish anyway. Fixes #594 (outcome="deadline", 1504/5962 aborted).
+  # rbac.impersonateGroups and rbac.impersonateServiceAccounts ship EMPTY and must stay empty:
+  # impersonating a user does not inherit their groups, but groups/SAs carry rights directly.
+  version: 1.12.43
   tier: platform
   feature: portal
 - name: authn
@@ -846,7 +857,18 @@ components:
   #   configs, and the repos. NOT swept, deliberately: HyperDX's own saved store (25 alerts and a
   #   non-empty dashboard set) lives outside Kubernetes and needs its API key. Cosmetic either way.
   #   No CRD change, no new env key, no chart-values change.
-  version: 1.12.42
+  # 1.12.43 (#595 + #597): #597 is a CHART change — the ClusterRole finally grants the `impersonate`
+  # verb, WITHOUT which #574's Go half (shipped in 1.12.42) is INERT. Verified on 057 before this
+  # bump: `kubectl auth can-i impersonate users|groups|serviceaccounts` as the snowplow SA answered
+  # no/no/no, and the pod counted 9,433 refused background refreshes in 6h (4,870 branch-E SA dial
+  # re-gates + 4,563 getFromAPIServer denials). Effect while inert: a permission grant or revoke
+  # does NOT propagate in the background — a button stays wrong until the cached answer hits TTL.
+  # An IMAGE-ONLY bump would not fix this; the chart must move, which this pin does.
+  # #595 (image side) orders external-endpoint-backed seed units LAST so a pipGlobalTimeout cut
+  # loses cells that cannot publish anyway. Fixes #594 (outcome="deadline", 1504/5962 aborted).
+  # rbac.impersonateGroups and rbac.impersonateServiceAccounts ship EMPTY and must stay empty:
+  # impersonating a user does not inherit their groups, but groups/SAs carry rights directly.
+  version: 1.12.43
   deps:
   - snowplow-crd
   - authn
@@ -2378,7 +2400,13 @@ components:
   # Upstream clickstack 3.2.0 does not template a startupProbe, and we do not patch upstream, so the
   # liveness budget is the only lever: it killed at ~70s against a measured 41.4s boot — a ~29s margin
   # that any stack roll closes, producing the observed pod flapping.
-  version: 0.1.21
+  # 0.1.22 (observability#66): bounds the ClickHouse SERVER LOG FILES (logger information/100M/5).
+  # Upstream trace/1000M/50 is a 50GB rotation budget on the 15Gi PVC that also holds the data, so
+  # rotation could never reclaim: on 057 /var/log/clickhouse-server was 3.4G of a 90%-full volume
+  # against 9.7G of real data. ClickHouse needs free space to merge, so its own logs were degrading
+  # SELECTs beside them. This is the 2026-07 incident's missing half — that one bounded the log
+  # TABLES, not the log FILES.
+  version: 0.1.22
   deps:
   - clickhouse-operator
   - mongodb-operator
