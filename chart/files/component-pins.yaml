@@ -2374,7 +2374,11 @@ components:
   kind: KrateoObservability
   # 0.1.19 (observability#62): the log-scoped default alerts also exclude ServiceName
   # 'krateo-alert-provider', so they never count the alert-provider's own logs.
-  version: 0.1.20
+  # 0.1.21 (observability#64): HyperDX liveness failureThreshold 3 -> 10 and requests-only CPU/memory.
+  # Upstream clickstack 3.2.0 does not template a startupProbe, and we do not patch upstream, so the
+  # liveness budget is the only lever: it killed at ~70s against a measured 41.4s boot — a ~29s margin
+  # that any stack roll closes, producing the observed pod flapping.
+  version: 0.1.21
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -2404,7 +2408,17 @@ components:
   svcMatch: krateo-clickstack
 - name: otel-collector-deployment
   kind: OtelCollectorDeployment
-  version: 0.3.7
+  # 0.3.8 (otel-collector#22/#24, image 1.0.4): compositionresolver invalidates the RESTMapper on a
+  # NO-MATCH, so a composition group/version minted AFTER the collector pod started can be learned.
+  # Every chart bump mints a new composition.krateo.io/vX-Y-Z, and the upstream
+  # DeferredDiscoveryRESTMapper self-heal is dead because memCacheClient.Fresh() reports POPULATED,
+  # not current — so without this, anything newly rolled emits UNLABELLED events for the life of
+  # the pod. Measured on 057 2026-10-12, composition-kind events only:
+  #     v0-3-0 8159/8165   v0-1-0 3224/3225   v0-2-49 153/153
+  #     v1-12-41 4/8 (50%)   v1-12-42 0/8 (0%)   v0-3-413 0/6 (0%)   <- both rolled that morning
+  # The 48h AGGREGATE reads a flat ~100% and hides this entirely; only the per-apiVersion split
+  # shows it. Read the split, never the rollup, when judging event correlation.
+  version: 0.3.8
   deps:
   - krateo-observability
   tier: observability
@@ -2421,7 +2435,14 @@ components:
   feature: portal
 - name: krateo-sse-proxy
   kind: KrateoSseProxy
-  version: 0.1.12
+  # 0.1.13 (sse-proxy#20/#21): prunes the GET /events?composition_id=… scan with a tokenbf
+  # prefilter on Body. The predicate was JSONExtractString over a non-indexed column, so it
+  # could not prune and cost ~2s REGARDLESS of result size — the 0-row case slowest of all,
+  # since nothing early-exits at LIMIT 200. Measured on 057 2026-10-12, shipped SELECT shape,
+  # medians of 3 interleaved rounds: 18.49s with no events, 5.21s with events, 1.33s control.
+  # CAVEAT: the control arm itself moved 1.04/4.43/1.33s on an UNCHANGING query — ClickHouse on
+  # 057 is independently degraded, so those seconds are inflated. Trust the ratio, not the value.
+  version: 0.1.13
   deps:
   - krateo-observability
   tier: observability
