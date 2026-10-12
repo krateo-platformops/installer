@@ -2470,7 +2470,26 @@ components:
   # medians of 3 interleaved rounds: 18.49s with no events, 5.21s with events, 1.33s control.
   # CAVEAT: the control arm itself moved 1.04/4.43/1.33s on an UNCHANGING query — ClickHouse on
   # 057 is independently degraded, so those seconds are inflated. Trust the ratio, not the value.
-  version: 0.1.13
+  # 0.1.14 (sse-proxy#20/#22): COMPLETES #20. The composition predicate is now ONE indexed map
+  # lookup — LogAttributes['krateo.io/composition-id'] — covered by the existing idx_log_attr_value
+  # bloom. 0.1.13's tokenbf prefilter pruned ~1.7x but left the JSONExtractString half parsing every
+  # surviving row and an ~870ms floor. Measured on 057, shipped SELECT shape, medians of 3
+  # interleaved rounds: the pathological 0-row case 18.49s -> 0.42s, with-events 5.21s -> 2.37s,
+  # against a 1.33s unfiltered control. Browser-side the two events widgets were the ENTIRE gap
+  # between the composition-detail page and the 1s cold bar (3.8-4.1s, vs 91ms median for every
+  # snowplow-served widget on the same page).
+  # SAFE because otel-collector#11 returns a root composition's own metadata.uid as its
+  # composition-id, so a composition's OWN reconcile events are labelled too: 1,612 of
+  # devday-milan's 1,613 own events over 12h carried the label.
+  # COST: rows written while composition-id stamping was broken have NO label and are now invisible
+  # to the panel. That decay is fixed going forward by otel-collector 1.0.4 (#22/#24), but affected
+  # rows persist for otel_logs' 7-day TTL — concentrated on components rolled during the window
+  # (v1-12-42 0/8, v0-3-413 0/6), not on long-lived compositions (v0-1-0 3224/3225, v0-3-0 8159/8165).
+  # THIS ROLL IS ALSO THE TEST FOR #24: it mints composition.krateo.io/v0-1-14, the first
+  # group/version created while the current collector pod has been running. If #24 works, v0-1-14
+  # events are labelled; if not, they read 0% like v1-12-42 did — and #22 makes that failure SILENT
+  # (empty panel) rather than slow, so check it.
+  version: 0.1.14
   deps:
   - krateo-observability
   tier: observability
