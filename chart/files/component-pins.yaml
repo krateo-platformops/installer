@@ -63,6 +63,10 @@ components:
   # 1.6.70: BYTE-IDENTICAL to 1.6.69 — verified by diffing the packaged templates, not assumed.
   # 1.6.71: BYTE-IDENTICAL to 1.6.70, verified by diffing the packaged templates. Lockstep only.
 - name: frontend-crd
+  # 1.8.1: lockstep with frontend, NO CRD change — verified byte-identical to 1.8.0 by unpacking both
+  # charts: 48 files and 540879 bytes on BOTH sides, differing only in Chart.yaml. It moves only to
+  # keep the pair equal. Rolling the frontend chart WITHOUT this one is the case that blanks pages, so
+  # the two land in ONE installer version, not merely on the same day.
   # 1.6.87: lockstep with frontend, NO CRD change — verified byte-identical to 1.6.86 by diffing the
   # packaged trees. It moves only to keep the pair equal.
   # 1.6.86: lockstep with frontend, no CRD change. Verified by diffing the packaged trees — 47 yaml
@@ -247,7 +251,7 @@ components:
   #   48 files — only Chart.yaml's version line moves. Diffed, not assumed. #455 is UI-only.
   # 1.6.97: co-versioned with frontend (lockstep). Packaged trees BYTE-IDENTICAL to 1.6.96 across all
   #   48 files — only Chart.yaml's version line moves. Diffed, not assumed. #464 is UI-only.
-  version: 1.8.0
+  version: 1.8.1
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -920,6 +924,19 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+  # 1.8.1 (ANNOTATED tag -> commit 369ae930; the lightweight ref is a1a52998, so a check that reads
+  # only one form sees a false mismatch — check both).
+  # The CHART is Chart.yaml-only vs 1.8.0 (version, appVersion, the sources URL), verified by diffing
+  # the unpacked trees. `image.tag` is "" in values.yaml, so appVersion IS the image selector and the
+  # whole payload rides in ghcr.io/krateo-platformops/frontend:1.8.1 — sha256:f10492ef..., published
+  # 2026-10-12T16:09:50Z, confirmed at the GHCR package rather than at a CI badge.
+  # Teaches the composer's readinessGuard the SECOND readyWhen form — the condition expression
+  # `.status.conditions[] | select(.type == "X") | .status == "True"`. The shipped JS bundle greps
+  # condType 3 / readyBy 2 / readyValue 2 / pathOf 0 (bundle greps measured by frontend-4b, who cut
+  # the fix; the chart, tag and image facts above are first-hand here).
+  # Pairs with portal 1.8.69, the SERVER half of the same bug. Both halves are needed: the RESTAction
+  # evaluates readyWhen for the architecture graph, the bundle evaluates it in the browser.
+  # MUST land with frontend-crd 1.8.1 in the same installer version.
   # 1.6.87 (tag -> commit 672b22b = main HEAD; LIGHTWEIGHT tag, where 1.6.86 was ANNOTATED — check
   # both ref forms or a deref returns nothing and reads as a false mismatch).
   # #434: Controller Builder round 2 — the authoring verbs added in portal 1.8.63's Builder CR
@@ -1556,7 +1573,7 @@ components:
   #   VERIFICATION LIMIT: the roll check is image + Ready. Proving the fix needs a chart STARTED in the
   #   Controller Composer after the roll, then its release reaching the index. Pre-1.6.97 charts (e.g.
   #   acme-feedback 0.1.0) still lack the icon and need re-releasing — that is not fixed by this roll.
-  version: 1.8.0
+  version: 1.8.1
   deps:
   - frontend-crd
   - authn
@@ -1761,6 +1778,24 @@ components:
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
 - name: portal
+  # 1.8.69 (ANNOTATED tag -> commit f51be045; the lightweight ref is 02f0df87 — check both forms).
+  # TWO FILES, verified by unpacking 1.8.68 and 1.8.69 and diffing the trees: Chart.yaml and
+  # templates/restaction.composition-architecture.yaml. 625 files on both sides, +1018 bytes.
+  # THE BUG: `readyWhen` has TWO forms and the RESTAction understood only one. `pathOf` split the
+  # string on dots and handed it to getpath — correct for a dotted field path, nonsense for the
+  # condition form `.status.conditions[] | select(.type == "X") | .status == "True"`. So a node whose
+  # readyWhen is a condition NEVER reported satisfied, however ready the resource actually was.
+  # 1.8.69 adds condType/readyBy/readyValue: detect the form first, then evaluate accordingly.
+  # Pre-roll baseline, so the post-check cannot be vacuous — chart template greps are
+  # pathOf 3 / condType 0 / readyBy 0 / readyValue 0 at 1.8.68, and
+  # pathOf 0 / condType 3 / readyBy 2 / readyValue 2 at 1.8.69.
+  # ON THE CLUSTER: `kubectl get restaction composition-architecture -n krateo-system -o yaml |
+  # grep -c pathOf` reads 3 BEFORE and must read 0 AFTER. Then both demo-system EventSites
+  # (devday-milan, spring-summit) leave level 0 / allReady false / waitingOn [form, computeinstance].
+  # Pairs with frontend 1.8.1, the browser half of the same bug.
+  # DOES NOT CARRY portal#300: 1.8.69...cc7241f is ahead_by=2 (the composition-events fix that
+  # replaces the 15.3 MB CRD list with per-group discovery). That needs its own portal tag — do not
+  # read this roll as delivering it, and do not re-measure composition-events against it.
   # 1.8.65 (annotated tag on main 685cdbe, PR #291). Co-versioned with portal-agents and
   # builder-publish as always — one tag, every chart under helm/.
   # Ships the two widgets chapters 5-6 of the demo need: the incident Apply button (sends
@@ -2136,7 +2171,7 @@ components:
   # last exit codes, Close, check history from status.checks), and an alert's page gains Pause and
   # Resume (krateo.io/paused). Its RESTActions read the Incident CRD, which incident-controller-crd
   # installs.
-  version: 1.8.68
+  version: 1.8.69
   deps:
   - frontend
   - git-provider
@@ -2179,6 +2214,8 @@ components:
   # 1.8.48: co-versioned with portal, as always.
   # 1.8.49: co-versioned with portal, as always.
 - name: portal-agents
+  # 1.8.69: co-versioned with portal, as always — one tag, every chart under helm/. Verified
+  # Chart.yaml-only vs 1.8.68 by diffing the unpacked trees; it moves to keep the pair equal.
   # 1.8.65: co-versioned with portal, as always — one tag, every chart under helm/.
   # 1.8.63: co-versioned with portal, as always — one tag, every chart under helm/ (builder-publish
   # also publishes at 1.8.63 but is registered by the portal chart, not pinned here).
@@ -2209,7 +2246,7 @@ components:
   # the pair equal. Caught because the portal-only bump in 0.3.353 left this at 1.8.60, which breaks
   # the same-version invariant stated at the top of this block; 0.3.353 was therefore never deployed.
   # 1.8.64: co-versioned with portal.
-  version: 1.8.68
+  version: 1.8.69
   deps: ['portal']
   tier: platform
   feature: portal
