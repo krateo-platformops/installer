@@ -63,6 +63,10 @@ components:
   # 1.6.70: BYTE-IDENTICAL to 1.6.69 — verified by diffing the packaged templates, not assumed.
   # 1.6.71: BYTE-IDENTICAL to 1.6.70, verified by diffing the packaged templates. Lockstep only.
 - name: frontend-crd
+  # 1.8.2: lockstep with frontend, NO CRD change — verified byte-identical to 1.8.1 by unpacking
+  # both charts: 48 files and 540879 bytes on BOTH sides, differing only in Chart.yaml's version
+  # line. It moves only to keep the pair equal. Rolling the frontend chart WITHOUT this one is the
+  # case that blanks pages, so the two land in ONE installer version.
   # 1.8.1: lockstep with frontend, NO CRD change — verified byte-identical to 1.8.0 by unpacking both
   # charts: 48 files and 540879 bytes on BOTH sides, differing only in Chart.yaml. It moves only to
   # keep the pair equal. Rolling the frontend chart WITHOUT this one is the case that blanks pages, so
@@ -251,7 +255,7 @@ components:
   #   48 files — only Chart.yaml's version line moves. Diffed, not assumed. #455 is UI-only.
   # 1.6.97: co-versioned with frontend (lockstep). Packaged trees BYTE-IDENTICAL to 1.6.96 across all
   #   48 files — only Chart.yaml's version line moves. Diffed, not assumed. #464 is UI-only.
-  version: 1.8.1
+  version: 1.8.2
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -924,6 +928,27 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+  # 1.8.2 (ANNOTATED tag ce44373 -> commit 550b26d; check both forms, a tool reading only one
+  # sees a false mismatch).
+  # The CHART is Chart.yaml-only vs 1.8.1 — 14 files and 60027 bytes on BOTH sides, differing in
+  # exactly three lines: version, appVersion and the sources URL. Diffed, not assumed.
+  # `image.tag` is "" in values.yaml, so appVersion IS the image selector and the whole payload
+  # rides in ghcr.io/krateo-platformops/frontend:1.8.2, whose digest is
+  # sha256:0d26030083479f1e4045f47a12151d4369cc8de47bbb071c848ebbe92c252046 (FULL 64 hex — the
+  # other digests in this file are deliberate 8-char prefixes; a middling 32 looks complete and
+  # fails verification).
+  # WHAT IT CARRIES (#483, #484): the Blueprint Composer inlines a whole status-projection jq
+  # program into each emitted <chart>-status RESTAction (9973 bytes on the real event-site-status),
+  # and that copy is frozen at publish time, so a generator fix cannot reach anything already
+  # installed. 1.8.2 stamps provenance on the emitted object — krateo.io/generated-by,
+  # krateo.io/filter-digest, krateo.io/generated-from — so a regenerator can rebuild the filter
+  # from the live CR alone, with no chart and no re-publish.
+  # A PIN BUMP DOES NOT REPAIR ALREADY-PUBLISHED BLUEPRINTS. Their RESTActions keep the jq they
+  # were born with; only scripts/status-projection-regenerate.mts reaches them, per object. It has
+  # already been run on krateo-057: krateo-system/event-site-status now reads digest=54dd4aa5
+  # by=frontend-1.8.2, and it is the ONLY composer-generated status RESTAction that exists on any
+  # reachable cluster — krateo-installer-release has 53 RESTActions and 0 carrying provenance.
+  # So this roll needs no follow-up regeneration pass anywhere.
   # 1.8.1 (ANNOTATED tag -> commit 369ae930; the lightweight ref is a1a52998, so a check that reads
   # only one form sees a false mismatch — check both).
   # The CHART is Chart.yaml-only vs 1.8.0 (version, appVersion, the sources URL), verified by diffing
@@ -1573,7 +1598,7 @@ components:
   #   VERIFICATION LIMIT: the roll check is image + Ready. Proving the fix needs a chart STARTED in the
   #   Controller Composer after the roll, then its release reaching the index. Pre-1.6.97 charts (e.g.
   #   acme-feedback 0.1.0) still lack the icon and need re-releasing — that is not fixed by this roll.
-  version: 1.8.1
+  version: 1.8.2
   deps:
   - frontend-crd
   - authn
