@@ -268,6 +268,9 @@ components:
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
   # rather than assumed. Lockstep only.
 - name: snowplow-crd
+  # 1.12.46: lockstep with snowplow, NO CRD change — verified byte-identical to 1.12.45 by pulling
+  # BOTH published charts: 4 files and 19855 bytes on both sides, and `diff -r` reports only the
+  # Chart.yaml version line. Moves solely to keep the pair equal.
   # 1.12.45: lockstep with snowplow, NO CRD change — verified byte-identical to 1.12.44 by unpacking
   # both charts: 4 files and 19855 bytes on BOTH sides, Chart.yaml version line only.
   # 1.12.44: lockstep with snowplow, NO CRD change — verified byte-identical to 1.12.43 by unpacking
@@ -340,7 +343,7 @@ components:
   # loses cells that cannot publish anyway. Fixes #594 (outcome="deadline", 1504/5962 aborted).
   # rbac.impersonateGroups and rbac.impersonateServiceAccounts ship EMPTY and must stay empty:
   # impersonating a user does not inherit their groups, but groups/SAs carry rights directly.
-  version: 1.12.45
+  version: 1.12.46
   tier: platform
   feature: portal
 - name: authn
@@ -384,6 +387,46 @@ components:
   # subjectaccessreviews ... Unauthorized" from snowplow in a single 24h window. Worth re-reading that
   # count after the roll — it is a free check on whether the fix landed.
 - name: snowplow
+  # 1.12.46 (ANNOTATED tag: ref object 9fe7a875 PEELS to commit 7c81db49 — peeled `^{}`, not the
+  # bare ref). NOT main HEAD: main is at 765e59da, so 7c81db49 is an ancestor. ahead 12 / behind 0
+  # against 1.12.45.
+  #
+  # THIS IS THE FIX FOR THE 1.12.45 ROLL FAILURE. 1.12.45 was pinned on 2026-10-13 and its CRD was
+  # REJECTED by the apiserver, so the CompositionDefinition never went Ready and the composition was
+  # dropped from the umbrella render entirely — leaving 1.12.44 running with no leaf CR and nothing
+  # reconciling it (installer#477). crdgen compiled the `not: {enum: [system:masters, "*"]}` on
+  # rbac.impersonateGroups / impersonateServiceAccounts into CEL rules, and with no maxItems or
+  # maxLength the cost estimator assumes unbounded size: "estimated rule cost exceeds budget by
+  # factor of 1.468006x" and 1.363149x. snowplow#657.
+  #
+  # 1.12.46 bounds them: maxItems 1024 and items.maxLength 253 on both arrays, plus an explicit
+  # x-kubernetes-validations rule "self != '*' && !self.startsWith('system:')" on impersonateGroups
+  # (crdgen silently DROPPED the `not: {anyOf: [...]}` form #640 used, so the rule is stated
+  # outright rather than left to compilation). impersonateServiceAccounts keeps its `not: {enum:
+  # ["*"]}` and needs no extra rule — the system: prefix ban is groups-only (#631).
+  #
+  # Chart delta verified by pulling BOTH published charts: 18 files on both sides, 92870 -> 94039 B,
+  # and only Chart.yaml, values.schema.json and values.yaml differ. TEMPLATES ARE UNCHANGED and
+  # clusterrole.yaml is byte-IDENTICAL, so this bump grants NOTHING new. The values.yaml delta is
+  # comment-only. 057 sets no componentValues.snowplow, so no override interacts with it.
+  #
+  # Gate (snowplow#658): the release suite on a fresh archive of 7c81db49 drives the schema through
+  # the REAL crdgen that core-provider 2.13.23 uses (plumbing v1.15.1) and server-dry-runs the
+  # resulting CRD on kind v1.36.4 — matching 057's apiserver minor, since the cost budget is
+  # version-sensitive. 34 ok / 0 FAIL / 0 races. The guard asserts BOTH directions: the unbounded
+  # twin is still refused for cost, and real CRs carrying system:masters, system:nodes, system:foo,
+  # `system:` or `*` are refused by the CEL rule.
+  #
+  # ADOPTION, not reinstall: there is no old leaf CR to prune (1.12.45's gate failure already removed
+  # it), the new v1-12-46 CR carries release-name `snowplow`, and the release is `deployed` at rev 79
+  # — not an incomplete helm operation — so Observe skips the stuck-release recovery and reaches
+  # ApplyRBAC BEFORE helm runs, re-subjecting snowplow-krateo-rbac from snowplows-v1-12-44 to
+  # -v1-12-46. Expect rev 80, an in-place upgrade. Confirm the CompositionDefinition reaches Ready
+  # (i.e. crdgen accepted the CRD) BEFORE the app upgrade proceeds.
+  #
+  # Cold start is ~11-13 min with 503s before /readyz reports ready; do NOT restart the pod during
+  # it (snowplow-coldstart-readyz-backstop).
+  #
   # 1.12.45 (ANNOTATED tag: ref object ada9d089 PEELS to commit 1205faad — peeled `^{}`, not the
   # bare ref). NINE commits, all cache / refresher / rbac.
   # This chart is NOT Chart.yaml-only, unlike the last several snowplow bumps: 18 files on both
@@ -929,7 +972,7 @@ components:
   # loses cells that cannot publish anyway. Fixes #594 (outcome="deadline", 1504/5962 aborted).
   # rbac.impersonateGroups and rbac.impersonateServiceAccounts ship EMPTY and must stay empty:
   # impersonating a user does not inherit their groups, but groups/SAs carry rights directly.
-  version: 1.12.45
+  version: 1.12.46
   deps:
   - snowplow-crd
   - authn
