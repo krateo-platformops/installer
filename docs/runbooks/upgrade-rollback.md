@@ -77,8 +77,9 @@ deps are Ready, so an under-capacity upgrade degrades to *slow*, not *broken*.
 `helm rollback` reverts the **rendered chart** (the ConfigMaps that *carry* the CR spec) but
 runs only `post-rollback` hooks — and the self-bootstrap hooks that merge-patch pins onto the
 live CR are annotated `post-install,post-upgrade`, **not** `post-rollback` (verified in
-`self-bootstrap.yaml`: 9 `post-upgrade` hook annotations, 0 `post-rollback`). It also rolls
-back the **bootstrap** release, not the CR-driven `installer-platform` release that
+`self-bootstrap.yaml`: 4 `post-install,post-upgrade` hook annotations at lines
+280/318/349/398, weights 0/5/10/20, and 0 `post-rollback`). It also rolls back the
+**bootstrap** release, not the CR-driven `installer-platform` release that
 core-provider actually manages. So the live `Installer` CR — the source of truth — is never
 re-patched, and the platform stays on the new versions while the Helm revision *looks* rolled
 back.
