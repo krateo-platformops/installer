@@ -2846,7 +2846,30 @@ components:
   tier: observability
   feature: coreAgents
 - name: krateo-autopilot
-  # 0.6.4 (ANNOTATED tag -> commit 4daba2f..., = main HEAD).
+  # 0.7.1 (ANNOTATED tag 57a2c4a -> commit 87ccab1). PROMPT-ONLY (#152). Four installer-agent
+  # skills were unreachable — upgrade-preflight, rollback-advisor, migration-assessment,
+  # upgrade-plan — because the `## Specialists` roster described the agent only as "the platform
+  # itself, via the Installer CR", and across the whole 12376-char prompt `upgrade` and `rollback`
+  # appeared ONCE each (both in the helm-agent sentence) with `migrat`/`preflight` never. So
+  # "helm rollback changed nothing" routed to a generic Helm agent that would call the rollback
+  # effective. It is not: THIS chart's self-bootstrap.yaml has four post-install,post-upgrade
+  # hooks and zero post-rollback, so a rollback leaves components where they were (see
+  # docs/runbooks/upgrade-rollback.md — whose own figure of "9 post-upgrade hook annotations" is
+  # wrong: 9 is the string count, 4 are real annotations at L280/318/349/398; the 0-post-rollback
+  # conclusion is unaffected).
+  # Verified on the PUBLISHED chart, not the PR: autopilot 12376 -> 13144, helm_agent 1328 -> 1775,
+  # k8s_agent and portal-protocol byte-identical; upgrade 1->5, rollback 1->3, migrat 0->2,
+  # preflight 0->1. Only files/prompts-eng.yaml changes in substance (Chart.yaml and Chart.lock
+  # move mechanically on every release of this chart, which has dependencies).
+  # PROMPT-ONLY VERIFICATION: grep cm/krateo-prompts-eng, NOT the Agent CR's
+  # spec.declarative.systemMessage, which is a short pointer.
+  # 0.7.0 (ANNOTATED tag 899a506 -> commit 4cb5954). PROMPT-ONLY (#150, #151): the rail performs
+  # the actions it announces — opening a dialog is not a mutation so it stops declining it, and a
+  # pull request's state is on the -pr resource, not the claim. autopilot 12268 -> 12376,
+  # portal-protocol 49491 -> 52146.
+  # 0.6.9 (ANNOTATED tag d27f0cf -> commit ba32732). PROMPT-ONLY (#149): handle an incident through
+  # the portal and read the Platform Review. autopilot 12082 -> 12268, portal-protocol 44107 -> 49491.
+  # 0.6.4 (ANNOTATED tag -> commit 4daba2f...; it headed main when 0.6.4 was cut, not since).
   # #144: the orchestrator prompt learns the controller flow — Autopilot drives the Controller
   # Builder's six authoring verbs instead of being told to hand a whole RestDefinition over inline.
   # PROMPT-ONLY: the prompt text lives in cm/krateo-prompts-eng, NOT in the Agent CR's
@@ -3161,7 +3184,7 @@ components:
   #   — so a dry run against the wrong order measures nothing and looks like a prompt failure.
   #   MARKER, grepped from both packaged charts by the author and confirmed here:
   #     'A PAGE IS DONE WHEN ITS PREVIEW SHOWS DATA'   (0.6.7=0, 0.6.8=1)
-  version: 0.7.0
+  version: 0.7.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
