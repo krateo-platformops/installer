@@ -1,8 +1,15 @@
 components:
 - name: authn-crd
+  # 0.27.3: lockstep with authn, NO CRD change — verified byte-identical to 0.27.2 by unpacking both
+  # charts: 8 files and 19846 bytes on BOTH sides, differing only in Chart.yaml's version line.
+  # This pin was LEFT BEHIND when authn moved to 0.27.3: the pair was split 0.27.3/0.27.2, which the
+  # co-versioning standard forbids — one chart-repo tag publishes app chart and CRD chart at the same
+  # version and the installer pins both at one version. Harmless here because 0.27.3 changed no CRD,
+  # but a split pair means the NEXT authn release that does touch CRDs ships stale ones silently.
+  # Found by sweeping all 52 pins against their registries, not by a report.
   kind: AuthnCrds
   chart: authn-crds
-  version: 0.27.2
+  version: 0.27.3
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -261,6 +268,8 @@ components:
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
   # rather than assumed. Lockstep only.
 - name: snowplow-crd
+  # 1.12.44: lockstep with snowplow, NO CRD change — verified byte-identical to 1.12.43 by unpacking
+  # both charts: 4 files and 19855 bytes on BOTH sides, Chart.yaml version line only.
   # 1.12.32: lockstep with snowplow, one tag. Byte-identical to 1.12.31 outside Chart.yaml (4 files,
   # 19855 B both), so no CRD change; it moves only to keep the pair equal.
   # 1.12.31: lockstep with snowplow, one tag. Verified byte-identical to 1.12.30 outside Chart.yaml
@@ -329,7 +338,7 @@ components:
   # loses cells that cannot publish anyway. Fixes #594 (outcome="deadline", 1504/5962 aborted).
   # rbac.impersonateGroups and rbac.impersonateServiceAccounts ship EMPTY and must stay empty:
   # impersonating a user does not inherit their groups, but groups/SAs carry rights directly.
-  version: 1.12.43
+  version: 1.12.44
   tier: platform
   feature: portal
 - name: authn
@@ -373,6 +382,18 @@ components:
   # subjectaccessreviews ... Unauthorized" from snowplow in a single 24h window. Worth re-reading that
   # count after the roll — it is a free check on whether the fix landed.
 - name: snowplow
+  # 1.12.44 (ANNOTATED tag: ref object a1a9ff28 PEELS to commit 9c233de9 — peeled `^{}` if present,
+  # else the bare ref; snowplow is annotated where portal/frontend went lightweight).
+  # The CHART is Chart.yaml-only vs 1.12.43 — 18 files and 93771 bytes on BOTH sides, differing in
+  # version, appVersion and the sources URL. `image.tag` is "" (values.yaml:55) so appVersion IS the
+  # image selector: ghcr.io/krateo-platformops/snowplow:1.12.44, digest
+  # sha256:5289e6b262445be4209ef74fafe6e8b752e47385909950d799ed02a7e6fac19d (full 64 hex).
+  # FOUR commits, all cache/refresher: #599 installs the RA-resolve memo so one dirty-mark burst
+  # parses a RESTAction once rather than once per widget; #610 orders the indexer read by
+  # (namespace, name) so an unchanged LIST rebuilds to IDENTICAL bytes; #612 measures what share of
+  # refreshes rebuild byte-identical output; #613 caches userAccessFilter-narrowed full lists again
+  # on the raFullList carrier. #610 is the one to carry forward: deterministic rebuild bytes are what
+  # make a cache-hit measurement mean anything.
   # 1.12.32 (ANNOTATED tag: refs/tags/1.12.32 is the tag OBJECT 46fd39dc, which PEELS to commit
   # 759a59d9 = main HEAD. snowplow is annotated; portal/frontend went LIGHTWEIGHT at 1.8.63/1.6.87,
   # where no peeled ref exists at all. Rule: peeled `^{}` if present, ELSE the bare ref.)
@@ -876,7 +897,7 @@ components:
   # loses cells that cannot publish anyway. Fixes #594 (outcome="deadline", 1504/5962 aborted).
   # rbac.impersonateGroups and rbac.impersonateServiceAccounts ship EMPTY and must stay empty:
   # impersonating a user does not inherit their groups, but groups/SAs carry rights directly.
-  version: 1.12.43
+  version: 1.12.44
   deps:
   - snowplow-crd
   - authn
