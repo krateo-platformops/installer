@@ -268,6 +268,8 @@ components:
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
   # rather than assumed. Lockstep only.
 - name: snowplow-crd
+  # 1.12.45: lockstep with snowplow, NO CRD change — verified byte-identical to 1.12.44 by unpacking
+  # both charts: 4 files and 19855 bytes on BOTH sides, Chart.yaml version line only.
   # 1.12.44: lockstep with snowplow, NO CRD change — verified byte-identical to 1.12.43 by unpacking
   # both charts: 4 files and 19855 bytes on BOTH sides, Chart.yaml version line only.
   # 1.12.32: lockstep with snowplow, one tag. Byte-identical to 1.12.31 outside Chart.yaml (4 files,
@@ -338,7 +340,7 @@ components:
   # loses cells that cannot publish anyway. Fixes #594 (outcome="deadline", 1504/5962 aborted).
   # rbac.impersonateGroups and rbac.impersonateServiceAccounts ship EMPTY and must stay empty:
   # impersonating a user does not inherit their groups, but groups/SAs carry rights directly.
-  version: 1.12.44
+  version: 1.12.45
   tier: platform
   feature: portal
 - name: authn
@@ -382,6 +384,36 @@ components:
   # subjectaccessreviews ... Unauthorized" from snowplow in a single 24h window. Worth re-reading that
   # count after the roll — it is a free check on whether the fix landed.
 - name: snowplow
+  # 1.12.45 (ANNOTATED tag: ref object ada9d089 PEELS to commit 1205faad — peeled `^{}`, not the
+  # bare ref). NINE commits, all cache / refresher / rbac.
+  # This chart is NOT Chart.yaml-only, unlike the last several snowplow bumps: 18 files on both
+  # sides, 93771 -> 92870 B, and clusterrole.yaml, values.yaml and values.schema.json all move.
+  # The ClusterRole RULES ARE UNCHANGED — verified by diffing the template: every hunk is comment
+  # prose describing the #608 fallback. This bump grants NOTHING new.
+  # values.schema.json HARDENS the rbac block: impersonateGroups and impersonateServiceAccounts
+  # gain uniqueItems and minLength 1, and now reject "system:masters" and "*" via `not/enum`.
+  # Both lists are [] on 057, so the constraint is inert here and cannot fail the render.
+  # env.REFRESH_DROP_EVICT_MAX_PER_MINUTE and env.REFRESH_SUPPRESS_AFTER_DECLINES are RETIRED by
+  # the #547 owner ruling and removed from values.yaml AND from the schema. No values migration is
+  # needed and nothing breaks: env.additionalProperties is `true` in both versions, the installer
+  # never set either key (grepped chart/ and .github/), and neither appears in the live 057 release
+  # values. A removed-but-set key would only matter if env were strict — it is not.
+  # `image.tag` is "" (values.yaml:55) so appVersion IS the image selector:
+  # ghcr.io/krateo-platformops/snowplow:1.12.45, index digest
+  # sha256:66d8e49110c6d215d64f20c83d21957816ec190a463ee5ac727126862d9898fd (full 64 hex);
+  # linux/amd64 sha256:f64d24fe6bb1f7950cbb7ac9ae6e0f1e21735cf97fb09e2bcd7e9d0c1a89faf3,
+  # linux/arm64 sha256:059f28b61ab142b3b1dbc50525292d9b53257ab6cea3d3f712076430439d58e0.
+  # WHY THIS ONE MATTERS ON 057. #608/#620 is the headline: the refresher now SelfSubjectAccessReviews
+  # each cohort principal BEFORE impersonating and falls back to the re-gated SA transport when
+  # refused, instead of dialling and eating a 403. Measured on 057 while still on 1.12.44: ~470
+  # `impersonate-on:user-info:get` denials in 10 minutes on a pod that was 1/1 READY — the denials
+  # are not readiness-blocking (the Ready pod logged them at a HIGHER rate than the warming one),
+  # they are wasted calls and declined cache Puts.
+  # Also lands #547 known-stale (any post-mark write closes it; shared shell served with background
+  # revalidation), #618/#602 (honour the query string on informer-served LISTs and key the content
+  # cell by it), #624 (typed store items through one converter, fail closed on the rest), #630 (keep
+  # the StatusError on the refresher's CR re-fetch so a 403 there is forbidden/refetch and NEVER
+  # evicts the cell), and #574 refusal attribution.
   # 1.12.44 (ANNOTATED tag: ref object a1a9ff28 PEELS to commit 9c233de9 — peeled `^{}` if present,
   # else the bare ref; snowplow is annotated where portal/frontend went lightweight).
   # The CHART is Chart.yaml-only vs 1.12.43 — 18 files and 93771 bytes on BOTH sides, differing in
@@ -897,7 +929,7 @@ components:
   # loses cells that cannot publish anyway. Fixes #594 (outcome="deadline", 1504/5962 aborted).
   # rbac.impersonateGroups and rbac.impersonateServiceAccounts ship EMPTY and must stay empty:
   # impersonating a user does not inherit their groups, but groups/SAs carry rights directly.
-  version: 1.12.44
+  version: 1.12.45
   deps:
   - snowplow-crd
   - authn
@@ -1824,6 +1856,18 @@ components:
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
 - name: portal
+  # 1.8.71 (ANNOTATED tag: ref object fa653221 PEELS to commit 90f1aaa6; for contrast 1.8.70's ref
+  # was d236a20b peeling to cc7241f — portal is annotated, so always peel, never take the bare ref).
+  # THREE commits, all design-system: f25726ef adopts frontend 1.7.0 (one Ask Autopilot look, A4;
+  # button roles, C26), d76d9e78 its controller-builder test, 90f1aaa6 the #296 merge commit.
+  # NINE files differ vs 1.8.70 — 625 files on both sides, 1510105 -> 1511956 B — being Chart.yaml
+  # plus EIGHT button templates. The change is uniform: the buttons stop setting `type: <role>` and
+  # set `intent: <role>` instead (button.incident-detail-close goes `type: default` -> `intent:
+  # dismiss`, commented "Close dismisses without deleting anything, so it is amber").
+  # DEPENDENCY FLOOR, and the reason this pin is not safe everywhere: `intent` IS the frontend 1.7.0
+  # button contract, so portal 1.8.71 requires frontend >= 1.7.0 to render the roles. 057 runs
+  # frontend 1.8.2 (pinned in #471) and clears the floor. A cluster still below frontend 1.7.0 must
+  # take the frontend bump FIRST, or all eight buttons silently lose their role styling.
   # 1.8.70 (ANNOTATED tag -> commit cc7241f; the lightweight ref is d236a20b — check both forms).
   # cc7241f is EXACTLY the portal#300 merge commit: `compare/cc7241f...1.8.70` reports identical,
   # ahead_by 0, behind_by 0. So the gap called out on the 1.8.69 pin is now closed.
@@ -2234,7 +2278,7 @@ components:
   # last exit codes, Close, check history from status.checks), and an alert's page gains Pause and
   # Resume (krateo.io/paused). Its RESTActions read the Incident CRD, which incident-controller-crd
   # installs.
-  version: 1.8.70
+  version: 1.8.71
   deps:
   - frontend
   - git-provider
@@ -2277,6 +2321,9 @@ components:
   # 1.8.48: co-versioned with portal, as always.
   # 1.8.49: co-versioned with portal, as always.
 - name: portal-agents
+  # 1.8.71: co-versioned with portal, as always — one tag, every chart under helm/. Verified
+  # Chart.yaml-only vs 1.8.70 by diffing the unpacked trees (107 files and 470601 B on BOTH sides);
+  # it moves only to keep the pair equal.
   # 1.8.70: co-versioned with portal, as always — one tag, every chart under helm/. Verified
   # Chart.yaml-only vs 1.8.69 by diffing the unpacked trees; it moves to keep the pair equal.
   # 1.8.69: co-versioned with portal, as always — one tag, every chart under helm/. Verified
@@ -2311,7 +2358,7 @@ components:
   # the pair equal. Caught because the portal-only bump in 0.3.353 left this at 1.8.60, which breaks
   # the same-version invariant stated at the top of this block; 0.3.353 was therefore never deployed.
   # 1.8.64: co-versioned with portal.
-  version: 1.8.70
+  version: 1.8.71
   deps: ['portal']
   tier: platform
   feature: portal
