@@ -2718,7 +2718,28 @@ components:
   # group/version created while the current collector pod has been running. If #24 works, v0-1-14
   # events are labelled; if not, they read 0% like v1-12-42 did — and #22 makes that failure SILENT
   # (empty panel) rather than slow, so check it.
-  version: 0.1.14
+  # 0.1.15 (sse-proxy#26, fixes #25): makes the 3s POLLER predicate sargable. 0.1.13/0.1.14 fixed the
+  # per-composition /events read; this one fixes the unconditional background poll, which ran every 3s
+  # regardless of whether anyone was watching. Measured on 057 by the snowplow session: the EXPLAIN for
+  # each poll went from 731 granules to 1. The per-composition /events is additionally windowed
+  # (1h -> 24h -> unbounded) with identical results on live 057 data.
+  # WHY IT MATTERS BEYOND sse-proxy: the poller was using 3.24 of ClickHouse's 4 cores, so this is
+  # expected to speed up EVERY ClickHouse consumer on the cluster -- the portal's events widgets and
+  # snowplow's ClickHouse RestActions included. That makes it the rare pin whose benefit shows up
+  # somewhere other than the component being rolled.
+  # CHART DELTA, verified by unpacking both and diffing: 8 files and 14729 bytes on BOTH sides,
+  # templates BYTE-IDENTICAL, only Chart.yaml (version/appVersion) and values.yaml (image.tag) move.
+  # `helm template` renders ghcr.io/krateo-platformops/sse-proxy:1.1.9 (0.1.14 rendered 1.1.8).
+  # NOTE ON THE MECHANISM, because it is not the usual one: this chart PINS image.tag in values.yaml,
+  # so the `.img.tag | default .defaultTag` helper never consults .Chart.AppVersion. appVersion alone
+  # would NOT have moved the image, which is why both fields change -- same as the 0.1.13/0.1.14 bumps.
+  # Corollary: do NOT set componentValues.krateo-sse-proxy.image.tag here. Unlike cdc (where an
+  # override is inert because the chart leaves the tag empty), here it would really take effect and
+  # then permanently mask every future chart bump.
+  # NOT RIDING: sse-proxy's dependabot #16 (otlptracehttp 1.45) breaks trace export (snowplow#596/#695).
+  # Verified absent -- go.mod at tag 1.1.9 and on main both read otlptracehttp/sdk v1.44.0.
+  # UNCHANGED BY THIS ROLL: the poller cursor-loss issue, sse-proxy#27.
+  version: 0.1.15
   deps:
   - krateo-observability
   tier: observability
