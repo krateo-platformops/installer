@@ -2671,6 +2671,14 @@ components:
   deps:
   - clickhouse-operator
   - mongodb-operator
+  # alert-provider-crd (installer#482): krateo-observability RENDERS Alert CRs
+  # (observability.krateo.io/v1alpha1, templates/default-alerts.yaml, defaultAlerts.enabled defaults
+  # TRUE) but ships NO crds/ of its own -- the CRD moved out to the alert-provider-crds chart and the
+  # consumer stayed. Without this dep AND the re-gate below, a cluster with portal on and
+  # specialistAgents off has no source for the CRD at all, chart-inspector fails its dry-render with
+  # `no matches for kind "Alert"`, and this component NEVER INSTALLS. Confirmed on a fresh bench
+  # cluster: 17/18 components Ready, this one stuck Ready=False/Creating forever.
+  - alert-provider-crd
   tier: observability
   feature: portal
   # HyperDX IS NOT PUBLICLY ROUTED, deliberately. It was: a Next.js root-asset app (hardcoded /_next,
@@ -3756,7 +3764,23 @@ components:
   # the CRD and every Alert: follow docs/configuration.md#upgrading-from-alert-troubleshooter first.
   version: 0.2.49
   tier: observability
-  feature: specialistAgents
+  # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
+  # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
+  # `portal`. Gating a CRD behind a DIFFERENT feature from the component that renders its CRs meant that
+  # portal-on + specialistAgents-off had no source for the CRD and krateo-observability could never
+  # install. Co-gating it with its consumer makes the CRD present exactly when something needs it and
+  # absent exactly when nothing does: with portal off, krateo-observability is gated out too, so the
+  # pair stays consistent in BOTH directions. Deliberately `portal` rather than ungated -- inst.coreFeatures
+  # is empty so nothing is forced on, and an ungated CRD would install on clusters with no consumer.
+  # NOT A RELOCATION: same chart, same published name, same helm release (alert-provider-crd), so no
+  # ownership change and none of #194's adoption hazard. On a cluster with both features on (e.g. 057)
+  # this is a no-op.
+  # CONSEQUENCE, deliberate: with portal on and specialistAgents off the CRD and the default Alert CRs
+  # now install while `alert-provider` (the controller that reconciles them into HyperDX) does NOT, since
+  # it stays gated on specialistAgents. Those Alerts exist as declarative records with no status. That is
+  # what default-alerts.yaml is for -- "a FRESH install lands on a populated /alerts page instead of an
+  # empty one" -- but it should be a choice rather than a surprise.
+  feature: portal
 - name: alert-provider
   kind: AlertProvider
   # 0.2.42 (#43): fixes a NameError that made the dashboard CREATE path unrunnable — ensure_dashboard_tile
