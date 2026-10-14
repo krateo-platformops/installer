@@ -347,7 +347,10 @@ components:
   # loses cells that cannot publish anyway. Fixes #594 (outcome="deadline", 1504/5962 aborted).
   # rbac.impersonateGroups and rbac.impersonateServiceAccounts ship EMPTY and must stay empty:
   # impersonating a user does not inherit their groups, but groups/SAs carry rights directly.
-  version: 1.12.46
+  # 1.12.47: lockstep with snowplow, one tag for the repo. NO CRD change -- verified by unpacking and
+  # diffing the packaged charts: 4 files and 19855 BYTES ON BOTH SIDES, only Chart.yaml version/appVersion
+  # move, templates byte-identical, values.schema.json identical. It moves only to keep the pair equal.
+  version: 1.12.47
   tier: platform
   feature: portal
 - name: authn
@@ -976,7 +979,29 @@ components:
   # loses cells that cannot publish anyway. Fixes #594 (outcome="deadline", 1504/5962 aborted).
   # rbac.impersonateGroups and rbac.impersonateServiceAccounts ship EMPTY and must stay empty:
   # impersonating a user does not inherit their groups, but groups/SAs carry rights directly.
-  version: 1.12.46
+  # 1.12.47 (ANNOTATED tag 0419d68a, PEELS to commit 37248bb9043674861d0a9f33258f30ae9cf41233).
+  # ROLLED FOR A SECURITY FIX: #703 (via #706) -- a key rotation could be published BEFORE the permission
+  # snapshot contained the change, i.e. a window in which a rotated-away key still authorizes. That is the
+  # reason this did not wait to ride with something else; everything below would have.
+  # Also carries #691 stuck-rebuild visibility gauges (#692), #596 (OTLP spans to /v1/traces), #684, #687,
+  # #688, #683, #681/#682, #677, #674, plus flake fixes.
+  # PURE IMAGE BUMP, verified at the ARTIFACT level rather than from a git diff, because "the diff is empty"
+  # and "the published chart is unchanged" are different claims and only the second one matters here:
+  #   snowplow      18 files, 94039 BYTES ON BOTH SIDES vs 1.12.46; only Chart.yaml differs
+  #   templates/    BYTE-IDENTICAL, so it grants nothing new and changes no rendered resource
+  #   values.schema.json IDENTICAL -> the Composition CRD at v1-12-47 is schema-identical to v1-12-46, so
+  #   installer#477 cannot bite this pin (CRD generation cannot fail on a schema it already accepts).
+  # image ghcr.io/krateo-platformops/snowplow:1.12.47, OCI index, linux/amd64 + linux/arm64,
+  #   digest sha256:95bc640f01461da64becd714a964600f64fe4e29b5e2a8dbd1f44e03d894ec58.
+  # RELEASE GATE met (Diego's condition): whole module -race unit+integration 34/34, 0 FAIL, 0 races, and
+  # internal/rbac/evaltest -count=50 ok, all from a fresh archive of 37248bb9.
+  # FORWARD PIN, deliberately -- NOT a componentValues image.tag override. An override would take effect and
+  # then permanently mask every future chart bump (cf. krateo-sse-proxy 0.1.15, where values.yaml pins the
+  # tag; the opposite of cdc, where an override is inert).
+  # EXPECTED ON THE ROLL, so it is not mistaken for a failure: snowplow cold-starts for ~11-15 MINUTES
+  # serving 503 before Ready (1.12.46 took 11m08s to ContainersReady). DO NOT RESTART IT during that window.
+  # The 480s boot seed ceiling is structural and unchanged by this release.
+  version: 1.12.47
   deps:
   - snowplow-crd
   - authn
