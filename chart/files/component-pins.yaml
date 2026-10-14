@@ -2358,7 +2358,36 @@ components:
   # last exit codes, Close, check history from status.checks), and an alert's page gains Pause and
   # Resume (krateo.io/paused). Its RESTActions read the Incident CRD, which incident-controller-crd
   # installs.
-  version: 1.8.71
+  # 1.8.72 (#305, fixes #302; and #304). THE REASON THIS RELEASE EXISTS is a DUPLICATE YAML KEY that
+  # silently emptied the blueprint catalog. portal.catalogStep emitted its own `filter:` for the
+  # configmap branch's fromjson, and two callers appended a SECOND `filter:` to the same map. YAML
+  # duplicate keys decode LAST-WINS, so the fromjson was dropped, the caller's jq read `.catalog.entries`
+  # on the RAW ConfigMap (which has no .entries), and `// {}` turned that into an empty set. Live effect
+  # on 057 before this roll: the filter returned 0 of 293 blueprints -- global search found NO installable
+  # blueprints and blueprint-builder-deliverables lost every $inCatalog match.
+  # VERIFIED IN THE PUBLISHED ARTIFACTS, before and after, with a STRICT yaml loader that rejects
+  # duplicate keys (PyYAML's safe_load does NOT -- it silently takes last-wins, so "it parses" proves
+  # nothing here):
+  #   1.8.71 render: 590 docs, 2 with duplicate `filter` keys -- global-search, blueprint-builder-deliverables
+  #   1.8.72 render: 590 docs, 0
+  # The fix composes instead of appending, RE-WRAPPING under the step name so `.catalog.entries` still
+  # resolves: filter: '{catalog: (.catalog.data["blueprints-index.json"] | fromjson)} | <postFilter>'.
+  # `postFilter` is a template-internal helper argument, NOT a values key -- nothing to plumb here.
+  # 1.8.72 also carries #304: sp-pod-uptime gets `| floor` so widgetData.value satisfies
+  # x-kubernetes-int-or-string, which rejects a float while the RestAction's SQL rounds to 1dp. Worth
+  # ~8 minutes of repeated engine boot passes per snowplow pod start.
+  # CHART DELTA: 625 files both sides, 1511956 -> 1514117 B. Only Chart.yaml, templates/_catalog.tpl,
+  # the two RestActions above and statistic.sp-pod-uptime move. NO image change beyond appVersion.
+  # #477 CANNOT BITE THIS PIN: values.schema.json is BYTE-IDENTICAL across 1.8.71 -> 1.8.72 (checked with
+  # cmp), so the Composition CRD crdgen mints at v1-8-72 is schema-identical and generation cannot fail
+  # on a schema it already accepts.
+  # WATCH THIS ROLL rather than assume it: core-provider#168's handover race reproduces on the next
+  # portal pin bump regardless of the 2.13.24 RBAC fix, and portal is the component it has already bitten
+  # (the 2026-10-13 wedge, which deleted the chart-shipped cluster-admin-binding-krateo-system on each
+  # failed uninstall and intermittently cost signed-in users the app shell). Markers: the portal release
+  # must NEVER reach `uninstalling`; cluster-admin-binding-krateo-system present throughout; both
+  # portal-krateo-rbac bindings re-subjected to portals-v1-8-72; widget CR counts steady.
+  version: 1.8.72
   deps:
   - frontend
   - git-provider
@@ -2438,7 +2467,10 @@ components:
   # the pair equal. Caught because the portal-only bump in 0.3.353 left this at 1.8.60, which breaks
   # the same-version invariant stated at the top of this block; 0.3.353 was therefore never deployed.
   # 1.8.64: co-versioned with portal.
-  version: 1.8.71
+  # 1.8.72: co-versioned with portal, one tag for the repo. NO content change -- 107 files and 470601
+  # bytes on BOTH sides, only Chart.yaml's version/appVersion lines move. Verified by unpacking and
+  # diffing, not assumed. values.schema.json byte-identical too.
+  version: 1.8.72
   deps: ['portal']
   tier: platform
   feature: portal
