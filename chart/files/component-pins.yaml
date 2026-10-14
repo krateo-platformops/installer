@@ -70,6 +70,10 @@ components:
   # 1.6.70: BYTE-IDENTICAL to 1.6.69 — verified by diffing the packaged templates, not assumed.
   # 1.6.71: BYTE-IDENTICAL to 1.6.70, verified by diffing the packaged templates. Lockstep only.
 - name: frontend-crd
+  # 1.8.4: lockstep with frontend, one tag. Verified Chart.yaml-only vs 1.8.2 by unpacking and
+  # diffing both trees — 48 files and 540879 bytes on BOTH sides — so it carries no CRD change and
+  # moves only to keep the pair equal. It still re-registers the CRD at v1-8-4 and prunes v1-8-2,
+  # so expect the Frontend leaf CR to vanish and return during the roll.
   # 1.8.2: lockstep with frontend, NO CRD change — verified byte-identical to 1.8.1 by unpacking
   # both charts: 48 files and 540879 bytes on BOTH sides, differing only in Chart.yaml's version
   # line. It moves only to keep the pair equal. Rolling the frontend chart WITHOUT this one is the
@@ -262,7 +266,7 @@ components:
   #   48 files — only Chart.yaml's version line moves. Diffed, not assumed. #455 is UI-only.
   # 1.6.97: co-versioned with frontend (lockstep). Packaged trees BYTE-IDENTICAL to 1.6.96 across all
   #   48 files — only Chart.yaml's version line moves. Diffed, not assumed. #464 is UI-only.
-  version: 1.8.2
+  version: 1.8.4
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1024,6 +1028,39 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+  # 1.8.4 (ANNOTATED tag: ref object 1e4c6dc PEELS to commit e3e7e32 on main).
+  # SKIPS 1.8.3 DELIBERATELY, and 1.8.3 is NOT ours: fedepini cut it at 14:47:56Z from b2c3c4a
+  # (frontend#486, design-system/primary-budget), 20 minutes before #487 merged. 1.8.3 is real and
+  # published but carries no resources change. `compare/1.8.3...1.8.4` is ahead 2 / behind 0, so
+  # 1.8.4 is a STRICT SUPERSET of 1.8.3 and pinning it means 1.8.3 never needs visiting.
+  # `compare/1.8.2...1.8.4` is ahead 7 / behind 0.
+  # The CHART is Chart.yaml + values.yaml only — 14 files and 60027 -> 60758 B, verified by
+  # unpacking and diffing both trees. The scripts/ changes in those commits
+  # (status-projection-regenerate.mts and a test) are NOT in the chart and NOT in the image:
+  # the Docker build context is ui/, so scripts/ is outside it.
+  # THE ONE LIVE EFFECT: values.yaml replaces the Helm scaffold's `resources: {}` with real
+  # requests cpu 50m / memory 64Mi and a memory limit of 256Mi, deliberately with NO CPU limit.
+  # That moves the frontend pod from BestEffort to Burstable. Sized from measurement, not a guess:
+  # the live 057 pod reads 1m CPU / 7Mi, so the memory request is an order of magnitude above it
+  # and the limit two more.
+  # WHY BestEffort WAS WRONG, and it bit us on 057 today: a zero-request pod is scored onto
+  # whichever node looks least allocated and never counts against that node's CPU budget, so it is
+  # also first to be evicted under pressure. Pod count is a NodeResourcesFit FILTER while only
+  # CPU/memory are SCORED, which is why the 1.8.2 roll placed fine on a saturated cluster while
+  # snowplow's real 2000m request could not place at all. Burstable is the correct trade for the
+  # component serving the whole portal UI.
+  # SCHEMA GUARD, checked before this bump: componentValues.frontend.resources already EXISTS in
+  # chart/values.schema.json and has NO `default:` — none at the top level and none nested (checked
+  # recursively). That is exactly why the chart value applies. Do NOT add one. A schema default on
+  # a componentValues leaf is written into the live composition spec by core-provider and silently
+  # shadows the chart forever; sixteen other frontend leaves already carry defaults (replicaCount,
+  # nodeSelector, tolerations, affinity, config, env, probes, ...) and that is what it looks like
+  # once it has happened.
+  # EXPECTED ON THE ROLL, so it does not read as a regression: the pod reschedules wherever a 50m
+  # request fits, which may no longer be 90b5 — that is the point. And frontend-crd 1.8.2 -> 1.8.4
+  # re-registers the Frontend CRD at v1-8-4 and prunes v1-8-2, so the leaf CR will vanish and
+  # return. This morning's identical-looking disappearance was NOT that; it was a dep gate behind
+  # an unschedulable snowplow. Same symptom, different cause.
   # 1.8.2 (ANNOTATED tag ce44373 -> commit 550b26d; check both forms, a tool reading only one
   # sees a false mismatch).
   # The CHART is Chart.yaml-only vs 1.8.1 — 14 files and 60027 bytes on BOTH sides, differing in
@@ -1694,7 +1731,7 @@ components:
   #   VERIFICATION LIMIT: the roll check is image + Ready. Proving the fix needs a chart STARTED in the
   #   Controller Composer after the roll, then its release reaching the index. Pre-1.6.97 charts (e.g.
   #   acme-feedback 0.1.0) still lack the icon and need re-releasing — that is not fixed by this roll.
-  version: 1.8.2
+  version: 1.8.4
   deps:
   - frontend-crd
   - authn
