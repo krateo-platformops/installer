@@ -351,7 +351,10 @@ components:
   # diffing the packaged charts: 4 files and 19855 BYTES ON BOTH SIDES, only Chart.yaml version/appVersion
   # move, templates byte-identical, values.schema.json identical. It moves only to keep the pair equal.
   # 1.12.48: lockstep again. 4 files and 19855 BYTES ON BOTH SIDES vs 1.12.47, only Chart.yaml moves.
-  version: 1.12.48
+  # 1.12.49: lockstep again. 4 files and 19855 BYTES ON BOTH SIDES vs 1.12.48; `diff -r` on the two
+  # unpacked published charts reports ONE line, Chart.yaml's version. The 1.12.49 release is Go-only
+  # (39 files changed, every one under go/snowplow/), so there is no CRD in it to move.
+  version: 1.12.49
   tier: platform
   feature: portal
 - name: authn
@@ -1027,7 +1030,38 @@ components:
   # GATE met: -race unit+integration 34/34, 0 races, internal/rbac/evaltest -count=50 ok, fresh archive.
   # Cold start: 1.12.47 was Ready in 4m56s (my measurement; the handoff said 4m49s), 1.12.46 took 11m08s.
   # DO NOT RESTART during it.
-  version: 1.12.48
+  # 1.12.49 (ANNOTATED tag 76e8d2a2bfb1094d06980bf234d93a73d01bdf5a, PEELS to commit
+  # 373777e3ab802d8df1ed14d4beb1abb238eaef9d, which is IDENTICAL to main HEAD -- compare/1.12.49...main
+  # reports ahead 0 / behind 0). ALL SECURITY, two commits, no other content.
+  #
+  # #725 (in #721) IS A LIVE WRITE ESCALATION ON 057 AND IS THE REASON TO TAKE THIS NOW. A RESTAction
+  # stage's OWN Impersonate-*/Authorization headers rode snowplow's ServiceAccount bearer, so a
+  # preview-sandbox author could write AS ANY USER through the refresher. 1.12.49 makes a stage's
+  # headers never travel on a snowplow-held credential.
+  # #615 (same PR): the refresher's branch-E ServiceAccount dial read as a plain SA rather than as the
+  # cohort.
+  # #723/#724 (in #727): a client carrying snowplow-held credentials followed cross-host redirects,
+  # leaking the SA bearer and Impersonate-* to the redirect target and accepting a forged body back.
+  # Any redirect on a credentialed dial is now an ERROR, not followed.
+  #
+  # EXPECTED AND CORRECT ON THIS ROLL: the refresher's access-review stages (access-preview x10 SAR,
+  # blueprint-palette x2 SSAR) now go out AS THE COHORT, not as snowplow's SA. A SAR will 403 wherever
+  # the cohort lacks `create subjectaccessreviews`. That is fail-closed by design, per Diego's ruling.
+  # NOTE THE INTERACTION: that is the SAME failure class as portal#307 (a stage re-gated to the caller
+  # denies because no user holds the grant). #307 is already live and already emptying the blueprint
+  # catalog. This roll does not cause it and must not be held for it, but if the portal looks worse
+  # afterwards, read #307 first rather than suspecting a regression in 1.12.49.
+  #
+  # CHART DELTA: 18 files, 94039 BYTES ON BOTH SIDES vs 1.12.48; `diff -r` on the two unpacked
+  # published charts reports ONLY Chart.yaml (appVersion, the sources tree URL, version); templates
+  # BYTE-IDENTICAL; values.schema.json IDENTICAL, so #477 cannot bite on a schema basis.
+  # image ghcr.io/krateo-platformops/snowplow:1.12.49, OCI index
+  # sha256:b92d424cea61e9e467c2fff7b8267f4cc890c5674f8b63f4603e8865b930bfa4, linux/amd64 + linux/arm64.
+  # `helm template` on the 1.12.49 chart renders exactly that tag out of appVersion -- FORWARD PIN BUMP,
+  # not an image-tag override.
+  # GATE met on a fresh archive of 373777e3: whole module -race 35/35 ok, 0 FAIL, 0 races;
+  # internal/rbac/evaltest -count=50 ok. Both PRs passed the adversarial security gate.
+  version: 1.12.49
   deps:
   - snowplow-crd
   - authn
