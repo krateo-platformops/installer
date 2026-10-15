@@ -350,7 +350,8 @@ components:
   # 1.12.47: lockstep with snowplow, one tag for the repo. NO CRD change -- verified by unpacking and
   # diffing the packaged charts: 4 files and 19855 BYTES ON BOTH SIDES, only Chart.yaml version/appVersion
   # move, templates byte-identical, values.schema.json identical. It moves only to keep the pair equal.
-  version: 1.12.47
+  # 1.12.48: lockstep again. 4 files and 19855 BYTES ON BOTH SIDES vs 1.12.47, only Chart.yaml moves.
+  version: 1.12.48
   tier: platform
   feature: portal
 - name: authn
@@ -1001,7 +1002,32 @@ components:
   # EXPECTED ON THE ROLL, so it is not mistaken for a failure: snowplow cold-starts for ~11-15 MINUTES
   # serving 503 before Ready (1.12.46 took 11m08s to ContainersReady). DO NOT RESTART IT during that window.
   # The 480s boot seed ceiling is structural and unchanged by this release.
-  version: 1.12.47
+  # 1.12.48 (ANNOTATED tag 0e6414eb, PEELS to commit eb055b77291238e38caaf4898a838f5ef181aa1d).
+  # HEADLINE: #710 PR-1 (#717) single-flight content fill -- concurrent readers of one list now share ONE
+  # rebuild instead of each triggering their own. Arrival-burst heap 1,089 -> 56 MiB in a 5K x 200 test.
+  # That is the reason to take this; the rest is operability.
+  # Also: #710 PR-0 (#712) fill instrumentation (snowplow_apistage_content_fill_*); #709 (#713) an upstream
+  # 404 is reported as a 404 instead of a JSON-decode 500; #714 (#716) an upstream Status reason can no
+  # longer steer internal classification; and #711 (#715), below.
+  # #711 DEMOTES A LOG LINE AND THAT HAS A COST WORTH KNOWING. It moves an expected per-identity pre-dial
+  # deny from ERROR-on-every-refresh to a single WARN. Measured on 057 before this roll: 761 of 787 log
+  # lines in 10 minutes were ERROR, ~4,566/h, and 711 of them were ONE path --
+  # /api/v1/namespaces/krateo-system/configmaps/blueprints-catalog-index, "forbidden: user not authorized".
+  # That is the ConfigMap holding the 293 blueprints, and the catalog stage of global-search is denied on
+  # it continuously: snowplow's SA CAN read it, `admin` and `admin`+group `admins` CANNOT, and no Role
+  # anywhere names it in resourceNames. So portal#302's fix repaired the jq while the data stayed
+  # unreadable by the caller. Filed as portal#307 BEFORE this roll, deliberately, because #711 removes the
+  # only signal that makes it visible. Per snowplow#711's own figures the deny predates 1.12.47
+  # (116-165 per 10 min on 1.12.46 vs 750-800 on 1.12.47), so 1.12.47 made the LOGGING noisier, not the
+  # denial. Rolling this is still right -- a log that is 97% one benign-looking message cannot be used to
+  # find real errors -- but portal#307 is the open item, not this pin.
+  # CHART DELTA: 18 files, 94039 BYTES ON BOTH SIDES vs 1.12.47; only Chart.yaml differs; templates
+  # BYTE-IDENTICAL; values.schema.json IDENTICAL, so #477 cannot bite.
+  # image sha256:17de25fa3c9b21cd739dbfabb1f7978ca602f486d6f372fdcf237c63bc631965, amd64 + arm64.
+  # GATE met: -race unit+integration 34/34, 0 races, internal/rbac/evaltest -count=50 ok, fresh archive.
+  # Cold start: 1.12.47 was Ready in 4m56s (my measurement; the handoff said 4m49s), 1.12.46 took 11m08s.
+  # DO NOT RESTART during it.
+  version: 1.12.48
   deps:
   - snowplow-crd
   - authn
