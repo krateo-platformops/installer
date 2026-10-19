@@ -266,7 +266,20 @@ components:
   #   48 files — only Chart.yaml's version line moves. Diffed, not assumed. #455 is UI-only.
   # 1.6.97: co-versioned with frontend (lockstep). Packaged trees BYTE-IDENTICAL to 1.6.96 across all
   #   48 files — only Chart.yaml's version line moves. Diffed, not assumed. #464 is UI-only.
-  version: 1.8.4
+  # 1.8.6: co-versioned with frontend. THIS ONE CARRIES REAL CRD CHANGES, two additive optional fields:
+  # FlowChart.widgetData.data.items.names (array of string) for portal#311, and Steps.reviewCurrent
+  # (int32) which is 1.8.5's wizard change. 48 files, 540879 -> 541939 bytes; Chart.yaml,
+  # FlowChart.crd.yaml and Steps.crd.yaml differ.
+  # IT MUST BE LIVE BEFORE PORTAL 1.8.74, AND THE FAILURE IS SILENT. 1.8.74 sends `names` on the
+  # Topology FlowChart CRs. Verified against the published CRDs: the four
+  # x-kubernetes-preserve-unknown-fields in this CRD sit on resourcesRefs.payload,
+  # resourcesRefsTemplate.payload, parentRefs.items.parentRefs.items and status -- NONE of them covers
+  # widgetData.data.items, which is where `names` lives. So against the 1.8.4 CRD the apiserver PRUNES
+  # the key with no error and no event: the widget renders, the tooltip keeps showing the truncated
+  # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
+  # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
+  # holds anyway because none is at the path that matters -- but check the path, not the presence.)
+  version: 1.8.6
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1840,7 +1853,24 @@ components:
   #   VERIFICATION LIMIT: the roll check is image + Ready. Proving the fix needs a chart STARTED in the
   #   Controller Composer after the roll, then its release reaching the index. Pre-1.6.97 charts (e.g.
   #   acme-feedback 0.1.0) still lack the icon and need re-releasing — that is not fixed by this roll.
-  version: 1.8.4
+  # 1.8.6 (ANNOTATED tag 839d5b661bac6aaa5d232d744af0bd2bb39aad3b, PEELS to commit
+  # 5ba4c9060d2bd706a002441b558359580227e34f, IDENTICAL to main HEAD).
+  # 1.8.5 IS SKIPPED AND ITS CHANGE RIDES ALONG. 1.8.5 was published 2026-10-14 and never rolled, so
+  # this bump also carries commit 942a4b59 "fix(form): list rows open with their fields, the review
+  # shows YAML, the wizard follows the review" (20 files). That change was reviewed for roll-time
+  # needs by neither its author nor me. It is additive and its CRD half is one optional field
+  # (Steps.reviewCurrent), but it is a real UI behaviour change riding in this roll.
+  # 1.8.6 proper is the two Topology fixes Diego reported on portal.krateo.dev: the architecture graph
+  # is drawn at TRUE SIZE and clipped its card (4 columns need 1360px, the card gives ~1200px, and all
+  # 20 architecture-bearing compositions on 057 have four) -- the overflow STAYS, because the type
+  # floor is why the variant draws at true size, but a right-edge fade now says the drawing continues
+  # (portal#310); and a node's name was shortened SERVER-SIDE while the hover tooltip repeated the
+  # short form, so the full value was reachable nowhere -- the card now discloses the full names and
+  # the apiVersion on hover and focus (portal#311).
+  # ARTIFACT: the frontend chart is a PURE VERSION MOVE -- 14 files and 60758 BYTES ON BOTH SIDES vs
+  # 1.8.4, only Chart.yaml. Every behaviour change rides in the IMAGE at tag 1.8.6, which is why the
+  # CRD and the image must move TOGETHER: a CRD bump without the matching SPA blanks pages.
+  version: 1.8.6
   deps:
   - frontend-crd
   - authn
@@ -2496,7 +2526,27 @@ components:
   # failed uninstall and intermittently cost signed-in users the app shell). Markers: the portal release
   # must NEVER reach `uninstalling`; cluster-admin-binding-krateo-system present throughout; both
   # portal-krateo-rbac bindings re-subjected to portals-v1-8-72; widget CR counts steady.
-  version: 1.8.72
+  # 1.8.73 (ANNOTATED tag 9e09948bcc5bf800c99083b3de98cc115224d751, PEELS to commit
+  # e6bee1b7a6ce1ebdc6721245db9676fd3c9db7cd, IDENTICAL to main HEAD). ONE FUNCTIONAL LINE, +17/-1 in
+  # helm/portal/templates/restaction.blueprint-formdef.yaml; the other 16 lines are the comment why.
+  # portal#308 -> PR#309:
+  #   resourcesFrom: "[.compdef.status.resource]"  ->  "[.compdef.status.resource // empty]"
+  # WHY: dependsOn.name only ORDERS stages -- only dependsOn.iterator fans one out -- so the
+  # namespaces stage dispatches ONCE even when compdef yielded nothing. On a keep-warm call (no
+  # ?extras) compdef is never dispatched, dict.compdef stays unset, and the old expression evaluated
+  # to [null]. snowplow fails closed on a non-string element: it dropped EVERY namespace and the final
+  # filter silently caught the empty list with [$blueprintNs] -- the pre-#66 behaviour this
+  # userAccessFilter exists to replace. 8,401 such pairs over 7 days on 057, 19 per burst on the
+  # 45-minute keep-warm cycle.
+  # IT ALSO BECOMES A CACHE PROBLEM: snowplow#651 makes an unresolved resourcesFrom a stage Error that
+  # is NEVER CACHED, so without this, blueprint-formdef stays COLD while any compdef is unready and
+  # the keep-warm can never warm it. snowplow are holding their next release until this is pinned.
+  # ARTIFACT: 625 files, 1514117 -> 1515560 bytes (the comment); only Chart.yaml and the restaction
+  # template differ. The published chart greps 1 occurrence of the new form and 0 of the old.
+  # FUNCTIONAL MARKER IS IN SNOWPLOW'S LOG, NOT THE CLUSTER: `userAccessFilter: ResourcesFrom yielded
+  # a non-string element` with expr [.compdef.status.resource] should STOP appearing. A quiet
+  # 45-minute window is the confirmation; cluster-side markers only prove the chart landed.
+  version: 1.8.73
   deps:
   - frontend
   - git-provider
@@ -2579,7 +2629,9 @@ components:
   # 1.8.72: co-versioned with portal, one tag for the repo. NO content change -- 107 files and 470601
   # bytes on BOTH sides, only Chart.yaml's version/appVersion lines move. Verified by unpacking and
   # diffing, not assumed. values.schema.json byte-identical too.
-  version: 1.8.72
+  # 1.8.73: lockstep with portal, one tag for the repo. CHART IS A PURE VERSION MOVE -- 107 files and
+  # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
+  version: 1.8.73
   deps: ['portal']
   tier: platform
   feature: portal
