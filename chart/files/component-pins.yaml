@@ -354,7 +354,9 @@ components:
   # 1.12.49: lockstep again. 4 files and 19855 BYTES ON BOTH SIDES vs 1.12.48; `diff -r` on the two
   # unpacked published charts reports ONE line, Chart.yaml's version. The 1.12.49 release is Go-only
   # (39 files changed, every one under go/snowplow/), so there is no CRD in it to move.
-  version: 1.12.49
+  # 1.12.50: lockstep again. 4 files and 19855 BYTES ON BOTH SIDES vs 1.12.49, `diff -r` reports only
+  # Chart.yaml's version. 1.12.50 is Go-only too (107 files, every one under go/snowplow/).
+  version: 1.12.50
   tier: platform
   feature: portal
 - name: authn
@@ -1061,7 +1063,29 @@ components:
   # not an image-tag override.
   # GATE met on a fresh archive of 373777e3: whole module -race 35/35 ok, 0 FAIL, 0 races;
   # internal/rbac/evaltest -count=50 ok. Both PRs passed the adversarial security gate.
-  version: 1.12.49
+  # 1.12.50 (ANNOTATED tag 98d598fba3d942889a35e41d08f3e00ab52cd0ba, PEELS to commit
+  # e47cd719cf6db0fab360c6e0bac95713db32cd76, IDENTICAL to main HEAD -- ahead 0 / behind 0).
+  # NOT a security release, unlike 1.12.49: this is responsiveness work. 18 commits, 107 files,
+  # EVERY ONE under go/snowplow/ -- no helm/, no crds, no apis.
+  # HEADLINE #710: a user's request never queues behind the background refresh cap, and stale content
+  # is served only when a push replacement is GUARANTEED to follow. #740 PR-A/PR-B: a failed refresh
+  # is retried on a 1s->60s backoff, and ONLY while someone is actually viewing -- so a dead tab stops
+  # costing refreshes. Also #719 #722 #739 #733 #741 #732 #737 #746 #747 #744 #748 #745 #750 #731
+  # #718 #751.
+  # CHART DELTA: 18 files, 94039 BYTES ON BOTH SIDES vs 1.12.49; `diff -r` on the unpacked published
+  # charts reports ONLY Chart.yaml; values.schema.json identical, so #477 cannot bite on a schema
+  # basis. `helm template` renders ghcr.io/krateo-platformops/snowplow:1.12.50 out of appVersion --
+  # FORWARD PIN BUMP, not an image-tag override.
+  # image index sha256:ebf3fa1a795e53406cf3cf40ccad1a62aacf2ecfff957acebad135bea33095c4.
+  # GATE: whole module -race, unit+integration tags, -p 1 -> 36 packages ok, 0 FAIL, 0 races;
+  # evaltest x50 ok.
+  # COLD START: expect ~5 MINUTES, not the 11-15 the older comments above describe. 1.12.49 measured
+  # 5m17s to Ready with /readyz outcome "latch" and seed_ms 218408 (3m38s), well under the 480s
+  # structural ceiling. DO NOT RESTART IT, and do not call it wedged at minute 6.
+  # ROLLBACK: re-upgrade the installer to 0.3.429, which pins 1.12.49. Do NOT roll back via
+  # componentValues.snowplow.image.tag -- an image-tag override on THIS component takes effect and
+  # then PERMANENTLY MASKS every future chart bump (the krateo-sse-proxy 0.1.15 trap).
+  version: 1.12.50
   deps:
   - snowplow-crd
   - authn
