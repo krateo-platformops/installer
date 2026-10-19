@@ -2546,7 +2546,26 @@ components:
   # FUNCTIONAL MARKER IS IN SNOWPLOW'S LOG, NOT THE CLUSTER: `userAccessFilter: ResourcesFrom yielded
   # a non-string element` with expr [.compdef.status.resource] should STOP appearing. A quiet
   # 45-minute window is the confirmation; cluster-side markers only prove the chart landed.
-  version: 1.8.73
+  # 1.8.74 (ANNOTATED tag 9ed57d8094780884530dc23db3991165323cb9f6, PEELS to commit
+  # 6ab484a328139e11ab794fff803121f4d9a4f69e, IDENTICAL to main HEAD). portal#311's data half.
+  # ONE template changes functionally, flowchart.composition-detail-architecture.yaml (+8/-1); the
+  # other 16 files in the release are test fixtures. The widgetDataTemplate jq gains two keys:
+  #   names: [ .instances[].name ],  version: (.apiVersion // "")
+  # WHY: `name` in that payload is a DISPLAY string -- the composition's own prefix elided and a
+  # range written `first … last` -- so the full name was DESTROYED at render and the browser's hover
+  # tooltip could only repeat the short form. `names` carries every instance by its real name; the
+  # card shows the same line it always did and discloses these on hover and keyboard focus.
+  # HARD PREREQUISITE, ALREADY SATISFIED: frontend-crd 1.8.6 must be LIVE, because the FlowChart CRD
+  # has NO x-kubernetes-preserve-unknown-fields covering widgetData.data.items (its four are on
+  # resourcesRefs.payload, resourcesRefsTemplate.payload, parentRefs.items.parentRefs.items and
+  # status). Against a 1.8.4 CRD the apiserver PRUNES `names` with no error and no event -- the
+  # widget renders, the tooltip stays truncated, nothing says why. Verified live on 057 before this
+  # pin: the served v1beta1 FlowChart CRD carries names as `array of string`.
+  # REGRESSION CHECK THAT MATTERS: 1.8.74 was cut from a LATER main than 1.8.73, so a revert could
+  # have silently dropped the `// empty` fix. Verified on the published chart -- 1 occurrence of
+  # `[.compdef.status.resource // empty]`, 0 of the bare pre-fix form.
+  # ARTIFACT: 625 files, 1515560 -> 1516342 bytes; only Chart.yaml and that one template differ.
+  version: 1.8.74
   deps:
   - frontend
   - git-provider
@@ -2631,7 +2650,9 @@ components:
   # diffing, not assumed. values.schema.json byte-identical too.
   # 1.8.73: lockstep with portal, one tag for the repo. CHART IS A PURE VERSION MOVE -- 107 files and
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
-  version: 1.8.73
+  # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
+  # 1.8.73; diff -r reports only Chart.yaml.
+  version: 1.8.74
   deps: ['portal']
   tier: platform
   feature: portal
