@@ -2075,6 +2075,45 @@ components:
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
 - name: portal
+  # 1.8.76 (portal#316 + the sandbox exclusion): FIXES A REGRESSION 1.8.75 SHIPPED AND WE ROLLED.
+  # 1.8.75's RBAC discovery lists every namespace where the caller may list flexes. For an admin that
+  # includes `previewSandbox.namespace` -- the Portal Builder's scratch space -- so the preview drafts
+  # became real sidebar entries the moment 0.3.435 converged. Measured on 057 AFTER the roll:
+  # `kubectl get flexes -A` = krateo-system 96, krateo-preview **12** (the frontend session reported
+  # 10; the cluster has 12 -- page-meetup-health-b2da9489 and page-pb-v2-20261005-3-b2da9489 were
+  # missing from their list). Seven shared the label `Event sites`, which is why it was noticed at
+  # all. ADMIN-ONLY blast radius, verified by `auth can-i list flexes -n krateo-preview`:
+  # admin/admins yes, cyberjoker/devs no, someone/system:authenticated no. Discovery worked exactly
+  # as designed; the design was wrong to treat the sandbox as somewhere page sets get installed.
+  # THE FIX IS NOT INERT ON 057 -- checked, because it keys on a value the installer never sets. The
+  # exclusion drops `previewSandbox.namespace` from the `namespaces` filter BEFORE the fan-out (so it
+  # costs no request) and an EMPTY namespace excludes nothing. The live Portal CR carries
+  # `previewSandbox: {namespace: krateo-preview}`, materialised from the portal chart's OWN schema
+  # defaults -- componentValues.portal holds only {acceptance, observability} and never mentions it.
+  # Had that been empty, the roll would have been a no-op wearing a fix.
+  # Published artifact verified rather than taken from the release notes: no schema keys added OR
+  # removed vs 1.8.75, root additionalProperties:true, no root `required`; template line 83 is
+  # `$sandbox := (.Values.previewSandbox | default dict).namespace | default ""`. Structural marker:
+  # steps=[namespaces, pages], UAF on [namespaces], no endpointRefs, sandbox excluded, release-
+  # namespace fallback present. Also carries #316's comment-only fix of the stale snowplow
+  # bearer-append citation.
+  # RETRACTION, recorded here because this is what gets read: 0.3.435's commit and tag messages claim
+  # the 1.8.75 nav output was "byte-identical to 1.8.74 on 057's own 96 flexes -- 43 items, 37 refs".
+  # DO NOT CARRY THAT NUMBER. It was computed against a HAND-BUILT namespace list (krateo-system +
+  # demo-system, which holds zero flexes) instead of the namespaces the userAccessFilter actually
+  # returns -- the enumeration was run twice with `-n` and never with `-A`. It was correct for its
+  # input, and its input omitted krateo-preview's 12. The messages stay as written because history is
+  # not rewritten; this is the correction.
+  # WORTH KNOWING FOR A FUTURE FIX: the preview flexes are ALREADY LABELLED --
+  # `krateo.io/purpose: preview-draft`, plus `krateo.io/draft-owner` and `krateo.io/preview-session`.
+  # A label-based exclusion would also catch drafts that ever land outside the sandbox namespace. The
+  # namespace filter is cheaper and correct today, so this is a note, not a defect.
+  # HOW IT WAS FOUND, the durable lesson: ONE authenticated portal load. Neither session could settle
+  # the nav's resolved output from logs, CRs or widget status -- widget status is NOT persisted (0 of
+  # 319 widgets on 057 carry one), so the counts exist only in the HTTP response body. Diego signed
+  # in, the duplicate labels were visible immediately, and the modelled number proved wrong. Model
+  # the resolve if you must, but ENUMERATE with `-A`; post-roll, confirm every nav-declaring root
+  # sits outside the sandbox via `kubectl get flexes -A -o json`.
   # 1.8.75 (portal#261, PR#315): the sidebar nav stops taking its namespaces from values and
   # DISCOVERS them from the caller's own RBAC, and the `tiers` model is DELETED from both charts.
   # Exactly two template changes: `_tiers.tpl` removed, `rbac.catalog-index-read.yaml` added.
@@ -2595,7 +2634,7 @@ components:
   # have silently dropped the `// empty` fix. Verified on the published chart -- 1 occurrence of
   # `[.compdef.status.resource // empty]`, 0 of the bare pre-fix form.
   # ARTIFACT: 625 files, 1515560 -> 1516342 bytes; only Chart.yaml and that one template differ.
-  version: 1.8.75
+  version: 1.8.76
   deps:
   - frontend
   - git-provider
@@ -2638,6 +2677,7 @@ components:
   # 1.8.48: co-versioned with portal, as always.
   # 1.8.49: co-versioned with portal, as always.
 - name: portal-agents
+  # 1.8.76: co-versioned with portal, as always — the sandbox exclusion lands in the portal chart.
   # 1.8.75: co-versioned with portal, as always — one tag, every chart under helm/. The nav and
   # tiers work lands in the portal chart; this moves only to keep the pair equal.
   # 1.8.71: co-versioned with portal, as always — one tag, every chart under helm/. Verified
@@ -2684,7 +2724,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.75
+  version: 1.8.76
   deps: ['portal']
   tier: platform
   feature: portal
