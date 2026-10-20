@@ -7845,6 +7845,12 @@
                   "description": "Enable OpenTelemetry instrumentation.",
                   "title": "OTEL Enabled"
                 },
+                "OTEL_LOGS_ENABLED": {
+                  "type": "string",
+                  "enum": ["true", "false"],
+                  "title": "OTEL Audit-Log Pipeline",
+                  "description": "Gate the AUDIT-LOG pipeline specifically: snowplow's AuditEvent (internal/support/audit, D19a) emitted as a trace-correlated OTLP LogRecord carrying enduser.id, user.name and user.roles from the AUTHENTICATED caller. DEFAULTS to the value of OTEL_ENABLED when unset, and the snowplow chart therefore ships it EXPLICITLY \"false\" even with the OTEL_ENABLED master on -- because until otel-collector-daemonset 0.1.11 the agent's logs pipeline had no `otlp` receiver, so an OTLP log export had no consumer and was dropped silently. That is fixed: 0.1.11 adds a dedicated `logs/audit` pipeline writing the `krateo_audit` table with its own 365-day TTL, so records no longer land on the 7-day TTL shared with every pod log. Setting this to \"true\" is what actually starts the server-authored audit trail (installer#408); it is the LAST step of that chain, and the identity it records is the thing the browser-authored AuditRecord CRs have never carried."
+                },
                 "OTEL_EXPORTER_OTLP_ENDPOINT": {
                   "type": "string",
                   "description": "OTLP collector endpoint.",
