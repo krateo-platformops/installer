@@ -2248,7 +2248,10 @@ components:
   # request walk, an agent x tool-server binding matrix, and a NEW route /agents/policies/new (order
   # 939) with a create Form for standalone AgentgatewayPolicies. Also fixes flex.page-agents-policies
   # living in the admin tier while reached by `page:` (resolves in FRONTEND_NAMESPACE) — would 404 on
-  # any install setting tiers.admin. Widget CRs only (new Form widget), NO widget-schema field added,
+  # any install setting tiers.admin. (HISTORICAL as of 1.8.75: the `tiers` model is deleted from both
+  # charts — portal#261/PR#315 — so there is no tiers.admin setting and this failure mode is
+  # unreachable. The sentence is kept because it records why the 1.8.4 fix was made.)
+  # Widget CRs only (new Form widget), NO widget-schema field added,
   # so frontend/frontend-crd pins stay. Validated kubectl apply --dry-run=server vs live 057 CRDs
   # (99/99 widgets, 0 errors, 0 residue). Republishes builder-publish 1.8.4 (one portal tag).
   # 1.8.6 (#140/#141/#142; supersedes 1.8.5): fixes 4 defects the first live agents-page render exposed —

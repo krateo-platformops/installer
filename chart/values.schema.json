@@ -6402,6 +6402,11 @@
                             "create_schema": {
                               "type": "boolean"
                             },
+                            "ttl": {
+                              "type": "string",
+                              "pattern": "^[0-9]+(ns|us|ms|s|m|h)$",
+                              "description": "RETENTION. Go duration stamped as a native TTL into the otel_* tables the exporter CREATEs (otel-collector-deployment >=0.3.3 / -daemonset >=0.1.5 default it to 168h = 7d). Left unset the chart default applies -- this key carries NO schema default on purpose, so declaring retention is an explicit act and never a silent live override. CAVEAT, read before setting it: create_schema issues CREATE ... IF NOT EXISTS, so this value only takes effect on tables that do not exist yet. On an install whose otel_* tables already exist (any cluster that has ingested once) changing it is a NO-OP and the live retention stays whatever the tables were created with -- that needs ALTER TABLE <t> MODIFY TTL, which no chart does. Verify with SHOW CREATE TABLE otel_logs before believing this field. 0s is accepted and means NO TTL at all, i.e. unbounded."
+                            },
                             "timeout": {
                               "type": "string"
                             },
@@ -6974,6 +6979,11 @@
                             },
                             "create_schema": {
                               "type": "boolean"
+                            },
+                            "ttl": {
+                              "type": "string",
+                              "pattern": "^[0-9]+(ns|us|ms|s|m|h)$",
+                              "description": "RETENTION. Go duration stamped as a native TTL into the otel_* tables the exporter CREATEs (otel-collector-deployment >=0.3.3 / -daemonset >=0.1.5 default it to 168h = 7d). Left unset the chart default applies -- this key carries NO schema default on purpose, so declaring retention is an explicit act and never a silent live override. CAVEAT, read before setting it: create_schema issues CREATE ... IF NOT EXISTS, so this value only takes effect on tables that do not exist yet. On an install whose otel_* tables already exist (any cluster that has ingested once) changing it is a NO-OP and the live retention stays whatever the tables were created with -- that needs ALTER TABLE <t> MODIFY TTL, which no chart does. Verify with SHOW CREATE TABLE otel_logs before believing this field. 0s is accepted and means NO TTL at all, i.e. unbounded."
                             },
                             "timeout": {
                               "type": "string"
