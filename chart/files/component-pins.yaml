@@ -2075,6 +2075,33 @@ components:
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
 - name: portal
+  # 1.8.75 (portal#261, PR#315): the sidebar nav stops taking its namespaces from values and
+  # DISCOVERS them from the caller's own RBAC, and the `tiers` model is DELETED from both charts.
+  # Exactly two template changes: `_tiers.tpl` removed, `rbac.catalog-index-read.yaml` added.
+  # SCHEMA LOSS is deliberate and safe: values.schema.json drops `tiers` (the only key removed;
+  # nothing added), so the derived CRD v1-8-75 has no `spec.tiers`. The live Portal CR on 057 DOES
+  # still carry `tiers: {admin:"",common:"",tenant:""}` — materialised by the old schema's defaults,
+  # never by the installer, which does not even DECLARE tiers under componentValues.portal
+  # (additionalProperties:false, so it could not pass it). Verified inert, not assumed: 1.8.75's
+  # schema root is additionalProperties:true with no root `required`, and rendering 1.8.75 against
+  # the ACTUAL live CR spec (14 top-level keys, stale `tiers` included) gives 662 objects, exit 0.
+  # A root-level `required` here would have wedged the installer — this chart has none.
+  # NEW RBAC, not in the release notes: `authenticated-get-catalog-index` (Role + RoleBinding,
+  # namespaced) grants group system:authenticated `get` on the ONE ConfigMap
+  # `blueprints-catalog-index` by resourceNames. One verb, one named object, no list/watch. It makes
+  # the marketplace catalog index readable by any authenticated portal user; the ConfigMap has
+  # existed on 057 for 55 days, so the grant is live-relevant rather than inert.
+  # Render-diff vs 1.8.74, with the noise floor BASELINED first (two renders of each unmodified
+  # chart differ in `admin-password`/`cyberjoker-password` alone, because helm template disables
+  # lookup so the reuse-the-Secret arm can never fire and randAlphaNum re-rolls): 660 -> 662
+  # objects, the +2 being that Role/RoleBinding pair, and only TWO content changes —
+  # `RESTAction sidebar-nav` (the feature) and `CompositionDefinition builder-publish`, whose entire
+  # diff is `version: "1.8.74"` -> `"1.8.75"`. Nothing else moved.
+  # PRE-EXISTING, carried not introduced: `observability.snowplowSli` is consumed by 9+ templates
+  # via `(.Values.observability | default dict)` but is declared in NEITHER 1.8.74's nor 1.8.75's
+  # values.schema.json. 057 sets it through componentValues.portal, and it keeps working only
+  # because the schema root admits additional properties. A values.schema.json coverage gap in the
+  # chart, not a regression in this bump — worth a portal issue, not a blocker here.
   # 1.8.71 (ANNOTATED tag: ref object fa653221 PEELS to commit 90f1aaa6; for contrast 1.8.70's ref
   # was d236a20b peeling to cc7241f — portal is annotated, so always peel, never take the bare ref).
   # THREE commits, all design-system: f25726ef adopts frontend 1.7.0 (one Ask Autopilot look, A4;
@@ -2565,7 +2592,7 @@ components:
   # have silently dropped the `// empty` fix. Verified on the published chart -- 1 occurrence of
   # `[.compdef.status.resource // empty]`, 0 of the bare pre-fix form.
   # ARTIFACT: 625 files, 1515560 -> 1516342 bytes; only Chart.yaml and that one template differ.
-  version: 1.8.74
+  version: 1.8.75
   deps:
   - frontend
   - git-provider
@@ -2608,6 +2635,8 @@ components:
   # 1.8.48: co-versioned with portal, as always.
   # 1.8.49: co-versioned with portal, as always.
 - name: portal-agents
+  # 1.8.75: co-versioned with portal, as always — one tag, every chart under helm/. The nav and
+  # tiers work lands in the portal chart; this moves only to keep the pair equal.
   # 1.8.71: co-versioned with portal, as always — one tag, every chart under helm/. Verified
   # Chart.yaml-only vs 1.8.70 by diffing the unpacked trees (107 files and 470601 B on BOTH sides);
   # it moves only to keep the pair equal.
@@ -2652,7 +2681,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.74
+  version: 1.8.75
   deps: ['portal']
   tier: platform
   feature: portal
