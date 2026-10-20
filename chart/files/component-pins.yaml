@@ -4090,11 +4090,15 @@ components:
 # Incidents; this component and a human close them. The Incident CRD ships in its own *-crds chart,
 # like every CRD-owning component, and installs first. Public krateo-platformops charts and images.
 - name: incident-controller-crd
+  # RE-GATED specialistAgents -> portal, same move and same reason as alert-provider-crd in
+  # installer#482: alert-provider WRITES Incident CRs, so it needs this CRD wherever it runs, and
+  # alert-provider is now portal-gated (below). A CRDs chart with no controller is inert -- that is
+  # precisely the precedent #482 set for alert-provider-crd.
   kind: IncidentControllerCrds
   chart: incident-controller-crds
   version: 0.3.0
   tier: observability
-  feature: specialistAgents
+  feature: portal
 - name: incident-controller
   kind: IncidentController
   version: 0.3.0
@@ -4148,6 +4152,34 @@ components:
   # empty one" -- but it should be a choice rather than a surprise.
   feature: portal
 - name: alert-provider
+  # RE-GATED specialistAgents -> portal, and DEPS TRIMMED of incident-agent + model-configs.
+  # Established on alert-provider#65 by its maintainer (EdmondDantes21) and the session working
+  # that PR, not inferred here: `incident-agent` serves RCA only, and `model-configs` is reached
+  # through COMPARE_MODEL_CONFIG -> incident.Comparer, which the incident writer calls ON A FIRING
+  # -- read when a comparison runs, never at startup. So BOTH serve the incident path only;
+  # syncing and DELIVERING alerts needs neither. With them absent the incident path degrades to
+  # "no verdict", which is the maintainer's own description of the intended behaviour.
+  # WHY ALL THREE EDITS WERE NEEDED, not just the dep trim: dropping the two agent deps alone
+  # leaves this component still gated on specialistAgents AND still depending on
+  # incident-controller-crd, which was itself specialistAgents-gated -- so the dep gate would have
+  # pruned it on a portal-only cluster regardless. Hence the re-gate here and on that CRD.
+  # Neither is reachable from values: `deps` and `feature` are deliberately NOT in the
+  # inst.componentsYaml override whitelist (version/registerOnly/tier/repo/chart only), because
+  # overriding them "would break resolution".
+  # NO LIVE EFFECT ON krateo-057, checked before making the change: its features carry
+  # portal:true AND specialistAgents:true, and alert-provider + incident-controller-crd are
+  # already installed and Ready there. Widening a gate from specialistAgents to portal cannot
+  # remove anything on a cluster where both are on. The change bites only on portal-only installs
+  # -- which is the point: that is where budget/metric alerts need Alert -> HyperDX -> webhook
+  # without the triage fleet (the GKE demo parent, acmp epic S4).
+  # ORDERING SIDE EFFECT, accepted: alert-provider no longer waits for model-configs to be Ready,
+  # so on a cluster that HAS the agents it may now start first. Per the maintainer the ModelConfig
+  # is read per-comparison rather than at startup, so a comparison before model-configs lands
+  # degrades to "no verdict" and recovers once it exists, instead of blocking the whole component.
+  # STILL OPEN upstream, deliberately not pre-empted here: the maintainer wants incident-agent
+  # swapped for autopilot ("as agreed a few weeks prior"), which will change this dep list again,
+  # and has asked for a follow-up on `spec.incidents: Auto | Never` to let a user decide whether
+  # an alert opens an incident at all. Both are alert-provider decisions, not installer ones.
   kind: AlertProvider
   # 0.2.42 (#43): fixes a NameError that made the dashboard CREATE path unrunnable — ensure_dashboard_tile
   # built its tile from an inline literal referencing an undefined `source_id`, while the sibling _tile_for
@@ -4168,11 +4200,9 @@ components:
   deps:
   - alert-provider-crd
   - incident-controller-crd
-  - incident-agent
-  - model-configs
   - krateo-observability
   tier: observability
-  feature: specialistAgents
+  feature: portal
 # ---- agent gateway (OPT-IN, feature: agentGateway — default OFF) -----------------------
 # JWT authentication + per-user RBAC over the agents, their MCP tools and A2A delegation.
 # Two components because helm maps every kind in a manifest before applying any of it, so the
