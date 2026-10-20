@@ -6373,6 +6373,12 @@
                     "exporters": {
                       "type": "object",
                       "additionalProperties": false,
+                      "patternProperties": {
+                        "^clickhouse/[a-z0-9][a-z0-9_-]*$": {
+                          "$ref": "#/properties/componentValues/properties/otel-collector-daemonset/properties/opentelemetry-collector/properties/config/properties/exporters/properties/clickhouse",
+                          "description": "A NAMED clickhouse exporter instance, e.g. `clickhouse/audit`. Same shape as the unnamed `clickhouse` beside it, enforced by $ref -- verified against helm's own validator: a bad `ttl` unit is rejected THROUGH the ref, and a typo like `clickhoose/audit` is still refused because additionalProperties stays false. It exists so ONE signal can get its own table and its own retention instead of sharing the single `ttl` with every other signal this collector exports: each signal's exporter creates only its own signal's tables at start(), so two instances with different `ttl` values yield two tables with different retention. Set the table name explicitly on the instance and reference it from config.service.pipelines.<signal>.exporters by the same name. This is the FIRST $ref in this schema. The CREATE-IF-NOT-EXISTS caveat in the sibling ttl description applies to a named instance identically."
+                        }
+                      },
                       "properties": {
                         "clickhouse": {
                           "type": "object",
@@ -6951,6 +6957,12 @@
                     "exporters": {
                       "type": "object",
                       "additionalProperties": false,
+                      "patternProperties": {
+                        "^clickhouse/[a-z0-9][a-z0-9_-]*$": {
+                          "$ref": "#/properties/componentValues/properties/otel-collector-deployment/properties/opentelemetry-collector/properties/config/properties/exporters/properties/clickhouse",
+                          "description": "A NAMED clickhouse exporter instance, e.g. `clickhouse/audit`. Same shape as the unnamed `clickhouse` beside it, enforced by $ref -- verified against helm's own validator: a bad `ttl` unit is rejected THROUGH the ref, and a typo like `clickhoose/audit` is still refused because additionalProperties stays false. It exists so ONE signal can get its own table and its own retention instead of sharing the single `ttl` with every other signal this collector exports: each signal's exporter creates only its own signal's tables at start(), so two instances with different `ttl` values yield two tables with different retention. Set the table name explicitly on the instance and reference it from config.service.pipelines.<signal>.exporters by the same name. This is the FIRST $ref in this schema. The CREATE-IF-NOT-EXISTS caveat in the sibling ttl description applies to a named instance identically."
+                        }
+                      },
                       "properties": {
                         "clickhouse": {
                           "type": "object",

@@ -129,7 +129,7 @@ signal's tables** at `start()` (`createLogsTable`, `createTraceTables`), so two 
 instances with different `ttl` values produce two tables with different retention.
 
 ```yaml
-# CHART-LEVEL ONLY — see the caveat below.
+# Settable from the Installer CR as of installer#500 — see below.
 exporters:
   clickhouse/logs:
     endpoint: *endpoint
@@ -149,14 +149,28 @@ service:
       exporters: [clickhouse/traces]
 ```
 
-**This does not work from the Installer CR yet.** `componentValues.<collector>
-.opentelemetry-collector.config.exporters` is `additionalProperties: false` with
-`clickhouse` as its only named property, so `clickhouse/traces` is rejected at helm
-time. Making per-signal settable from the CR needs a `patternProperties` entry for
-`^clickhouse/[a-z0-9][a-z0-9_-]*$` on that object in both collector blocks — about 100
-lines of duplicated subschema, or the first `$ref` in a draft-07 schema that currently
-has none. It has not been done because no retention decision has asked for it yet
-(installer#407, installer#393 step 4).
+**This now works from the Installer CR.** Both collector blocks carry a
+`patternProperties` entry for `^clickhouse/[a-z0-9][a-z0-9_-]*$` whose shape is a
+`$ref` to the sibling unnamed `clickhouse` subschema — three lines per collector
+instead of the ~100 duplicated ones the alternative would have cost, and the first
+`$ref` in this schema.
+
+The `$ref` is genuinely enforced rather than decoratively present, checked against
+helm's own validator:
+
+| case | result |
+|---|---|
+| `clickhouse/audit` with `ttl: 8760h`, referenced from a pipeline | accepted |
+| same on the daemonset | accepted |
+| `clickhouse/audit` with `ttl: 365d` | **rejected on the pattern, through the ref** |
+| `clickhoose/audit` (typo) | **rejected** — `additionalProperties` still guards |
+| `clickhouse/Audit` (uppercase) | **rejected** — the pattern is lowercase-only |
+| `clickhouse/audit` with an undeclared key | **rejected** — inherited through the ref |
+| plain `clickhouse.ttl`, and no override at all | unchanged |
+
+Each collector's `patternProperties` points at **its own** `clickhouse` block, not the
+other's. They are identical today, so a crossed ref would validate the same and hide
+until the two diverge.
 
 Note also that the daemonset's `config.service.pipelines` has no `traces` key under
 `additionalProperties: false` — a traces pipeline there would need one. The deployment
