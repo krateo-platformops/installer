@@ -1,7 +1,7 @@
 ---
 type: ExampleIndex
 title: installer — examples
-description: Runnable examples under examples/ — a minimal NodePort bootstrap install, a componentValues override set, a full kind profile, the agent-gateway RBAC profile, a distribution-agnostic Gemini-API-key gateway profile and the gateway's cost/budget/failover overlays — each paired with a README stating preconditions and the one command.
+description: Runnable examples under examples/ — a minimal NodePort bootstrap install, a componentValues override set, a full kind profile, the agent-gateway RBAC profile, a distribution-agnostic Gemini-API-key gateway profile, the gateway's cost/budget/failover overlays and the ClickHouse telemetry-retention knob — each paired with a README stating preconditions and the one command.
 resource: oci://ghcr.io/krateo-platformops/charts/installer
 tags: [examples, install, componentvalues]
 timestamp: 2026-08-20T00:00:00Z
@@ -32,6 +32,10 @@ validate offline with `helm template` (after `helm dependency build chart/` and 
   the day-2 layer on the gateway: model pricing, per-request audit rows in ClickHouse, token
   budgets, provider failover, per-hop retries, span export and load shedding. One overlay per
   feature, plus a table of what `features.agentGateway` already turned on — most of it.
+- [telemetry-retention](../examples/telemetry-retention/README.md) — raise the `otel_*`
+  ClickHouse TTL from the default 7 days on both collectors, why the value is a **no-op on a
+  cluster that has already ingested** (`CREATE TABLE IF NOT EXISTS`), and what per-signal
+  retention would take.
 - [kind-full-profile](../examples/kind-full-profile/README.md) — full-profile (portal + agents) values for a kind install; see [runbook](./runbooks/kind-full-profile.md).
 
 For a step-by-step local install per profile, see the kind runbooks:

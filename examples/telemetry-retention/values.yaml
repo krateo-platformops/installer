@@ -1,0 +1,29 @@
+# Telemetry retention — the ClickHouse TTL the OTel collectors stamp into the
+# otel_* tables they create.
+#
+# 2160h = 90 days. The exporter converts a whole-day duration into a native
+# `TTL toDateTime(Timestamp) + toIntervalDay(90)` clause, so 2160h renders as
+# exactly 90 days (internal.GenerateTTLExpr).
+#
+# Units are GO DURATIONS: ns|us|ms|s|m|h. There is NO `d` — `90d` does not parse.
+# The installer schema rejects it at helm time rather than letting the collector
+# fail to start on an unparseable config.
+#
+# BOTH collectors are set here on purpose. They are separate components with
+# separate exporters, and the daemonset is the one that carries pod logs — set
+# only one and half the telemetry keeps the old retention.
+componentValues:
+  # Cluster-level collector: k8s events (logs pipeline) + k8s_cluster metrics.
+  otel-collector-deployment:
+    opentelemetry-collector:
+      config:
+        exporters:
+          clickhouse:
+            ttl: 2160h
+  # Node-level collector: pod logs.
+  otel-collector-daemonset:
+    opentelemetry-collector:
+      config:
+        exporters:
+          clickhouse:
+            ttl: 2160h
