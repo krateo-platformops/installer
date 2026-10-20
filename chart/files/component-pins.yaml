@@ -2111,6 +2111,43 @@ components:
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
 - name: portal
+  # 1.8.77 (portal#318, #261): FIRST OF THIS SERIES TO DELETE LIVE RBAC. The `devs` group loses
+  # both cluster-wide grants -- helm PRUNES 2 ClusterRoles and 2 ClusterRoleBindings on upgrade:
+  #   devs-list-any-namespace-in-cluster                     (list namespaces)
+  #   devs-get-list-any-customresourcedefinition-in-cluster  (get,list CRDs)
+  # The four portal reads that needed them changed their QUESTION instead: three CRD LISTs became
+  # cluster-scope CompositionDefinition lists under a userAccessFilter (the pattern
+  # `compositions-list` has always used), `projects` now asks where the caller may list
+  # compositions rather than whether it may list namespaces, and `blueprint-formdef` treats the
+  # namespaced jsonschema ConfigMap as sufficient.
+  # DELTA MEASURED STRUCTURALLY, not by grep -- and grep would have MISLED here: the removed
+  # objects' NAMES still appear in 1.8.77's templates, in comments explaining the removal and in
+  # the two rewritten RESTActions, so `grep -l <name>` matches in 1.8.77 and reads as "still
+  # present". Rendering both against the live CR spec and counting OBJECTS: 1.8.76 emits 33 RBAC
+  # objects of which 8 are cluster-scoped; 1.8.77 emits 29 of which 4 are. The -4 is exactly the
+  # two devs ClusterRoles and their two ClusterRoleBindings. Nothing else moved.
+  # `sre-list-namespaces-get-list-crds-in-cluster` (ClusterRole + Binding) SURVIVES -- the `sre`
+  # group keeps cluster-wide namespace and CRD read. Only `devs` is narrowed.
+  # EXTERNAL-DEPENDENCY SWEEP, done because the frontend session audited only its own charts and
+  # said so: NOTHING outside portal depends on these grants on 057. All 10 bindings that grant to
+  # Group=devs carry composition=Portal/portal -- no other chart, composition or namespace -- and
+  # only the 2 cluster-scoped ones are pruned; the 8 namespaced ones stay. 0 live RESTActions
+  # reference `devs`; no ConfigMap outside portal does. In THIS repo the only hits are
+  # agentgateway-policies authorization SUBJECTS (`groups: [admins, devs]` in docs/configuration.md
+  # and examples/agent-gateway/) -- gateway-level authz, a different mechanism from k8s RBAC, so
+  # unaffected -- plus a prose mention of "devs-* cluster-roles" in
+  # templates/ordered-teardown.yaml:9, which is illustrative text, enumerates nothing, and deletes
+  # nothing by name. That comment GOES STALE with this roll and should be corrected on a later
+  # pins change rather than bundled here.
+  # WHAT NO CLUSTER CHECK CAN SETTLE: every rerouted step carries `continueOnError`, so a mistake
+  # renders as an EMPTY PANEL, not an error -- the identical failure shape that got the 1.8.75
+  # sandbox regression past two sessions. Three surfaces are affected and need an authenticated
+  # load AS CYBERJOKER to confirm: the Dashboard, Blueprints, and the header project picker.
+  # Post-roll the cluster half is: zero clusterrolebindings with a Group=devs subject, and
+  # `auth can-i list namespaces` / `list customresourcedefinitions --as=cyberjoker --as-group=devs`
+  # both NO. Those prove the removal, not the replacement.
+  # No values-surface change: schema root stays additionalProperties:true with no root `required`,
+  # and nothing is added or removed from the values surface.
   # 1.8.76 (portal#316 + the sandbox exclusion): FIXES A REGRESSION 1.8.75 SHIPPED AND WE ROLLED.
   # 1.8.75's RBAC discovery lists every namespace where the caller may list flexes. For an admin that
   # includes `previewSandbox.namespace` -- the Portal Builder's scratch space -- so the preview drafts
@@ -2670,7 +2707,7 @@ components:
   # have silently dropped the `// empty` fix. Verified on the published chart -- 1 occurrence of
   # `[.compdef.status.resource // empty]`, 0 of the bare pre-fix form.
   # ARTIFACT: 625 files, 1515560 -> 1516342 bytes; only Chart.yaml and that one template differ.
-  version: 1.8.76
+  version: 1.8.77
   deps:
   - frontend
   - git-provider
@@ -2713,6 +2750,7 @@ components:
   # 1.8.48: co-versioned with portal, as always.
   # 1.8.49: co-versioned with portal, as always.
 - name: portal-agents
+  # 1.8.77: co-versioned with portal, as always — the RBAC narrowing lands in the portal chart.
   # 1.8.76: co-versioned with portal, as always — the sandbox exclusion lands in the portal chart.
   # 1.8.75: co-versioned with portal, as always — one tag, every chart under helm/. The nav and
   # tiers work lands in the portal chart; this moves only to keep the pair equal.
@@ -2760,7 +2798,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.76
+  version: 1.8.77
   deps: ['portal']
   tier: platform
   feature: portal
