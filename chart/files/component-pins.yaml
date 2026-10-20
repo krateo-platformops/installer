@@ -3049,11 +3049,49 @@ components:
   tier: observability
   feature: portal
 - name: otel-collector-daemonset
+  # 0.1.11 (observability#72, repo tag 3.1.19): gives the Krateo audit record its OWN logs
+  # pipeline and its OWN ClickHouse table. Adds `logs/audit` (receivers [otlp] -> exporters
+  # [clickhouse/audit]) plus a second named exporter instance writing `krateo_audit` with
+  # ttl 8760h (365 days -- Diego's retention decision on installer#407).
+  # The main `logs` pipeline is BYTE-IDENTICAL to 0.1.10: filelog only. Guarded structurally
+  # before merge -- the whole parsed values tree minus the two additions equalled main, and the
+  # unnamed `clickhouse` exporter was untouched. That matters more than usual: the agentgateway
+  # access logs that the acmp session's per-tenant LLM-spend SQL reads out of otel_logs travel
+  # that pipeline, so it now has a real consumer with real queries on top of it.
+  # WHY A SEPARATE PIPELINE rather than adding `otlp` to `logs` (which is what the first cut of
+  # observability#72 did, and I revised it): one pipeline mixes the audit stream with every pod
+  # log on every node, which then has to be un-mixed -- by a routing connector (that component
+  # is unverified in the custom otelcol-krateo image) or by paired filter processors (which run
+  # k8sattributes + transform TWICE over the pod-log firehose and discard one copy). A receiver
+  # feeds only the pipelines that NAME it, so filelog -> `logs` and otlp -> `logs/audit` keeps
+  # them apart at zero cost. Safe because snowplow is the ONLY component carrying an
+  # OTEL_LOGS_ENABLED knob -- verified three ways: absent from this schema, absent as direct env
+  # on every workload, present in exactly one ConfigMap.
+  # `transform` IS KEPT on the audit pipeline deliberately. It reads as filelog-specific (it
+  # strips ANSI escapes from body) but it also carries
+  # `replace_pattern(body, "eyJ[A-Za-z0-9._-]{20,}", "<REDACTED-JWT>")` -- the JWT redaction.
+  # Dropping it would bypass that control on the stream most likely to carry identity, on a
+  # platform that has already purged 384 leaked bearer tokens from otel_traces (#396).
+  # THIS ROLL RESTARTS EVERY NODE'S COLLECTOR: the daemonset config changes, so the agent pods
+  # roll across all nodes. Content of the pod-log path is unaffected; there is a brief per-node
+  # gap during the restart.
+  # krateo_audit is created EMPTY and stays empty until snowplow's OTEL_LOGS_ENABLED flips,
+  # which is a snowplow-chart change in another repo (installer#408). Creating it now is the
+  # point: create_schema is CREATE TABLE IF NOT EXISTS, so `ttl` is only settable at table
+  # CREATION. 365 days is free in this window and needs an ALTER TABLE afterwards.
+  # Published artifact verified by PULLING it, not by the workflow's green tick (that workflow
+  # has a known verify-images race): 0.1.11 pulls and contains exporters
+  # [clickhouse, clickhouse/audit], logs [filelog]->[clickhouse],
+  # logs/audit [otlp]->[clickhouse/audit], krateo_audit ttl 8760h.
+  # NOTE the repo's TAGS are a release counter (3.1.x, 60 of them), NOT chart versions -- each
+  # of its six charts publishes at its own Chart.yaml version and none carries the
+  # CHART_VERSION placeholder. Tagging `0.1.11` would have matched the trigger and broken the
+  # sequence; the release tag for this is 3.1.19.
   kind: OtelCollectorDaemonset
   # 0.1.9 (#122): traces pipeline redacts caller JWTs before ClickHouse — drops the
   # http.header.Authorization span attr + strips eyJ… tokens from exception/error/status
   # messages (backstop for the upstream kagent-tools JWT-in-span leak, amplified by per-user RBAC).
-  version: 0.1.10
+  version: 0.1.11
   deps:
   - otel-collector-deployment
   tier: observability
