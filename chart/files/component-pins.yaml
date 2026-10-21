@@ -70,6 +70,12 @@ components:
   # 1.6.70: BYTE-IDENTICAL to 1.6.69 — verified by diffing the packaged templates, not assumed.
   # 1.6.71: BYTE-IDENTICAL to 1.6.70, verified by diffing the packaged templates. Lockstep only.
 - name: frontend-crd
+  # 1.8.9: lockstep with frontend, one tag. THIS is the chart that carries the change -- the Listy
+  # CRD gaining `ellipsis` and `footerNavigateTo`. The frontend chart itself is only an image bump.
+  # Chart publishes as `frontend-crds` (plural) via the `chart:` override on this entry; the pin
+  # NAME is singular and the artifact is not. Do not "fix" either to match the other -- and note
+  # the derived kind follows the CHART, not this pin name: the live CD `frontend-crd` yields kind
+  # `FrontendCrds`, which is the counter-example that refutes "the kind comes from the CD name".
   # 1.8.8: lockstep with frontend, one tag. Chart publishes as `frontend-crds` (plural) via the
   # `chart:` override on this entry -- the pin NAME is singular and the artifact is not; do not
   # "fix" either to match the other. Published and verified at 1.8.8 alongside frontend.
@@ -282,7 +288,7 @@ components:
   # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
   # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
   # holds anyway because none is at the path that matters -- but check the path, not the presence.)
-  version: 1.8.8
+  version: 1.8.9
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1186,6 +1192,37 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+  # 1.8.9: A ROLL-ORDER DEPENDENCY, not an optional bump. frontend-crds 1.8.9 is the ONLY version
+  # whose Listy CRD admits `ellipsis`, and portal main renders three Listy widgets that carry it
+  # (list-composition-detail-conditions, list-composition-detail-events, composition-incidents,
+  # from portal#313). The CRD must precede the consumer: if a portal tag carrying those widgets
+  # rolled first, they would meet a CRD that rejects the field. The hazard is NOT live on 057 --
+  # portal 1.8.77 predates #313 -- so this lands BEFORE the next portal tag, which the frontend
+  # session is holding for exactly this reason.
+  # VERIFIED BY UNPACKING BOTH ARTIFACTS, because a narrow one-field check is not a verification
+  # of a chart: the frontend chart differs from 1.8.8 in `Chart.yaml` ALONE -- pure image bump,
+  # templates identical file-for-file, values.schema.json gains and loses nothing, root stays
+  # additionalProperties:false. frontend-crds differs in `Chart.yaml` + `templates/Listy.crd.yaml`
+  # and nothing else, and that CRD delta is TWO ADDITIVE OPTIONAL FIELDS with nothing removed:
+  #   + ellipsis          (boolean) one-line primaryText/subPrimaryText with the full text in a tooltip
+  #   + footerNavigateTo  (string)  in-app route the footer opens, rendering it as a link
+  # Additive optional properties on a structural schema are backward-compatible, so existing Listy
+  # CRs are unaffected.
+  # WEDGE CHECK THAT MATTERS FOR THIS CHART: frontend's values.schema.json root is
+  # `additionalProperties: FALSE` (like snowplow's, unlike portal's), so any key on the live CR
+  # that 1.8.9 does not declare would REJECT the render rather than linger inertly. Checked: the
+  # live Frontend CR carries 24 top-level spec keys, all 24 declared, zero undeclared, and 1.8.9
+  # renders against that exact spec (8 docs, exit 0).
+  # POSITIVE CONTROL CAPTURED BEFORE ROLLING, so the post-roll check can fail: the live
+  # listies.widgets.templates.krateo.io CRD contains NEITHER `ellipsis` NOR `footerNavigateTo`
+  # today. Both must be present afterwards; if they are not, the CRD did not re-apply and the next
+  # portal tag would still break.
+  # Dependency gate: frontend's declared deps frontend-crd, authn and snowplow are Ready=True, and
+  # so are the dependents portal and portal-agents.
+  # PROVENANCE NOTE: 1.8.9 and portal#313/#306/#301 were cut by a session neither I nor the
+  # frontend session can name -- six rolls and three PRs today from unidentified sessions, found by
+  # merge conflict rather than by notice. The chart is verified additive regardless; the
+  # coordination gap is Diego's to close, not something the verification substitutes for.
   # 1.8.8: stops the Portal Builder emitting a dead `tiers.common` knob into every page set it
   # publishes (the generator half of portal#261; the portal chart's half shipped in 1.8.75/76).
   # SKIPS 1.8.7, which is taken along: charts are cumulative and the 1.8.6 -> 1.8.8 delta is
@@ -1939,7 +1976,7 @@ components:
   # ARTIFACT: the frontend chart is a PURE VERSION MOVE -- 14 files and 60758 BYTES ON BOTH SIDES vs
   # 1.8.4, only Chart.yaml. Every behaviour change rides in the IMAGE at tag 1.8.6, which is why the
   # CRD and the image must move TOGETHER: a CRD bump without the matching SPA blanks pages.
-  version: 1.8.8
+  version: 1.8.9
   deps:
   - frontend-crd
   - authn
