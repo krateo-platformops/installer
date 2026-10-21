@@ -7183,6 +7183,90 @@
             }
           }
         },
+        "alerts-page": {
+          "additionalProperties": false,
+          "description": "The alerts-page chart, split out of the portal chart in 1.8.78 (portal#319, #261). It creates its own namespace and renders only into it. `namespace` is where this page's own objects go; `dataNamespace` is where the data it READS lives, and that does NOT move with the page. Set BOTH explicitly rather than relying on the chart defaults: dataNamespace defaults to krateo-system, which is correct on an install whose portal lives there and wrong on one where it does not -- and because every step of these pages carries continueOnError, a wrong dataNamespace renders the page EMPTY rather than erroring, which no cluster-side query detects. `readerGroups` defaults to [admins]; it is stated explicitly because `devs` being absent is the entire point of #261 and a value that load-bearing should be visible in values, not inherited.",
+          "properties": {
+            "dataNamespace": {
+              "description": "Namespace holding the data this page reads (alerts.observability.krateo.io). It does not move with the page.",
+              "minLength": 1,
+              "title": "Data namespace",
+              "type": "string"
+            },
+            "namespace": {
+              "description": "Namespace this page's objects render into; the chart creates it. Chart default krateo-alerts.",
+              "minLength": 1,
+              "title": "Namespace",
+              "type": "string"
+            },
+            "readerGroups": {
+              "description": "Groups given read access to this page's objects. [admins] by convention; adding devs would undo #261.",
+              "items": {
+                "type": "string"
+              },
+              "title": "Reader groups",
+              "type": "array"
+            }
+          },
+          "title": "alerts-page values",
+          "type": "object"
+        },
+        "incidents-page": {
+          "additionalProperties": false,
+          "description": "The incidents-page chart, split out of the portal chart in 1.8.78 (portal#319, #261). It creates its own namespace and renders only into it. `namespace` is where this page's own objects go; `dataNamespace` is where the data it READS lives, and that does NOT move with the page. Set BOTH explicitly rather than relying on the chart defaults: dataNamespace defaults to krateo-system, which is correct on an install whose portal lives there and wrong on one where it does not -- and because every step of these pages carries continueOnError, a wrong dataNamespace renders the page EMPTY rather than erroring, which no cluster-side query detects. `readerGroups` defaults to [admins]; it is stated explicitly because `devs` being absent is the entire point of #261 and a value that load-bearing should be visible in values, not inherited.",
+          "properties": {
+            "dataNamespace": {
+              "description": "Namespace holding the data this page reads (incidents.observability.krateo.io). It does not move with the page.",
+              "minLength": 1,
+              "title": "Data namespace",
+              "type": "string"
+            },
+            "namespace": {
+              "description": "Namespace this page's objects render into; the chart creates it. Chart default krateo-incidents.",
+              "minLength": 1,
+              "title": "Namespace",
+              "type": "string"
+            },
+            "readerGroups": {
+              "description": "Groups given read access to this page's objects. [admins] by convention; adding devs would undo #261.",
+              "items": {
+                "type": "string"
+              },
+              "title": "Reader groups",
+              "type": "array"
+            }
+          },
+          "title": "incidents-page values",
+          "type": "object"
+        },
+        "marketplace-page": {
+          "additionalProperties": false,
+          "description": "The marketplace-page chart, split out of the portal chart in 1.8.78 (portal#319, #261). It creates its own namespace and renders only into it. `namespace` is where this page's own objects go; `dataNamespace` is where the data it READS lives, and that does NOT move with the page. Set BOTH explicitly rather than relying on the chart defaults: dataNamespace defaults to krateo-system, which is correct on an install whose portal lives there and wrong on one where it does not -- and because every step of these pages carries continueOnError, a wrong dataNamespace renders the page EMPTY rather than erroring, which no cluster-side query detects. `readerGroups` defaults to [admins]; it is stated explicitly because `devs` being absent is the entire point of #261 and a value that load-bearing should be visible in values, not inherited.",
+          "properties": {
+            "dataNamespace": {
+              "description": "Namespace holding the data this page reads (the blueprints-catalog-index ConfigMap and the blueprints-endpoint Secret). It does not move with the page.",
+              "minLength": 1,
+              "title": "Data namespace",
+              "type": "string"
+            },
+            "namespace": {
+              "description": "Namespace this page's objects render into; the chart creates it. Chart default krateo-marketplace.",
+              "minLength": 1,
+              "title": "Namespace",
+              "type": "string"
+            },
+            "readerGroups": {
+              "description": "Groups given read access to this page's objects. [admins] by convention; adding devs would undo #261.",
+              "items": {
+                "type": "string"
+              },
+              "title": "Reader groups",
+              "type": "array"
+            }
+          },
+          "title": "marketplace-page values",
+          "type": "object"
+        },
         "portal": {
           "additionalProperties": false,
           "properties": {

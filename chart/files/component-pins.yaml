@@ -2777,7 +2777,7 @@ components:
   # have silently dropped the `// empty` fix. Verified on the published chart -- 1 occurrence of
   # `[.compdef.status.resource // empty]`, 0 of the bare pre-fix form.
   # ARTIFACT: 625 files, 1515560 -> 1516342 bytes; only Chart.yaml and that one template differ.
-  version: 1.8.77
+  version: 1.8.78
   deps:
   - frontend
   - git-provider
@@ -2868,7 +2868,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.77
+  version: 1.8.78
   deps: ['portal']
   tier: platform
   feature: portal
@@ -2876,6 +2876,50 @@ components:
   # 0.4.0 (#19): /render accepts lookupStubs and returns a `lookups` report. LEG 1 OF 3 of the Preview
   # gate-stubs feature. A request without stubs renders exactly as before, and a parity test pins the
   # stubbed path to action.Install's output.
+# ---- the three page components split out of the portal chart (portal#319, #261) ------------
+# NEW COMPONENTS, first time any of these is pinned. They exist because the portal chart no
+# longer renders /marketplace, /incidents or /alerts: 1.8.78 PRUNES them. Rendered against the
+# live Portal CR spec, portal drops from 658 objects at 1.8.77 to 527 at 1.8.78 -- -131 -- and
+# these three charts supply 63 + 42 + 31 = 136 in their own namespaces. So the portal bump ALONE
+# is a regression: between the prune and these three reconciling, those pages exist NOWHERE, for
+# admins too. That is why they land in the SAME roll and not after it. Diego accepted that cost.
+# EACH DEPS ON `portal` deliberately: their RESTActions read data other components own in
+# `dataNamespace`, and the nav that surfaces them is the portal's own sidebar-nav. A page
+# reconciling first would be objects nothing routes to. The price is the dependency-depth trail --
+# portal-agents lagged portal by 8 minutes on the 1.8.77 roll and there are three of these, so
+# expect longer. They do NOT dep on each other.
+# KIND IS DECLARED HERE, NOT DERIVED. Measured over all 46 pin-matched CompositionDefinitions on
+# 057: `status.kind` equals the pin's own `kind:` in 46 of 46 cases, zero mismatches. The earlier
+# belief that it follows the chart name (or the CD name) was an artifact of pin authors mirroring
+# chart names -- a convention mistaken for a mechanism by two sessions independently. What IS
+# derived is `status.resource`, the plural, from the kind. Predicted
+# marketplacepages/incidentspages/alertspages; STILL READ BACK before writing any CR, because the
+# plural is the one part nobody here controls and a guessed plural 404s.
+# Each chart creates its OWN namespace and renders nothing outside it (verified on the pulled
+# artifacts, not on main), and binds `admins` only -- RoleBindings
+# admins-read-{marketplace,incidents,alerts}-pages with no devs subject. That absence is the point
+# of #261: `devs` has no binding where these pages now live.
+- name: marketplace-page
+  kind: MarketplacePage
+  version: 1.8.78
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: incidents-page
+  kind: IncidentsPage
+  version: 1.8.78
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: alerts-page
+  kind: AlertsPage
+  version: 1.8.78
+  deps:
+  - portal
+  tier: platform
+  feature: portal
 - name: blueprint-render-service
   # RUN 2 DONE: the old krateo-helm-render-service component is gone. Its CR was deleted FIRST, while
   # krateohelmrenderservices-v0-4-0-controller was still running, so composition.krateo.io/finalizer was
