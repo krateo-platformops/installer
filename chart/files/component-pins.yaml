@@ -372,7 +372,7 @@ components:
   # (39 files changed, every one under go/snowplow/), so there is no CRD in it to move.
   # 1.12.50: lockstep again. 4 files and 19855 BYTES ON BOTH SIDES vs 1.12.49, `diff -r` reports only
   # Chart.yaml's version. 1.12.50 is Go-only too (107 files, every one under go/snowplow/).
-  version: 1.12.50
+  version: 1.12.51
   tier: platform
   feature: portal
 - name: authn
@@ -416,6 +416,39 @@ components:
   # subjectaccessreviews ... Unauthorized" from snowplow in a single 24h window. Worth re-reading that
   # count after the roll — it is a free check on whether the fix landed.
 - name: snowplow
+  # 1.12.51: #759 is the one that matters -- SECURITY. An access-filtered step with NO stage
+  # filter now serves what the userAccessFilter refilter KEPT, never the raw service-account
+  # response. #651/#760/#767/#778 are related fail-closed fixes. Also #799 (widgets someone has
+  # open refresh first), #772 (shared lists re-read only when older than the change),
+  # #773/#784/#788/#793 (fan-out shadow, observation only), #777 b' (header cached on pages with
+  # params), #801 (a #787 metric export), test fixes.
+  # CHART IS CHART.YAML-ONLY vs 1.12.50, verified by unpacking BOTH published artifacts and
+  # diffing the trees rather than taking the release note: `diff -rq` reports Chart.yaml as the
+  # single differing file. values.schema.json gains and loses nothing, crds/ is empty in both.
+  # So no schema dry-run is needed, and the whole delta is the image.
+  # WEDGE CHECK THAT MATTERS FOR THIS CHART: snowplow's values.schema.json root is
+  # `additionalProperties: FALSE` (like frontend's, unlike portal's), so any key on the live CR
+  # that 1.12.51 does not declare would REJECT the render outright rather than linger inertly.
+  # Checked: the live Snowplow CR spec carries 2 top-level keys, both declared, zero undeclared,
+  # and 1.12.51 renders against that exact spec -- 11 docs, exit 0.
+  # Image digest VERIFIED INDEPENDENTLY against the registry, not accepted from the peer that
+  # reported it: index sha256:ea215effd5628e9b1992ef96f0138713ddf274244bf4a31eea52ab33d8815127,
+  # linux/amd64 sha256:86902aa85708dff7f48a5752f7c6153d6ee4550335b7d8da9347666c2fa55278 (arm64
+  # and a third platform also present). The 1.12.51 tag object is 09d9ca2d, peeling to commit
+  # abc4fdfc95475fe1bb09941afa546610cdb02385 -- also confirmed by ls-remote, since this repo is
+  # annotated-tagged and a bare ref must always be peeled.
+  # Dependency gate (a pin bump prunes the live leaf): snowplow's declared deps snowplow-crd and
+  # authn are Ready=True, and so are its dependent frontend, plus portal downstream of that.
+  # ROLL DISCIPLINE, at the snowplow session's request and matching a trap that has bitten twice:
+  # read ALL pods mid-rollout, old and new, never just the first Ready -- a glob that matched the
+  # NEW pod's tag against the OLD pod's ready=True announced READY while the container was
+  # ready=False. Decide in code and emit one verdict.
+  # NO VERIFIED ROLLBACK LEVER exists; do not promise one. If forced, the image override is
+  # componentValues.snowplow.image.tag, and the unmask follow-up must be announced.
+  # Expected on 057: cold start similar to 1.12.50 (~4m10s); a new refresher "viewed" tier
+  # visible in snowplow_refresher stats; the meetupsites v0-1-0 retries should STOP after the
+  # restart, because the draft RestAction that re-registered it was deleted earlier today with
+  # Diego's approval. That last one is an expectation to CHECK, not to assume.
   # 1.12.46 (ANNOTATED tag: ref object 9fe7a875 PEELS to commit 7c81db49 — peeled `^{}`, not the
   # bare ref). NOT main HEAD: main is at 765e59da, so 7c81db49 is an ancestor. ahead 12 / behind 0
   # against 1.12.45.
@@ -1101,7 +1134,7 @@ components:
   # ROLLBACK: re-upgrade the installer to 0.3.429, which pins 1.12.49. Do NOT roll back via
   # componentValues.snowplow.image.tag -- an image-tag override on THIS component takes effect and
   # then PERMANENTLY MASKS every future chart bump (the krateo-sse-proxy 0.1.15 trap).
-  version: 1.12.50
+  version: 1.12.51
   deps:
   - snowplow-crd
   - authn
