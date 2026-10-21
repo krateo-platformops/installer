@@ -336,6 +336,29 @@ localModel:
 #     snowplow:
 #       replicaCount: 2
 componentValues:
+  # The three page components split out of the portal chart in 1.8.78 (portal#319, #261).
+  # BOTH keys are set explicitly on each, deliberately. The chart defaults are already correct on
+  # an install whose portal lives in krateo-system -- which is why relying on them is the trap:
+  # dataNamespace would then default correctly here and wrongly anywhere else, and because every
+  # step of these pages carries continueOnError a wrong dataNamespace renders the page EMPTY
+  # rather than erroring. No cluster-side query distinguishes that from a working page.
+  # readerGroups is restated even though [admins] is the chart default: `devs` being absent is the
+  # entire point of #261, so it should be visible here rather than inherited.
+  marketplace-page:
+    namespace: krateo-marketplace
+    dataNamespace: krateo-system
+    readerGroups:
+    - admins
+  incidents-page:
+    namespace: krateo-incidents
+    dataNamespace: krateo-system
+    readerGroups:
+    - admins
+  alerts-page:
+    namespace: krateo-alerts
+    dataNamespace: krateo-system
+    readerGroups:
+    - admins
   # The portal's Agents sidebar entry and its /agents routes, which live in the SEPARATE
   # portal-agents chart this installer pins beside it. The portal CHART defaults this false so a
   # standalone install cannot show a nav entry whose pages are absent; this installer always
