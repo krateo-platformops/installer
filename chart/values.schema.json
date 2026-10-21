@@ -7185,26 +7185,25 @@
         },
         "alerts-page": {
           "additionalProperties": false,
-          "description": "The alerts-page chart, split out of the portal chart in 1.8.78 (portal#319, #261). It creates its own namespace and renders only into it. `namespace` is where this page's own objects go; `dataNamespace` is where the data it READS lives, and that does NOT move with the page. Set BOTH explicitly rather than relying on the chart defaults: dataNamespace defaults to krateo-system, which is correct on an install whose portal lives there and wrong on one where it does not -- and because every step of these pages carries continueOnError, a wrong dataNamespace renders the page EMPTY rather than erroring, which no cluster-side query detects. `readerGroups` defaults to [admins]; it is stated explicitly because `devs` being absent is the entire point of #261 and a value that load-bearing should be visible in values, not inherited.",
+          "description": "The alerts-page chart, one of the fourteen page charts split out of the portal shell at 1.8.80 (portal#261/#323). It creates its own namespace and renders only into it, because `resourceNames` cannot narrow `list`: the namespace is the only boundary page visibility has. Every key here is an OVERRIDE of the chart's own values.yaml and carries NO `default:` -- crdgen propagates a chart schema default into the generated composition CRD, where the apiserver materialises it into the leaf CR spec and the chart's values.yaml never runs (measured at 1.8.78: the marketplacepages CRD defaulted readerGroups to [admins] and the live CR carried it with nothing having written it). So leave a key UNSET to take the chart's value; `namespace` and `readerGroups` both come from the chart unless an install needs to move a page or grant another group.",
           "properties": {
-            "dataNamespace": {
-              "description": "Namespace holding the data this page reads (alerts.observability.krateo.io). It does not move with the page.",
+            "namespace": {
+              "description": "The namespace this chart CREATES and installs its page objects into. It is the RBAC boundary the whole chart exists for \u2014 a group with no RoleBinding here cannot `list` the page roots, so the portal's sidebar never shows them and the page body 403s on a deep link. The release itself stays wherever the composition is created (krateo-system on the platform install); only the page objects live here.",
               "minLength": 1,
-              "title": "Data namespace",
+              "title": "namespace",
               "type": "string"
             },
-            "namespace": {
-              "description": "Namespace this page's objects render into; the chart creates it. Chart default krateo-alerts.",
-              "minLength": 1,
-              "title": "Namespace",
+            "observabilityConsoleUrl": {
+              "description": "Optional URL of the external observability console (the clickstack/HyperDX UI). When set, the alert detail page offers a \"View in console\" link; empty hides it. Must match the portal chart's value \u2014 these pages were split out of it and read the same console.",
+              "title": "observabilityConsoleUrl",
               "type": "string"
             },
             "readerGroups": {
-              "description": "Groups given read access to this page's objects. [admins] by convention; adding devs would undo #261.",
+              "description": "Groups granted read of these pages in `namespace`. A group listed here sees /alerts in the sidebar and can open it; a group absent cannot list the page roots, so the entry never renders. `devs` is deliberately NOT a default \u2014 keeping it out is the point of the split (#261). No schema default: the installer applies schema defaults, so one here would silently re-assert itself over a group set through componentValues. The chart default lives in values.yaml instead.",
               "items": {
                 "type": "string"
               },
-              "title": "Reader groups",
+              "title": "readerGroups",
               "type": "array"
             }
           },
@@ -7213,26 +7212,20 @@
         },
         "incidents-page": {
           "additionalProperties": false,
-          "description": "The incidents-page chart, split out of the portal chart in 1.8.78 (portal#319, #261). It creates its own namespace and renders only into it. `namespace` is where this page's own objects go; `dataNamespace` is where the data it READS lives, and that does NOT move with the page. Set BOTH explicitly rather than relying on the chart defaults: dataNamespace defaults to krateo-system, which is correct on an install whose portal lives there and wrong on one where it does not -- and because every step of these pages carries continueOnError, a wrong dataNamespace renders the page EMPTY rather than erroring, which no cluster-side query detects. `readerGroups` defaults to [admins]; it is stated explicitly because `devs` being absent is the entire point of #261 and a value that load-bearing should be visible in values, not inherited.",
+          "description": "The incidents-page chart, one of the fourteen page charts split out of the portal shell at 1.8.80 (portal#261/#323). It creates its own namespace and renders only into it, because `resourceNames` cannot narrow `list`: the namespace is the only boundary page visibility has. Every key here is an OVERRIDE of the chart's own values.yaml and carries NO `default:` -- crdgen propagates a chart schema default into the generated composition CRD, where the apiserver materialises it into the leaf CR spec and the chart's values.yaml never runs (measured at 1.8.78: the marketplacepages CRD defaulted readerGroups to [admins] and the live CR carried it with nothing having written it). So leave a key UNSET to take the chart's value; `namespace` and `readerGroups` both come from the chart unless an install needs to move a page or grant another group.",
           "properties": {
-            "dataNamespace": {
-              "description": "Namespace holding the data this page reads (incidents.observability.krateo.io). It does not move with the page.",
-              "minLength": 1,
-              "title": "Data namespace",
-              "type": "string"
-            },
             "namespace": {
-              "description": "Namespace this page's objects render into; the chart creates it. Chart default krateo-incidents.",
+              "description": "The namespace this chart CREATES and installs its page objects into. It is the RBAC boundary the whole chart exists for \u2014 a group with no RoleBinding here cannot `list` the page roots, so the portal's sidebar never shows them and the page body 403s on a deep link. The release itself stays wherever the composition is created (krateo-system on the platform install); only the page objects live here. Changing it after install orphans the previous namespace's objects, which Helm will not prune because it no longer renders them.",
               "minLength": 1,
-              "title": "Namespace",
+              "title": "namespace",
               "type": "string"
             },
             "readerGroups": {
-              "description": "Groups given read access to this page's objects. [admins] by convention; adding devs would undo #261.",
+              "description": "Groups granted read of these pages in `namespace`. A group listed here sees /incidents in the sidebar and can open it; a group absent cannot list the page roots, so the entry never renders. `devs` is deliberately NOT a default \u2014 keeping it out is the point of the split (#261). No schema default: the installer applies schema defaults, so one here would silently re-assert itself over a group set through componentValues. The chart default lives in values.yaml instead.",
               "items": {
                 "type": "string"
               },
-              "title": "Reader groups",
+              "title": "readerGroups",
               "type": "array"
             }
           },
@@ -7241,30 +7234,440 @@
         },
         "marketplace-page": {
           "additionalProperties": false,
-          "description": "The marketplace-page chart, split out of the portal chart in 1.8.78 (portal#319, #261). It creates its own namespace and renders only into it. `namespace` is where this page's own objects go; `dataNamespace` is where the data it READS lives, and that does NOT move with the page. Set BOTH explicitly rather than relying on the chart defaults: dataNamespace defaults to krateo-system, which is correct on an install whose portal lives there and wrong on one where it does not -- and because every step of these pages carries continueOnError, a wrong dataNamespace renders the page EMPTY rather than erroring, which no cluster-side query detects. `readerGroups` defaults to [admins]; it is stated explicitly because `devs` being absent is the entire point of #261 and a value that load-bearing should be visible in values, not inherited.",
+          "description": "The marketplace-page chart, one of the fourteen page charts split out of the portal shell at 1.8.80 (portal#261/#323). It creates its own namespace and renders only into it, because `resourceNames` cannot narrow `list`: the namespace is the only boundary page visibility has. Every key here is an OVERRIDE of the chart's own values.yaml and carries NO `default:` -- crdgen propagates a chart schema default into the generated composition CRD, where the apiserver materialises it into the leaf CR spec and the chart's values.yaml never runs (measured at 1.8.78: the marketplacepages CRD defaulted readerGroups to [admins] and the live CR carried it with nothing having written it). So leave a key UNSET to take the chart's value; `namespace` and `readerGroups` both come from the chart unless an install needs to move a page or grant another group.",
           "properties": {
-            "dataNamespace": {
-              "description": "Namespace holding the data this page reads (the blueprints-catalog-index ConfigMap and the blueprints-endpoint Secret). It does not move with the page.",
-              "minLength": 1,
-              "title": "Data namespace",
-              "type": "string"
+            "marketplace": {
+              "additionalProperties": false,
+              "description": "Where these pages read the blueprint/operator catalog. `configmap` (default) reads the two indexes from the in-cluster ConfigMap the krateo-marketplace-catalog composition renders, in the release namespace; `external` fetches the Helm-repo index through the blueprints-endpoint Secret, also in the release namespace. MUST match the portal chart's marketplace.source \u2014 both read the same catalog.",
+              "properties": {
+                "configMapName": {
+                  "description": "Name of the catalog ConfigMap, read in the release namespace.",
+                  "title": "configMapName",
+                  "type": "string"
+                },
+                "liveIndex": {
+                  "description": "Also read the live blueprints index so a freshly published blueprint appears before the catalog ConfigMap is re-released.",
+                  "title": "liveIndex",
+                  "type": "boolean"
+                },
+                "source": {
+                  "description": "`configmap` or `external`.",
+                  "title": "source",
+                  "type": "string"
+                }
+              },
+              "title": "marketplace",
+              "type": "object"
             },
             "namespace": {
-              "description": "Namespace this page's objects render into; the chart creates it. Chart default krateo-marketplace.",
+              "description": "The namespace this chart CREATES and installs its page objects into. It is the RBAC boundary the whole chart exists for \u2014 a group with no RoleBinding here cannot `list` the page roots, so the portal's sidebar never shows them and the page body 403s on a deep link. The release itself stays wherever the composition is created (krateo-system on the platform install); only the page objects live here.",
               "minLength": 1,
-              "title": "Namespace",
+              "title": "namespace",
               "type": "string"
             },
             "readerGroups": {
-              "description": "Groups given read access to this page's objects. [admins] by convention; adding devs would undo #261.",
+              "description": "Groups granted read of these pages in `namespace`. A group listed here sees /marketplace in the sidebar and can open it; a group absent cannot list the page roots, so the entry never renders. `devs` is deliberately NOT a default \u2014 keeping it out is the point of the split (#261). No schema default: the installer applies schema defaults, so one here would silently re-assert itself over a group set through componentValues. The chart default lives in values.yaml instead.",
               "items": {
                 "type": "string"
               },
-              "title": "Reader groups",
+              "title": "readerGroups",
               "type": "array"
             }
           },
           "title": "marketplace-page values",
+          "type": "object"
+        },
+        "blueprints-page": {
+          "additionalProperties": false,
+          "description": "The blueprints-page chart, one of the fourteen page charts split out of the portal shell at 1.8.80 (portal#261/#323). It creates its own namespace and renders only into it, because `resourceNames` cannot narrow `list`: the namespace is the only boundary page visibility has. Every key here is an OVERRIDE of the chart's own values.yaml and carries NO `default:` -- crdgen propagates a chart schema default into the generated composition CRD, where the apiserver materialises it into the leaf CR spec and the chart's values.yaml never runs (measured at 1.8.78: the marketplacepages CRD defaulted readerGroups to [admins] and the live CR carried it with nothing having written it). So leave a key UNSET to take the chart's value; `namespace` and `readerGroups` both come from the chart unless an install needs to move a page or grant another group.",
+          "properties": {
+            "marketplace": {
+              "additionalProperties": false,
+              "description": "Where these pages read the blueprint/operator catalog, which lives in the release namespace. MUST match the portal chart's marketplace.source.",
+              "properties": {
+                "configMapName": {
+                  "title": "configMapName",
+                  "type": "string"
+                },
+                "liveIndex": {
+                  "title": "liveIndex",
+                  "type": "boolean"
+                },
+                "source": {
+                  "title": "source",
+                  "type": "string"
+                }
+              },
+              "title": "marketplace",
+              "type": "object"
+            },
+            "namespace": {
+              "description": "The namespace this chart CREATES and installs its page objects into. It is the RBAC boundary the chart exists for \u2014 a group with no RoleBinding here cannot `list` the page roots, so the portal sidebar never shows them and the page body 403s on a deep link. The release itself stays in the portal's namespace (the shell), and only these objects live here.",
+              "minLength": 1,
+              "title": "namespace",
+              "type": "string"
+            },
+            "readerGroups": {
+              "description": "Groups granted read of these pages in `namespace`. A group listed here sees /blueprints in the sidebar and can open it; a group absent cannot list the page roots, so the entry never renders. No schema default: the installer applies schema defaults, so one here would silently re-assert itself over a group set through componentValues. The chart default lives in values.yaml instead.",
+              "items": {
+                "type": "string"
+              },
+              "title": "readerGroups",
+              "type": "array"
+            }
+          },
+          "title": "blueprints-page values",
+          "type": "object"
+        },
+        "builders-page": {
+          "additionalProperties": false,
+          "description": "The builders-page chart, one of the fourteen page charts split out of the portal shell at 1.8.80 (portal#261/#323). It creates its own namespace and renders only into it, because `resourceNames` cannot narrow `list`: the namespace is the only boundary page visibility has. Every key here is an OVERRIDE of the chart's own values.yaml and carries NO `default:` -- crdgen propagates a chart schema default into the generated composition CRD, where the apiserver materialises it into the leaf CR spec and the chart's values.yaml never runs (measured at 1.8.78: the marketplacepages CRD defaulted readerGroups to [admins] and the live CR carried it with nothing having written it). So leave a key UNSET to take the chart's value; `namespace` and `readerGroups` both come from the chart unless an install needs to move a page or grant another group.",
+          "properties": {
+            "marketplace": {
+              "additionalProperties": false,
+              "description": "Where these pages read the blueprint/operator catalog, read in the release namespace. MUST match the portal chart's marketplace.source.",
+              "properties": {
+                "configMapName": {
+                  "title": "configMapName",
+                  "type": "string"
+                },
+                "liveIndex": {
+                  "title": "liveIndex",
+                  "type": "boolean"
+                },
+                "source": {
+                  "title": "source",
+                  "type": "string"
+                }
+              },
+              "title": "marketplace",
+              "type": "object"
+            },
+            "namespace": {
+              "description": "The namespace this chart CREATES and installs its page objects into. It is the RBAC boundary the chart exists for \u2014 a group with no RoleBinding here cannot `list` the page roots, so the portal sidebar never shows them and the page body 403s on a deep link. The release itself stays wherever the composition is created; only the page objects live here.",
+              "minLength": 1,
+              "title": "namespace",
+              "type": "string"
+            },
+            "previewSandbox": {
+              "additionalProperties": false,
+              "description": "Where the builders keep drafts and page previews. MUST match the frontend chart's previewSandbox, which OWNS the namespace and its RBAC. This chart creates nothing there.",
+              "properties": {
+                "namespace": {
+                  "title": "namespace",
+                  "type": "string"
+                }
+              },
+              "title": "previewSandbox",
+              "type": "object"
+            },
+            "readerGroups": {
+              "description": "Groups granted read of these pages in `namespace`. A group listed here sees the three Builder pages in the sidebar and can open it; a group absent cannot list the page roots, so the entry never renders. `devs` is deliberately NOT a default \u2014 keeping it out is the point of the split (#261). No schema default: the installer applies schema defaults, so one here would silently re-assert itself over a group set through componentValues. The chart default lives in values.yaml instead.",
+              "items": {
+                "type": "string"
+              },
+              "title": "readerGroups",
+              "type": "array"
+            }
+          },
+          "title": "builders-page values",
+          "type": "object"
+        },
+        "clusters-page": {
+          "additionalProperties": false,
+          "description": "The clusters-page chart, one of the fourteen page charts split out of the portal shell at 1.8.80 (portal#261/#323). It creates its own namespace and renders only into it, because `resourceNames` cannot narrow `list`: the namespace is the only boundary page visibility has. Every key here is an OVERRIDE of the chart's own values.yaml and carries NO `default:` -- crdgen propagates a chart schema default into the generated composition CRD, where the apiserver materialises it into the leaf CR spec and the chart's values.yaml never runs (measured at 1.8.78: the marketplacepages CRD defaulted readerGroups to [admins] and the live CR carried it with nothing having written it). So leave a key UNSET to take the chart's value; `namespace` and `readerGroups` both come from the chart unless an install needs to move a page or grant another group.",
+          "properties": {
+            "namespace": {
+              "description": "The namespace this chart CREATES and installs its page objects into. It is the RBAC boundary the chart exists for \u2014 a group with no RoleBinding here cannot `list` the page roots, so the portal sidebar never shows them and the page body 403s on a deep link. The release itself stays wherever the composition is created; only the page objects live here.",
+              "minLength": 1,
+              "title": "namespace",
+              "type": "string"
+            },
+            "readerGroups": {
+              "description": "Groups granted read of these pages in `namespace`. A group listed here sees /clusters in the sidebar and can open it; a group absent cannot list the page roots, so the entry never renders. `devs` is deliberately NOT a default \u2014 keeping it out is the point of the split (#261). No schema default: the installer applies schema defaults, so one here would silently re-assert itself over a group set through componentValues. The chart default lives in values.yaml instead.",
+              "items": {
+                "type": "string"
+              },
+              "title": "readerGroups",
+              "type": "array"
+            },
+            "spokeReadbackEndpointNamespace": {
+              "description": "Namespace of the derived spoke endpoint Secret, which must be readable by snowplow's ServiceAccount. Mirrors the portal chart's value of the same name; these pages were split out of it and read the same Secret.",
+              "title": "spokeReadbackEndpointNamespace",
+              "type": "string"
+            }
+          },
+          "title": "clusters-page values",
+          "type": "object"
+        },
+        "compositions-page": {
+          "additionalProperties": false,
+          "description": "The compositions-page chart, one of the fourteen page charts split out of the portal shell at 1.8.80 (portal#261/#323). It creates its own namespace and renders only into it, because `resourceNames` cannot narrow `list`: the namespace is the only boundary page visibility has. Every key here is an OVERRIDE of the chart's own values.yaml and carries NO `default:` -- crdgen propagates a chart schema default into the generated composition CRD, where the apiserver materialises it into the leaf CR spec and the chart's values.yaml never runs (measured at 1.8.78: the marketplacepages CRD defaulted readerGroups to [admins] and the live CR carried it with nothing having written it). So leave a key UNSET to take the chart's value; `namespace` and `readerGroups` both come from the chart unless an install needs to move a page or grant another group.",
+          "properties": {
+            "namespace": {
+              "description": "The namespace this chart CREATES and installs its page objects into. It is the RBAC boundary the chart exists for \u2014 a group with no RoleBinding here cannot `list` the page roots, so the portal sidebar never shows them and the page body 403s on a deep link. The release itself stays in the portal's namespace (the shell), and only these objects live here.",
+              "minLength": 1,
+              "title": "namespace",
+              "type": "string"
+            },
+            "readerGroups": {
+              "description": "Groups granted read of these pages in `namespace`. A group listed here sees /compositions in the sidebar and can open it; a group absent cannot list the page roots, so the entry never renders. No schema default: the installer applies schema defaults, so one here would silently re-assert itself over a group set through componentValues. The chart default lives in values.yaml instead.",
+              "items": {
+                "type": "string"
+              },
+              "title": "readerGroups",
+              "type": "array"
+            }
+          },
+          "title": "compositions-page values",
+          "type": "object"
+        },
+        "dashboard-page": {
+          "additionalProperties": false,
+          "description": "The dashboard-page chart, one of the fourteen page charts split out of the portal shell at 1.8.80 (portal#261/#323). It creates its own namespace and renders only into it, because `resourceNames` cannot narrow `list`: the namespace is the only boundary page visibility has. Every key here is an OVERRIDE of the chart's own values.yaml and carries NO `default:` -- crdgen propagates a chart schema default into the generated composition CRD, where the apiserver materialises it into the leaf CR spec and the chart's values.yaml never runs (measured at 1.8.78: the marketplacepages CRD defaulted readerGroups to [admins] and the live CR carried it with nothing having written it). So leave a key UNSET to take the chart's value; `namespace` and `readerGroups` both come from the chart unless an install needs to move a page or grant another group.",
+          "properties": {
+            "namespace": {
+              "description": "The namespace this chart CREATES and installs its page objects into. It is the RBAC boundary the chart exists for \u2014 a group with no RoleBinding here cannot `list` the page roots, so the portal sidebar never shows them and the page body 403s on a deep link. The release itself stays in the portal's namespace (the shell), and only these objects live here.",
+              "minLength": 1,
+              "title": "namespace",
+              "type": "string"
+            },
+            "readerGroups": {
+              "description": "Groups granted read of these pages in `namespace`. A group listed here sees /dashboard in the sidebar and can open it; a group absent cannot list the page roots, so the entry never renders. No schema default: the installer applies schema defaults, so one here would silently re-assert itself over a group set through componentValues. The chart default lives in values.yaml instead.",
+              "items": {
+                "type": "string"
+              },
+              "title": "readerGroups",
+              "type": "array"
+            }
+          },
+          "title": "dashboard-page values",
+          "type": "object"
+        },
+        "observability-page": {
+          "additionalProperties": false,
+          "description": "The observability-page chart, one of the fourteen page charts split out of the portal shell at 1.8.80 (portal#261/#323). It creates its own namespace and renders only into it, because `resourceNames` cannot narrow `list`: the namespace is the only boundary page visibility has. Every key here is an OVERRIDE of the chart's own values.yaml and carries NO `default:` -- crdgen propagates a chart schema default into the generated composition CRD, where the apiserver materialises it into the leaf CR spec and the chart's values.yaml never runs (measured at 1.8.78: the marketplacepages CRD defaulted readerGroups to [admins] and the live CR carried it with nothing having written it). So leave a key UNSET to take the chart's value; `namespace` and `readerGroups` both come from the chart unless an install needs to move a page or grant another group.",
+          "properties": {
+            "namespace": {
+              "description": "The namespace this chart CREATES and installs its page objects into. It is the RBAC boundary the chart exists for \u2014 a group with no RoleBinding here cannot `list` the page roots, so the portal sidebar never shows them and the page body 403s on a deep link. The release itself stays wherever the composition is created; only the page objects live here.",
+              "minLength": 1,
+              "title": "namespace",
+              "type": "string"
+            },
+            "observability": {
+              "additionalProperties": false,
+              "description": "The snowplow SLI sub-page. 74 of this chart's templates are gated on it and render nothing when it is off, which is the default.",
+              "properties": {
+                "snowplowSli": {
+                  "title": "snowplowSli",
+                  "type": "boolean"
+                }
+              },
+              "title": "observability",
+              "type": "object"
+            },
+            "observabilityConsoleUrl": {
+              "description": "Optional URL of the external observability console. When set, a \"View in console\" link appears; empty hides it.",
+              "title": "observabilityConsoleUrl",
+              "type": "string"
+            },
+            "readerGroups": {
+              "description": "Groups granted read of these pages in `namespace`. A group listed here sees /observability in the sidebar and can open it; a group absent cannot list the page roots, so the entry never renders. `devs` is deliberately NOT a default \u2014 keeping it out is the point of the split (#261). No schema default: the installer applies schema defaults, so one here would silently re-assert itself over a group set through componentValues. The chart default lives in values.yaml instead.",
+              "items": {
+                "type": "string"
+              },
+              "title": "readerGroups",
+              "type": "array"
+            }
+          },
+          "title": "observability-page values",
+          "type": "object"
+        },
+        "portal-agents": {
+          "additionalProperties": false,
+          "description": "The portal-agents chart, which became a page chart at 1.8.80: it gained `namespace` (chart default krateo-agents) and `readerGroups`, and its 121 objects now render into krateo-agents instead of the shell namespace -- every one of them with an explicit metadata.namespace, so the move is a clean prune-and-recreate inside the same leaf release. Declared here so `readerGroups` is reachable from the Installer CR at all: with additionalProperties:false an undeclared key is not passed through, it is REJECTED. No `default:` on any leaf.",
+          "properties": {
+            "enableAdminUser": {
+              "description": "Enable admin user (basic authentication) with cluster-admin permissions",
+              "title": "enableAdminUser",
+              "type": "boolean"
+            },
+            "enableCyberjokerUser": {
+              "description": "Enable cyberjoker user (basic authentication) with namespace-scoped permissions",
+              "title": "enableCyberjokerUser",
+              "type": "boolean"
+            },
+            "enableDemoSystemNamespace": {
+              "description": "enabling the demo creates the demo-system namespace, deploys two Route resources within it, and grants permissions to the cyberjoker user if that user is enabled",
+              "title": "enableDemoSystemNamespace",
+              "type": "boolean"
+            },
+            "marketplace": {
+              "additionalProperties": false,
+              "description": "Where the portal reads the blueprint/operator marketplace catalog. configmap (default) = the in-cluster ConfigMap the krateo-marketplace-catalog composition renders; external = the legacy blueprints-endpoint Helm-repo (one-release fallback).",
+              "properties": {
+                "configMapName": {
+                  "type": "string"
+                },
+                "source": {
+                  "enum": [
+                    "configmap",
+                    "external"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "namespace": {
+              "description": "The namespace this chart CREATES and installs its page objects into. It is the RBAC boundary the chart exists for \u2014 a group with no RoleBinding here cannot `list` the page roots, so the portal sidebar never shows them and the page body 403s on a deep link. The release itself stays in the portal's namespace (the shell), and only these objects live here.",
+              "minLength": 1,
+              "title": "namespace",
+              "type": "string"
+            },
+            "observabilityConsoleUrl": {
+              "description": "Optional URL of the external observability console (e.g. the clickstack/HyperDX UI). When set, a \"View in console\" link appears on the /observability page and opens it in a new tab; empty hides the link. No default target is invented \u2014 a deployer must point this at their own console.",
+              "title": "observabilityConsoleUrl",
+              "type": "string"
+            },
+            "readerGroups": {
+              "description": "Groups granted read of /agents in `namespace`. A group listed here sees Agents in the sidebar and can open it; a group absent cannot list the page roots, so the entry never renders. No schema default: the installer applies schema defaults, so one here would silently re-assert itself over a group set through componentValues. The chart default lives in values.yaml instead.",
+              "items": {
+                "type": "string"
+              },
+              "title": "readerGroups",
+              "type": "array"
+            },
+            "spokeReadbackCluster": {
+              "description": "W3-3 spoke read-back binding \u2014 the ONE registered spoke cluster whose /clusters/{name} detail page shows LIVE compositions read directly from the spoke apiserver (restaction cluster-compositions). snowplow endpointRef references are static (not jq-templated), so the read-back is bound per-install; generating a per-spoke RESTAction + endpoint Secret pair at registration time is the follow-up that removes this value.",
+              "title": "spokeReadbackCluster",
+              "type": "string"
+            },
+            "spokeReadbackEndpointNamespace": {
+              "description": "Namespace of the derived spoke endpoint Secret (must be readable by snowplow's ServiceAccount; the authn namespace krateo-system is the canonical home, same place the registration flow keeps the kubeconfig Secret).",
+              "title": "spokeReadbackEndpointNamespace",
+              "type": "string"
+            },
+            "spokeReadbackEndpointSecret": {
+              "description": "Name of the DERIVED endpoint Secret for the spoke read-back \u2014 snowplow endpoint shape {server-url, token, insecure, certificate-authority-data}, derived from the registered spoke's kubeconfig Secret (NOT the kubeconfig Secret itself, which snowplow cannot consume). The server-url deliberately carries the /apis suffix; see restaction.cluster-compositions.yaml for why.",
+              "title": "spokeReadbackEndpointSecret",
+              "type": "string"
+            },
+            "tenant": {
+              "description": "Display name of the platform tenant \u2014 shown in the sider tenant chip and the page eyebrows (dashboard greeting, compositions, observability). A deployer-set label, not derived data; defaults to krateo-enterprise.",
+              "title": "tenant",
+              "type": "string"
+            }
+          },
+          "title": "portal-agents values",
+          "type": "object"
+        },
+        "resources-page": {
+          "additionalProperties": false,
+          "description": "The resources-page chart, one of the fourteen page charts split out of the portal shell at 1.8.80 (portal#261/#323). It creates its own namespace and renders only into it, because `resourceNames` cannot narrow `list`: the namespace is the only boundary page visibility has. Every key here is an OVERRIDE of the chart's own values.yaml and carries NO `default:` -- crdgen propagates a chart schema default into the generated composition CRD, where the apiserver materialises it into the leaf CR spec and the chart's values.yaml never runs (measured at 1.8.78: the marketplacepages CRD defaulted readerGroups to [admins] and the live CR carried it with nothing having written it). So leave a key UNSET to take the chart's value; `namespace` and `readerGroups` both come from the chart unless an install needs to move a page or grant another group.",
+          "properties": {
+            "namespace": {
+              "description": "The namespace this chart CREATES and installs its page objects into. It is the RBAC boundary the chart exists for \u2014 a group with no RoleBinding here cannot `list` the page roots, so the portal sidebar never shows them and the page body 403s on a deep link. The release itself stays in the portal's namespace (the shell), and only these objects live here.",
+              "minLength": 1,
+              "title": "namespace",
+              "type": "string"
+            },
+            "readerGroups": {
+              "description": "Groups granted read of these pages in `namespace`. A group listed here sees /resources/\u2026 in the sidebar and can open it; a group absent cannot list the page roots, so the entry never renders. No schema default: the installer applies schema defaults, so one here would silently re-assert itself over a group set through componentValues. The chart default lives in values.yaml instead.",
+              "items": {
+                "type": "string"
+              },
+              "title": "readerGroups",
+              "type": "array"
+            }
+          },
+          "title": "resources-page values",
+          "type": "object"
+        },
+        "reviews-page": {
+          "additionalProperties": false,
+          "description": "The reviews-page chart, one of the fourteen page charts split out of the portal shell at 1.8.80 (portal#261/#323). It creates its own namespace and renders only into it, because `resourceNames` cannot narrow `list`: the namespace is the only boundary page visibility has. Every key here is an OVERRIDE of the chart's own values.yaml and carries NO `default:` -- crdgen propagates a chart schema default into the generated composition CRD, where the apiserver materialises it into the leaf CR spec and the chart's values.yaml never runs (measured at 1.8.78: the marketplacepages CRD defaulted readerGroups to [admins] and the live CR carried it with nothing having written it). So leave a key UNSET to take the chart's value; `namespace` and `readerGroups` both come from the chart unless an install needs to move a page or grant another group.",
+          "properties": {
+            "namespace": {
+              "description": "The namespace this chart CREATES and installs its page objects into. It is the RBAC boundary the chart exists for \u2014 a group with no RoleBinding here cannot `list` the page roots, so the portal sidebar never shows them and the page body 403s on a deep link. The release itself stays wherever the composition is created; only the page objects live here.",
+              "minLength": 1,
+              "title": "namespace",
+              "type": "string"
+            },
+            "readerGroups": {
+              "description": "Groups granted read of these pages in `namespace`. A group listed here sees /reviews in the sidebar and can open it; a group absent cannot list the page roots, so the entry never renders. `devs` is deliberately NOT a default \u2014 keeping it out is the point of the split (#261). No schema default: the installer applies schema defaults, so one here would silently re-assert itself over a group set through componentValues. The chart default lives in values.yaml instead.",
+              "items": {
+                "type": "string"
+              },
+              "title": "readerGroups",
+              "type": "array"
+            }
+          },
+          "title": "reviews-page values",
+          "type": "object"
+        },
+        "search-page": {
+          "additionalProperties": false,
+          "description": "The search-page chart, one of the fourteen page charts split out of the portal shell at 1.8.80 (portal#261/#323). It creates its own namespace and renders only into it, because `resourceNames` cannot narrow `list`: the namespace is the only boundary page visibility has. Every key here is an OVERRIDE of the chart's own values.yaml and carries NO `default:` -- crdgen propagates a chart schema default into the generated composition CRD, where the apiserver materialises it into the leaf CR spec and the chart's values.yaml never runs (measured at 1.8.78: the marketplacepages CRD defaulted readerGroups to [admins] and the live CR carried it with nothing having written it). So leave a key UNSET to take the chart's value; `namespace` and `readerGroups` both come from the chart unless an install needs to move a page or grant another group.",
+          "properties": {
+            "marketplace": {
+              "additionalProperties": false,
+              "description": "Where these pages read the blueprint/operator catalog, which lives in the release namespace. MUST match the portal chart's marketplace.source.",
+              "properties": {
+                "configMapName": {
+                  "title": "configMapName",
+                  "type": "string"
+                },
+                "liveIndex": {
+                  "title": "liveIndex",
+                  "type": "boolean"
+                },
+                "source": {
+                  "title": "source",
+                  "type": "string"
+                }
+              },
+              "title": "marketplace",
+              "type": "object"
+            },
+            "namespace": {
+              "description": "The namespace this chart CREATES and installs its page objects into. It is the RBAC boundary the chart exists for \u2014 a group with no RoleBinding here cannot `list` the page roots, so the portal sidebar never shows them and the page body 403s on a deep link. The release itself stays in the portal's namespace (the shell), and only these objects live here.",
+              "minLength": 1,
+              "title": "namespace",
+              "type": "string"
+            },
+            "readerGroups": {
+              "description": "Groups granted read of these pages in `namespace`. A group listed here sees /search in the sidebar and can open it; a group absent cannot list the page roots, so the entry never renders. No schema default: the installer applies schema defaults, so one here would silently re-assert itself over a group set through componentValues. The chart default lives in values.yaml instead.",
+              "items": {
+                "type": "string"
+              },
+              "title": "readerGroups",
+              "type": "array"
+            }
+          },
+          "title": "search-page values",
+          "type": "object"
+        },
+        "settings-page": {
+          "additionalProperties": false,
+          "description": "The settings-page chart, one of the fourteen page charts split out of the portal shell at 1.8.80 (portal#261/#323). It creates its own namespace and renders only into it, because `resourceNames` cannot narrow `list`: the namespace is the only boundary page visibility has. Every key here is an OVERRIDE of the chart's own values.yaml and carries NO `default:` -- crdgen propagates a chart schema default into the generated composition CRD, where the apiserver materialises it into the leaf CR spec and the chart's values.yaml never runs (measured at 1.8.78: the marketplacepages CRD defaulted readerGroups to [admins] and the live CR carried it with nothing having written it). So leave a key UNSET to take the chart's value; `namespace` and `readerGroups` both come from the chart unless an install needs to move a page or grant another group.",
+          "properties": {
+            "namespace": {
+              "description": "The namespace this chart CREATES and installs its page objects into. It is the RBAC boundary the chart exists for \u2014 a group with no RoleBinding here cannot `list` the page roots, so the portal sidebar never shows them and the page body 403s on a deep link. The release itself stays wherever the composition is created; only the page objects live here.",
+              "minLength": 1,
+              "title": "namespace",
+              "type": "string"
+            },
+            "readerGroups": {
+              "description": "Groups granted read of these pages in `namespace`. A group listed here sees /settings in the sidebar and can open it; a group absent cannot list the page roots, so the entry never renders. `devs` is deliberately NOT a default \u2014 keeping it out is the point of the split (#261). No schema default: the installer applies schema defaults, so one here would silently re-assert itself over a group set through componentValues. The chart default lives in values.yaml instead.",
+              "items": {
+                "type": "string"
+              },
+              "title": "readerGroups",
+              "type": "array"
+            }
+          },
+          "title": "settings-page values",
           "type": "object"
         },
         "portal": {
@@ -7338,6 +7741,14 @@
                   "description": "Enable the /s6-probe route (portal >= 1.8.23): a route-only, LABEL-LESS nav entry the snowplow live-refresh acceptance harness needs so it can render a widget to arm. Without the route the harness can create a widget, delete it, observe nothing and report a false clean pass having never armed. Label-less, so even enabled it renders nothing in the sidebar."
                 }
               }
+            },
+            "readerGroups": {
+              "description": "Groups granted read of the portal SHELL (layout, theme, header, sidebar Menu, and the shared RESTActions the pages read) in the release namespace. This is the floor beneath every page grant: a group needs this AND the readerGroups of each page chart it should see. Empty grants nobody anything.",
+              "items": {
+                "type": "string"
+              },
+              "title": "readerGroups",
+              "type": "array"
             }
           },
           "type": "object"
@@ -7931,7 +8342,10 @@
                 },
                 "OTEL_LOGS_ENABLED": {
                   "type": "string",
-                  "enum": ["true", "false"],
+                  "enum": [
+                    "true",
+                    "false"
+                  ],
                   "title": "OTEL Audit-Log Pipeline",
                   "description": "Gate the AUDIT-LOG pipeline specifically: snowplow's AuditEvent (internal/support/audit, D19a) emitted as a trace-correlated OTLP LogRecord carrying enduser.id, user.name and user.roles from the AUTHENTICATED caller. DEFAULTS to the value of OTEL_ENABLED when unset, and the snowplow chart therefore ships it EXPLICITLY \"false\" even with the OTEL_ENABLED master on -- because until otel-collector-daemonset 0.1.11 the agent's logs pipeline had no `otlp` receiver, so an OTLP log export had no consumer and was dropped silently. That is fixed: 0.1.11 adds a dedicated `logs/audit` pipeline writing the `krateo_audit` table with its own 365-day TTL, so records no longer land on the 7-day TTL shared with every pod log. Setting this to \"true\" is what actually starts the server-authored audit trail (installer#408); it is the LAST step of that chain, and the identity it records is the thing the browser-authored AuditRecord CRs have never carried."
                 },
