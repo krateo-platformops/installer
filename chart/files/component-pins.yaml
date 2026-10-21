@@ -2777,7 +2777,7 @@ components:
   # have silently dropped the `// empty` fix. Verified on the published chart -- 1 occurrence of
   # `[.compdef.status.resource // empty]`, 0 of the bare pre-fix form.
   # ARTIFACT: 625 files, 1515560 -> 1516342 bytes; only Chart.yaml and that one template differ.
-  version: 1.8.78
+  version: 1.8.80
   deps:
   - frontend
   - git-provider
@@ -2868,7 +2868,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.78
+  version: 1.8.80
   deps: ['portal']
   tier: platform
   feature: portal
@@ -2901,21 +2901,134 @@ components:
 # of #261: `devs` has no binding where these pages now live.
 - name: marketplace-page
   kind: MarketplacePage
-  version: 1.8.78
+  version: 1.8.80
   deps:
   - portal
   tier: platform
   feature: portal
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.78
+  version: 1.8.80
   deps:
   - portal
   tier: platform
   feature: portal
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.78
+  version: 1.8.80
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+# The ten remaining page charts, split out of the portal shell at 1.8.80 (portal#261/#323). The shell
+# now renders 59 objects and 9 widget CRs and NO page root at all; all 36 page roots live in these
+# charts plus the four already pinned above. The reason is RBAC and it is structural: `resourceNames`
+# cannot narrow `list`, so a group allowed to list widgets in a namespace can list EVERY widget in it.
+# The namespace is the only boundary page visibility has, so each page chart creates its own and
+# renders only into it.
+#
+# TEN components rather than one grouped composition, deliberately. The driver is partial availability:
+# grouped, one bad page is an empty sidebar; split, one bad page is one missing entry -- which is the
+# failure mode the split exists to produce. Two supporting reasons: a single composition creating ten
+# namespaces is exactly the shape that produced the Ready-rollup false negatives and the ApplyNamespace
+# label-strip churn, so ten single-namespace compositions each hit the easy case; and the cost is noise
+# (each page controller requests 50m/128Mi, so ten take krateo-057 from 58.4% to 60.0% CPU requested,
+# 29.2% to 30.3% memory, 205 to 215 pods of 440, against 93 *-controller deployments already there).
+# What ten does NOT buy is independent rollback -- all fourteen page charts carry the shell's version
+# and are tagged together -- so do not expect to roll one page alone.
+#
+# `deps: [portal]` on every one, and that is NOT a CRD dependency: the widget CRDs come from
+# `frontend-crd` (group widgets.templates.krateo.io, release frontend-crd/krateo-system). Portal is
+# their TEARDOWN parent -- `inst.dependentsGone` keeps the shell rendering until every component that
+# deps on it is gone, so `features.portal=false` drains leaves-first and never deletes the shell out
+# from under a live page. The dep costs bring-up latency, not availability: `compositions.yaml:119` is
+# `$crd AND ($deps OR $exists)`, and the `$exists` arm means a portal bump does NOT prune already-live
+# pages. But $exists is evaluated at the component's OWN pinned version, so on a lockstep bump every
+# page waits for the new portal's Ready. Measured on 0.3.442: portal Ready 11:26:48Z, the three pages
+# created 11:27:27-11:27:30Z (one reconcile tick later) and all Ready by 11:28:46Z -- a ~2min window
+# where the shell serves an incomplete sidebar. The pages render in the SAME reconcile and install in
+# parallel, so that window grows with the slowest page, not with the count.
+#
+# No componentValues entries for any of these -- the charts own `namespace` (schema default) and
+# `readerGroups` (values.yaml). See the comment at the head of componentValues in values.yaml for why
+# restating them is a trap. The devs grant ships with the charts: dashboard/compositions/blueprints/
+# resources/search carry [admins, devs]; the other nine carry [admins].
+- name: dashboard-page
+  # Renders into krateo-dashboard, which the chart creates. readerGroups admins + devs (chart values.yaml).
+  kind: DashboardPage
+  version: 1.8.80
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: compositions-page
+  # Renders into krateo-compositions, which the chart creates. readerGroups admins + devs (chart values.yaml).
+  kind: CompositionsPage
+  version: 1.8.80
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: blueprints-page
+  # Renders into krateo-blueprints, which the chart creates. readerGroups admins + devs (chart values.yaml).
+  kind: BlueprintsPage
+  version: 1.8.80
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: resources-page
+  # Renders into krateo-resources, which the chart creates. readerGroups admins + devs (chart values.yaml).
+  kind: ResourcesPage
+  version: 1.8.80
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: search-page
+  # Renders into krateo-search, which the chart creates. readerGroups admins + devs (chart values.yaml).
+  kind: SearchPage
+  version: 1.8.80
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: builders-page
+  # Renders into krateo-builders, which the chart creates. readerGroups admins only (chart values.yaml).
+  kind: BuildersPage
+  version: 1.8.80
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: clusters-page
+  # Renders into krateo-clusters, which the chart creates. readerGroups admins only (chart values.yaml).
+  kind: ClustersPage
+  version: 1.8.80
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: reviews-page
+  # Renders into krateo-reviews, which the chart creates. readerGroups admins only (chart values.yaml).
+  kind: ReviewsPage
+  version: 1.8.80
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: settings-page
+  # Renders into krateo-settings, which the chart creates. readerGroups admins only (chart values.yaml).
+  kind: SettingsPage
+  version: 1.8.80
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: observability-page
+  # Renders into krateo-observability, which the chart creates. readerGroups admins only (chart values.yaml).
+  kind: ObservabilityPage
+  version: 1.8.80
   deps:
   - portal
   tier: platform

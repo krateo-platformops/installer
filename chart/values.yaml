@@ -336,29 +336,31 @@ localModel:
 #     snowplow:
 #       replicaCount: 2
 componentValues:
-  # The three page components split out of the portal chart in 1.8.78 (portal#319, #261).
-  # BOTH keys are set explicitly on each, deliberately. The chart defaults are already correct on
-  # an install whose portal lives in krateo-system -- which is why relying on them is the trap:
-  # dataNamespace would then default correctly here and wrongly anywhere else, and because every
-  # step of these pages carries continueOnError a wrong dataNamespace renders the page EMPTY
-  # rather than erroring. No cluster-side query distinguishes that from a working page.
-  # readerGroups is restated even though [admins] is the chart default: `devs` being absent is the
-  # entire point of #261, so it should be visible here rather than inherited.
-  marketplace-page:
-    namespace: krateo-marketplace
-    dataNamespace: krateo-system
-    readerGroups:
-    - admins
-  incidents-page:
-    namespace: krateo-incidents
-    dataNamespace: krateo-system
-    readerGroups:
-    - admins
-  alerts-page:
-    namespace: krateo-alerts
-    dataNamespace: krateo-system
-    readerGroups:
-    - admins
+  # The fourteen page components carry NO entries here, deliberately -- the charts own both keys.
+  #
+  # `dataNamespace` is GONE at portal 1.8.80: a page chart's release lives in the shell namespace, so
+  # .Release.Namespace already means the shell and the key had nothing left to say. It is removed from
+  # the schema too; with additionalProperties:false it would be an unknown key and the roll would FAIL,
+  # not degrade.
+  #
+  # `namespace` and `readerGroups` both come from each page chart's own values.yaml. Restating them
+  # here is the drift half of a trap worth naming: crdgen propagates a chart schema `default:` into the
+  # generated composition CRD, where the apiserver MATERIALISES it into the leaf CR spec -- measured at
+  # 1.8.78, the marketplacepages CRD defaulted readerGroups to ["admins"] and the live CR carried
+  # readerGroups: [admins] with nothing having written it. A value set here would therefore have been
+  # fighting a CRD default rather than a chart default. At 1.8.80 `readerGroups` is defaultless in all
+  # fourteen schemas (so an omitted grant renders no Role subjects -- it fails CLOSED and visibly),
+  # while `namespace` keeps its default because a namespace is structure, not authorization.
+  #
+  # The devs grant therefore ships WITH THE CHARTS, not from here: dashboard/compositions/blueprints/
+  # resources/search-page carry readerGroups [admins, devs]; the other nine carry [admins]. Per #261
+  # that is narrower than the pre-split state -- devs loses settings, builders, clusters, reviews,
+  # observability and agents, which it could see while all 72 flexes lived in krateo-system.
+  #
+  # Each block IS declared in values.schema.json, with every chart key and no default, so an install
+  # can still move a page or grant another group (acmp's tenant work needs portal.readerGroups above
+  # all: the chrome is the floor beneath every page grant). An UNDECLARED key is not passed through --
+  # it is REJECTED.
   # The portal's Agents sidebar entry and its /agents routes, which live in the SEPARATE
   # portal-agents chart this installer pins beside it. The portal CHART defaults this false so a
   # standalone install cannot show a nav entry whose pages are absent; this installer always
