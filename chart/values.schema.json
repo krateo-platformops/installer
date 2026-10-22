@@ -7458,6 +7458,11 @@
               "additionalProperties": false,
               "description": "The snowplow SLI sub-page. 74 of this chart's templates are gated on it and render nothing when it is off, which is the default.",
               "properties": {
+                "reconcileTracing": {
+                  "description": "Show the reconcile PERFORMANCE section of /observability (p50/p95/p99 latency, throughput, phase breakdown, per-composition reconcile table). Off by default: it reads reconcile tracing metrics, and an install without them renders empty panels, which reads as broken rather than absent.",
+                  "title": "reconcileTracing",
+                  "type": "boolean"
+                },
                 "snowplowSli": {
                   "title": "snowplowSli",
                   "type": "boolean"
@@ -7722,23 +7727,6 @@
                   "default": false,
                   "title": "snowplowSli",
                   "description": "Show the snowplow SLI dashboard on the portal observability page (20 ClickHouse-backed panels across four tabs, portal >= 1.8.22). Requires the snowplow metrics pipeline to be present, otherwise the tabs render empty."
-                }
-              }
-            },
-            "acceptance": {
-              "type": "object",
-              "title": "acceptance",
-              "default": {
-                "s6Probe": false
-              },
-              "description": "Test scaffolding for the live-refresh acceptance harness. Fully typed (additionalProperties: false) per check-no-unknowns; A DEFAULT IS REQUIRED or the nested key is dropped from schema-expansion and never reaches the component release (installer #173/#174). Deliberately SEPARATE from `observability`: that is a dashboard an operator may want, this is scaffolding nobody else should carry. Defaults FALSE everywhere; enabled on bench clusters only.",
-              "additionalProperties": false,
-              "properties": {
-                "s6Probe": {
-                  "type": "boolean",
-                  "default": false,
-                  "title": "s6Probe",
-                  "description": "Enable the /s6-probe route (portal >= 1.8.23): a route-only, LABEL-LESS nav entry the snowplow live-refresh acceptance harness needs so it can render a widget to arm. Without the route the harness can create a widget, delete it, observe nothing and report a false clean pass having never armed. Label-less, so even enabled it renders nothing in the sidebar."
                 }
               }
             },
