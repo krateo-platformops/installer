@@ -4359,7 +4359,7 @@ components:
   # migration; the Incident CRD ships in incident-controller-crd). Its release takes over
   # alerts.observability.krateo.io from the alert-troubleshooter-crd release, whose uninstall deletes
   # the CRD and every Alert: follow docs/configuration.md#upgrading-from-alert-troubleshooter first.
-  version: 0.2.51
+  version: 0.2.52
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -4423,7 +4423,7 @@ components:
   # {precondition, apply, verify} and an optional rollback. The service's authn identity
   # (config.authnUrl) authenticates its A2A calls. The chart has no observer thread, and its schema
   # rejects config.reportCooldown and config.snowplowUrl.
-  version: 0.2.51
+  version: 0.2.52
   deps:
   - alert-provider-crd
   - incident-controller-crd
@@ -5122,7 +5122,7 @@ components:
   # alert-troubleshooter LLM 403s of 2026-09-29 stop recurring — same guardrail, plausibly same cause.
   # 0.2.17 (#71): drops the connection-string response rule, which rejected any database URL as a
   # live credential and cut off RCAs whose fix sets one (e.g. DATABASE_URL=postgres://...).
-  version: 0.2.17
+  version: 0.2.18
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
