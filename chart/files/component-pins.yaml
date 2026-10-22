@@ -288,7 +288,7 @@ components:
   # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
   # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
   # holds anyway because none is at the path that matters -- but check the path, not the presence.)
-  version: 1.8.9
+  version: 1.8.10
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1976,7 +1976,7 @@ components:
   # ARTIFACT: the frontend chart is a PURE VERSION MOVE -- 14 files and 60758 BYTES ON BOTH SIDES vs
   # 1.8.4, only Chart.yaml. Every behaviour change rides in the IMAGE at tag 1.8.6, which is why the
   # CRD and the image must move TOGETHER: a CRD bump without the matching SPA blanks pages.
-  version: 1.8.9
+  version: 1.8.10
   deps:
   - frontend-crd
   - authn
@@ -2908,7 +2908,7 @@ components:
   feature: portal
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.80
+  version: 1.8.82
   deps:
   - portal
   tier: platform
@@ -4323,12 +4323,12 @@ components:
   # precisely the precedent #482 set for alert-provider-crd.
   kind: IncidentControllerCrds
   chart: incident-controller-crds
-  version: 0.3.0
+  version: 0.4.0
   tier: observability
   feature: portal
 - name: incident-controller
   kind: IncidentController
-  version: 0.3.0
+  version: 0.4.0
   deps:
   - incident-controller-crd
   tier: observability
@@ -4359,7 +4359,7 @@ components:
   # migration; the Incident CRD ships in incident-controller-crd). Its release takes over
   # alerts.observability.krateo.io from the alert-troubleshooter-crd release, whose uninstall deletes
   # the CRD and every Alert: follow docs/configuration.md#upgrading-from-alert-troubleshooter first.
-  version: 0.2.50
+  version: 0.2.51
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -4423,7 +4423,7 @@ components:
   # {precondition, apply, verify} and an optional rollback. The service's authn identity
   # (config.authnUrl) authenticates its A2A calls. The chart has no observer thread, and its schema
   # rejects config.reportCooldown and config.snowplowUrl.
-  version: 0.2.50
+  version: 0.2.51
   deps:
   - alert-provider-crd
   - incident-controller-crd
