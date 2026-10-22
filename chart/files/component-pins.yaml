@@ -2181,6 +2181,32 @@ components:
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
 - name: portal
+  # 1.8.84 (portal#328 + portal#329): UNBREAKS THE LIVE PORTAL. 1.8.83's chart split rewrote
+  # endpointRef.namespace (and the apiRef half) to the PAGE namespace across 5 charts, 37 refs.
+  # Endpoint Secrets are created in the RELEASE namespace, so every rewritten ref resolved to
+  # nothing. Measured by the frontend session in a 6h snowplow window before the fix: 364
+  # clickhouse-endpoint @ krateo-observability, 28 blueprint-render-endpoint, 27
+  # clickhouse-endpoint @ krateo-agents, 27 + 24 sse-proxy-internal-endpoint @
+  # krateo-compositions and krateo-dashboard, 22 clickhouse-endpoint @ krateo-compositions,
+  # plus 21 distinct widgets at 28 "unable to resolve api reference" failures each. The entire
+  # Observability page and BOTH live event feeds were dead on 057.
+  # VERIFIED INDEPENDENTLY against the PUBLISHED artifacts, not the repo -- pulled all 15 charts
+  # at both versions and counted how endpointRef.namespace is templated:
+  #   1.8.83:  37x {{ $.Values.namespace }}  +  3x {{ .Release.Namespace }}
+  #   1.8.84:  40x {{ .Release.Namespace }}  +  0x {{ $.Values.namespace }}
+  # 37 + 3 = 40 reconciles exactly, so the rewrite is complete and nothing else moved.
+  # THE MIRROR TRAP DOES NOT FIRE on this bump, checked rather than assumed: all 15 charts'
+  # values.schema.json still carry additionalProperties:true at the top level, the top-level key
+  # SETS are byte-identical 1.8.83 -> 1.8.84, and no `default:` was added or removed at ANY depth
+  # (the crdgen trap, which materialises a chart default into the leaf CR spec). So no
+  # componentValues change is required here and the installer values.schema.json is untouched.
+  # NOTE this tag does NOT close the fifteen chart schemas -- that work is still pending and is
+  # what will require a componentValues mirror pass. Do not read 1.8.84 as having done it.
+  # ROLL EXPECTATION: restaction.projects moves namespace krateo-settings -> krateo-system, so
+  # there is a prune-and-recreate window where the header's project selector has no RESTAction to
+  # read. Expect a brief "Not found" mid-roll that heals; that is not the fix failing. Nobody
+  # loses access -- the shell Role already grants templates.krateo.io/restactions: get and
+  # settings-page's readerGroups was admins-only.
   # 1.8.77 (portal#318, #261): FIRST OF THIS SERIES TO DELETE LIVE RBAC. The `devs` group loses
   # both cluster-wide grants -- helm PRUNES 2 ClusterRoles and 2 ClusterRoleBindings on upgrade:
   #   devs-list-any-namespace-in-cluster                     (list namespaces)
@@ -2777,7 +2803,7 @@ components:
   # have silently dropped the `// empty` fix. Verified on the published chart -- 1 occurrence of
   # `[.compdef.status.resource // empty]`, 0 of the bare pre-fix form.
   # ARTIFACT: 625 files, 1515560 -> 1516342 bytes; only Chart.yaml and that one template differ.
-  version: 1.8.83
+  version: 1.8.84
   deps:
   - frontend
   - git-provider
@@ -2868,7 +2894,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.83
+  version: 1.8.84
   deps: ['portal']
   tier: platform
   feature: portal
@@ -2901,21 +2927,21 @@ components:
 # of #261: `devs` has no binding where these pages now live.
 - name: marketplace-page
   kind: MarketplacePage
-  version: 1.8.83
+  version: 1.8.84
   deps:
   - portal
   tier: platform
   feature: portal
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.83
+  version: 1.8.84
   deps:
   - portal
   tier: platform
   feature: portal
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.83
+  version: 1.8.84
   deps:
   - portal
   tier: platform
@@ -2956,7 +2982,7 @@ components:
 - name: dashboard-page
   # Renders into krateo-dashboard, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: DashboardPage
-  version: 1.8.83
+  version: 1.8.84
   deps:
   - portal
   tier: platform
@@ -2964,7 +2990,7 @@ components:
 - name: compositions-page
   # Renders into krateo-compositions, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: CompositionsPage
-  version: 1.8.83
+  version: 1.8.84
   deps:
   - portal
   tier: platform
@@ -2972,7 +2998,7 @@ components:
 - name: blueprints-page
   # Renders into krateo-blueprints, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: BlueprintsPage
-  version: 1.8.83
+  version: 1.8.84
   deps:
   - portal
   tier: platform
@@ -2980,7 +3006,7 @@ components:
 - name: resources-page
   # Renders into krateo-resources, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: ResourcesPage
-  version: 1.8.83
+  version: 1.8.84
   deps:
   - portal
   tier: platform
@@ -2988,7 +3014,7 @@ components:
 - name: search-page
   # Renders into krateo-search, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: SearchPage
-  version: 1.8.83
+  version: 1.8.84
   deps:
   - portal
   tier: platform
@@ -2996,7 +3022,7 @@ components:
 - name: builders-page
   # Renders into krateo-builders, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: BuildersPage
-  version: 1.8.83
+  version: 1.8.84
   deps:
   - portal
   tier: platform
@@ -3004,7 +3030,7 @@ components:
 - name: clusters-page
   # Renders into krateo-clusters, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ClustersPage
-  version: 1.8.83
+  version: 1.8.84
   deps:
   - portal
   tier: platform
@@ -3012,7 +3038,7 @@ components:
 - name: reviews-page
   # Renders into krateo-reviews, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ReviewsPage
-  version: 1.8.83
+  version: 1.8.84
   deps:
   - portal
   tier: platform
@@ -3020,7 +3046,7 @@ components:
 - name: settings-page
   # Renders into krateo-settings, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: SettingsPage
-  version: 1.8.83
+  version: 1.8.84
   deps:
   - portal
   tier: platform
@@ -3028,7 +3054,7 @@ components:
 - name: observability-page
   # Renders into krateo-observability, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ObservabilityPage
-  version: 1.8.83
+  version: 1.8.84
   deps:
   - portal
   tier: platform
