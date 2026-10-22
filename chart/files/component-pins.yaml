@@ -3302,6 +3302,29 @@ components:
   tier: observability
   feature: portal
 - name: otel-collector-daemonset
+  # 0.1.13 (observability#75, repo tag 3.1.22): PARTITION the OTLP log stream. krateo_audit had
+  # acquired a SECOND producer -- the exact condition 0.1.11's own chart comment said to guard
+  # against ("If a second ever appears, gate THIS pipeline with a filter on event.name==audit").
+  # MEASURED on 057 2026-10-22: of 2,493 krateo_audit rows, 10 were snowplow audit records and
+  # 2,483 were the AGENT GATEWAY's access log, which had no other destination because logs/audit
+  # was the only otlp-fed logs pipeline on this agent.
+  # Fixed as a PARTITION, not a drop: otlp now fans out to logs/audit (keeps event.name=="audit"
+  # -> krateo_audit, 365d) and a new logs/gateway (keeps the complement -> otel_logs, 7d), via a
+  # pair of complementary `filter` processors. The gateway records are the only per-request record
+  # of the LLM and MCP hops, so they move to the right retention rather than being deleted.
+  # WHY IT HAD TO BE FIXED IN THE COLLECTOR and not in each query: the two populations use
+  # DIFFERENT identity keys -- `user` on the access logs, `user.name` on the audit rows -- so a
+  # userAccessFilter written against either matches ZERO rows in the other while still returning a
+  # result. On installer#415's audit view that fails toward DISCLOSURE, because a predicate
+  # matching no row in the population being served does not restrict it. And krateo_audit's
+  # 8760h ttl was retaining access logs 52x longer than the pod logs they belong with.
+  # `logs` (filelog) is BYTE-UNCHANGED -- the 0.1.11 objection to paired filters was about adding
+  # otlp to `logs` and re-processing the pod-log firehose; this touches ~1.2k OTLP records/day.
+  # `filter` WAS VERIFIED PRESENT IN THE RUNNING IMAGE with `otelcol-contrib components` against
+  # a live agent pod BEFORE the config was written -- the lesson from otel-collector-deployment
+  # 0.3.9, which added `transform` to a chart whose custom image lacks it and crash-looped 057.
+  # helm template renders an invalid component reference perfectly cleanly; only the collector
+  # validates its own component set, at startup. Rendering is necessary, never sufficient.
   # 0.1.11 (observability#72, repo tag 3.1.19): gives the Krateo audit record its OWN logs
   # pipeline and its OWN ClickHouse table. Adds `logs/audit` (receivers [otlp] -> exporters
   # [clickhouse/audit]) plus a second named exporter instance writing `krateo_audit` with
@@ -3344,7 +3367,7 @@ components:
   # 0.1.9 (#122): traces pipeline redacts caller JWTs before ClickHouse — drops the
   # http.header.Authorization span attr + strips eyJ… tokens from exception/error/status
   # messages (backstop for the upstream kagent-tools JWT-in-span leak, amplified by per-user RBAC).
-  version: 0.1.12
+  version: 0.1.13
   deps:
   - otel-collector-deployment
   tier: observability
