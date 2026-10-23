@@ -237,7 +237,7 @@ Values worth knowing:
 | `componentValues.alert-provider.config.autopilotA2aUrl` | The agent that writes the root-cause analysis, `incident-agent`. With `features.agentGateway` the installer fills it with the gateway's `/api/a2a/<namespace>/incident-agent` route. |
 | `componentValues.alert-provider.config.compareModelConfig` | The ModelConfig slot whose model compares a firing with the alert's open Incidents, in one chat completion per firing: `gemini-flash` by default. Behind the agent gateway it runs on the gateway's `/llm/v1` route, like the agents. |
 | `componentValues.alert-provider.config.authnUrl` | Where the service exchanges its token for the Krateo JWT that authenticates its A2A calls through the agent gateway. With `features.agentGateway` the installer fills it. |
-| `componentValues.incident-controller.checks.readApiGroups` | The Krateo API groups check scripts may read (get/list/watch). The built-in `view` role covers no Krateo CRs; add a group here for scripts that read it. Never a wildcard: that includes Secrets. |
+| `componentValues.incident-controller.checks.readerRefresh` | How often incident-controller rewrites the check pods' read role from discovery (`5m`). Check scripts read every resource the cluster serves except Secrets and subresources; nothing to list. |
 | `componentValues.incident-controller.checks.networkPolicy.apiServer` | The check pods' only egress. Empty means the chart looks up the `kubernetes` Service and EndpointSlice in `default` while it renders; set it explicitly where that lookup is not allowed. |
 | `componentValues.incident-controller.controller.{pollInterval,settleWindow}` | Check cadence (`1m`) and how long a failing verify is retried (`5m`). |
 

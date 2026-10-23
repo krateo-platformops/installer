@@ -4323,12 +4323,12 @@ components:
   # precisely the precedent #482 set for alert-provider-crd.
   kind: IncidentControllerCrds
   chart: incident-controller-crds
-  version: 0.4.0
+  version: 0.5.0
   tier: observability
   feature: portal
 - name: incident-controller
   kind: IncidentController
-  version: 0.4.0
+  version: 0.5.0
   deps:
   - incident-controller-crd
   tier: observability
@@ -4359,7 +4359,7 @@ components:
   # migration; the Incident CRD ships in incident-controller-crd). Its release takes over
   # alerts.observability.krateo.io from the alert-troubleshooter-crd release, whose uninstall deletes
   # the CRD and every Alert: follow docs/configuration.md#upgrading-from-alert-troubleshooter first.
-  version: 0.2.52
+  version: 0.2.53
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -4423,7 +4423,7 @@ components:
   # {precondition, apply, verify} and an optional rollback. The service's authn identity
   # (config.authnUrl) authenticates its A2A calls. The chart has no observer thread, and its schema
   # rejects config.reportCooldown and config.snowplowUrl.
-  version: 0.2.52
+  version: 0.2.53
   deps:
   - alert-provider-crd
   - incident-controller-crd
