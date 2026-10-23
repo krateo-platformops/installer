@@ -9428,13 +9428,10 @@
                     "type": "string"
                   }
                 },
-                "readApiGroups": {
-                  "type": "array",
-                  "description": "Krateo API groups the check service account reads (get, list, watch). A wildcard or the core group would include Secrets.",
-                  "items": {
-                    "type": "string",
-                    "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)+$"
-                  }
+                "readerRefresh": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(ns|us|ms|s|m|h)$",
+                  "description": "How often incident-controller rewrites the check pods' read role from discovery: get, list and watch on every resource but Secrets and subresources."
                 },
                 "image": {
                   "type": "object",
