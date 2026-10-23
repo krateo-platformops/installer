@@ -378,7 +378,14 @@ components:
   # (39 files changed, every one under go/snowplow/), so there is no CRD in it to move.
   # 1.12.50: lockstep again. 4 files and 19855 BYTES ON BOTH SIDES vs 1.12.49, `diff -r` reports only
   # Chart.yaml's version. 1.12.50 is Go-only too (107 files, every one under go/snowplow/).
-  version: 1.12.51
+  # 1.12.54: lockstep again, and the pair MUST move together. 4 files and 19855 BYTES ON BOTH SIDES
+  # vs 1.12.51; `diff -r` on the two unpacked published charts reports ONE line, Chart.yaml's
+  # version -- the same 19855 bytes this chart has carried since 1.12.44. The 1.12.52-1.12.54 span
+  # touches no apis/ and no crds/ (84 files, every one under go/snowplow/ plus scripts), so there is
+  # no CRD in it to move. MIND THE NAME: this chart publishes as `snowplow-crds` (PLURAL, see
+  # chart:) -- probing `snowplow-crd` reports a vacuous NOT PUBLISHED at EVERY version, including
+  # ones that are live and Ready on the cluster.
+  version: 1.12.54
   tier: platform
   feature: portal
 - name: authn
@@ -422,6 +429,36 @@ components:
   # subjectaccessreviews ... Unauthorized" from snowplow in a single 24h window. Worth re-reading that
   # count after the roll — it is a free check on whether the fix landed.
 - name: snowplow
+  # 1.12.54: rolls 1.12.52 + 1.12.53 + 1.12.54 together. #860 FIXES #857, which was LIVE on 057 --
+  # keep-warm no longer re-seeds widgets from their boot-time CR snapshot, so an edited apiRef stops
+  # resolving at its old address for the pod's lifetime; the roll also clears 057's stale harvest.
+  # Go 1.25 -> 1.26.10 clears 20 stdlib + 5 x/net vulns. Also #819 (RBAC boot epoch settles before
+  # Ready, plus a refetch frame when an armed key rotates), #843 (faster per-item access check),
+  # #845 (external YAML->JSON conversion reused by content; every read still fetches), #846 (prewarm
+  # seeds only identities a real requester can hit), otel 1.45.0, klauspost/compress 1.18.7 with
+  # zstd kept OFF so browsers still get gzip.
+  # CHART IS CHART.YAML-ONLY vs 1.12.51, verified by unpacking BOTH published artifacts rather than
+  # reading the release note: 18 files and 94039 BYTES ON BOTH SIDES, `diff -rq` reports Chart.yaml
+  # as the single differing file, values.schema.json byte-identical. The whole delta is the image.
+  # WEDGE CHECK: the schema root is still `additionalProperties: FALSE`, but values.schema.json is
+  # byte-identical to 1.12.51, so no live key can newly become undeclared. Checked anyway against
+  # the live CR (2 top-level keys, env + service, both declared): 1.12.54 renders 11 docs, exit 0,
+  # and `helm template` emits ghcr.io/krateo-platformops/snowplow:1.12.54 out of appVersion --
+  # FORWARD PIN BUMP, not an image-tag override.
+  # image index sha256:3520d366bfd11d213ce3e81e8fbedd6db55be30fe144be0a8628a56f8cd1eb56, VERIFIED
+  # against the registry, NOT accepted from the peer that requested the roll. Commit
+  # 5575c592e4685e6e3dc9005c0136a2642a732bdd, amd64 + arm64.
+  # GO 1.26 url.Parse NOW REJECTS HOSTS WITH STRAY COLONS, so a malformed RESTAction endpoint that
+  # used to parse now fails. Checked on 057 BEFORE rolling: 27 endpoint Secrets (server-url /
+  # proxy-url) are all bare-host or host:port, and 242 RESTAction api stages carry ZERO absolute-URL
+  # paths -- all 88 templated paths are relative, so no host is ever synthesised. No exposure.
+  # MIND THE INSTRUMENT: the Secret key is `server-url`, NOT `server`, and there is no
+  # endpoints.templates.krateo.io CRD. Both wrong probes return a vacuous 0 that looks like a pass.
+  # COLD START: expect ~6m30 (measured 6m33, down from 12m+), still under the 480s structural seed
+  # ceiling. DO NOT RESTART IT, and do not call it wedged at minute 6.
+  # ROLLBACK: re-upgrade the installer to 0.3.450, which pins 1.12.51. The roll request proposed an
+  # image override back to 1.12.51 -- DO NOT. An image-tag override on THIS component takes effect
+  # and then PERMANENTLY MASKS every future chart bump (the krateo-sse-proxy 0.1.15 trap).
   # 1.12.51: #759 is the one that matters -- SECURITY. An access-filtered step with NO stage
   # filter now serves what the userAccessFilter refilter KEPT, never the raw service-account
   # response. #651/#760/#767/#778 are related fail-closed fixes. Also #799 (widgets someone has
@@ -1140,7 +1177,7 @@ components:
   # ROLLBACK: re-upgrade the installer to 0.3.429, which pins 1.12.49. Do NOT roll back via
   # componentValues.snowplow.image.tag -- an image-tag override on THIS component takes effect and
   # then PERMANENTLY MASKS every future chart bump (the krateo-sse-proxy 0.1.15 trap).
-  version: 1.12.51
+  version: 1.12.54
   deps:
   - snowplow-crd
   - authn
