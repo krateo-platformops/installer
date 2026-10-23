@@ -583,14 +583,16 @@
 {{- range $d := $components -}}{{- if eq $d.name "authn" -}}{{- $authnPort = $d.exposePort -}}{{- end -}}{{- end -}}
 {{- if and $isLB $top.Values.exposure.port -}}{{- $authnPort = $top.Values.exposure.port -}}{{- end -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "config" "authnUrl") "value" (printf "http://authn.%s.svc.cluster.local:%v" $top.Values.namespaces.krateo (int $authnPort))) -}}
-{{- /* And route its A2A call to incident-agent THROUGH the gateway so the minted JWT is gateway-
+{{- /* And route its A2A call to autopilot THROUGH the gateway so the minted JWT is gateway-
      validated and per-agent RBAC is enforced on that hop — not merely presented to a directly-dialed
      Service (kagent agents get this for free via the controller's proxy.url rewrite; a plain webhook
-     does not). Use the gateway's CONTROLLER A2A path (/api/a2a/<ns>/incident-agent) — the same route
-     the frontend uses for autopilot — which needs no x-kagent-host header and no app change. The
+     does not). Use the gateway's CONTROLLER A2A path (/api/a2a/<ns>/autopilot) — the same route the
+     frontend uses — which needs no x-kagent-host header. autopilot hands the RCA to incident-agent and
+     relays the answer; alert-provider reads incident-agent's tool calls for its evidence ledger from
+     kagent's session API next to this path, which only the gateway serves. The
      gateway is on its OWN listener port (not exposure.port). Fill-if-absent, so the chart default
-     (direct incident-agent:8080) correctly stands when the gateway is OFF and nothing enforces RBAC. */ -}}
-{{- $a2a := printf "http://%s.%s.svc.cluster.local:%v/api/a2a/%s/incident-agent" $gwName $top.Values.namespaces.krateo $gwPort $top.Values.namespaces.krateo -}}
+     (direct autopilot:8080) correctly stands when the gateway is OFF and nothing enforces RBAC. */ -}}
+{{- $a2a := printf "http://%s.%s.svc.cluster.local:%v/api/a2a/%s/autopilot" $gwName $top.Values.namespaces.krateo $gwPort $top.Values.namespaces.krateo -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "config" "autopilotA2aUrl") "value" $a2a) -}}
 {{- end -}}
 {{- /* HyperDX FRONTEND_URL (#100): in Gateway path mode point HyperDX's own SPA at the gateway origin it
