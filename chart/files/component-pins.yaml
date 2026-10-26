@@ -70,6 +70,10 @@ components:
   # 1.6.70: BYTE-IDENTICAL to 1.6.69 — verified by diffing the packaged templates, not assumed.
   # 1.6.71: BYTE-IDENTICAL to 1.6.70, verified by diffing the packaged templates. Lockstep only.
 - name: frontend-crd
+  # 1.8.11: lockstep with frontend, NO CRD change -- verified by pulling BOTH published charts:
+  # 48 files and 542,460 BYTES ON BOTH SIDES, and `diff -r` reports only the Chart.yaml version
+  # line. Moves solely to keep the pair equal. Byte-identical is a reason to RECORD it here, not
+  # a reason to leave the pin behind: a CRD roll without the matching image is what blanks pages.
   # 1.8.9: lockstep with frontend, one tag. THIS is the chart that carries the change -- the Listy
   # CRD gaining `ellipsis` and `footerNavigateTo`. The frontend chart itself is only an image bump.
   # Chart publishes as `frontend-crds` (plural) via the `chart:` override on this entry; the pin
@@ -288,7 +292,7 @@ components:
   # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
   # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
   # holds anyway because none is at the path that matters -- but check the path, not the presence.)
-  version: 1.8.10
+  version: 1.8.11
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1229,6 +1233,23 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+  # 1.8.11: frontend#500 the 424 calm state (pairs with snowplow 1.12.56, which starts emitting it)
+  # + frontend#501, which is installer#395 stage 1: the bearer token leaves the URL. BOTH SSE call
+  # sites move to fetch-SSE + `Authorization: Bearer` -- the bell (useGetEvents) and the
+  # action-dispatch onEventNavigateTo path (useHandleActions), which held its own EventSource
+  # outside sseClient. `src/` retains no native EventSource and no token-in-URL.
+  # Measured on 057 before this pin, as the baseline the fix is verified against: 111 token-in-URL
+  # rows and 45 no-credential 401s over 7 days on /events/notifications -- the second population
+  # being two further subscribers that had been 401ing all along because sseClient keys its
+  # connection map on the URL, so a tokened URL and a bare one were different keys.
+  # THE LIVE-REFRESH FIREHOSE SHIPS DORMANT (LIVE_REFRESH_FIREHOSE_ENABLED=false) and is enabled in
+  # its own PR. So after this roll the 45 vanish because the firehose opens no connection AT ALL --
+  # not because it now shares the bell's stream. A zero does not mean the firehose works.
+  # No new chart values keys: the top-level set is IDENTICAL to 1.8.10 (32 keys both sides), so no
+  # installer componentValues mirror is needed -- the installer#489 wedge class does not apply.
+  # ROLL ORDER within the release: frontend up BEFORE or WITH snowplow. If snowplow 1.12.56 leads,
+  # it answers 424 to a frontend with no branch for it -- a red cross with a Retry that cannot
+  # succeed. Cosmetic and self-healing on the pod swap, but expected rather than a regression.
   # 1.8.9: A ROLL-ORDER DEPENDENCY, not an optional bump. frontend-crds 1.8.9 is the ONLY version
   # whose Listy CRD admits `ellipsis`, and portal main renders three Listy widgets that carry it
   # (list-composition-detail-conditions, list-composition-detail-events, composition-incidents,
@@ -2013,7 +2034,7 @@ components:
   # ARTIFACT: the frontend chart is a PURE VERSION MOVE -- 14 files and 60758 BYTES ON BOTH SIDES vs
   # 1.8.4, only Chart.yaml. Every behaviour change rides in the IMAGE at tag 1.8.6, which is why the
   # CRD and the image must move TOGETHER: a CRD bump without the matching SPA blanks pages.
-  version: 1.8.10
+  version: 1.8.11
   deps:
   - frontend-crd
   - authn
