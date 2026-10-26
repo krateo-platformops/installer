@@ -125,3 +125,15 @@ Two `.Values.components` interactions (validated by name against the pins,
   (+ `tier: catalog`): a blueprint registered for the portal catalog but never
   auto-emitted. Anything else fails the render loudly — a typo'd component name would
   otherwise silently register a dead CompositionDefinition.
+- **Blueprint namespace** — a catalog append may also set `namespace` (convention
+  `krateo-bp-<name>`) to place its CompositionDefinition there instead of
+  `namespaces.krateo`, and `readerGroups` to let those groups see it on the Blueprints
+  page: the installer emits the namespace (kept on uninstall) and a namespaced `Role`
+  (never a ClusterRole) reading `compositiondefinitions`, bound to each group. A
+  blueprint's namespace is its visibility scope (portal#261). Only the definition moves:
+  registerOnly emits no Composition, so nothing is stranded in `namespaces.krateo`.
+  `readerGroups` without a blueprint `namespace` fails the render, because a reader Role
+  in `namespaces.krateo` would expose every platform definition; so does either key on a
+  pinned component. Moving a definition that already has instances is a
+  create-then-delete inside one helm upgrade, which is safe only with core-provider's
+  one-controller-per-version hand-over (core-provider#203).
