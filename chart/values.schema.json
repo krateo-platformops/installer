@@ -416,7 +416,7 @@
             "type": "string",
             "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
             "maxLength": 63,
-            "description": "Where this blueprint's CompositionDefinition is placed, instead of namespaces.krateo (convention: krateo-bp-<name>). Applies to the CompositionDefinition's placement ONLY, not to where any Composition is emitted, and only on an APPENDED registerOnly catalog blueprint (registerOnly emits no Composition). The namespace is created if absent and kept on uninstall. Moving an existing definition here needs core-provider with the one-controller-per-version hand-over (core-provider#203)."
+            "description": "Where this blueprint's CompositionDefinition is placed, instead of namespaces.krateo (convention: krateo-bp-<name>). Applies to the CompositionDefinition's placement ONLY, not to where any Composition is emitted, and only on an APPENDED registerOnly catalog blueprint (registerOnly emits no Composition). The namespace is created if absent and kept on uninstall, because deleting it would take any objects people put there with it; an empty krateo-bp-<name> left after an uninstall is expected. Moving an existing definition here needs core-provider with the one-controller-per-version hand-over (core-provider#203)."
           },
           "readerGroups": {
             "type": "array",
