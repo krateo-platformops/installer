@@ -412,6 +412,20 @@
             "type": "boolean",
             "description": "Catalog blueprint: Pass A registers this component's CompositionDefinition (making the blueprint available in the portal) but Pass B never emits a Composition for it \u2014 the operator/end-user instantiates it on demand. Use for tenant workload blueprints (e.g. openstack) that ship in the catalog rather than being auto-installed. Typically paired with tier: catalog."
           },
+          "namespace": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+            "maxLength": 63,
+            "description": "Where this blueprint's CompositionDefinition is placed, instead of namespaces.krateo (convention: krateo-bp-<name>). Applies to the CompositionDefinition's placement ONLY, not to where any Composition is emitted, and only on an APPENDED registerOnly catalog blueprint (registerOnly emits no Composition). The namespace is created if absent and kept on uninstall. Moving an existing definition here needs core-provider with the one-controller-per-version hand-over (core-provider#203)."
+          },
+          "readerGroups": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Groups that may see this blueprint on the Blueprints page: a Role reading compositiondefinitions in the blueprint `namespace`, bound to each group (never a ClusterRole). Requires `namespace` set to a blueprint namespace other than namespaces.krateo."
+          },
           "nodePort": {
             "type": "integer",
             "minimum": 30000,

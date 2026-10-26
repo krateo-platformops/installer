@@ -15,12 +15,76 @@
 {{/* registerOnly (catalog) blueprints are always registered while installDefinitions is on, so the
      blueprint appears in the portal; their Composition emission is suppressed in compositions.yaml. */}}
 {{- if or $c.registerOnly (eq (include "inst.featureEnabled" (list $ $c.feature)) "true") (eq (include "inst.compositionExists" (list $ $c.kind $c.name $c.version $allCRDs)) "true") }}
+{{/* Blueprint namespace (portal#261: a blueprint's namespace is its visibility scope). An APPENDED
+     registerOnly catalog blueprint may set `namespace` to place its CompositionDefinition there
+     instead of namespaces.krateo, and `readerGroups` to let those groups see it on the Blueprints
+     page: a namespaced Role (never a ClusterRole) reading compositiondefinitions, bound to each
+     group. Only the DEFINITION moves — registerOnly emits no Composition, so nothing is left behind
+     in namespaces.krateo; instances are created by their users wherever they choose.
+     Moving an existing definition here is create-then-delete within one helm upgrade (the new
+     object is applied before the old is removed); core-provider >= the one-controller-per-version
+     release (core-provider#203) hands the composition controller over without touching the
+     definition's instances. */}}
+{{- $cdNamespace := $.Values.namespaces.krateo }}
+{{- if $c.namespace }}
+{{- if not $c.registerOnly }}{{- fail (printf "components[%s]: `namespace` is only supported on registerOnly catalog blueprints" (toString $c.name)) }}{{- end }}
+{{- $cdNamespace = $c.namespace }}
+{{- end }}
+{{- if and $c.readerGroups (eq $cdNamespace $.Values.namespaces.krateo) }}
+{{- fail (printf "components[%s]: `readerGroups` needs `namespace` set to a blueprint namespace — a reader Role in %s would expose every platform CompositionDefinition" (toString $c.name) $.Values.namespaces.krateo) }}
+{{- end }}
+{{- if ne $cdNamespace $.Values.namespaces.krateo }}
+{{/* Emit the namespace unless it already exists and is not this release's (helm cannot adopt it,
+     and an existing namespace needs nothing). keep: uninstalling the installer must not delete a
+     namespace other things may have been put into; core-provider removes the definition's own
+     controller objects when the definition goes. */}}
+{{- $existingNs := lookup "v1" "Namespace" "" $cdNamespace }}
+{{- if or (not $existingNs) (eq (dig "metadata" "annotations" "meta.helm.sh/release-name" "" $existingNs) $.Release.Name) }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $cdNamespace }}
+  labels:
+    krateo.io/blueprint: {{ $c.name }}
+  annotations:
+    helm.sh/resource-policy: keep
+{{- end }}
+{{- with $c.readerGroups }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: blueprint-readers
+  namespace: {{ $cdNamespace }}
+rules:
+  - apiGroups: ["core.krateo.io"]
+    resources: ["compositiondefinitions"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: blueprint-readers
+  namespace: {{ $cdNamespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: blueprint-readers
+subjects:
+  {{- range $g := . }}
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: {{ $g | quote }}
+  {{- end }}
+{{- end }}
+{{- end }}
 ---
 apiVersion: core.krateo.io/v1alpha1
 kind: CompositionDefinition
 metadata:
   name: {{ $c.name }}
-  namespace: {{ $.Values.namespaces.krateo }}
+  namespace: {{ $cdNamespace }}
   labels:
     # NB: app.kubernetes.io/managed-by is intentionally NOT set — helm forces it to
     # "Helm" on every release resource, so a chart-set value never converges and makes

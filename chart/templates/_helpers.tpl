@@ -490,6 +490,10 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- range $o := (.Values.components | default list) -}}
 {{- if and (kindIs "map" $o) (hasKey $o "name") -}}
 {{- if hasKey $known (toString $o.name) -}}
+{{/* namespace/readerGroups place a blueprint's CompositionDefinition in its own namespace; they are
+     for APPENDED registerOnly catalog blueprints only (definitions.yaml). A pinned component's
+     definition stays in namespaces.krateo, so refuse rather than silently ignore them. */}}
+{{- if or (hasKey $o "namespace") (hasKey $o "readerGroups") -}}{{- fail (printf "components[%s]: `namespace`/`readerGroups` apply only to appended registerOnly catalog blueprints, not to a pinned component" (toString $o.name)) -}}{{- end -}}
 {{- $fields := dict -}}
 {{- range $k := (list "version" "registerOnly" "tier" "repo" "chart") -}}
 {{- if hasKey $o $k -}}{{- $_ := set $fields $k (index $o $k) -}}{{- end -}}
