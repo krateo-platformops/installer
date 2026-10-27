@@ -70,6 +70,47 @@ deps are Ready, so an under-capacity upgrade degrades to *slow*, not *broken*.
   scheduling). That is the composition-status aggregation gap tracked in `core-provider#72`,
   not an installer bug — but do not read `deployed` as "every pod is up".
 
+### The pre-roll gate
+
+Two scripts in [`hack/`](../../hack) are the gate. Run both before any `helm upgrade` of a live
+platform; neither touches the cluster destructively, and both **require the kube context as an
+argument** rather than falling back to `current-context` — which matters, because a context switched
+elsewhere on the machine is invisible from here.
+
+```bash
+# 1. Does the new version add, remove, or re-own any object ON THIS CLUSTER?
+hack/render-diff.sh <fromVersion> <toVersion> --from-cluster <kube-context>
+#    exit 0 = no churn   2 = VOID, a render was too small to mean anything   3 = objects changed
+
+# 2. Snapshot composition identity, to diff after the roll.
+hack/capture-compositions.sh <kube-context> before.tsv
+#    ... roll ...
+hack/capture-compositions.sh <kube-context> after.tsv
+diff <(cut -f1-4 before.tsv) <(cut -f1-4 after.tsv)
+```
+
+**Use `--from-cluster`, not `--defaults`.** A defaults render predicts nothing about a configured
+cluster, and the failure is a confident wrong answer rather than an error. Measured on this estate:
+`0.3.455 → 0.3.458` renders as **+1 `Secret/hyperdx-admin-creds`** against chart defaults — correct
+for a default profile, because installer#526 made that gate follow `alert-provider`'s own feature —
+and as **no churn at all** against krateo-057's live values, which run `specialistAgents=true`. Same
+version pair, opposite answers, only the value source differing. `--defaults` prints that it is not a
+prediction, for exactly this reason.
+
+**What a clean identity diff looks like.** Expect **exactly** the components whose version moved to
+change uid, and nothing else: a component version bump recreates its composition CR under the new
+served version. On the `0.3.458 → 0.3.459` roll (snowplow 1.12.54 → 1.12.56), 2 of 83 uids changed
+and they were `snowplow` and `snowplow-crd`. Any *other* row changing uid is an uninstall/reinstall
+nobody asked for, and the rows that did **not** change are the evidence — which is why the capture
+takes all of them and refuses to produce a file at all if any CRD read failed.
+
+**Also assert the value set before upgrading**, because `-f` is only as good as the file: the live
+7-key set (`bootstrap`, `componentValues`, `exposure`, `features`, `hitlApproval`, `registryAuth`,
+`vertexAI`), no `default:` key under any `componentValues` entry, and **no `components` key at all** —
+a `.Values.components` overlay is what lets a stale pin survive a chart bump (installer#524).
+
+**Never `--reuse-values`.** See the caveats below.
+
 ## Rollback
 
 > **Do not use `helm rollback` to roll back component versions — validated: it does not move the platform.**
