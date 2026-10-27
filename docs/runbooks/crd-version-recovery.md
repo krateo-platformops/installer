@@ -96,6 +96,20 @@ healthy, bumped         versions=[vacuum(storage), vX(served)] storedVersions=[v
 DAMAGED                 storedVersions contains a name absent from spec.versions
 ```
 
+### So "`vacuum` is absent" is NOT the damage state, and any repair keyed on it does harm
+
+This matters beyond diagnosis, because it is the difference between a correct fix and a destructive
+one. `vacuum` is the storage version in **59 of the 59** CRDs that have one on krateo-057 — zero
+exceptions. So restoring it unconditionally, on the grounds that the injection is idempotent,
+necessarily **demotes a never-bumped CRD's only version to `storage: false` and adds `vacuum` to
+`status.storedVersions`** — which the apiserver will not release without a storage migration.
+
+On 057 that would permanently alter **9 healthy CRDs** to repair a state that occurs **0** times.
+
+A repair must therefore key on `status.storedVersions` naming a version `spec.versions` does not —
+never on the absence of `vacuum`. "Idempotent" is a claim about a function, not about a cluster; the
+question it skips is what the function does to the objects that are *not* in the failure state.
+
 ### Why it never self-heals
 
 `vacuum` is constructed in exactly one place — `generation.go:85-87` inside `AppendVersion` —
