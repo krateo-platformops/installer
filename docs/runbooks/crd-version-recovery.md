@@ -192,6 +192,109 @@ do not leave a second served version in place while anything else reconciles.
 returns `0` across all 68 CRDs on a healthy cluster: a false negative that looks exactly like a
 clean finding. That mistake was made while writing this runbook.
 
+## Failure C — `installer-platform` loops `pending-rollback` after a pin bump pruned a version
+
+**EXECUTED AND VERIFIED on the demo parent, 2026-10-27.** Unlike the two routes above, this
+procedure has been run, and the honest scope is stated at the end.
+
+Symptom: a new `pending-rollback` revision every ~6 minutes, each targeting the previous stuck one,
+and the controller logging
+
+```
+rollback failed: unable to build kubernetes objects from current release manifest:
+resource mapping not found for name "frontend" ... no matches for kind "Frontend"
+in version "composition.krateo.io/v1-8-11"
+```
+
+while the Installer CR reports `Ready=False`, *"waiting for an in-flight helm operation to settle"*.
+
+### The pruning is NOT the fault
+
+A `1.8.11 -> 1.8.12` pin bump prunes `v1-8-11` from the `frontends` CRD. **That is normal:**
+krateo-057 did exactly the same on the same step and did not wedge — its compositions were recreated
+at `v1-8-12` within the reconcile and its release never went pending. The fault is an *interrupted*
+upgrade leaving the release `pending-rollback`, after which the rollback cannot build a manifest that
+references the pruned version.
+
+### Why it never self-heals
+
+```
+composition.go:1244   isIncompleteHelmOperation = {pending-install, pending-upgrade,
+                                                  pending-rollback, uninstalling}   -- `failed` NOT in it
+composition.go:301    pendingFor < pendingOperationGrace (default 5m, env-overridable)
+                        -> report the pending condition, return UpToDate, DO NOTHING
+composition.go:328    past the grace -> Rollback once, targeting ReleaseVersion: rel.Revision
+```
+
+`Observe` enters stuck-release recovery and **early-returns before reaching the repair that exists
+for this exact manifest problem**. plumbing's `dropUnservedFromStoredManifest` runs at
+`reconcile.go:109`, step **1.5 of the UPGRADE path**. The `hc.Rollback` call never reaches it. So the
+loop cannot repair itself however long it runs, and **a controller restart does not clear it.**
+
+### DO NOT re-serve the pruned version
+
+It would work, and that is the danger. The thing failing is the *rollback*, so making it buildable
+makes the rollback **succeed** — reverting the whole umbrella to the old release's pin set and then
+rendering compositions at a version that no longer exists. Same lesson as the portal repair: clearing
+a blocker while a teardown is pending **authorises the teardown**. Go forward, never back.
+
+### The procedure
+
+1. **Wait for a NEW pending revision to appear.** You are then inside the grace period, during which
+   the controller sets the pending condition and takes no action — a window you can derive rather
+   than guess at. Check `pendingGraceEnvvar` on the `installers-v<version>-controller` deployment
+   rather than assuming 5 minutes.
+2. **Back up the DEPLOYED revision's secret first.** Step 1.5 does not read the stored manifest, it
+   **rewrites it in place** — `rel.Manifest = repaired; actionConfig.Releases.Update(rel)`, on
+   `Releases.Deployed(releaseName)`. Skip this and the pristine release is gone.
+3. **Back up, then delete, the `pending-rollback` secrets** — inside that window, mode 600.
+4. The newest revision is now the deployed one, so `isIncompleteHelmOperation` is false, `Observe`
+   reaches the upgrade path, step 1.5 sanitises the stored manifest, and the render proceeds.
+
+Prefer deleting the pending secrets over flipping a status to `failed`: `failed` converges normally
+(it is not in the set above), but editing it means rewriting a gzipped release payload, which is a
+larger change than a delete — and restoring the two backed-up secrets reverts a delete exactly.
+
+### Afterwards: the release is FORWARD-ONLY
+
+The deployed revision's manifest has had the unmappable documents dropped, so **rolling back to it
+will not recreate them.** With `helmMaxHistory = 3` (`composition.go:50`) there may be no revision
+left that restores those compositions. Treat the cluster as having no rollback target until the
+sanitised revision ages out of the retained three, and label any backup taken afterwards
+**POST-SANITIZE** — a backup whose provenance is stated is usable; one whose provenance is assumed
+traps whoever restores it expecting the old release.
+
+### Never ship an engine fix and the operation it fixes in the same upgrade
+
+Generalised from the acmp session's analysis while planning the re-home, and it applies well beyond
+this one case.
+
+A single `helm upgrade` that **both** bumps core-provider **and** changes something that triggers a
+CompositionDefinition move **races the fix against the thing it fixes.** The core-provider Deployment
+rolls during the upgrade, and the old pod keeps serving reconciles until the new one is Ready — while
+the post-upgrade hook has already patched the CR, so `installer-platform` re-renders and performs the
+create-then-delete. If the **old** engine is still the active reconciler at that moment, the race is
+reachable again and the new engine's fix is irrelevant.
+
+**Split it into two upgrades:**
+
+```
+phase 1   bump the engine ONLY -- the moving entry unchanged
+          wait for the new core-provider to be rolled AND the platform settled
+phase 2   the same chart, adding only the namespace / readerGroups change
+```
+
+The general rule: **a fix only protects operations that begin after it is the one running.** Shipping
+both in one transaction means the protected window and the dangerous window overlap, and which one
+wins is a scheduling accident. This is the deployment-time twin of the status-write window above — in
+both cases the fix exists and the question is only whether it is *in effect yet*.
+
+### Scope, stated so nobody over-cites this
+
+The run exercised the **sanitize plus a plain create**. Step 4.7's *adopt* never ran, because the
+dropped compositions were not live — the step 1.5 comment assumes they are. So this is not evidence
+the adopt path works.
+
 ## The same shape one layer down: a controller's own write window
 
 Everything above is the **apiserver's** version-dependent handling deciding what a reader sees.
