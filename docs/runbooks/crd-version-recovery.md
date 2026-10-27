@@ -326,11 +326,35 @@ halves of the destructive path are gated (`if skipCRD || successor != nil`). Equ
 ref is used only to *add* a successor, never to rule one out, so the failure direction stays "miss a
 successor", never "invent one".
 
-**Until 2.13.33 is verified and running, hold the operation**: do not perform a CompositionDefinition
-namespace move. Ordinary component pin bumps and engine bumps are unaffected — they update a
-definition in place and delete/recreate the *composition CR*, never the definition. Measured across
-that path on the 0.3.458 roll: exactly 2 of 83 composition uids changed, and they were the two
-components whose version moved.
+**The hold is LIFTED on core-provider >= 2.13.33, and only there.** Proven end to end on 2026-10-27,
+first on a demo-sized disposable GKE cluster and then on the real demo parent — a `selfservice-krateo`
+re-home across namespaces, with the objects the bug destroys left intact:
+
+```
+acme    uid f0e51514   UNCHANGED, Ready, no deletionTimestamp
+globex  uid 369e0ba7   UNCHANGED, Ready, no deletionTimestamp
+CRD     uid 2cc2d8ec   UNCHANGED, not terminating
+old CD began deleting 11:41:04Z   new CD Ready ~11:41:30Z   cdc + CRB subject moved
+real tenants can list the definition ONLY in the new namespace, not in krateo-system
+```
+
+**Below 2.13.33 the hold still stands** — installer 0.3.455/0.3.456 pin core-provider 2.13.30 and
+0.3.457 pins 2.13.31, all of which carry the race. Their release notes are annotated accordingly.
+
+**And it only holds with the two-phase sequence** above: a single upgrade that both bumps the engine
+and adds the `namespace` key races the fix against the operation. One demonstration is not a
+controlled pair — we have one run showing 2.13.33 is safe and one earlier run showing 2.13.30 is not,
+on different clusters. That is enough to proceed and not enough to call the race characterised.
+
+One caveat the acmp session volunteered against its own result, worth keeping: core-provider runs at
+INFO while both the hand-over and destructive-path lines are DEBUG, **so their absence from the log
+proves nothing.** The verdict rests on the uids and the live state. A detector that cannot fire reads
+exactly like a system that did nothing wrong.
+
+Ordinary component pin bumps and engine bumps were never affected — they update a definition in place
+and delete/recreate the *composition CR*, never the definition. Measured across that path on the
+0.3.458 roll: exactly 2 of 83 composition uids changed, and they were the two components whose
+version moved.
 
 **Do not pin backwards to avoid any of this.** Below core-provider 2.13.29 the #199
 standalone-composition protection is lost, and that is live and load-bearing on krateo-057.
