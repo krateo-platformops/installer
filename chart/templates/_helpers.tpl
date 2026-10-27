@@ -261,6 +261,48 @@ components:
      in chart-inspector (server-side), unlike client-side `helm template` which returns
      empty. So short-circuit via inst.crdExists (an apiextensions lookup, always valid)
      before doing the typed Composition lookup. */}}
+{{/* inst.readyFromConditions — the ONE place this chart decides whether a dep counts as ready.
+     args: (list <conditions list>). Returns "true" or "".
+
+     Split out of inst.ready so it can be TESTED: inst.ready has to `lookup` the live object,
+     and `helm template` disables lookup, so the decision was previously unverifiable except
+     against a cluster. Shipping a gate nobody can exercise is how the version that only
+     accepted "True" went unexamined for as long as it did.
+
+     READY, or HONESTLY UNKNOWN. A dep satisfies this gate when Ready is True, OR when it is
+     Unknown for the specific reason that the cdc evaluated NONE of its managed children
+     (core-provider#165). Those are different claims and only the first means "healthy":
+     ZeroEvidence means "we do not know", and a dependant must not be blocked forever on
+     ignorance that is a steady state rather than a transient.
+
+     KEYED ON `reason`, NEVER ON MESSAGE TEXT. The caveat message is prose and will be
+     reworded; a gate reading prose breaks silently when it is.
+
+     AND NEVER ON `Unknown` ALONE. A genuinely converging child also reports Unknown, and
+     that one MUST block — it is the transient this gate exists to wait for. Accepting bare
+     Unknown would turn every mid-creation dep into "ready" and let dependants render against
+     children that do not exist yet.
+
+     WHY THE CONSUMER GOES FIRST. 8 components dep on model-configs (installer-agent,
+     krateo-autopilot, incident-agent, authn-agent, snowplow-agent, frontend-agent,
+     clickstack-agent, core-provider-agent), and model-configs is one of exactly two
+     compositions on krateo-057 at 100% unevaluated children. So the moment the cdc starts
+     emitting Unknown, those 8 are gated unless this already accepts it. Landing it first is
+     a no-op until then: a reason nothing emits is never matched. */}}
+{{- define "inst.readyFromConditions" -}}
+{{- $conds := index . 0 -}}
+{{- $r := "" -}}
+{{- range $conds -}}
+{{- if eq (.type | toString) "Ready" -}}
+{{- $s := .status | toString -}}
+{{- if eq $s "True" -}}{{- $r = "true" -}}
+{{- else if and (eq $s "Unknown") (eq (.reason | toString) "ZeroEvidence") -}}{{- $r = "true" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $r -}}
+{{- end -}}
+
 {{- define "inst.ready" -}}
 {{- $top := index . 0 -}}{{- $kind := index . 1 -}}{{- $name := index . 2 -}}{{- $ver := index . 3 -}}{{- $allCRDs := index . 4 -}}
 {{- $r := "" -}}
@@ -273,9 +315,7 @@ components:
      interface {}.conditions") and chart-inspector returns 500, wedging the umbrella mid-chain.
      Coalesce .status to an empty dict so a status-less dep cleanly reads as not-ready. */}}
 {{- $st := $o.status | default dict -}}
-{{- range ($st.conditions | default list) -}}
-{{- if and (eq .type "Ready") (eq (.status | toString) "True") -}}{{- $r = "true" -}}{{- end -}}
-{{- end -}}
+{{- $r = include "inst.readyFromConditions" (list ($st.conditions | default list)) -}}
 {{- end -}}
 {{- end -}}
 {{- $r -}}
