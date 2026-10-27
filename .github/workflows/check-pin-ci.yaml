@@ -1,0 +1,49 @@
+name: check-pin-ci
+
+# Installer-specific guard: a bumped component pin must point at a commit whose OWN repo CI
+# was green.
+#
+# WHY. On 2026-10-27 this repo pinned frontend 1.8.12 and rolled it to krateo-057. That tag
+# is commit 191e7f65, whose `test` check was FAILURE, with 52 tests silently not collecting.
+# Nothing in the path objected: the pin PR's other checks are all about the CHART, and the
+# component's release workflows are tag-triggered and independent of `test`, so a tag cuts
+# cleanly over a red main. A green release workflow is not a green repo.
+#
+# HOW IT RESOLVES THE REPO. No hardcoded map: a published chart names its own `sources` and
+# its `appVersion` is the app repo's tag, so chart version -> appVersion -> tag -> sha ->
+# that repo's check-runs. CHECK-RUNS rather than a guessed workflow filename, because
+# core-provider has no `test.yaml` at all (its tests run as `test-core-provider` et al) and
+# a filename lookup returned "unknown" and PASSED — a guard that cannot find the tests
+# reads exactly like one that found them green.
+#
+# NOT a required status check: adding one needs an org ruleset change. It runs unfiltered
+# anyway — a pin can be bumped from either chart/files/component-pins.yaml or
+# chart/Chart.yaml, and filtering on a subset of paths is how the next one gets through.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  pin-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Assert every bumped pin's component CI was green at its tagged commit
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/check-pin-ci.py
