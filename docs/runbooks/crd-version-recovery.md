@@ -284,6 +284,46 @@ phase 1   bump the engine ONLY -- the moving entry unchanged
 phase 2   the same chart, adding only the namespace / readerGroups change
 ```
 
+**There is a second, independent and worse reason, and #212 does NOT cover it** (core-provider#214).
+Collapsing the phases does not merely race the engine bump — it produces a CRD **deletion**:
+
+```
+skipCRD = len(lst) > 1                 from GetCompositionDefinitions(GroupKind)  -- VERSION-AGNOSTIC
+                                       but filtered on Status.CurrentGVK() -- so status-keyed
+successor                              matched on the GVK being torn down        -- VERSION-SPECIFIC
+gate:  if skipCRD || successor != nil  -> keep the CRD
+```
+
+A sibling definition on the **same Kind at a different version** is exactly who the CRD is being kept
+for — and it is *correctly* not a "successor" for the version being torn down. So:
+
+```
+CD-old at v0-2-45 deleted; CD-new at v0-2-46 exists, not yet reconciled
+  lst misses CD-new (no status)      -> skipCRD = false
+  successor for v0-2-45              -> nil  (CD-new targets v0-2-46)
+  Undeploy SkipCRD=false             -> CRD DELETED, taking CD-new's Kind with it
+```
+
+**Which path the installer can reach, measured.** The installer declares **65 distinct Kinds with
+zero overlap** — no two component pins share a `kind`, so it never emits two definitions on one Kind
+by itself. The only operation that creates a transient second definition for one Kind is the
+installer#522 re-home. Therefore:
+
+| what you do | the two definitions | outcome |
+|---|---|---|
+| version bump alone | one definition | not reachable |
+| namespace move alone (phase 2) | **same** version | `successor` found ⇒ `\|\| successor != nil` keeps the CRD — **covered by #212** |
+| both in one upgrade | **different** versions | successor nil, `skipCRD` false ⇒ **CRD deleted — NOT covered** |
+
+So the two-phase split prevents this as well as the engine race, and the collapsed form is worse than
+a race: a race leaves you diagnosing a teardown, a deleted CRD takes the Kind with it.
+
+Worth noting #212's own comment at `compositiondefinitions.go:1803` already says `skipCRD` "misses a
+successor that has not reconciled yet" and relies on `successor != nil` to cover it. That reasoning
+is correct for the same-version case and silently incomplete for the different-version one — a
+disjunction whose second term does not span the first term's gap. The same shape as the conjunction
+in #210, one gate over.
+
 The general rule: **a fix only protects operations that begin after it is the one running.** Shipping
 both in one transaction means the protected window and the dangerous window overlap, and which one
 wins is a scheduling accident. This is the deployment-time twin of the status-write window above — in
