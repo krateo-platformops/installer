@@ -104,6 +104,32 @@ and they were `snowplow` and `snowplow-crd`. Any *other* row changing uid is an 
 nobody asked for, and the rows that did **not** change are the evidence — which is why the capture
 takes all of them and refuses to produce a file at all if any CRD read failed.
 
+### The post-roll gate
+
+One more script, and it is the one that keeps a roll honest: the expected changes are declared on
+the command line **before** the upgrade, so a surprising diff cannot be rationalised afterwards.
+
+```bash
+hack/verify-roll.sh <kube-context> before.tsv \
+  --expect-uid-change krateo-sse-proxy \
+  --expect-zero-evidence event-health --expect-zero-evidence model-configs
+#    exit 0 = exactly what was declared   2 = verdict WITHHELD   3 = identity   4 = health
+```
+
+It treats `Ready=Unknown` with reason **`ZeroEvidence`** as healthy-but-unmeasured (core-provider#165,
+engine 2.13.36+: the child-health rollup evaluated zero children and the engine declines to claim
+health it never measured), while failing on `Ready=Unknown` for any **other** reason — an
+unrecognised reason being the case nobody has planned for. `Ready=False` always fails.
+
+> **Its own first version was structurally incapable of failing**, and that is worth knowing before
+> trusting any gate here. The identity diff used `join -j1`; BSD/macOS `join` has no `-j` flag, so it
+> errored to stderr and emitted zero rows — the "did anything unexpected change?" loop iterated an
+> empty list and printed `ok identity matches the declared expectation exactly`. Only the detector
+> proof found it: four degradations, three caught, and the one missed was the single case the tool
+> exists for. The comparison is now in python and names added/removed rows instead of inferring them
+> from a count mismatch. **A gate that reports "ok" makes two claims — that the thing is fine, and
+> that it looked. Degrade it and check which one you are getting.**
+
 **Also assert the value set before upgrading**, because `-f` is only as good as the file: the live
 7-key set (`bootstrap`, `componentValues`, `exposure`, `features`, `hitlApproval`, `registryAuth`,
 `vertexAI`), no `default:` key under any `componentValues` entry, and **no `components` key at all** —

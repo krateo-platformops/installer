@@ -359,36 +359,6 @@ mandatory:
 So phase 2 of the re-home must carry the namespace/readerGroups change **and nothing else**. A chart
 version bump smuggled into that same apply re-opens a hole that neither shipped fix covers.
 
-### And a fourth reason, whose symptom is a HANG (core-provider#205)
-
-A direct consequence of #214's fix, and the reason the two-phase rule outlives both #217 and #218.
-
-`Delete` now keeps the shared CRD whenever **any** live definition still needs the Kind — that is
-#214 fixed. But `Observe` only reports the definition gone when a successor holds the same Kind
-**and version**. So after a collapsed re-home across versions, the old definition sits in
-`Terminating` **forever**: nothing is destroyed, and the operation never finishes.
-
-**Fixed on main as #222, which is OPEN — it is NOT in 2.13.36.** Flip this when it tags.
-
-The progression is worth keeping, because it shows the rule is not getting less necessary:
-
-| engine | a collapsed re-home does |
-|---|---|
-| < 2.13.33 | races the engine bump |
-| < 2.13.35 | **deletes the shared CRD**, taking the new definition's Kind with it (#214) |
-| < 2.13.36 | **loses the instances** a surviving definition would have adopted (#218) |
-| 2.13.36 | **hangs** — the old definition never leaves `Terminating` (#205) |
-
-Each fix traded a worse failure for a better one. A hang is the best of the four and still not one
-anybody wants, so **phase 2 carries the namespace/readerGroups change and nothing else**, on every
-engine version, until #222 ships and is verified.
-
-**Not reachable on krateo-057, measured here rather than taken on report** (2026-10-27): 68
-CompositionDefinitions, **68 distinct Kinds, none held by more than one definition**, and **none
-Terminating**. The installer never emits two definitions on one Kind by itself, so the only way to
-reach any of the four is the installer#522 re-home — which is exactly the operation the two-phase
-split governs.
-
 The general rule: **a fix only protects operations that begin after it is the one running.** Shipping
 both in one transaction means the protected window and the dangerous window overlap, and which one
 wins is a scheduling accident. This is the deployment-time twin of the status-write window above — in
