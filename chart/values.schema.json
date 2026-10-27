@@ -5089,6 +5089,17 @@
                 }
               }
             },
+            "auth": {
+              "type": "object",
+              "title": "authn base URL",
+              "additionalProperties": false,
+              "properties": {
+                "urlAuthn": {
+                  "type": "string",
+                  "description": "Base URL for RS256/JWKS verification on /events and /notifications; the JWKS document is derived as <urlAuthn>/.well-known/jwks.json. Unset, the chart derives authn in the component's own namespace, which is correct for every installer-managed deploy. Set it only to point at a non-co-located authn. Verification is mandatory: the proxy refuses to start with no JWKS source."
+                }
+              }
+            },
             "clickhouse": {
               "type": "object",
               "additionalProperties": false,
@@ -5118,6 +5129,58 @@
             },
             "listenAddr": {
               "type": "string"
+            },
+            "otel": {
+              "type": "object",
+              "title": "OpenTelemetry export",
+              "description": "OTLP export, default-off, chart 0.1.16+ (installer#519: this is the first component to expose it). Each key reaches the pod as an env var ONLY when set here, so an omitted key leaves the binary's own default authoritative. Unlike core-provider's block there is no `endpoint` default to commit: the chart derives the node-local daemonset collector in the component's own namespace, which is the only collector on the estate with an OTLP receiver.",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Master gate (OTEL_ENABLED). Turns on sse_proxy_events_delivered_total, _dropped_total, _poll_errors_total and _connected_clients, which are otherwise computed on every poll and discarded. Needs the binary at 1.2.0+ for the drop counter."
+                },
+                "tracing": {
+                  "type": "boolean",
+                  "description": "OTEL_TRACING_ENABLED. Omit to inherit `enabled`; set it only to diverge. Setting this true with `enabled` false DOES turn tracing on \u2014 the per-signal flag overrides the master in the binary \u2014 and the chart emits the endpoint for that case too."
+                },
+                "metrics": {
+                  "type": "boolean",
+                  "description": "OTEL_METRICS_ENABLED. Omit to inherit `enabled`; set it only to diverge."
+                },
+                "endpoint": {
+                  "type": "string",
+                  "description": "OTEL_EXPORTER_OTLP_ENDPOINT. Omit it: the chart derives otel-collector-daemonset-opentelemetry-collector in the component's namespace. Set it only for a collector that is not co-located. There is deliberately no `protocol` key, in this schema or the chart's: the binary builds the OTLP-HTTP exporters directly and they ignore OTEL_EXPORTER_OTLP_PROTOCOL, so the key would validate, reach the pod and change nothing."
+                }
+              }
+            },
+            "rbacScoping": {
+              "type": "object",
+              "title": "Per-caller event scoping",
+              "description": "Filters the SSE stream to the namespaces a caller may read, resolved with SubjectAccessReviews (sse-proxy#29). Default-off. Enabling it also creates the ClusterRole and binding the proxy needs, in the component's own chart \u2014 the two cannot be separated, because the flag without the grants makes resolveRequestScope fail, and that failure answers HTTP 500, killing every /notifications request on the cluster including an admin's. Chart 0.1.16+.",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "RBAC_SCOPING_ENABLED, plus the grants it requires. A scoped non-admin loses every CLUSTER-SCOPED event, since those carry no namespace to allow."
+                },
+                "verb": {
+                  "type": "string",
+                  "description": "RBAC_SCOPING_VERB. Omit for the binary's default (list)."
+                },
+                "resource": {
+                  "type": "string",
+                  "description": "RBAC_SCOPING_RESOURCE. Omit for the binary's default (events)."
+                },
+                "apiGroup": {
+                  "type": "string",
+                  "description": "RBAC_SCOPING_APIGROUP. Omit for the binary's default (the core group)."
+                },
+                "cacheTTL": {
+                  "type": "string",
+                  "description": "RBAC_SCOPING_CACHE_TTL as a Go duration. Omit for the binary's default (60s). This is how long an RBAC change takes to affect a caller's scope."
+                }
+              }
             },
             "resources": {
               "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
