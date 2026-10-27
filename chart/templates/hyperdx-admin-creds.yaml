@@ -2,15 +2,34 @@
   hyperdx-admin-creds — the HyperDX admin login the alert-provider component's bootstrap Job uses
   to register/log in headlessly and mint the `hyperdx-api-token` Secret its handler reads. The
   alert-provider chart deliberately does NOT ship this (never commit a password) — its bootstrap-job
-  documents that the INSTALLER generates it. So we do, whenever alert-provider can be deployed
-  (the specialistAgents feature). The bootstrap Job REGISTERS this admin on first-boot HyperDX and logs in
-  with it thereafter, so any stable email/password works — email is fixed, password is generated.
+  documents that the INSTALLER generates it. So we do, whenever alert-provider can be deployed.
+  The bootstrap Job REGISTERS this admin on first-boot HyperDX and logs in with it thereafter, so any
+  stable email/password works — email is fixed, password is generated.
+
+  THE GATE IS DERIVED FROM alert-provider's OWN `feature` IN files/component-pins.yaml, never from a
+  feature name written here. It used to read `specialistAgents`, which was correct until #482 moved
+  alert-provider and alert-provider-crd to `portal` so a portal-only install could install
+  krateo-observability. The components moved; this hand-written Secret did not, and a portal-only
+  install then deployed alert-provider with no admin creds: the bootstrap Job sat in
+  CreateContainerConfigError `secret "hyperdx-admin-creds" not found`, never minted
+  hyperdx-api-token, and the handler never started. Measured on the demo parent at 0.3.454 — 43
+  minutes wedged. 057 masked it by running specialistAgents=true.
+
+  Deriving the gate means the next feature move carries this Secret with it. If alert-provider is not
+  pinned at all (retired), nothing is emitted. incident-controller consumes hyperdx-api-token, NOT
+  these admin creds, so it is deliberately not part of this condition.
 
   `lookup` reuses an existing password on re-render so reconciles never rotate it (which would lock the
   bootstrap out of the HyperDX admin it already registered); a fresh one is generated only on first create.
   Composition mode only (owned by the Installer composition/cdc, like secret.yaml/imagepull-secret.yaml).
 */}}
-{{- if and ((include "inst.featureEnabled" (list $ "specialistAgents")) | trim) (not .Values.bootstrap.coreProvider.enabled) }}
+{{- if not .Values.bootstrap.coreProvider.enabled }}
+{{- $alertProvider := dict }}
+{{- range $c := (include "inst.componentsYaml" $ | fromYaml).components }}
+{{- if eq (toString $c.name) "alert-provider" }}{{- $alertProvider = $c }}{{- end }}
+{{- end }}
+{{- if $alertProvider.name }}
+{{- if eq (include "inst.featureEnabled" (list $ $alertProvider.feature)) "true" }}
 {{- $ns := .Values.namespaces.krateo }}
 {{- $existing := lookup "v1" "Secret" $ns "hyperdx-admin-creds" }}
 {{- $pw := "" }}
@@ -36,4 +55,6 @@ type: Opaque
 stringData:
   email: admin@krateo.local
   password: {{ $pw | quote }}
+{{- end }}
+{{- end }}
 {{- end }}
