@@ -307,6 +307,9 @@ components:
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
   # rather than assumed. Lockstep only.
 - name: snowplow-crd
+  # 1.12.56: carried in lockstep with snowplow 1.12.56. CRD payload UNCHANGED -- verified by
+  # unpacking: 4 files / 19,855 bytes on BOTH sides, identical outside Chart.yaml. Lockstep is
+  # the rule for this pair; never move one without the other.
   # 1.12.46: lockstep with snowplow, NO CRD change — verified byte-identical to 1.12.45 by pulling
   # BOTH published charts: 4 files and 19855 bytes on both sides, and `diff -r` reports only the
   # Chart.yaml version line. Moves solely to keep the pair equal.
@@ -398,7 +401,7 @@ components:
   # no CRD in it to move. MIND THE NAME: this chart publishes as `snowplow-crds` (PLURAL, see
   # chart:) -- probing `snowplow-crd` reports a vacuous NOT PUBLISHED at EVERY version, including
   # ones that are live and Ready on the cluster.
-  version: 1.12.54
+  version: 1.12.56
   tier: platform
   feature: portal
 - name: authn
@@ -442,6 +445,33 @@ components:
   # subjectaccessreviews ... Unauthorized" from snowplow in a single 24h window. Worth re-reading that
   # count after the roll — it is a free check on whether the fix landed.
 - name: snowplow
+  # 1.12.56: paired-bench verdict from the snowplow session (run 16, 1.12.54 vs 1.12.56,
+  # 50K x 1,000 users). Every judged cell passed, and the two that matter are large:
+  #   login storm p95   4.93s -> 2.07s   (ratio 0.42)
+  #   churn p95         1.04s -> 0.15s   (ratio 0.15)
+  #   steady p95 ratio 0.36, throughput ratio >= 1.0
+  #   1.12.56 had 0 restarts; 1.12.54 was OOMKilled once during the run.
+  # The formal verdict was INVALID on ONE rule only -- a single failed poll from the operator's
+  # laptop to cluster B's API server. B's own customers made 20,532 requests in that window at
+  # 0.41% errors (its normal rate), p95 135ms, so the gap was in the OBSERVER, not the subject.
+  # Diego reviewed that evidence and ruled run 16 a PASS.
+  # VERIFIED BY UNPACKING BOTH ARTIFACTS, not from the bench report or the release notes:
+  #   snowplow       values.yaml top-level key set IDENTICAL (32 keys both sides, none added or
+  #                  removed) => NO installer componentValues mirror; installer#489 class N/A
+  #   snowplow-crds  4 files / 19,855 bytes BOTH sides; CRD payload identical outside Chart.yaml
+  # ACCEPTED KNOWN RISK, Diego's call: 1.12.56 carries the RESTAction write-safety issues
+  # snowplow#903/#904/#905 -- the SAME as the live 1.12.54, so this is not a new exposure. They are
+  # harmless with 057's current RestActions (only SAR and render POSTs). The fix is 1.12.57, in
+  # review. #904 is the one to watch: a write stage runs after the stage it dependsOn FAILED and
+  # /call still answers 200, which a controller reading the status sees as success.
+  # NO ROLL-ORDER CONSTRAINT REMAINS. The old rule was frontend-before-snowplow, because 1.12.56
+  # starts emitting 424 and a frontend without frontend#500's branch renders a red cross with an
+  # unusable Retry. frontend 1.8.11 carried that branch and has been live since 2026-10-26 20:48Z;
+  # 1.8.12 contains it too. The window that rule existed to prevent cannot open.
+  # FIRST PRODUCTION EXERCISE OF THE 424 PATH: until this rolls, frontend#500's branch is
+  # unreachable code. Watch /agents/new on an install without kagent -- the known dependency-missing
+  # route -- and attribute anything odd there to frontend#500 rather than filing a snowplow
+  # regression.
   # 1.12.54: rolls 1.12.52 + 1.12.53 + 1.12.54 together. #860 FIXES #857, which was LIVE on 057 --
   # keep-warm no longer re-seeds widgets from their boot-time CR snapshot, so an edited apiRef stops
   # resolving at its old address for the pod's lifetime; the roll also clears 057's stale harvest.
@@ -1190,7 +1220,7 @@ components:
   # ROLLBACK: re-upgrade the installer to 0.3.429, which pins 1.12.49. Do NOT roll back via
   # componentValues.snowplow.image.tag -- an image-tag override on THIS component takes effect and
   # then PERMANENTLY MASKS every future chart bump (the krateo-sse-proxy 0.1.15 trap).
-  version: 1.12.54
+  version: 1.12.56
   deps:
   - snowplow-crd
   - authn
