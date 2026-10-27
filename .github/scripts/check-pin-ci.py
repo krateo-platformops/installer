@@ -112,15 +112,33 @@ def tag_sha(slug, tag):
     return sha or None
 
 
+# Recognises a check-run that TESTS CODE, as opposed to building, scanning or publishing it.
+# Built from the names actually in use across this estate, not from imagination:
+#
+#   frontend        test · kind · drift · gate · a11y · css-tokens
+#   sse-proxy       go test                              (added in sse-proxy#28/#31)
+#   core-provider   test-core-provider · test-chart-inspector · test-composition-dynamic-controller
+#   snowplow        (NONE — build, lint, preflight, release-*, security/* only)
+#
+# It is a RECOGNISER and it FAILS CLOSED: when nothing matches, the pin fails rather than
+# passes. That direction is the whole point. The earlier version of this guard only failed
+# on "no check-run of ANY kind", which let two real pins through vacuously on the day it
+# was written: sse-proxy 1.1.9 (11 check-runs, none a test) and snowplow 1.12.56 (13, none
+# a test) -- the latter pinned and rolled to krateo-057 behind a guard reporting it green.
+#
+# A false negative here (a real test suite this pattern does not recognise) is a LOUD,
+# correctable failure: widen the pattern. A false positive is a silent pass, which is the
+# failure this guard exists to end. Keep the asymmetry.
+TEST_RUN_RE = re.compile(r"(^|[^a-z])(go )?test(s|ing)?([^a-z]|$)|^(vet|kind|drift|gate)$", re.I)
+
+
 def ci_at(slug, sha):
-    """(verdict, detail). verdict in {green, red, norun, running}.
+    """(verdict, detail). verdict in {green, red, norun, notested, running}.
 
     Uses the commit's CHECK-RUNS, not a guessed workflow filename. Guessing was the first
     implementation and it was silently blind: core-provider has no `test.yaml` at all --
-    its tests run as `test-core-provider`, `test-chart-inspector` and
-    `test-composition-dynamic-controller` -- so a filename lookup returned "unknown" and
-    PASSED. A guard that cannot find the tests reads exactly like a guard that found them
-    green, which is the failure mode this guard exists to prevent one layer up.
+    its tests run as `test-core-provider` et al -- so a filename lookup returned "unknown"
+    and PASSED.
 
     Any failed check-run is a failure, including lint or image verification: if a
     component's own CI is red for any reason, that is not a commit to pin.
@@ -135,13 +153,23 @@ def ci_at(slug, sha):
         return "norun", f"unparseable check-runs for {sha[:8]}"
     if not runs:
         return "norun", f"NO check-run of any kind for {sha[:8]}"
+
     bad = sorted({r["n"] for r in runs if r.get("c") in ("failure", "timed_out", "cancelled", "action_required")})
     pending = sorted({r["n"] for r in runs if r.get("s") != "completed"})
     if bad:
         return "red", f"{len(runs)} check-runs at {sha[:8]}, FAILED: {bad[:4]}"
     if pending:
         return "running", f"{len(runs)} check-runs at {sha[:8]}, still running: {pending[:3]}"
-    return "green", f"all {len(runs)} check-runs passed at {sha[:8]}"
+
+    # Everything green -- but green at WHAT? A commit whose only checks build, scan and
+    # publish it has not been tested, and "CI was green" would be read as "the code was
+    # tested". That does not follow, and a check-run COUNT cannot separate the two either
+    # (11 for an untested repo against 13 for another untested one).
+    tested = sorted({r["n"] for r in runs if TEST_RUN_RE.search(r["n"] or "")})
+    if not tested:
+        return "notested", (f"all {len(runs)} check-runs passed at {sha[:8]} but NONE tests code "
+                            f"(saw: {sorted({r['n'].split(' /')[0] for r in runs})[:6]})")
+    return "green", f"all {len(runs)} passed at {sha[:8]}, incl. {tested[:3]}"
 
 
 def main():
@@ -201,6 +229,12 @@ def main():
             elif verdict == "norun":
                 failures.append(f"{name} {version}: {slug} has NO CI run for the tagged commit — "
                                 f"{detail}. Nothing tested this code; that is not the same as it passing.")
+            elif verdict == "notested":
+                failures.append(
+                    f"{name} {version}: {slug} CI is green but NOTHING TESTED THE CODE — {detail}. "
+                    f"Either wire tests in that repo, or widen TEST_RUN_RE if its suite is simply "
+                    f"named something this guard does not recognise. Passing here would report "
+                    f"'CI was green' for a commit nothing tested.")
 
     if failures:
         print("::error::pin-ci: a bumped pin points at a commit whose own repo CI is not green "
