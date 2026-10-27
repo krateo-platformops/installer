@@ -3536,7 +3536,32 @@ components:
   # NOT RIDING: sse-proxy's dependabot #16 (otlptracehttp 1.45) breaks trace export (snowplow#596/#695).
   # Verified absent -- go.mod at tag 1.1.9 and on main both read otlptracehttp/sdk v1.44.0.
   # UNCHANGED BY THIS ROLL: the poller cursor-loss issue, sse-proxy#27.
-  version: 0.1.15
+  # 0.1.16 (observability#78/#79): the chart gains typed `otel` and `rbacScoping` blocks and,
+  # with them, the first way to turn EITHER feature on. The Deployment hardcoded exactly five env
+  # vars and offered no hook, so OTEL_ENABLED / OTEL_TRACING_ENABLED / OTEL_METRICS_ENABLED /
+  # OTEL_EXPORTER_OTLP_ENDPOINT and RBAC_SCOPING_ENABLED were all unreachable: the four
+  # sse_proxy_* instruments were computed on every poll and discarded. componentValues mirrors
+  # both blocks (installer#519 — this is the first component to expose an otel block at all), plus
+  # `auth`, which had drifted out of the mirror.
+  # ENABLING rbacScoping ALSO CREATES ITS GRANTS, in the component's own chart, and that is why it
+  # is safe to expose: with the flag on and no grants, resolveRequestScope fails and the failure
+  # answers HTTP 500 — not 403, not an unfiltered 200 — so every /notifications request on the
+  # cluster dies, admins included. Flag and ClusterRole are one template.
+  # DEFAULT-OFF BOTH WAYS: with no componentValues override this chart renders byte-identically to
+  # 0.1.15 except for the image tag. Each env var is emitted only when its value is set, so an
+  # unset key leaves the BINARY's default authoritative.
+  # IMAGE MOVES TO 1.2.0 (sse-proxy#31/#32/#33/#34). Both appVersion AND values.yaml image.tag
+  # move, per the mechanism noted above: this chart pins the tag, so appVersion alone is inert.
+  # 1.1.9 had NO eventsDropped in metrics.go, so enabling export against it would have given 3 of
+  # the 4 instruments and delivered would still have counted ATTEMPTED sends — a saturated client
+  # reading as a healthy one. 1.2.0 also carries the X-Krateo-Event-Scope header (#29's
+  # prerequisite). Image verified by resolving the manifest ANONYMOUSLY (the workflow has a known
+  # verify-images race): OCI index, linux/amd64 + linux/arm64.
+  # STILL TRUE AT 1.2.0: otlptracehttp/otel sdk are v1.44.0. Do NOT ride dependabot
+  # sse-proxy#15/#16/#17 (1.45 breaks trace export, snowplow#596/#695).
+  # The 0.1.15 note above about image.tag still applies verbatim: do NOT set
+  # componentValues.krateo-sse-proxy.image.tag here.
+  version: 0.1.16
   deps:
   - krateo-observability
   tier: observability

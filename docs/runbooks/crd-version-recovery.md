@@ -324,6 +324,41 @@ is correct for the same-version case and silently incomplete for the different-v
 disjunction whose second term does not span the first term's gap. The same shape as the conjunction
 in #210, one gate over.
 
+**FIXED AND SHIPPED: core-provider#217, in 2.13.35.** Verified as *contained in the tag*, not inferred
+from tag ordering: GitHub's compare API puts #217's merge commit `89357e0` **ahead** of `2.13.34` (so
+2.13.34 does not contain it — as recorded here before) and **behind** `2.13.35` (so 2.13.35 does). The
+shipped gate at that tag no longer counts definitions at all:
+
+```go
+skipCRD := keep.keep              // a dedicated reference check (controllerowner.go), Kind+version aware
+switch {
+case skipCRD:                     // "another CompositionDefinition still needs this Kind", with referencedBy
+case successor != nil:            // "handing this version over"
+default:                          // delete
+}
+```
+
+The two reasons to keep a CRD are now *separate branches that say which one applied*, instead of a
+disjunction where either term silently covering for the other is indistinguishable from neither
+covering. **The two-phase re-home is still the procedure below 2.13.35**, and above it the split is no
+longer load-bearing for this mechanism — but it remains load-bearing for the other two (the engine-roll
+race, and #218 next).
+
+### Still open: a move plus a chart-version bump loses the instances (core-provider#218)
+
+A third mechanism, **not** fixed by #212 or #217 and **open** as of 2026-10-27. A definition that is
+moved *and* chart-version-bumped in **one apply** uninstalls its instances before the successor adopts
+them. The bound is specific and worth holding onto, because it is what makes the two-phase split still
+mandatory:
+
+| what you do | #218 |
+|---|---|
+| namespace move alone | **safe** — chartRefs compare url + repo + **version**, so the ref is unchanged and the successor is recognised |
+| move + chart version bump in one apply | **instances lost** |
+
+So phase 2 of the re-home must carry the namespace/readerGroups change **and nothing else**. A chart
+version bump smuggled into that same apply re-opens a hole that neither shipped fix covers.
+
 The general rule: **a fix only protects operations that begin after it is the one running.** Shipping
 both in one transaction means the protected window and the dangerous window overlap, and which one
 wins is a scheduling accident. This is the deployment-time twin of the status-write window above — in
