@@ -34,3 +34,4 @@ examples/kind-full-profile/README.md: full-profile kind values — precondition 
 examples/kind-full-profile/values-full.yaml: the full-profile values file (all feature tiers on)
 examples/agent-gateway/README.md: features.agentGateway with a two-tier RBAC split over the fleet plus guardrails on the LLM traffic — what the installer installs and wires, how to verify each layer, and how to drop only the guardrails
 examples/agent-gateway/values.yaml: the agent-gateway profile — endpoint/tool/delegation rules and the guardrail block under componentValues.agentgateway-policies
+docs/runbooks/crd-version-recovery.md: recovering a composition CRD whose version structure is damaged — and why every ordinary API read may under-report during that recovery (pruning follows the request version's schema on reads too, and GKE has no etcd to appeal to)
