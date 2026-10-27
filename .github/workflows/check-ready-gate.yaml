@@ -1,0 +1,44 @@
+name: check-ready-gate
+
+# Installer-specific guard: exercise inst.readyFromConditions, the ONE place this chart
+# decides whether a dependency counts as ready.
+#
+# WHY IT NEEDS A TEST AT ALL. inst.ready has to `lookup` the live object and `helm template`
+# DISABLES lookup, so while the decision lived inside inst.ready it could not be exercised
+# without a cluster. It was one line reading `status == "True"` and nothing ever checked it —
+# which is how it went unexamined until core-provider#165 asked what it does with `Unknown`.
+# The decision is now split out, so it is testable.
+#
+# BOTH FAILURE DIRECTIONS ARE LIVE, which is why both arms are asserted:
+#   accepting bare Unknown  -> every mid-creation dep reads "ready", and dependants render
+#                              against children that do not exist yet
+#   rejecting ZeroEvidence  -> the 8 components that dep on model-configs are gated
+#                              PERMANENTLY, since zero-evidence is a steady state
+#
+# It renders the REAL _helpers.tpl in a throwaway chart rather than reimplementing the rule:
+# a test that restates the rule in Python would agree with itself.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  ready-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Exercise the dependency-ready decision
+        run: python3 .github/scripts/check-ready-gate.py
