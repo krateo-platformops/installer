@@ -127,6 +127,20 @@ core-provider old enough never to have added it.
 
 ### Recovery
 
+**From core-provider 2.13.32 the `vacuum` case is automatic.** A CRD whose
+`status.storedVersions` names `vacuum` while `spec.versions` does not is repaired on the next
+reconcile, with the single-storage-version bookkeeping handled in the same apply
+(core-provider#209). Verified pullable: chart and `core-provider-crds` both at 2.13.32.
+
+**The two manual routes below stay correct and stay necessary**, for two cases the automatic repair
+deliberately does not cover:
+
+- an orphaned **chart** version — #209 declines to guess at a schema it cannot synthesize, which is
+  the right call: a wrong schema would validate writes against something nobody authored
+- recovery on a **managed cluster**, where the instrument that would confirm the repair does not
+  exist (see the measurements above)
+
+
 **Route 1 — preferred. Append a version the CRD has never seen.** Bump the component's pin to
 a version not previously registered. That trips `!exist` on both guards and `vacuum` is
 restored as a side effect.
@@ -177,6 +191,53 @@ do not leave a second served version in place while anything else reconciles.
 — **not** the root. The flag sits on `spec`, not at the top level, and a survey reading the root
 returns `0` across all 68 CRDs on a healthy cluster: a false negative that looks exactly like a
 clean finding. That mistake was made while writing this runbook.
+
+## The same shape one layer down: a controller's own write window
+
+Everything above is the **apiserver's** version-dependent handling deciding what a reader sees.
+core-provider has a cousin: **its own status-write window deciding what a gate sees.** Worth knowing
+because the symptom is a teardown that looks malicious rather than a read that looks empty.
+
+A helm upgrade that moves a CompositionDefinition (installer#522's re-home shape) creates the new
+definition and deletes the old one within about a second. The successor lookup filtered on
+`cd.Status.CurrentGVK()`, so a definition whose status had not yet been written was **invisible** to
+it, and the delete path took the last-definition branch: uninstalled the instances, then removed the
+CRD. Demonstrated on kind against installer 0.3.457 — a live composition instance and its CRD were
+deleted.
+
+It was not introduced by the hand-over work, which is the part worth carrying:
+
+```
+2.13.30   if remote || len(lst) == 1                        -> FIRES
+2.13.31   if successor == nil && (remote || len(lst) == 1)  -> FIRES
+```
+
+`successor` was resolved by the same status-keyed mechanism, so both terms of the conjunction went
+false-negative together. **Two signals that share a failure mode are one signal wearing a second
+hat** — narrowing a gate along an axis that shares the fault narrows nothing. So pinning backwards
+protected nothing; every version carried it.
+
+**Fixed in core-provider#212, shipping as 2.13.33:** the successor is found from
+`cd.Spec.Chart` — a **spec-derived** signal that exists before any status is written — and both
+halves of the destructive path are gated (`if skipCRD || successor != nil`). Equality on the chart
+ref is used only to *add* a successor, never to rule one out, so the failure direction stays "miss a
+successor", never "invent one".
+
+**Until 2.13.33 is verified and running, hold the operation**: do not perform a CompositionDefinition
+namespace move. Ordinary component pin bumps and engine bumps are unaffected — they update a
+definition in place and delete/recreate the *composition CR*, never the definition. Measured across
+that path on the 0.3.458 roll: exactly 2 of 83 composition uids changed, and they were the two
+components whose version moved.
+
+**Do not pin backwards to avoid any of this.** Below core-provider 2.13.29 the #199
+standalone-composition protection is lost, and that is live and load-bearing on krateo-057.
+
+**One sibling gate still reads status only** (core-provider#212's review): the reference count behind
+served-version retirement. An unreconciled definition targeting an older version is invisible to it,
+so that version can be pruned out from under it — self-correcting, since the version is re-appended
+on the next reconcile, and #189's unaccounted-instance gate blocks pruning while any instance is
+unaccounted for. If a teardown ever does something inexplicable, that call site and the successor
+lookup are the two places to look.
 
 ## See also
 
