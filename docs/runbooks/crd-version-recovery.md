@@ -264,6 +264,31 @@ sanitised revision ages out of the retained three, and label any backup taken af
 **POST-SANITIZE** — a backup whose provenance is stated is usable; one whose provenance is assumed
 traps whoever restores it expecting the old release.
 
+### Never ship an engine fix and the operation it fixes in the same upgrade
+
+Generalised from the acmp session's analysis while planning the re-home, and it applies well beyond
+this one case.
+
+A single `helm upgrade` that **both** bumps core-provider **and** changes something that triggers a
+CompositionDefinition move **races the fix against the thing it fixes.** The core-provider Deployment
+rolls during the upgrade, and the old pod keeps serving reconciles until the new one is Ready — while
+the post-upgrade hook has already patched the CR, so `installer-platform` re-renders and performs the
+create-then-delete. If the **old** engine is still the active reconciler at that moment, the race is
+reachable again and the new engine's fix is irrelevant.
+
+**Split it into two upgrades:**
+
+```
+phase 1   bump the engine ONLY -- the moving entry unchanged
+          wait for the new core-provider to be rolled AND the platform settled
+phase 2   the same chart, adding only the namespace / readerGroups change
+```
+
+The general rule: **a fix only protects operations that begin after it is the one running.** Shipping
+both in one transaction means the protected window and the dangerous window overlap, and which one
+wins is a scheduling accident. This is the deployment-time twin of the status-write window above — in
+both cases the fix exists and the question is only whether it is *in effect yet*.
+
 ### Scope, stated so nobody over-cites this
 
 The run exercised the **sanitize plus a plain create**. Step 4.7's *adopt* never ran, because the
