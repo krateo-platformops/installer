@@ -59,34 +59,62 @@ rc=0
 
 echo
 echo "== identity: which compositions were recreated =="
-# Column 2 is name, column 4 is uid. Compare name->uid maps.
-moved="$(join -t'	' -j1 \
-  <(awk -F'\t' 'NF>3 {print $2"\t"$4}' "$BEFORE" | sort) \
-  <(awk -F'\t' 'NF>3 {print $2"\t"$4}' "$AFTER"  | sort) \
-  -o 0,1.2,2.2 2>/dev/null | awk -F'\t' '$2 != $3 {print $1}' || true)"
+# Done in python, NOT with join(1). BSD/macOS join has no -j flag — it prints a usage error and
+# emits ZERO rows, so an identity check built on it reports "no unexpected changes" because it
+# compared nothing, and prints a green line while being structurally blind. That is exactly what
+# this script's own detector proof caught before it was ever used on a roll.
+# Python also lets added/removed rows be named rather than inferred from a count mismatch.
+python3 - "$BEFORE" "$AFTER" ${EXPECT_UID[@]+"${EXPECT_UID[@]}"} <<'PYIDENT'
+import sys
+before_path, after_path, *expected = sys.argv[1:]
 
-printf '  expected to change : %s\n' "${EXPECT_UID[*]:-<none>}"
-printf '  actually changed   : %s\n' "$(echo "$moved" | tr '\n' ' ' | sed 's/ *$//;s/^$/<none>/')"
+def load(path):
+    out = {}
+    with open(path) as fh:
+        for line in fh:
+            f = line.rstrip("\n").split("\t")
+            if len(f) > 3 and f[1] and f[3]:
+                out[f[1]] = f[3]
+    return out
 
-for want in ${EXPECT_UID[@]+"${EXPECT_UID[@]}"}; do
-  echo "$moved" | grep -qx "$want" || { echo "  FAIL expected $want to be recreated; its uid did not change"; rc=3; }
-done
-for got in $moved; do
-  printf '%s\n' ${EXPECT_UID[@]+"${EXPECT_UID[@]}"} | grep -qx "$got" \
-    || { echo "  FAIL $got was recreated and was NOT expected to be — an uninstall/reinstall nobody asked for"; rc=3; }
-done
-[ "$rc" = 0 ] && echo "  ok  identity matches the declared expectation exactly"
+b, a = load(before_path), load(after_path)
+moved   = sorted(n for n in (b.keys() & a.keys()) if b[n] != a[n])
+added   = sorted(a.keys() - b.keys())
+removed = sorted(b.keys() - a.keys())
+exp     = sorted(set(expected))
 
-# Rows present in only one capture are neither "moved" nor "same" — join drops them silently.
-nb="$(awk -F'\t' 'NF>3' "$BEFORE" | wc -l | tr -d ' ')"
-na="$(awk -F'\t' 'NF>3' "$AFTER"  | wc -l | tr -d ' ')"
-if [ "$nb" != "$na" ]; then
-  echo "  FAIL composition COUNT moved: $nb -> $na. join compares the intersection, so added or"
-  echo "       removed rows would otherwise be invisible to the identity check above."
-  rc=3
-else
-  echo "  ok  composition count unchanged ($nb), so the identity diff covered every row"
-fi
+print(f"  rows: {len(b)} before, {len(a)} after, {len(b.keys() & a.keys())} comparable")
+print(f"  expected to change : {' '.join(exp) or '<none>'}")
+print(f"  actually changed   : {' '.join(moved) or '<none>'}")
+
+rc = 0
+for want in exp:
+    if want not in a:
+        print(f"  FAIL {want} was declared with --expect-uid-change but is not present after the roll"); rc = 3
+    elif want not in moved:
+        print(f"  FAIL expected {want} to be recreated; its uid did not change "
+              f"({b.get(want, '<absent before>')})"); rc = 3
+for got in moved:
+    if got not in exp:
+        print(f"  FAIL {got} was recreated and was NOT expected to be "
+              f"({b[got]} -> {a[got]}) — an uninstall/reinstall nobody asked for"); rc = 3
+for n in added:
+    print(f"  FAIL {n} APPEARED during the roll and was not there before"); rc = 3
+for n in removed:
+    print(f"  FAIL {n} DISAPPEARED during the roll"); rc = 3
+
+# The comparison must have had something to compare. An empty intersection would produce no
+# FAIL lines at all and read as a pass.
+if not (b.keys() & a.keys()):
+    print("  FAIL the two captures share no composition names — nothing was compared, verdict WITHHELD")
+    sys.exit(2)
+if rc == 0:
+    print("  ok  identity matches the declared expectation exactly, over every row in both captures")
+sys.exit(rc)
+PYIDENT
+irc=$?
+[ "$irc" = 2 ] && exit 2
+[ "$irc" = 0 ] || rc=3
 
 echo
 echo "== health: every composition's Ready condition =="
