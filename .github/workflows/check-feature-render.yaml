@@ -1,0 +1,46 @@
+name: check-feature-render
+
+# Installer-specific guard (installer#523): turning a feature OFF must remove exactly that feature's
+# components from the render, and nothing else.
+#
+# check-feature-keys.yaml covers the STATIC mapping (every pin's `feature:` exists in the schema).
+# This covers the DYNAMIC one — that flipping a flag actually changes what the chart declares. The
+# two are independent: a pin can name a real feature and still not respond to it.
+#
+# The other half of #523 lives in plumbing (#52/#54): that suite proves helm DELETES what a chart
+# stopped declaring, per-PR against a real cluster. This proves the chart STOPS DECLARING it.
+# Neither implies the other.
+#
+# NOT a required status check, deliberately. The required contexts on main are lint, pin-kinds,
+# fill-defaults, feature-keys and no-unknowns (org ruleset installer-required-checks) — adding one
+# needs a ruleset change, which is not this workflow's to make. Because it is not required, it MAY
+# carry a `paths:` filter without stranding a PR on "Expected - waiting for status to be reported"
+# the way a filtered required context does (see check-feature-keys.yaml). It still runs unfiltered
+# here: this job renders the chart ~10 times and pulls subcharts, so it is slower than the python
+# guards, but a feature gate can be broken from a template OR a pin OR the schema, and filtering on
+# any subset of those paths is how the next instance gets through.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  feature-render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Assert each feature removes only its own objects when disabled
+        run: python3 .github/scripts/check-feature-render.py
