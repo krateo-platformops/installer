@@ -70,6 +70,15 @@ components:
   # 1.6.70: BYTE-IDENTICAL to 1.6.69 — verified by diffing the packaged templates, not assumed.
   # 1.6.71: BYTE-IDENTICAL to 1.6.70, verified by diffing the packaged templates. Lockstep only.
 - name: frontend-crd
+  # 1.8.12: carried with frontend 1.8.12 (frontend#505, the SSE identity re-open). The CRD payload is
+  # UNCHANGED -- verified by unpacking both artifacts, not predicted:
+  #   48 files and 542,460 bytes on BOTH sides, and the ONLY difference in the entire chart is
+  #   `version: 1.8.11` -> `1.8.12` on Chart.yaml line 14. Identical outside Chart.yaml.
+  # That byte count is the same as 1.8.10's, so the widget CRD set has not moved in three releases.
+  # The frontend session predicted byte-identity and has now been right twice; it asked for the diff
+  # rather than its word precisely because a prediction right twice is the kind that stops being
+  # checked. Keep checking it: frontend-crds 1.8.9 DID change a CRD (Listy gaining `ellipsis`), and
+  # a CRD change is the one that must precede its consumer.
   # 1.8.11: lockstep with frontend, NO CRD change -- verified by pulling BOTH published charts:
   # 48 files and 542,460 BYTES ON BOTH SIDES, and `diff -r` reports only the Chart.yaml version
   # line. Moves solely to keep the pair equal. Byte-identical is a reason to RECORD it here, not
@@ -292,7 +301,7 @@ components:
   # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
   # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
   # holds anyway because none is at the path that matters -- but check the path, not the presence.)
-  version: 1.8.11
+  version: 1.8.12
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1233,6 +1242,24 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+  # 1.8.12: frontend#505 ONLY -- the SSE identity re-open. An SSE stream now re-opens with the NEW
+  # credential when the session changes, plus the controller-identity guard completion review found
+  # (a superseded stream could still kill its replacement). Nothing in installer#395's token path
+  # changes: 1.8.11 already removed the credential from the URL and this does not touch that.
+  # WHY IT EXISTED UNRELEASED: #505 merged to main and then THREE installer releases shipped past it
+  # (0.3.455/456/457) because no 1.8.12 tag was cut. The installer pin was NOT wrong -- 1.8.11 was
+  # genuinely the newest tag -- so this was an upstream release gap, not a pin error. Check
+  # `compare/<newest-tag>...main` on a component before assuming a merged fix is deployed anywhere.
+  # VERIFIED BY UNPACKING BOTH ARTIFACTS rather than by the release workflow going green:
+  #   frontend 1.8.11 vs 1.8.12   values.yaml IDENTICAL, values.schema.json IDENTICAL,
+  #                               only Chart.yaml differs. appVersion 1.8.12 with image
+  #                               `tag: ""`, so the image rides appVersion -- no separate pin.
+  #   => NO installer componentValues mirror needed; the installer#489 wedge class does not apply.
+  # NO ROLL-ORDER CONSTRAINT, unlike 1.8.11: snowplow is untouched by #505, so there is no
+  # frontend-before-snowplow pairing this time. It can ride whatever release is next.
+  # NAME vs CHART TRAP, hit while verifying this: this component's `name:` is frontend-crd but its
+  # `chart:` is frontend-crdS (plural). Checking publication by the COMPONENT name asks the registry
+  # for a chart that does not exist and returns "not published" forever. Resolve the `chart:` value.
   # 1.8.11: frontend#500 the 424 calm state (pairs with snowplow 1.12.56, which starts emitting it)
   # + frontend#501, which is installer#395 stage 1: the bearer token leaves the URL. BOTH SSE call
   # sites move to fetch-SSE + `Authorization: Bearer` -- the bell (useGetEvents) and the
@@ -2034,7 +2061,7 @@ components:
   # ARTIFACT: the frontend chart is a PURE VERSION MOVE -- 14 files and 60758 BYTES ON BOTH SIDES vs
   # 1.8.4, only Chart.yaml. Every behaviour change rides in the IMAGE at tag 1.8.6, which is why the
   # CRD and the image must move TOGETHER: a CRD bump without the matching SPA blanks pages.
-  version: 1.8.11
+  version: 1.8.12
   deps:
   - frontend-crd
   - authn
