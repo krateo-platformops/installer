@@ -233,11 +233,27 @@ components whose version moved.
 standalone-composition protection is lost, and that is live and load-bearing on krateo-057.
 
 **One sibling gate still reads status only** (core-provider#212's review): the reference count behind
-served-version retirement. An unreconciled definition targeting an older version is invisible to it,
-so that version can be pruned out from under it — self-correcting, since the version is re-appended
-on the next reconcile, and #189's unaccounted-instance gate blocks pruning while any instance is
-unaccounted for. If a teardown ever does something inexplicable, that call site and the successor
-lookup are the two places to look.
+served-version retirement, `versionReferencedByAnotherDefinition`. An unreconciled definition
+targeting an older version is invisible to it, so that version can be pruned out from under it.
+
+**Nothing covers that case, and an earlier revision of this runbook wrongly said #189 did.** The
+correction is worth stating because the wrong version was the reassuring one. `#189`'s gate blocks
+pruning while *instances* are unaccounted for, selecting composition **instances** by the
+`krateo.io/composition-version` label through the dynamic client — it never reads a definition's
+status. Two consequences, and they point opposite ways:
+
+- **Good:** the two guards are *not* blind in the same window. Different objects, different fields.
+  This is not another conjunction of signals sharing a failure mode.
+- **Bad:** a brand-new, unreconciled definition has **no instances yet**, so nothing is unaccounted
+  for, the gate does not fire, and the prune proceeds. #189 protects a version that still has
+  objects encoded at it. It says nothing about a version a definition is *about to* need.
+
+It stays much less severe than the destructive race above — the consequence is a served version
+pruned from a definition that re-appends it on its next reconcile, which is recoverable, against
+instances and a CRD deleted, which is not. **"Less severe" holds; "partly protected" does not.**
+
+If a teardown ever does something inexplicable, that call site and the successor lookup are the two
+places to look.
 
 ## See also
 
