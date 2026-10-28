@@ -52,6 +52,11 @@ done
 grep -q 'INCOMPLETE' "$BEFORE" && { echo "verify-roll: the BEFORE capture is marked INCOMPLETE" >&2; exit 2; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# The Ready-condition decision lives in ONE place and is exercised by CI
+# (.github/scripts/check-ready-classify.py). Keeping a second copy inline here would mean the test
+# proves a file nothing uses -- the exact failure it exists to prevent.
+# shellcheck source=hack/ready-classify.sh
+. "$HERE/ready-classify.sh"
 AFTER="$(mktemp -t verify-roll-after)"
 trap 'rm -f "$AFTER"' EXIT
 
@@ -181,50 +186,30 @@ done < "$AFTER.gvks" | sort -u > "$AFTER.ready" || true
 
 while IFS=$'\t' read -r name status reason; do
   [ -n "$name" ] || continue
-  case "$status" in
-    True) ;;
-    False)
-      # Ready=False SPLITS on reason, and conflating the two arms is a false FAIL on every roll.
-      #
-      # `Creating` means the composition is CONVERGING -- not converged, but not faulty either.
-      # Observed live on 057 during the 0.3.466 roll: the umbrella read
-      #   Ready=False reason=Creating, "1 of 122 managed children are not ready: krateo-sse-proxy"
-      # seconds after the child was recreated, while the roll was completing normally. This arm
-      # used to call that UNHEALTHY COMPOSITION. Nothing was unhealthy; the roll had not finished.
-      #
-      # It is NOT a pass either, so the verdict is WITHHELD (exit 2) exactly as for an incomplete
-      # capture -- "re-run when it settles", never "nothing is unhealthy".
-      #
-      # KEYED ON THE LITERAL STRING `Creating`, case-insensitively, because that is the only value
-      # core-provider#234 recognises. Synonyms (Progressing, Converging, Pending) are DELIBERATELY
-      # not accepted upstream and fall back to Unavailable, so accepting them here would make this
-      # gate disagree with the controller that stamped the condition.
-      case "$(printf '%s' "$reason" | tr '[:upper:]' '[:lower:]')" in
-        creating)
-          echo "  .... $name Ready=False reason=Creating — still converging, not a fault"
-          converging=$((converging+1)) ;;
-        *)
-          echo "  FAIL $name Ready=False reason=$reason"; bad=1 ;;
-      esac ;;
-    Unknown)
-      if [ "$reason" = "ZeroEvidence" ]; then
-        ze=$((ze+1))
-        # Print ONE line per object, not an ok immediately contradicted by a FAIL. The old form
-        # emitted both for an undeclared ZeroEvidence composition, which reads as the check
-        # disagreeing with itself.
-        if printf '%s\n' ${EXPECT_ZE[@]+"${EXPECT_ZE[@]}"} | grep -qx "$name"; then
-          echo "  ok   $name Ready=Unknown/ZeroEvidence — declared, and zero children evaluated"
-        else
-          echo "  FAIL $name reports Unknown/ZeroEvidence and was NOT declared with"
-          echo "       --expect-zero-evidence. Health was never claimed for it, so this is not"
-          echo "       necessarily a fault — but an undeclared one means the roll changed which"
-          echo "       compositions can evaluate their children, which wants a decision not a shrug."
-          bad=1
-        fi
+  case "$(classify_ready "$status" "$reason")" in
+    healthy) ;;
+    converging)
+      # In flight: NOT a fault and NOT a pass. Observed live on the 0.3.466 roll, where the
+      # umbrella read Ready=False/Creating seconds after a child was recreated while the roll was
+      # completing normally. This used to be reported as UNHEALTHY COMPOSITION.
+      echo "  .... $name Ready=False reason=Creating — still converging, not a fault"
+      converging=$((converging+1)) ;;
+    zeroevidence)
+      ze=$((ze+1))
+      # Print ONE line per object, not an ok immediately contradicted by a FAIL. The old form
+      # emitted both for an undeclared ZeroEvidence composition, which reads as the check
+      # disagreeing with itself.
+      if printf '%s\n' ${EXPECT_ZE[@]+"${EXPECT_ZE[@]}"} | grep -qx "$name"; then
+        echo "  ok   $name Ready=Unknown/ZeroEvidence — declared, and zero children evaluated"
       else
-        echo "  FAIL $name Ready=Unknown reason=$reason — an unrecognised reason is the case nobody planned for"; bad=1
+        echo "  FAIL $name reports Unknown/ZeroEvidence and was NOT declared with"
+        echo "       --expect-zero-evidence. Health was never claimed for it, so this is not"
+        echo "       necessarily a fault — but an undeclared one means the roll changed which"
+        echo "       compositions can evaluate their children, which wants a decision not a shrug."
+        bad=1
       fi ;;
-    *) echo "  FAIL $name Ready='$status' reason=$reason — not one of True/False/Unknown"; bad=1 ;;
+    fail)
+      echo "  FAIL $name Ready=$status reason=${reason:-<none>}"; bad=1 ;;
   esac
 done < "$AFTER.ready"
 
