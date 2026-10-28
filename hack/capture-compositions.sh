@@ -40,10 +40,28 @@ set -euo pipefail
 CTX="${1:?usage: capture-compositions.sh <kube-context> <output-file>}"
 OUT="${2:?usage: capture-compositions.sh <kube-context> <output-file>}"
 
-CRDS=$(kubectl --context="$CTX" get crds -o json 2>/dev/null \
-  | jq -r '.items[] | select(.spec.group=="composition.krateo.io") | "\(.spec.names.plural).composition.krateo.io"')
+# `|| crdrc=$?` and capturing stderr are both LOAD-BEARING, not style.
+#
+# This block used to read `CRDS=$(kubectl ... 2>/dev/null | jq ...)` followed by an `if [ -z ... ]`
+# that printed FATAL. Under `set -euo pipefail` a failing command substitution in an assignment
+# exits the script IMMEDIATELY, so the `if` — and the only diagnostic this script had for a bad
+# context, expired credentials or an unreachable cluster — was UNREACHABLE. Combined with the
+# `2>/dev/null`, a wrong --context produced a SILENT exit 1 with no output whatsoever. Hit live on
+# 2026-10-28 while gating a roll: the script said nothing at all, and an empty result is
+# indistinguishable from a broken instrument through a silenced stderr.
+CRDERR=$(mktemp -t capture-crderr); trap 'rm -f "$CRDERR"' EXIT
+crdrc=0
+CRDS=$(kubectl --context="$CTX" get crds -o json 2>"$CRDERR" \
+  | jq -r '.items[] | select(.spec.group=="composition.krateo.io") | "\(.spec.names.plural).composition.krateo.io"') || crdrc=$?
+if [ "$crdrc" -ne 0 ]; then
+  echo "FATAL: could not list CRDs on context '$CTX' (exit $crdrc). kubectl said:" >&2
+  sed 's/^/  /' "$CRDERR" >&2
+  exit 1
+fi
 if [ -z "$CRDS" ]; then
-  echo "FATAL: no composition.krateo.io CRDs found on context $CTX" >&2
+  echo "FATAL: context '$CTX' answered, but serves NO composition.krateo.io CRDs." >&2
+  echo "  The cluster is reachable and this is a real (empty) answer, not a read failure --" >&2
+  echo "  check you named the right cluster before concluding the platform is not installed." >&2
   exit 1
 fi
 
@@ -88,10 +106,33 @@ sort -o "$OUT" "$OUT"
 # umbrella, and 83 == 83 holds while 14 children are missing from the render.
 # -A rather than a hardcoded namespace: the rest of this script is namespace-agnostic and the
 # umbrella is not guaranteed to live in krateo-system on every install.
-MANAGED=$(kubectl --context="$CTX" get installers.composition.krateo.io -A \
-  -o jsonpath='{range .items[*]}{range .status.conditions[?(@.type=="Ready")]}{.message}{"\n"}{end}{end}' 2>/dev/null \
-  | grep -oE '[0-9]+ managed children' | grep -oE '^[0-9]+' | head -1 || true)
+# READ status.managed DIRECTLY, NOT THE CONDITION MESSAGE.
+#
+# This used to grep "N managed children" out of the Ready condition's MESSAGE. That is prose: it is
+# core-provider's to reword, and a gate reading prose breaks silently when it is reworded -- the
+# count would quietly become "unknown" and the comparison would downgrade to "cannot compare"
+# without anything failing. `status.managed` is the array the rollup actually consumes (#230), so
+# its length is the primary source and the message is a signature of it.
+#
+# ALSO RECORD EACH CHILD'S apiVersion, not just the count. Window 4 proved the count alone is not
+# enough: the umbrella read 122 before the roll and 122 after, both correct, while the composition
+# was NOT converged -- the managed SET was right and the managed children's VERSIONS were stale. A
+# capture that records only the length can never speak to WHICH children moved, so it cannot
+# distinguish "did not happen" from "has not happened yet". These lines are comments, so the row
+# count (grep -vc '^#') is unaffected and old captures stay comparable.
+MANAGED_JSON=$(kubectl --context="$CTX" get installers.composition.krateo.io -A -o json 2>/dev/null || echo '{}')
+MANAGED=$(printf '%s' "$MANAGED_JSON" | jq -r '[.items[]?.status.managed // [] | length] | add // "unknown"')
 echo "#MANAGED-CHILDREN ${MANAGED:-unknown}" >> "$OUT"
+# FIELD NAMES READ OFF A LIVE ENTRY, NOT ASSUMED. A status.managed entry has exactly:
+#   apiVersion, name, namespace, path, resource
+# There is NO `kind`. The first version of this line used `.kind // "-"` and would have emitted
+# "-" on every row forever -- a field that does not exist, defaulting silently, with uniqueness
+# holding only by luck because apiVersion happened to differ. `resource` is the plural
+# ("secrets", "krateosseproxies") and `path` is the fully-qualified self link.
+printf '%s' "$MANAGED_JSON" | jq -r '
+  .items[]? | .status.managed // [] | .[] |
+  "#MANAGED-CHILD \(.apiVersion // "-") \(.resource // "-")/\(.namespace // "-")/\(.name // "-")"
+' 2>/dev/null | sort >> "$OUT" || true
 
 ROWS=$(grep -vc '^#' "$OUT" | tr -d ' ')
 echo "captured $ROWS compositions from $CRD_COUNT CRDs; CRs seen $SEEN; read errors $ERRORS; umbrella managed children ${MANAGED:-unknown}"
