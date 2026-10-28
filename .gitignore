@@ -3,3 +3,4 @@ chart/charts/
 chart/Chart.lock
 *.tgz
 dist/
+__pycache__/
