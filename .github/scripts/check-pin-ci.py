@@ -32,6 +32,7 @@ NOT-FOUND IS NOT A PASS. If no source repo carries a tag matching appVersion, th
 reports UNRESOLVED and fails, rather than silently approving. A guard that cannot find
 its subject must say so -- an unresolvable pin is exactly where an untested commit hides.
 """
+import base64
 import json
 import os
 import re
@@ -166,10 +167,94 @@ def ci_at(slug, sha):
     # tested". That does not follow, and a check-run COUNT cannot separate the two either
     # (11 for an untested repo against 13 for another untested one).
     tested = sorted({r["n"] for r in runs if TEST_RUN_RE.search(r["n"] or "")})
-    if not tested:
-        return "notested", (f"all {len(runs)} check-runs passed at {sha[:8]} but NONE tests code "
-                            f"(saw: {sorted({r['n'].split(' /')[0] for r in runs})[:6]})")
-    return "green", f"all {len(runs)} passed at {sha[:8]}, incl. {tested[:3]}"
+    if tested:
+        return "green", f"all {len(runs)} passed at {sha[:8]}, incl. {tested[:3]}"
+
+    # THE NAME IS NOT THE EVIDENCE. A check-run is named after its workflow JOB, and a job that
+    # runs tests need not say so in its name: krateo-platformops/portal runs nine suites under
+    # names like `composition-architecture` (three test-*.py scripts) and `builder-crs`. Judging
+    # by name alone produced a FALSE `notested` on portal 1.8.85 and blocked a roll on a regex.
+    #
+    # So before reporting notested, resolve each GREEN check-run to its job in the workflow files
+    # AT THE PINNED COMMIT and look at what that job actually runs. This can only convert a false
+    # notested into green; it cannot excuse a failure, because failures are judged above and never
+    # reach here. And it is anchored to jobs that ACTUALLY RAN AND PASSED — a test job defined in
+    # the workflow but skipped or failed is not evidence.
+    ran = {(r["n"] or "").split(" /")[0].strip() for r in runs}
+    invoked = _test_invocations(slug, sha, ran)
+    if invoked:
+        return "green", (f"all {len(runs)} passed at {sha[:8]}; no check-run NAME says test, but "
+                         f"{len(invoked)} green job(s) invoke one: " +
+                         ", ".join(f"{j} -> {s}" for j, s in sorted(invoked)[:3]))
+    return "notested", (f"all {len(runs)} check-runs passed at {sha[:8]} but NONE tests code — "
+                        f"neither by name nor by what any green job runs "
+                        f"(saw: {sorted({r['n'].split(' /')[0] for r in runs})[:6]})")
+
+
+# Invocations that constitute "this job tested the code". Deliberately about the COMMAND, not the
+# job's name: a script called test-*.py, a test runner, or a language's test subcommand.
+TEST_CMD_RE = re.compile(
+    r"(^|[\s/])test[-_][\w.-]+\.(py|sh|js|ts)"      # scripts/test-foo.py
+    r"|(^|[\s/])[\w.-]+[-_]test\.(py|sh|js|ts)"      # foo_test.py
+    r"|\bgo\s+test\b|\bpytest\b|\bnpm\s+(run\s+)?test\b|\byarn\s+test\b"
+    r"|\bvitest\b|\bjest\b|\bhelm\s+unittest\b|\bgo\s+vet\b",
+    re.I)
+
+
+def _test_invocations(repo, sha, ran_names):
+    """{(job, script)} for workflow jobs that BOTH ran green and invoke something test-shaped.
+
+    Reads the workflow files at the pinned commit, so it describes the tree that was released
+    rather than whatever main says today.
+    """
+    # sh() returns (stdout, returncode) — not a string. Unpacking it is the whole reason the
+    # first version of this fallback silently found nothing: json.loads got a tuple, raised, and
+    # a blanket `except` turned the breakage into "no tests here". A fallback that cannot
+    # distinguish its own failure from a negative result is worse than no fallback, so the
+    # excepts below are narrow and anything unexpected is REPORTED rather than swallowed.
+    body, rc = sh("gh", "api", f"/repos/{repo}/contents/.github/workflows?ref={sha}")
+    if rc != 0:
+        print(f"  note: could not list {repo}'s workflows at {sha[:8]} (gh rc={rc}); "
+              f"falling back to the name check alone")
+        return set()
+    try:
+        listing = json.loads(body)
+    except json.JSONDecodeError as e:
+        print(f"  note: {repo}'s workflow listing at {sha[:8]} was not JSON ({e}); "
+              f"falling back to the name check alone")
+        return set()
+    out = set()
+    for entry in listing if isinstance(listing, list) else []:
+        name = entry.get("name", "")
+        if not name.endswith((".yml", ".yaml")):
+            continue
+        raw, rc = sh("gh", "api", f"/repos/{repo}/contents/.github/workflows/{name}?ref={sha}",
+                     "--jq", ".content")
+        if rc != 0 or not raw:
+            print(f"  note: could not read {repo}:.github/workflows/{name} at {sha[:8]}")
+            continue
+        try:
+            text = base64.b64decode(raw).decode("utf-8", "replace")
+            doc = yaml.safe_load(text) or {}
+        except (ValueError, yaml.YAMLError) as e:
+            print(f"  note: {name} at {sha[:8]} did not parse ({type(e).__name__}); skipping it")
+            continue
+        for job_key, job in (doc.get("jobs") or {}).items():
+            if not isinstance(job, dict):
+                continue
+            label = str(job.get("name") or job_key)
+            # The check-run carries the job's display name, falling back to its key.
+            if label not in ran_names and job_key not in ran_names:
+                continue
+            for step in (job.get("steps") or []):
+                run = step.get("run") if isinstance(step, dict) else None
+                if not isinstance(run, str):
+                    continue
+                m = TEST_CMD_RE.search(run)
+                if m:
+                    out.add((label, m.group(0).strip()))
+                    break
+    return out
 
 
 def main():
