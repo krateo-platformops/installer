@@ -3487,6 +3487,39 @@ components:
   - otel-collector-deployment
   tier: observability
   feature: portal
+- name: krateo-audit-worm
+  # 0.1.0 (observability#82): a tamper-EVIDENT mirror of krateo_audit. The audit table itself is
+  # ordinary ClickHouse -- anyone who can write it can rewrite it -- so this chart maintains a
+  # separate WORM copy plus a hash-chained seal, and a verifier that goes RED when the chain
+  # breaks. Two silent-loss paths fail loudly (Job failure + an ERROR integrity line): a dropped
+  # materialized view, and a dropped/truncated seal table. A reset chain stays `tampered`
+  # permanently rather than re-sealing clean, which is the only behaviour that makes the artefact
+  # worth having.
+  kind: KrateoAuditWorm
+  # DEPS ON THE DAEMONSET, NOT ON krateo-observability, and the reason is not the obvious one.
+  # What this chart needs is the krateo_audit TABLE, and that table is created by the daemonset
+  # collector's `clickhouse/audit` exporter via create_schema -- not by the ClickHouse install.
+  # The chain otel-collector-daemonset -> otel-collector-deployment -> krateo-observability then
+  # covers the instance transitively, so one dep expresses both requirements.
+  # The near-miss worth recording: an earlier draft of this dep list named clickhouse-operator.
+  # The OPERATOR being Ready does not mean a ClickHouse INSTANCE exists -- krateo-observability is
+  # what deploys the instance, which is why every other consumer deps on that and not the operator.
+  version: 0.1.0
+  # NO HOOKS AND NO `lookup` IN THIS CHART, which is load-bearing for the pre-roll gate rather
+  # than a style note. 0.1.0 originally created the materialized view in a helm post-install hook
+  # Job. A hook-created object is invisible to a `helm template` render-diff, the Job is immutable
+  # on upgrade, and if the cdc path does not run hooks the MV never exists and the chart mirrors
+  # nothing -- silently, which is the exact failure the component exists to prevent. The seal
+  # CronJob now owns the schema and applies it idempotently at the start of every run, so the
+  # chart renders exactly one ConfigMap and two CronJobs and the render-diff sees all of it.
+  deps:
+  - otel-collector-daemonset
+  tier: observability
+  # DEFAULT OFF. A new feature that defaults on grows a component on every fresh install, so new
+  # features here default off and an operator opts in. The seal Job fails with a clear message
+  # until krateo_audit exists and the next schedule retries, so enabling it before the audit
+  # stream has produced anything is safe: the race self-resolves without wedging the umbrella.
+  feature: auditWorm
 - name: krateo-sse-proxy
   kind: KrateoSseProxy
   # 0.1.13 (sse-proxy#20/#21): prunes the GET /events?composition_id=… scan with a tokenbf

@@ -199,6 +199,11 @@
       "title": "Feature flags",
       "additionalProperties": false,
       "properties": {
+        "auditWorm": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in tamper-EVIDENT mirror of the krateo_audit table (component krateo-audit-worm). The audit table is ordinary ClickHouse, so anyone who can write it can rewrite it; this maintains a separate WORM copy plus a hash-chained seal, and a verifier that reports RED when the chain breaks or the materialized view is dropped. A reset chain stays tampered permanently rather than re-sealing clean. Default false: it needs the krateo_audit table, which only exists once the daemonset collector's clickhouse/audit exporter has created it, and the seal Job fails loudly and retries on its next schedule until then."
+        },
         "coreProvider": {
           "type": "boolean",
           "default": true,
@@ -613,6 +618,153 @@
       "description": "Per-component Composition spec overrides, STRICTLY TYPED against each pinned component's chart schema. This is a HAND-CURATED, deliberate override surface: every leaf is explicitly typed and unknown keys are REJECTED (additionalProperties is false on every object). No free-form escapes remain anywhere in this schema (neither an open additionalProperties nor the k8s preserve-unknown extension) \u2014 enforced in CI by .github/workflows/check-no-unknowns.yaml. Invariants: each component's `global` is the fixed engine-injected block (plumbing InjectGlobalValues) plus imageRegistry; `resources` is k8s ResourceRequirements (limits/requests each with cpu/memory); label, annotation and nodeSelector maps are typed string maps. To expose a NEW override knob for a component, add it here explicitly and typed \u2014 do not reintroduce a free-form object. Deep-merged into the rendered Composition spec; the installer-computed wiring (service.type/config/vertexAI/hitlApproval) stays authoritative and wins on any leaf conflict.",
       "additionalProperties": false,
       "properties": {
+        "krateo-audit-worm": {
+          "type": "object",
+          "title": "krateo-audit-worm values",
+          "description": "Tamper-evident WORM mirror of the krateo_audit table, with a hash-chained seal and a verifier (component krateo-audit-worm, gated on features.auditWorm). Renders one ConfigMap and two CronJobs: no helm hooks and no lookup, so a helm-template render-diff sees every object the chart will create. The seal CronJob owns the ClickHouse schema and applies it idempotently on every run, failing loudly until the krateo_audit table exists. Table and image names are deliberately NOT exposed here: they are internal to the chart, and the verifier's correctness depends on the seal and the mirror agreeing about them.",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            },
+            "clickhouse": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Where the audit table lives. Defaults come from the chart, which points at the krateo-observability ClickHouse instance.",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "database": {
+                  "type": "string"
+                },
+                "credentialsSecret": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Secret carrying the ClickHouse user and password, read via secretKeyRef. The credentials are never rendered into the Composition spec.",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "usernameKey": {
+                      "type": "string"
+                    },
+                    "passwordKey": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "seal": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The CronJob that mirrors new audit rows into the WORM table and extends the hash chain.",
+              "properties": {
+                "schedule": {
+                  "type": "string"
+                },
+                "lagSeconds": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "How far behind now() to stop sealing, so rows still arriving for the current window are not sealed into a chain link they would later contradict."
+                }
+              }
+            },
+            "verify": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The CronJob that re-walks the hash chain and reports integrity. Goes RED on a broken chain, a dropped materialized view, or a dropped/truncated seal table.",
+              "properties": {
+                "schedule": {
+                  "type": "string"
+                },
+                "staleAfterSeconds": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Age past which an unextended chain is reported as stale. A verifier that only fails on a BROKEN chain cannot tell a healthy quiet period from a seal CronJob that stopped running."
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "authn": {
           "type": "object",
           "title": "Authn",

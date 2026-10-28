@@ -257,6 +257,17 @@ features:
                                   #   ModelConfigs are pointed straight back at the provider (componentValues.
                                   #   model-configs.agentgateway.modelRoute.enabled=false, fill-if-absent, so an explicit
                                   #   override still wins).
+  auditWorm: false                 # OPT-IN tamper-EVIDENT mirror of the krateo_audit table (component
+                                  #   krateo-audit-worm). The audit table is ordinary ClickHouse — whoever can
+                                  #   write it can rewrite it — so this keeps a separate WORM copy plus a
+                                  #   hash-chained seal, and a verifier that reports RED when the chain breaks,
+                                  #   the materialized view is dropped, or the seal table is truncated. A reset
+                                  #   chain stays `tampered` permanently rather than re-sealing clean.
+                                  #   Needs the krateo_audit table, which the daemonset collector's
+                                  #   clickhouse/audit exporter creates — so it deps on otel-collector-daemonset,
+                                  #   NOT on clickhouse-operator: the operator being Ready does not mean a
+                                  #   ClickHouse instance exists. Enabling it early is safe; the seal Job fails
+                                  #   loudly and its next schedule retries until the table appears.
 
 # external-dns configuration (#115), applied when features.externalDns is on. A straight passthrough
 # to the external-dns blueprint's curated surface. The platform gateway is annotated with
