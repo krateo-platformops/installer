@@ -1,0 +1,37 @@
+name: check-ready-classify
+
+# Operator-side guard: exercise hack/ready-classify.sh, the ONE place verify-roll.sh decides what a
+# composition's Ready condition means.
+#
+# WHY IT NEEDS A TEST AT ALL. verify-roll.sh talks to a live cluster, so while this decision lived
+# inside it the decision could not be exercised by CI. That is exactly how the CHART-side gate
+# shipped a version that only accepted "True" and went unexamined until core-provider#165 asked
+# what it does with `Unknown`. Same move, operator side.
+#
+# BOTH FAILURE DIRECTIONS ARE LIVE, which is why both arms are asserted:
+#   calling `Creating` a FAULT     -> every roll sampled before it settles reports UNHEALTHY
+#                                     COMPOSITION. Observed live on the 0.3.466 roll.
+#   calling a FAULT `converging`   -> a real failure is downgraded and the verdict is withheld
+#                                     forever instead of failing loudly.
+#
+# It shells into the REAL bash function rather than reimplementing the rule in Python: a test that
+# restates the logic would agree with itself.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  ready-classify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Exercise the Ready-condition classification
+        run: python3 .github/scripts/check-ready-classify.py
