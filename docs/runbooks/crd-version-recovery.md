@@ -368,7 +368,15 @@ A direct consequence of #214's fix, and the reason the two-phase rule outlives b
 **and version**. So after a collapsed re-home across versions, the old definition sits in
 `Terminating` **forever**: nothing is destroyed, and the operation never finishes.
 
-**Fixed on main as #222, which is OPEN — it is NOT in 2.13.36.** Flip this when it tags.
+**FIXED AND SHIPPED in core-provider 2.13.37** (#222). Verified as contained in the tag rather
+than taken on report: the compare API puts #222's merge commit `59c0bb6` **ahead** of `2.13.36` (so
+2.13.36 does not have it) and **behind** `2.13.37`. All three 2.13.37 images resolve anonymously as
+multi-arch OCI indexes, and both engine charts are pullable at that version — checked because that
+tag's first `release-tag` run failed on a transient `proxy.golang.org` stream error and the artifacts
+come from a re-run, which is exactly the shape the verify-images race takes.
+
+`Delete`'s "I am not removing this CRD" and `Observe`'s "this CRD is not mine" are now the same
+predicate, so the two can no longer disagree.
 
 The progression is worth keeping, because it shows the rule is not getting less necessary:
 
@@ -378,10 +386,17 @@ The progression is worth keeping, because it shows the rule is not getting less 
 | < 2.13.35 | **deletes the shared CRD**, taking the new definition's Kind with it (#214) |
 | < 2.13.36 | **loses the instances** a surviving definition would have adopted (#218) |
 | 2.13.36 | **hangs** — the old definition never leaves `Terminating` (#205) |
+| >= 2.13.37 | nothing — all four are closed (#217, #218, #205) |
 
-Each fix traded a worse failure for a better one. A hang is the best of the four and still not one
-anybody wants, so **phase 2 carries the namespace/readerGroups change and nothing else**, on every
-engine version, until #222 ships and is verified.
+Each fix traded a worse failure for a better one, and the row above is kept rather than deleted
+**because a runbook describes the engine a cluster is actually running, not the newest one that
+exists.** krateo-057 is on **2.13.30** as of 2026-10-28, so three of these four are live there right
+now. Delete the rows only when no cluster you operate is below the version that fixes them.
+
+**So the two-phase rule is no longer load-bearing for this mechanism at >= 2.13.37** — and it is
+still the procedure, because the engine-roll race is independent of all four and a collapsed re-home
+is harder to reason about than two applies. Carry the namespace/readerGroups change alone in phase 2
+regardless.
 
 **Not reachable on krateo-057, measured here rather than taken on report** (2026-10-27): 68
 CompositionDefinitions, **68 distinct Kinds, none held by more than one definition**, and **none
