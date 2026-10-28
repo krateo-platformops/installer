@@ -3561,7 +3561,7 @@ components:
   # sse-proxy#15/#16/#17 (1.45 breaks trace export, snowplow#596/#695).
   # The 0.1.15 note above about image.tag still applies verbatim: do NOT set
   # componentValues.krateo-sse-proxy.image.tag here.
-  version: 0.1.16
+  version: 0.1.17
   deps:
   - krateo-observability
   tier: observability
