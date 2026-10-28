@@ -7755,6 +7755,23 @@
         "portal": {
           "additionalProperties": false,
           "properties": {
+            "agents": {
+              "type": "object",
+              "title": "agents",
+              "default": {
+                "enabled": true
+              },
+              "description": "Show the Agents sidebar entry and its /agents routes. The pages themselves live in the separate portal-agents composition, which this installer pins alongside the portal \u2014 so this defaults TRUE here while the portal CHART defaults it false for a standalone install. Fully typed (additionalProperties: false) per check-no-unknowns. A DEFAULT IS REQUIRED, not just schema-allow: a new nested componentValues key with no default is dropped from the schema-expansion and never reaches the component release (installer #173/#174).",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true,
+                  "title": "enabled",
+                  "description": "Show the Agents sidebar entry. Requires the portal-agents composition."
+                }
+              }
+            },
             "enableAdminUser": {
               "default": true,
               "description": "Enable admin user (basic authentication) with cluster-admin permissions",
@@ -7773,22 +7790,9 @@
               "title": "enableDemoSystemNamespace",
               "type": "boolean"
             },
-            "agents": {
-              "type": "object",
-              "title": "agents",
-              "default": {
-                "enabled": true
-              },
-              "description": "Show the Agents sidebar entry and its /agents routes. The pages themselves live in the separate portal-agents composition, which this installer pins alongside the portal \u2014 so this defaults TRUE here while the portal CHART defaults it false for a standalone install. Fully typed (additionalProperties: false) per check-no-unknowns. A DEFAULT IS REQUIRED, not just schema-allow: a new nested componentValues key with no default is dropped from the schema-expansion and never reaches the component release (installer #173/#174).",
-              "additionalProperties": false,
-              "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "default": true,
-                  "title": "enabled",
-                  "description": "Show the Agents sidebar entry. Requires the portal-agents composition."
-                }
-              }
+            "enableIncidentResponse": {
+              "type": "boolean",
+              "description": "Ships the sre-incident-responder ClusterRoleBinding (portal 1.8.85+, portal#341 fixing portal#340). DELIBERATELY WITHOUT A `default:`. It used to ride on enableDemoSystemNamespace, which granted it on installs that have no incident-controller \u2014 krateo-demo, where the dangling binding made snowplow emit a WARN per RBAC evaluation at ~790/s, 95% of all otel_logs, and filled ClickHouse. So unset must mean not-shipped. SET IT TRUE ON ANY INSTALL THAT HAS incident-controller, IN THE SAME UPGRADE THAT MOVES THE PORTAL PIN: the pin alone revokes the binding, and nothing fails closed or alerts when a binding disappears \u2014 which is how the original defect stayed invisible for six days. krateo-057 is such an install (incident-controller 0.5.0, enableDemoSystemNamespace true, the binding live). A `default:` here would propagate into the CR and re-create the original bug on every install that lacks the controller."
             },
             "observability": {
               "type": "object",

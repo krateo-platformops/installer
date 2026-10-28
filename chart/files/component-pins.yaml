@@ -301,7 +301,7 @@ components:
   # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
   # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
   # holds anyway because none is at the path that matters -- but check the path, not the presence.)
-  version: 1.8.12
+  version: 1.8.13
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -2091,7 +2091,7 @@ components:
   # ARTIFACT: the frontend chart is a PURE VERSION MOVE -- 14 files and 60758 BYTES ON BOTH SIDES vs
   # 1.8.4, only Chart.yaml. Every behaviour change rides in the IMAGE at tag 1.8.6, which is why the
   # CRD and the image must move TOGETHER: a CRD bump without the matching SPA blanks pages.
-  version: 1.8.12
+  version: 1.8.13
   deps:
   - frontend-crd
   - authn
@@ -2918,7 +2918,7 @@ components:
   # have silently dropped the `// empty` fix. Verified on the published chart -- 1 occurrence of
   # `[.compdef.status.resource // empty]`, 0 of the bare pre-fix form.
   # ARTIFACT: 625 files, 1515560 -> 1516342 bytes; only Chart.yaml and that one template differ.
-  version: 1.8.84
+  version: 1.8.85
   deps:
   - frontend
   - git-provider
@@ -3009,7 +3009,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.84
+  version: 1.8.85
   deps: ['portal']
   tier: platform
   feature: portal
@@ -3042,21 +3042,21 @@ components:
 # of #261: `devs` has no binding where these pages now live.
 - name: marketplace-page
   kind: MarketplacePage
-  version: 1.8.84
+  version: 1.8.85
   deps:
   - portal
   tier: platform
   feature: portal
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.84
+  version: 1.8.85
   deps:
   - portal
   tier: platform
   feature: portal
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.84
+  version: 1.8.85
   deps:
   - portal
   tier: platform
@@ -3097,7 +3097,7 @@ components:
 - name: dashboard-page
   # Renders into krateo-dashboard, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: DashboardPage
-  version: 1.8.84
+  version: 1.8.85
   deps:
   - portal
   tier: platform
@@ -3105,7 +3105,7 @@ components:
 - name: compositions-page
   # Renders into krateo-compositions, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: CompositionsPage
-  version: 1.8.84
+  version: 1.8.85
   deps:
   - portal
   tier: platform
@@ -3113,7 +3113,7 @@ components:
 - name: blueprints-page
   # Renders into krateo-blueprints, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: BlueprintsPage
-  version: 1.8.84
+  version: 1.8.85
   deps:
   - portal
   tier: platform
@@ -3121,7 +3121,7 @@ components:
 - name: resources-page
   # Renders into krateo-resources, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: ResourcesPage
-  version: 1.8.84
+  version: 1.8.85
   deps:
   - portal
   tier: platform
@@ -3129,7 +3129,7 @@ components:
 - name: search-page
   # Renders into krateo-search, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: SearchPage
-  version: 1.8.84
+  version: 1.8.85
   deps:
   - portal
   tier: platform
@@ -3137,7 +3137,7 @@ components:
 - name: builders-page
   # Renders into krateo-builders, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: BuildersPage
-  version: 1.8.84
+  version: 1.8.85
   deps:
   - portal
   tier: platform
@@ -3145,7 +3145,7 @@ components:
 - name: clusters-page
   # Renders into krateo-clusters, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ClustersPage
-  version: 1.8.84
+  version: 1.8.85
   deps:
   - portal
   tier: platform
@@ -3153,7 +3153,7 @@ components:
 - name: reviews-page
   # Renders into krateo-reviews, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ReviewsPage
-  version: 1.8.84
+  version: 1.8.85
   deps:
   - portal
   tier: platform
@@ -3161,7 +3161,7 @@ components:
 - name: settings-page
   # Renders into krateo-settings, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: SettingsPage
-  version: 1.8.84
+  version: 1.8.85
   deps:
   - portal
   tier: platform
@@ -3169,7 +3169,7 @@ components:
 - name: observability-page
   # Renders into krateo-observability, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ObservabilityPage
-  version: 1.8.84
+  version: 1.8.85
   deps:
   - portal
   tier: platform
