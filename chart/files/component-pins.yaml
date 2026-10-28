@@ -3504,7 +3504,17 @@ components:
   # The near-miss worth recording: an earlier draft of this dep list named clickhouse-operator.
   # The OPERATOR being Ready does not mean a ClickHouse INSTANCE exists -- krateo-observability is
   # what deploys the instance, which is why every other consumer deps on that and not the operator.
-  version: 0.1.0
+  version: 0.1.1
+  # 0.1.1 (observability#83, repo tag 3.1.27) drops `appVersion`, which 0.1.0 set to 0.1.0. The
+  # chart builds NO image -- both CronJobs run upstream clickhouse/clickhouse-server:24.8-alpine --
+  # so there is no component repo whose CI check-pin-ci could resolve, and appVersion 0.1.0 matched
+  # no tag in any declared source. The gate called that UNRESOLVED and refused the pin, correctly:
+  # an unresolvable pin is where an untested commit hides. Dropped, it reports the right thing --
+  # `n/a (chart declares no appVersion: no image, so no component CI to check)`, the same shape the
+  # CRD-only charts take. The alternatives were both worse: declaring sources would have pointed at
+  # a chart repo whose tags are release counters (3.1.x), so still unresolvable AND checking the
+  # wrong repo's CI; allowlisting the chart in the gate would patch the instrument to accept bad
+  # input. Rendered objects are byte-identical between 0.1.0 and 0.1.1.
   # NO HOOKS AND NO `lookup` IN THIS CHART, which is load-bearing for the pre-roll gate rather
   # than a style note. 0.1.0 originally created the materialized view in a helm post-install hook
   # Job. A hook-created object is invisible to a `helm template` render-diff, the Job is immutable
