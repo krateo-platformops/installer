@@ -60,7 +60,7 @@ components:
   # refuses below 1.36 rather than installing a label-selector mechanism nothing can satisfy.
   # 0.28.1: co-versioned with oasgen-provider. Same k8s >= 1.36 floor; carries no part of the
   # regression fix, which is provider-side only.
-  version: 0.28.1
+  version: 0.39.0
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -3329,7 +3329,7 @@ components:
   #   makes both charts unrenderable on the CI runner, and the workflow warns rather than fails).
   #   Images verified by hand instead. The .github fix is still unmerged and now blocks core-provider's
   #   tag too — the issue number was cited as #25 once and #24 once, so confirm which before chasing.
-  version: 0.28.1
+  version: 0.39.0
   deps:
   - oasgen-provider-crd
   tier: platform
