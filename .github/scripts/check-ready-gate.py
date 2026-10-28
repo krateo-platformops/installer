@@ -14,6 +14,9 @@ WHAT IT MUST DISCRIMINATE, and the middle two are the point:
     Ready=True                            -> ready
     Ready=Unknown reason=ZeroEvidence     -> ready      the cdc evaluated NONE of the children
     Ready=Unknown reason=Creating         -> NOT ready   a genuinely converging dep MUST block
+    Ready=False  reason=Creating          -> NOT ready   core-provider#230's new emitter: a
+                                                         composition whose render shrank
+    Ready=False  reason=Unavailable       -> NOT ready
     Ready=False                           -> NOT ready
 
 Accepting bare `Unknown` would turn every mid-creation dependency into "ready" and let
@@ -40,6 +43,17 @@ CASES = [
     ("Unknown/Creating must BLOCK",       [{"type": "Ready", "status": "Unknown", "reason": "Creating"}],          ""),
     ("Unknown with NO reason must BLOCK", [{"type": "Ready", "status": "Unknown"}],                                ""),
     ("Ready=False",                       [{"type": "Ready", "status": "False"}],                                 ""),
+    # core-provider#230 ships a NEW emitter of Ready=False: a composition whose render produced
+    # FEWER children than it was managing now reports condition.Creating(), which is
+    # Type=Ready / Status=False / Reason=Creating (unstructured-runtime v1.6.0), rather than
+    # Available. The bare Ready=False case above already covers the BRANCH, so these two add no
+    # new code path — they pin the CONTRACT, named for the states that will actually arrive.
+    # Why that is worth two lines: #230's whole purpose is that a dep mid-shrink must not be
+    # treated as converged, and the tempting "fix" when rolls start converging more slowly is to
+    # accept False/Creating here as "it is only converging". That would restore exactly the false
+    # convergence #230 removes, and without these cases nothing would fail.
+    ("False/Creating must BLOCK",         [{"type": "Ready", "status": "False", "reason": "Creating"}],           ""),
+    ("False/Unavailable must BLOCK",      [{"type": "Ready", "status": "False", "reason": "Unavailable"}],        ""),
     ("no Ready condition at all",         [{"type": "Synced", "status": "True"}],                                 ""),
     ("no conditions",                     [],                                                                     ""),
     # A non-Ready condition carrying the magic reason must not satisfy the gate.
