@@ -23,6 +23,8 @@
 #   namespace  name  kind  uid  generation  creationTimestamp
 #   composition-version  composition-origin-version  ownerRefs  helm-release-name
 #
+# A trailing `#MANAGED-CHILDREN <n>` line records the umbrella's own child count (see below).
+#
 # The last four are the core-provider#199 classifier: a composition with NEITHER a
 # `meta.helm.sh/release-name` NOR a `krateo.io/composition-name` is STANDALONE, and a
 # standalone composition whose write-once origin stamp trails its CompositionDefinition
@@ -69,8 +71,30 @@ while read -r kind; do
 done <<< "$CRDS"
 
 sort -o "$OUT" "$OUT"
-ROWS=$(wc -l < "$OUT" | tr -d ' ')
-echo "captured $ROWS compositions from $CRD_COUNT CRDs; CRs seen $SEEN; read errors $ERRORS"
+
+# The umbrella's OWN managed-children count, recorded as a trailing comment so a before/after
+# diff can see it move.
+#
+# WHY THIS IS NOT REDUNDANT WITH THE ROWS ABOVE. core-provider#230: `status.managed` is replaced
+# WHOLESALE from each render and is the only input to the health rollup, so a render that yields
+# fewer resources shrinks the denominator, the rollup finds the smaller set healthy, and the
+# composition reports Available with nothing in the condition saying the set moved. Measured on
+# krateo-057 during the 0.3.465 roll: 122 -> 108 -> 122, with Ready=True throughout the 108.
+#
+# So the composition's own Ready condition cannot distinguish "complete and healthy" from
+# "incomplete and healthy about what is left", and a gate that waits on Ready=True can be
+# satisfied precisely BECAUSE components are missing. The row count above does not catch it
+# either: the pruned components' CRs are gone, so they are absent from both the capture and the
+# umbrella, and 83 == 83 holds while 14 children are missing from the render.
+# -A rather than a hardcoded namespace: the rest of this script is namespace-agnostic and the
+# umbrella is not guaranteed to live in krateo-system on every install.
+MANAGED=$(kubectl --context="$CTX" get installers.composition.krateo.io -A \
+  -o jsonpath='{range .items[*]}{range .status.conditions[?(@.type=="Ready")]}{.message}{"\n"}{end}{end}' 2>/dev/null \
+  | grep -oE '[0-9]+ managed children' | grep -oE '^[0-9]+' | head -1 || true)
+echo "#MANAGED-CHILDREN ${MANAGED:-unknown}" >> "$OUT"
+
+ROWS=$(grep -vc '^#' "$OUT" | tr -d ' ')
+echo "captured $ROWS compositions from $CRD_COUNT CRDs; CRs seen $SEEN; read errors $ERRORS; umbrella managed children ${MANAGED:-unknown}"
 
 if [ "$ERRORS" -gt 0 ]; then
   # Mark the file itself, not just this output: a stderr warning is lost the moment
