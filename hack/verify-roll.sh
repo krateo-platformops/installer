@@ -64,7 +64,7 @@ echo "== identity: which compositions were recreated =="
 # compared nothing, and prints a green line while being structurally blind. That is exactly what
 # this script's own detector proof caught before it was ever used on a roll.
 # Python also lets added/removed rows be named rather than inferred from a count mismatch.
-python3 - "$BEFORE" "$AFTER" ${EXPECT_UID[@]+"${EXPECT_UID[@]}"} <<'PYIDENT'
+( python3 - "$BEFORE" "$AFTER" ${EXPECT_UID[@]+"${EXPECT_UID[@]}"} <<'PYIDENT'
 import sys
 before_path, after_path, *expected = sys.argv[1:]
 
@@ -112,9 +112,55 @@ if rc == 0:
     print("  ok  identity matches the declared expectation exactly, over every row in both captures")
 sys.exit(rc)
 PYIDENT
-irc=$?
-[ "$irc" = 2 ] && exit 2
+) && irc=0 || irc=$?
+# `|| irc=$?` is load-bearing, not style. Under `set -e` a bare command that exits non-zero kills
+# the script immediately — so the identity block exiting 3 meant health was NEVER CHECKED and no
+# VERDICT was printed at all. A gate that stops at its first finding reports less than it looked
+# at, and the operator cannot tell "healthy" from "never examined".
+#
+# This bit twice over: the invocation that found it piped the script to `tail`, so the `$?` I read
+# was tail's status (0) rather than the script's. Two instruments agreeing on a wrong answer.
+if [ "$irc" = 2 ]; then
+  echo "VERDICT WITHHELD: the identity comparison could not be made."
+  exit 2
+fi
 [ "$irc" = 0 ] || rc=3
+
+echo
+echo "== the umbrella's managed-children count =="
+# core-provider#230: `status.managed` is replaced WHOLESALE from each render and is the only input
+# to the health rollup, so a render yielding fewer resources shrinks the denominator, the rollup
+# finds the smaller set healthy, and the composition reports Available with nothing in the
+# condition saying the set moved. The identity check above cannot see it either — the pruned
+# components' CRs are gone, so they are absent from BOTH captures and 83 == 83 holds while 14
+# children are missing from the render.
+#
+# Measured on krateo-057 during the 0.3.465 roll: 122 -> 108 -> 122, Ready=True throughout. A
+# verification that ran at 108 reported the 14 as DISAPPEARED, which was true of that instant and
+# false as a verdict. This check exists so the SHRINK is named rather than inferred from a
+# downstream symptom.
+BEFORE_MANAGED=$(grep -oE '^#MANAGED-CHILDREN [0-9]+' "$BEFORE" | grep -oE '[0-9]+' || true)
+AFTER_MANAGED=$(grep -oE '^#MANAGED-CHILDREN [0-9]+' "$AFTER" | grep -oE '[0-9]+' || true)
+if [ -z "$BEFORE_MANAGED" ]; then
+  echo "  -- the BEFORE capture predates this check and records no count."
+  echo "     Cannot compare, so NOT asserting it. Re-capture to get this arm; a missing"
+  echo "     comparison is reported here rather than silently passing."
+elif [ -z "$AFTER_MANAGED" ]; then
+  echo "  FAIL the AFTER capture has no managed-children count — the umbrella's Ready message did"
+  echo "       not carry one, which is itself worth looking at"
+  rc=4
+elif [ "$AFTER_MANAGED" -lt "$BEFORE_MANAGED" ]; then
+  echo "  FAIL the umbrella manages FEWER children than before: $BEFORE_MANAGED -> $AFTER_MANAGED."
+  echo "       Components are missing from the render. The composition can still report Available,"
+  echo "       because the rollup only evaluates what was rendered (core-provider#230). Either the"
+  echo "       roll is still mid-prune, or components were pruned and not re-emitted."
+  rc=4
+elif [ "$AFTER_MANAGED" -gt "$BEFORE_MANAGED" ]; then
+  echo "  ok   the umbrella manages MORE children than before: $BEFORE_MANAGED -> $AFTER_MANAGED"
+  echo "       (expected when a roll adds components; stated so it is not mistaken for noise)"
+else
+  echo "  ok   managed children unchanged at $AFTER_MANAGED — the render set is the same size"
+fi
 
 echo
 echo "== health: every composition's Ready condition =="
@@ -138,10 +184,19 @@ while IFS=$'\t' read -r name status reason; do
       echo "  FAIL $name Ready=False reason=$reason"; bad=1 ;;
     Unknown)
       if [ "$reason" = "ZeroEvidence" ]; then
-        echo "  ok   $name Ready=Unknown/ZeroEvidence — zero children evaluated, health not claimed"
         ze=$((ze+1))
-        printf '%s\n' ${EXPECT_ZE[@]+"${EXPECT_ZE[@]}"} | grep -qx "$name" \
-          || { echo "  FAIL $name reports ZeroEvidence and was NOT declared with --expect-zero-evidence"; bad=1; }
+        # Print ONE line per object, not an ok immediately contradicted by a FAIL. The old form
+        # emitted both for an undeclared ZeroEvidence composition, which reads as the check
+        # disagreeing with itself.
+        if printf '%s\n' ${EXPECT_ZE[@]+"${EXPECT_ZE[@]}"} | grep -qx "$name"; then
+          echo "  ok   $name Ready=Unknown/ZeroEvidence — declared, and zero children evaluated"
+        else
+          echo "  FAIL $name reports Unknown/ZeroEvidence and was NOT declared with"
+          echo "       --expect-zero-evidence. Health was never claimed for it, so this is not"
+          echo "       necessarily a fault — but an undeclared one means the roll changed which"
+          echo "       compositions can evaluate their children, which wants a decision not a shrug."
+          bad=1
+        fi
       else
         echo "  FAIL $name Ready=Unknown reason=$reason — an unrecognised reason is the case nobody planned for"; bad=1
       fi ;;
