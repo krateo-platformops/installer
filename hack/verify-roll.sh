@@ -28,7 +28,10 @@
 #   1  usage error
 #   2  the after-capture is incomplete — verdict withheld, NOT a pass
 #   3  identity: an unexpected uid changed, or an expected one did not
-#   4  health: a composition is Ready=False, or Unknown for an unexpected reason
+#   4  health: a composition is Ready=False for a reason OTHER than Creating, or Unknown for an
+#      unexpected reason
+#   5  WITHHELD: identity matched and nothing is unhealthy, but one or more compositions report
+#      Ready=False/Creating -- still converging. Not a pass; re-run when they settle.
 set -euo pipefail
 
 CTX="${1:?usage: verify-roll.sh <kube-context> <before.tsv> [--expect-uid-change <name>]...}"
@@ -168,7 +171,7 @@ kubectl --context "$CTX" get compositiondefinitions -A \
   -o jsonpath='{range .items[*]}{.status.apiVersion}{" "}{.status.resource}{"\n"}{end}' 2>/dev/null \
   | awk 'NF==2' | sort -u > "$AFTER.gvks" || true
 
-bad=0; ze=0
+bad=0; ze=0; converging=0
 while read -r apiver res; do
   [ -n "$res" ] || continue
   kubectl --context "$CTX" get "$res.${apiver%%/*}" -A \
@@ -181,7 +184,28 @@ while IFS=$'\t' read -r name status reason; do
   case "$status" in
     True) ;;
     False)
-      echo "  FAIL $name Ready=False reason=$reason"; bad=1 ;;
+      # Ready=False SPLITS on reason, and conflating the two arms is a false FAIL on every roll.
+      #
+      # `Creating` means the composition is CONVERGING -- not converged, but not faulty either.
+      # Observed live on 057 during the 0.3.466 roll: the umbrella read
+      #   Ready=False reason=Creating, "1 of 122 managed children are not ready: krateo-sse-proxy"
+      # seconds after the child was recreated, while the roll was completing normally. This arm
+      # used to call that UNHEALTHY COMPOSITION. Nothing was unhealthy; the roll had not finished.
+      #
+      # It is NOT a pass either, so the verdict is WITHHELD (exit 2) exactly as for an incomplete
+      # capture -- "re-run when it settles", never "nothing is unhealthy".
+      #
+      # KEYED ON THE LITERAL STRING `Creating`, case-insensitively, because that is the only value
+      # core-provider#234 recognises. Synonyms (Progressing, Converging, Pending) are DELIBERATELY
+      # not accepted upstream and fall back to Unavailable, so accepting them here would make this
+      # gate disagree with the controller that stamped the condition.
+      case "$(printf '%s' "$reason" | tr '[:upper:]' '[:lower:]')" in
+        creating)
+          echo "  .... $name Ready=False reason=Creating — still converging, not a fault"
+          converging=$((converging+1)) ;;
+        *)
+          echo "  FAIL $name Ready=False reason=$reason"; bad=1 ;;
+      esac ;;
     Unknown)
       if [ "$reason" = "ZeroEvidence" ]; then
         ze=$((ze+1))
@@ -216,8 +240,11 @@ if [ "$nready" -lt 1 ]; then
   echo "  FAIL the readiness sweep evaluated 0 compositions — verdict WITHHELD, not a pass"
   rm -f "$AFTER.gvks" "$AFTER.ready"; exit 2
 fi
-echo "  -- evaluated $nready compositions, $ze reporting ZeroEvidence"
+echo "  -- evaluated $nready compositions, $ze reporting ZeroEvidence, $converging converging"
 [ "$bad" = 0 ] || rc=4
+# A real fault outranks "still converging": if anything is genuinely broken, say so rather than
+# withholding. Only withhold when converging is the ONLY thing standing between this and a pass.
+if [ "$bad" = 0 ] && [ "$converging" -gt 0 ] && [ "$rc" = 0 ]; then rc=5; fi
 
 rm -f "$AFTER.gvks" "$AFTER.ready"
 
@@ -226,5 +253,9 @@ case $rc in
   0) echo "VERDICT: the roll changed exactly what was declared, and nothing is unhealthy." ;;
   3) echo "VERDICT: IDENTITY MISMATCH — see the FAIL lines above." ;;
   4) echo "VERDICT: UNHEALTHY COMPOSITION — see the FAIL lines above." ;;
+  5) echo "VERDICT: WITHHELD — $converging composition(s) report Ready=False/Creating, i.e. still"
+     echo "         converging. Identity matched and nothing is unhealthy, but the roll has not"
+     echo "         finished, so this is NOT a pass. Re-run when they settle."
+     echo "         A sample taken mid-convergence is not the level." ;;
 esac
 exit $rc
