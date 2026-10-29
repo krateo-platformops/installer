@@ -331,9 +331,28 @@ Values worth knowing:
    > same as being safe — **and that reasoning applies here. For Alert data, prefer stripping
    > `composition.krateo.io/finalizer` explicitly, then deleting.**
    >
-   > Upstream: **krateo-platformops/unstructured-runtime#23** — the missing `return nil` at
-   > `worker.go:333`, with both arms, the controls, and the note that a regression test needs **both**,
-   > because the sole-finalizer arm passes today and would keep passing with the bug present.
+   > **FIXED UPSTREAM IN `unstructured-runtime` v1.6.1** (issue #23, PR #24, tests run with `-race`
+   > and verified to fail without the fix). So this is version-scoped rather than open-ended:
+   >
+   > | | |
+   > |---|---|
+   > | **affected** | any component embedding unstructured-runtime **< v1.6.1** |
+   > | behaviour when affected | orphan defeated **100%** of the time for an object carrying any finalizer besides `composition.krateo.io/finalizer`; reliable when that finalizer is alone |
+   > | **krateo-057 today** | core-provider 2.13.42 embeds **v1.6.0** — affected. rest-dynamic-controller pins **v1.4.0** — affected (branch identical at `worker.go:307`) |
+   >
+   > So **strip the finalizer explicitly, then delete** remains the recommendation for Alert data
+   > **until the cdc is on v1.6.1**; after that it becomes belt-and-braces rather than the procedure.
+   >
+   > The cdc was deliberately **not** re-pinned to v1.6.1 for installer 0.3.470: with all 83
+   > compositions carrying a sole finalizer the live blast radius is zero, so a third re-pin before
+   > an already-slipped roll was not worth it. It arrives in whatever core-provider release follows.
+   >
+   > **A note on how this survived.** `TestProcessItem_DeleteOrphan` existed in that repo throughout
+   > and was green. It drives the event as `EventType: Observe`, so the fall-through landed in
+   > `handleObserve` and **the branch carrying the bug never executed** — and it asserted only that
+   > the finalizer was removed, never that no external delete fired. A test named for the scenario,
+   > testing a different code path. **Mis-tested, not untested**, which is worse: it carried a green
+   > check for months and anyone auditing coverage would have ticked it off.
 
    **Why the annotation is consulted at all, and the three sharp edges.** Verified at the primary source rather than from
    core-provider's tree, where the string does not appear: the annotation is defined in the
