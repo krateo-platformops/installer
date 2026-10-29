@@ -70,6 +70,12 @@ components:
   # 1.6.70: BYTE-IDENTICAL to 1.6.69 — verified by diffing the packaged templates, not assumed.
   # 1.6.71: BYTE-IDENTICAL to 1.6.70, verified by diffing the packaged templates. Lockstep only.
 - name: frontend-crd
+  # 1.8.15: carried with frontend 1.8.15 (comment-only upstream; see that entry). THE CRD PAYLOAD IS
+  # UNCHANGED -- verified by unpacking both artifacts, not predicted: 48 files and 542,460 BYTES ON
+  # BOTH SIDES vs 1.8.13, 47 yaml files under crds/ on both, and `diff -rq` reports Chart.yaml alone.
+  # That byte count is unchanged since 1.8.10, so the widget CRD set has not moved in six releases.
+  # Byte-identical is a reason to RECORD the pin here, not a reason to leave it behind: the pair must
+  # stay equal, and a CRD roll without the matching image is what blanks pages.
   # 1.8.12: carried with frontend 1.8.12 (frontend#505, the SSE identity re-open). The CRD payload is
   # UNCHANGED -- verified by unpacking both artifacts, not predicted:
   #   48 files and 542,460 bytes on BOTH sides, and the ONLY difference in the entire chart is
@@ -301,7 +307,7 @@ components:
   # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
   # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
   # holds anyway because none is at the path that matters -- but check the path, not the presence.)
-  version: 1.8.13
+  version: 1.8.15
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1272,6 +1278,24 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+  # 1.8.15: NO RUNTIME BEHAVIOUR CHANGE. Cut for provenance symmetry so portal 1.8.86's byte copies
+  # reference a released revision rather than an unreleased main. Contents: frontend#530 (a jqcheck
+  # fix that runs only in CI), #531 stage 3 of the composer->builder rename, #532 a corrected
+  # comment.
+  # CHART VERIFIED BY UNPACKING BOTH ARTIFACTS, not by the release run going green: 1.8.13 -> 1.8.15
+  # is 14 files and 60761 BYTES ON BOTH SIDES, and `diff -rq` reports Chart.yaml and nothing else.
+  # The image rides appVersion (`tag: ""`), so the SPA moves with the chart version.
+  # IMAGE VERIFIED AT SOURCE by the frontend session, with a CONTROL: the #531 marker
+  # 'the builder owns the rest' resolves 1 and 'the composer owns the rest' 0, while the 1.8.14
+  # marker 'no page builder is open' still resolves 1/0 -- so a 0 means absent rather than
+  # NOT LOOKED AT. Their first extraction read /usr/share/nginx/html and found 0 JS assets; the
+  # assets are at /app/assets. Without the control, "0 assets in the published image" would have
+  # read as a broken build when the instrument was pointed at the wrong path.
+  # digest sha256:d4a75683b0122add6984aa99311fb1ff7f94e43de0d083e9797cf6cdcd6a0eb4, footer 1.8.15 · fe4b0e7.
+  # 1.8.14 IS SKIPPED, DELIBERATELY: it is live on krateo-demo only, applied as a CR patch because
+  # the installer pinned 1.8.13. 1.8.15 supersedes it, so that hand-patch becomes unnecessary the
+  # moment krateo-demo rolls an installer carrying this pin -- and should then be dropped, because a
+  # CR patch that happens to agree with the chart is indistinguishable from one that is fighting it.
   # 1.8.12: frontend#505 ONLY -- the SSE identity re-open. An SSE stream now re-opens with the NEW
   # credential when the session changes, plus the controller-identity guard completion review found
   # (a superseded stream could still kill its replacement). Nothing in installer#395's token path
@@ -2091,7 +2115,7 @@ components:
   # ARTIFACT: the frontend chart is a PURE VERSION MOVE -- 14 files and 60758 BYTES ON BOTH SIDES vs
   # 1.8.4, only Chart.yaml. Every behaviour change rides in the IMAGE at tag 1.8.6, which is why the
   # CRD and the image must move TOGETHER: a CRD bump without the matching SPA blanks pages.
-  version: 1.8.13
+  version: 1.8.15
   deps:
   - frontend-crd
   - authn
@@ -2315,6 +2339,22 @@ components:
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
 - name: portal
+  # 1.8.86: COMMENT TEXT ONLY -- frontend#531 stage 3 of the composer->builder rename. PROVEN, not
+  # inspected by eye. Seven files differ vs 1.8.85 (41 files, 168323 -> 168310 bytes):
+  #   templates/_builder.tpl, restaction.blueprint-palette.yaml, restaction.blueprint-render-draft.yaml,
+  #   restaction.controller-render-draft.yaml   -> every change is inside a `{{/* */}}` block. Strip
+  #     those blocks from both versions and all four hash IDENTICALLY, so the RENDERED output cannot
+  #     differ. The stripper was controlled first: a known comment line resolves 1 before stripping
+  #     and 0 after, so "identical" means the comments were removed rather than the files unread.
+  #   files/builders/controller-builder.builder.yaml, portal-builder.builder.yaml -> `#` comments
+  #     only; identical once `^\s*#` lines are dropped.
+  # ONE THING THAT DOES REACH THE CLUSTER: those two builder files are SHIPPED VERBATIM into their
+  # Builder CRs, so the CR bodies' comment text changes and cdc will apply it. Cosmetic, but it is a
+  # write, so expect Builder CR revisions to move on this roll and do not read that as drift.
+  # A COMMENT DEGRADED IN THE RENAME, recorded because the next reader will trip on it:
+  # restaction.controller-render-draft.yaml now says "the builder does what the builder's Preview
+  # does", which named two different things before the rename. Harmless, worth a portal issue, not a
+  # blocker.
   # 1.8.84 (portal#328 + portal#329): UNBREAKS THE LIVE PORTAL. 1.8.83's chart split rewrote
   # endpointRef.namespace (and the apiRef half) to the PAGE namespace across 5 charts, 37 refs.
   # Endpoint Secrets are created in the RELEASE namespace, so every rewritten ref resolved to
@@ -2937,7 +2977,7 @@ components:
   # have silently dropped the `// empty` fix. Verified on the published chart -- 1 occurrence of
   # `[.compdef.status.resource // empty]`, 0 of the bare pre-fix form.
   # ARTIFACT: 625 files, 1515560 -> 1516342 bytes; only Chart.yaml and that one template differ.
-  version: 1.8.85
+  version: 1.8.86
   deps:
   - frontend
   - git-provider
@@ -2980,6 +3020,9 @@ components:
   # 1.8.48: co-versioned with portal, as always.
   # 1.8.49: co-versioned with portal, as always.
 - name: portal-agents
+  # 1.8.86: co-versioned with portal, as always -- one tag, every chart under helm/. PURE VERSION
+  # MOVE: 109 files and 472981 BYTES ON BOTH SIDES vs 1.8.85, `diff -rq` reports Chart.yaml alone.
+  # Verified by unpacking, not assumed from the co-versioning rule.
   # 1.8.77: co-versioned with portal, as always — the RBAC narrowing lands in the portal chart.
   # 1.8.76: co-versioned with portal, as always — the sandbox exclusion lands in the portal chart.
   # 1.8.75: co-versioned with portal, as always — one tag, every chart under helm/. The nav and
@@ -3028,7 +3071,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.85
+  version: 1.8.86
   deps: ['portal']
   tier: platform
   feature: portal
@@ -3060,8 +3103,11 @@ components:
 # admins-read-{marketplace,incidents,alerts}-pages with no devs subject. That absence is the point
 # of #261: `devs` has no binding where these pages now live.
 - name: marketplace-page
+  # 1.8.86: co-versioned with portal. COMMENT TEXT ONLY -- the same composer->builder rename, in
+  # templates/_builder.tpl, inside `{{/* */}}` blocks. 26 files, 124539 -> 124537 bytes; Chart.yaml
+  # and that one template differ, and the template's change cannot reach the render.
   kind: MarketplacePage
-  version: 1.8.85
+  version: 1.8.86
   deps:
   - portal
   tier: platform
