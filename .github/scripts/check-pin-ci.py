@@ -366,8 +366,11 @@ def main():
                     f"commit. The tag may well exist. In CI the repo-scoped GITHUB_TOKEN cannot "
                     f"read a PRIVATE repo in another org, and 26 of this chart's pins are "
                     f"cross-org — so a local run of this script is NOT equivalent to the CI run. "
-                    f"Fix by giving CI a token that can read it; do NOT 'fix' it by removing the "
-                    f"source or the appVersion. Still a failure: unverifiable is not a pass.")
+                    f"Fix by setting the org secret PIN_CI_READ_TOKEN to a fine-grained PAT with "
+                    f"contents:read + checks:read on the cross-org repos; the workflow prefers it "
+                    f"and falls back to GITHUB_TOKEN, and its first log line says which it used. "
+                    f"Do NOT 'fix' it by removing the source or the appVersion. Still a failure: "
+                    f"unverifiable is not a pass.")
             else:
                 failures.append(
                     f"{name} {version}: UNRESOLVED — appVersion {app} matches no tag in any of "
