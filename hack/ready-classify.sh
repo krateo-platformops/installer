@@ -18,17 +18,29 @@
 #   fail          everything else
 classify_ready() {
   local st="${1-}" rsn="${2-}"
-  local lr; lr="$(printf '%s' "$rsn" | tr '[:upper:]' '[:lower:]')"
+  # No case folding: every comparison below is against a Go constant, exact by contract.
   case "$st" in
     True) printf 'healthy' ;;
     False)
-      # ONLY the literal `Creating` means converging. core-provider#234 recognises that string and
-      # DELIBERATELY rejects synonyms (Progressing/Converging/Pending), which fall back to
-      # Unavailable. Accepting a synonym here would make this gate disagree with the controller
-      # that stamped the condition. The unrecognised->fail direction is also the safe one: a typo
-      # read as converging would silently downgrade a real failure and wait forever, whereas a typo
-      # read as a failure is loud.
-      if [ "$lr" = "creating" ]; then printf 'converging'; else printf 'fail'; fi ;;
+      # ONLY THE EXACT STRING `Creating`, case-SENSITIVE. This was case-insensitive and that was
+      # wrong -- I had carried a normalisation from the wrong boundary.
+      #
+      # core-provider applies EqualFold at childhealth.go:239, but to `p.reason`, which
+      # readProjectedHealth reads from `.status.health.reason` (support.go:286) -- the
+      # AUTHOR-DECLARED PROJECTION INPUT. The OUTPUT is different: setCreatingStatus calls
+      # condition.Creating(), which sets `Reason: ReasonCreating` where
+      # `ReasonCreating string = "Creating"` (unstructured-runtime condition.go:21,52). So a
+      # blueprint author may write `creating` and have it accepted, but the CONDITION this script
+      # reads can only ever carry the constant.
+      #
+      # Therefore a case variant HERE is off-contract, not a tolerable spelling. Accepting it would
+      # mean reporting "healthy progress" for a value the controller cannot emit -- and if
+      # core-provider ever changed that constant, a tolerant match would keep passing silently
+      # while a strict one goes loudly red. Loud is the failure mode worth having.
+      #
+      # The frontend session argued this and was right; verified against the source above rather
+      # than conceded.
+      if [ "$rsn" = "Creating" ]; then printf 'converging'; else printf 'fail'; fi ;;
     Unknown)
       # Unknown is ONLY acceptable for the one reason that means "zero children were evaluated".
       # Bare Unknown must NOT be accepted: a genuinely converging child also reports Unknown, and
