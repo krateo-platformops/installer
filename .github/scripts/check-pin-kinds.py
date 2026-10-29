@@ -29,6 +29,17 @@ def crdgen_kind(chart):
     return "".join(CANON.get(p.upper(), p[:1].upper() + p[1:].lower()) for p in parts if p)
 
 pins = yaml.safe_load(open("chart/files/component-pins.yaml"))["components"]
+
+# THE INSTRUMENT MUST HAVE FOUND SOMETHING. With an empty, renamed or unparseable pins file this
+# script used to print "OK -- all 0 pins ..." and exit 0: a pass over nothing, which is the same
+# defect as a join that emitted zero rows and printed `ok`. The message was even honest about the
+# zero and still succeeded, which is why nobody would notice. A floor of >0 is enough -- a
+# hardcoded count would need editing on every pin addition and would rot into a lie.
+if not pins:
+    print("::error::%s: parsed ZERO components from chart/files/component-pins.yaml. The file was "
+          "read but yielded no pins, so this check verified nothing. That is not a pass." % 'check-pin-kinds')
+    sys.exit(1)
+
 bad = [(c["name"], c.get("chart", c["name"]), c["kind"], crdgen_kind(c.get("chart", c["name"])))
        for c in pins if c["kind"] != crdgen_kind(c.get("chart", c["name"]))]
 if bad:
