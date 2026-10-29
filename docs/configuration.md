@@ -268,16 +268,26 @@ Values worth knowing:
    `alert-troubleshooter-crd` Composition, and its controller then runs `helm uninstall`, which
    deletes the CRD and every Alert with it. A `helm.sh/resource-policy: keep` annotation on the live
    CRD does not stop that: `helm uninstall` reads the policy from the release's stored manifest.
-   Mark the Composition `orphan` instead, so its controller drops the finalizer without
-   uninstalling:
+   > **DO NOT FOLLOW THE COMMAND BELOW — `krateo.io/deletion-policy` IS NOT A REAL ANNOTATION.**
+   > Verified 2026-10-29: core-provider's tree contains **zero** occurrences of it, and **zero**
+   > objects on krateo-057 carry it (the only `krateo.io` annotation on a live composition is
+   > `composition-origin-version`). Applying it is a silent no-op: clean apply, zero protection.
+   > An operator who followed this would lose `alerts.observability.krateo.io` and every Alert
+   > **believing they were protected**, which is worse than having no procedure at all.
+   >
+   > The problem described above is real and still unsolved here: the upgrade deletes the
+   > `alert-troubleshooter-crd` Composition, its controller runs `helm uninstall`, and that takes
+   > the CRD and every Alert with it — and `helm.sh/resource-policy: keep` on the live CRD does not
+   > help, because `helm uninstall` reads the policy from the release's **stored manifest**.
+   >
+   > **Do not attempt this upgrade path until the safe sequence is documented here.** The open
+   > question with core-provider is whether any annotation or spec field makes a composition's
+   > controller drop its finalizer *without* running `helm uninstall` (`krateo.io/gracefully-paused`
+   > is a candidate but is NOT confirmed to have that effect), or whether no such mechanism exists
+   > and a different sequence is required. Tracked in the issue linked from this section.
 
-   ```bash
-   kubectl annotate alerttroubleshootercrds alert-troubleshooter-crd -n krateo-system \
-     krateo.io/deletion-policy=orphan
-   # Expect ["composition.krateo.io/finalizer"] and nothing else:
-   kubectl get alerttroubleshootercrds alert-troubleshooter-crd -n krateo-system \
-     -o jsonpath='{.metadata.finalizers}'
-   ```
+   ~~Mark the Composition `orphan` instead, so its controller drops the finalizer without
+   uninstalling:~~ **[RETRACTED — see the warning above.]**
 
    The CRD's helm ownership needs no hand edit: the composition controller installs with helm's
    take-ownership, so the `alert-provider-crd` release adopts the CRD. Leave the

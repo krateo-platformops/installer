@@ -2287,9 +2287,22 @@ components:
   # so replacing the RestDefinition cascade-deletes its CRs and their finalizers delete the REAL
   # GitHub deployment records. `kubectl get deployments.github.krateo.io -A` returns no resources on
   # 057 -- 0 instances, apiserver-confirmed against a control of 15 `repositories` -- so the
-  # destructive path has nothing to act on. A cluster WITH instances needs
-  # krateo.io/deletion-policy=orphan reconciled FIRST, then migrate, then confirm zero old-kind CRs,
-  # then delete the orphaned RestDefinition. Orphan alone is a holding state, not a completion.
+  # destructive path has nothing to act on.
+  # A CLUSTER WITH INSTANCES HAS NO VERIFIED SAFE PATH, and what was written here before was WRONG:
+  # it prescribed reconciling `krateo.io/deletion-policy=orphan` first. THAT ANNOTATION DOES NOT
+  # EXIST -- zero occurrences in core-provider's tree (they grepped it), and zero objects carrying it
+  # on 057, where the only krateo.io annotation on a live composition is composition-origin-version
+  # (checked 2026-10-29). Applying it is a SILENT NO-OP: clean apply, zero protection, which is worse
+  # than having no procedure because it reads as a completed safeguard.
+  # THE REAL MECHANISM, per github-provider-kog: removing the RestDefinition makes oasgen reap the
+  # generated CRD, the apiserver cascades to the CRs, and OASGEN'S OWN finalizers call the external
+  # DELETE /repos/.../deployments/{id}. Neither helm nor cdc is in that path, so no helm
+  # resource-policy and no cdc annotation can gate it -- there is nothing for an installer-side
+  # annotation to do. The only verified-safe approach is to ensure the old kind has ZERO CRs (or zero
+  # finalizers) BEFORE its RestDefinition is removed, so no finalizer ever fires.
+  # I did not invent that annotation, I RESTATED it -- to github-provider-kog, approvingly, hours
+  # after it had already been written here. A fake fact that round-trips through two sessions and a
+  # file reads like a verified one by its third mention; only grepping for the string broke it.
   version: 0.6.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
