@@ -2291,9 +2291,15 @@ components:
   # A CLUSTER WITH INSTANCES: do NOT follow what this comment used to say. It prescribed reconciling
   # `krateo.io/deletion-policy=orphan` first. THAT ANNOTATION IS REAL -- unstructured-runtime v1.6.0
   # meta.go:70, honoured by worker.go:333 for cdc-driven COMPOSITION CRs (see docs/configuration.md)
-  # -- but it is INERT FOR KOG CRs, because the rest-dynamic-controller never calls ShouldDelete
-  # (oasgen-provider#276). So on a `deployments.github.krateo.io` CR it applies cleanly and does
-  # nothing, which is the worst shape a safeguard can have.
+  # -- and WHETHER IT BITES DEPENDS ON THE FINALIZER, not on the controller. The worker removes
+  # exactly one, `composition.krateo.io/finalizer` (worker.go:30, same in v1.4.0 and v1.6.0), so a
+  # CR with no finalizer or a different one is unaffected: the annotation applies cleanly and does
+  # nothing. DO NOT reason "rdc never calls ShouldDelete" -- rdc embeds the same worker at v1.4.0,
+  # and measured on 057 `repositories.github.krateo.io` has 15 CRs that DO carry
+  # composition.krateo.io/finalizer, while actionsvariableorgconfigurations carries none and
+  # git.krateo.io LocalResources carry provider-runtime's finalizer.managedresource.krateo.io.
+  # So for THIS kind, check it per cluster before relying on anything:
+  #   kubectl get deployments.github.krateo.io -A -o jsonpath='{.items[*].metadata.finalizers}'
   # WHAT ACTUALLY HAPPENS, code-read by oasgen-provider + openstack-ironic-operator-kog: a naive roll
   # onto a populated cluster does NOT deprovision. oasgen's deploy.Undeploy (deploy.go:437) REFUSES
   # to drop a CRD that still has live instances, counting them at the moment of the act and also

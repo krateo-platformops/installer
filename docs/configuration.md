@@ -300,10 +300,34 @@ Values worth knowing:
       in" has a different answer than it would for a core-provider annotation; core-provider 2.13.41
       reports embedding `unstructured-runtime v1.6.0`.
 
-   **This applies to cdc-driven composition CRs, which is what this section is about. It does NOT
-   apply to KOG CRs** (`*.krateo.io` kinds generated from a RestDefinition): the rest-dynamic
-   controller never calls `ShouldDelete`, so the annotation is inert there -- tracked as
-   oasgen-provider#276. Do not carry this procedure across to a KOG kind.
+   **What decides whether the annotation does anything is the FINALIZER, not the controller.** The
+   worker removes exactly one: `finalizerName = "composition.krateo.io/finalizer"`
+   (`pkg/controller/worker.go:30`, identical in v1.4.0 and v1.6.0). So before relying on
+   `deletion-policy: orphan` for any resource, confirm that resource carries that finalizer:
+
+   ```bash
+   kubectl get <kind> <name> -n <ns> -o jsonpath='{.metadata.finalizers}'
+   ```
+
+   A CR with **no** finalizer, or with a **different** one, is unaffected: the annotation applies
+   cleanly and does nothing. Measured on krateo-057:
+
+   | kind | finalizers | governed? |
+   |---|---|---|
+   | `portals.composition.krateo.io` | `composition.krateo.io/finalizer` | **yes** |
+   | `repositories.github.krateo.io` (15 CRs) | `composition.krateo.io/finalizer` | **yes** |
+   | `actionsvariableorgconfigurations.github.krateo.io` | `[]` | no |
+   | `localresources.git.krateo.io` (127 CRs) | `finalizer.managedresource.krateo.io` | no -- a **provider-runtime** finalizer, a different runtime with a different name |
+
+   **Do not reason from the controller.** "KOG kinds are exempt because the rest-dynamic controller
+   never calls `ShouldDelete`" is wrong twice over: rdc embeds the same worker (it pins
+   unstructured-runtime v1.4.0, which carries the same block), and `repositories.github.krateo.io`
+   is a KOG kind whose 15 live CRs on 057 **do** carry the governed finalizer. The finalizer is the
+   test; the controller is not.
+
+   Three axes have to be pinned for any claim of the form "X is honoured": **which repo** (the
+   annotation is in the dependency, not core-provider), **which runtime version** (rdc v1.4.0 vs cdc
+   v1.6.0), and **which finalizer the CR carries**.
 
    The CRD's helm ownership needs no hand edit: the composition controller installs with helm's
    take-ownership, so the `alert-provider-crd` release adopts the CRD. Leave the
