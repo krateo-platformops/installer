@@ -8543,7 +8543,8 @@
                 },
                 "GOMEMLIMIT": {
                   "type": "string",
-                  "description": "Go soft memory limit; must be below the container memory limit.",
+                  "pattern": "^([0-9]+(B|KiB|MiB|GiB|TiB)|off)$",
+                  "description": "Go soft memory limit; must be below the container memory limit. THE SUFFIX IS GO'S, NOT KUBERNETES': the accepted forms are B/KiB/MiB/GiB/TiB (e.g. 192MiB) or `off`. A Kubernetes quantity such as `192Mi` does NOT parse — and Go IGNORES an unparseable GOMEMLIMIT rather than failing, so the process runs with NO soft limit and is indistinguishable from one where the variable was never set. The pattern exists to make that typo a schema rejection instead of a silent loss of the limit.",
                   "title": "GOMEMLIMIT"
                 },
                 "GOGC": {
