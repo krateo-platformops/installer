@@ -2288,21 +2288,24 @@ components:
   # GitHub deployment records. `kubectl get deployments.github.krateo.io -A` returns no resources on
   # 057 -- 0 instances, apiserver-confirmed against a control of 15 `repositories` -- so the
   # destructive path has nothing to act on.
-  # A CLUSTER WITH INSTANCES HAS NO VERIFIED SAFE PATH, and what was written here before was WRONG:
-  # it prescribed reconciling `krateo.io/deletion-policy=orphan` first. THAT ANNOTATION DOES NOT
-  # EXIST -- zero occurrences in core-provider's tree (they grepped it), and zero objects carrying it
-  # on 057, where the only krateo.io annotation on a live composition is composition-origin-version
-  # (checked 2026-10-29). Applying it is a SILENT NO-OP: clean apply, zero protection, which is worse
-  # than having no procedure because it reads as a completed safeguard.
-  # THE REAL MECHANISM, per github-provider-kog: removing the RestDefinition makes oasgen reap the
-  # generated CRD, the apiserver cascades to the CRs, and OASGEN'S OWN finalizers call the external
-  # DELETE /repos/.../deployments/{id}. Neither helm nor cdc is in that path, so no helm
-  # resource-policy and no cdc annotation can gate it -- there is nothing for an installer-side
-  # annotation to do. The only verified-safe approach is to ensure the old kind has ZERO CRs (or zero
-  # finalizers) BEFORE its RestDefinition is removed, so no finalizer ever fires.
-  # I did not invent that annotation, I RESTATED it -- to github-provider-kog, approvingly, hours
-  # after it had already been written here. A fake fact that round-trips through two sessions and a
-  # file reads like a verified one by its third mention; only grepping for the string broke it.
+  # A CLUSTER WITH INSTANCES: do NOT follow what this comment used to say. It prescribed reconciling
+  # `krateo.io/deletion-policy=orphan` first. THAT ANNOTATION IS REAL -- unstructured-runtime v1.6.0
+  # meta.go:70, honoured by worker.go:333 for cdc-driven COMPOSITION CRs (see docs/configuration.md)
+  # -- but it is INERT FOR KOG CRs, because the rest-dynamic-controller never calls ShouldDelete
+  # (oasgen-provider#276). So on a `deployments.github.krateo.io` CR it applies cleanly and does
+  # nothing, which is the worst shape a safeguard can have.
+  # WHAT ACTUALLY HAPPENS, code-read by oasgen-provider + openstack-ironic-operator-kog: a naive roll
+  # onto a populated cluster does NOT deprovision. oasgen's deploy.Undeploy (deploy.go:437) REFUSES
+  # to drop a CRD that still has live instances, counting them at the moment of the act and also
+  # refusing on a failed LIST. The old RestDefinition blocks in `Deleting`; the CRD, its CRs and the
+  # external GitHub records all survive. A mistaken roll STALLS rather than destroys.
+  # AND DO NOT REACH ZERO BY DELETING THE CRs: each delete fires composition.krateo.io/finalizer and
+  # the external DELETE /repos/.../deployments/{id}, i.e. hand-executing the cascade Undeploy would
+  # have blocked. Scaling the controller to 0 is not a substitute -- the CRs keep their finalizers,
+  # sit Terminating, and the CRD hangs. The order is: patch the finalizer off FIRST (better: adopt
+  # onto RepoDeployment, confirm it observes the same records, then strip), then delete.
+  # github-provider-kog is rehearsing that on a throwaway GitHub fixture and owes a verified runbook
+  # before any krateo-demo roll. Until then this cluster-with-instances path is NOT cleared.
   version: 0.6.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
