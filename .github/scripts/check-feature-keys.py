@@ -24,6 +24,17 @@ declared = set(features.get("properties", {}))
 
 pins = yaml.safe_load(open("chart/files/component-pins.yaml"))["components"]
 
+# THE INSTRUMENT MUST HAVE FOUND SOMETHING. With an empty, renamed or unparseable pins file this
+# script used to print "OK -- all 0 pins ..." and exit 0: a pass over nothing, which is the same
+# defect as a join that emitted zero rows and printed `ok`. The message was even honest about the
+# zero and still succeeded, which is why nobody would notice. A floor of >0 is enough -- a
+# hardcoded count would need editing on every pin addition and would rot into a lie.
+if not pins:
+    print("::error::%s: parsed ZERO components from chart/files/component-pins.yaml. The file was "
+          "read but yielded no pins, so this check verified nothing. That is not a pass." % 'check-feature-keys')
+    sys.exit(1)
+
+
 used = {}  # feature -> first pin name that uses it
 for c in pins:
     if not isinstance(c, dict):
