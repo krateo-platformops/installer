@@ -411,6 +411,20 @@ components:
   tier: platform
   feature: portal
 - name: authn
+  # KRATEO-DEMO CONSTRAINT -- DO NOT BUMP TO >= 0.28.0 AS A ROUTINE UPDATE (acmp, 2026-10-29).
+  # authn 0.28.0 (authn#42) stamps an `authn.krateo.io/groups` annotation, and AT STARTUP it
+  # BACKFILLS that annotation onto every existing `<user>-clientconfig` Secret. On krateo-demo the
+  # legacy Kyverno policy `tenant-namespace-on-login` triggers on CREATE **or UPDATE** of any
+  # `*-clientconfig` in krateo-system, so the backfill's UPDATE fires it -- proven on kind by acmp.
+  # Consequence: it mints `tenant-admin` and `tenant-authn`, two spurious tenant namespaces, each
+  # with a Role, a RoleBinding naming User/<name>, a LimitRange and a ResourceQuota. They do not
+  # exist today only because both clientconfigs PREDATE the policy and every rule sets
+  # `generateExisting: false`, so no backfill ever ran for them.
+  # The cutover runbook rolls authn >= 0.28.0 at STEP 3, after the legacy policy is orphaned and
+  # deleted, in Diego's window. Kyverno 3.9.2 is unaffected and still goes first.
+  # 057 IS NOT AFFECTED: it has no Kyverno at all, so there is no policy to trigger.
+  # If Diego directs an earlier bump that is his call -- but FLAG the two tenants when it happens;
+  # he has agreed to clean them up at the cutover with the other spurious service tenants.
   kind: Authn
   chart: authn
   # 0.27.3 (#29): AUTHN_KUBECONFIG_SERVER_URL default kube-apiserver:6443 -> kubernetes.default.svc.
