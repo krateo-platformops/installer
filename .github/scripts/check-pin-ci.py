@@ -101,13 +101,30 @@ def repo_slug(url):
     return m.group(1) if m else None
 
 
+def repo_readable(slug):
+    """Can this token see the repo at all? Distinguishes NO ACCESS from NO SUCH TAG.
+
+    CI runs with the repo-scoped GITHUB_TOKEN, which CANNOT read a PRIVATE repo in another org.
+    26 of this chart's 66 pins are cross-org (krateo-agentiko, krateo-blueprints), and several of
+    those repos are private -- so in CI their tag lookups fail for a reason that has nothing to do
+    with the pin. Without this distinction the gate reports "appVersion X matches no tag", which
+    sends the reader looking for a tag that exists. Measured: the same lookup succeeds from a
+    developer token and fails in CI, so a local run is NOT equivalent to the CI run.
+    """
+    _, rc = sh("gh", "api", f"repos/{slug}", "--jq", ".full_name")
+    return rc == 0
+
+
 def tag_sha(slug, tag):
     out, rc = sh("gh", "api", f"repos/{slug}/git/ref/tags/{tag}",
                  "--jq", '.object.sha + " " + .object.type')
     if rc != 0:
         return None
     sha, _, kind = out.partition(" ")
-    if kind.strip() == "tag":  # annotated: dereference to the commit
+    # ANNOTATED TAGS: /git/ref/tags/X returns the TAG OBJECT's sha, not the commit's. Checking CI
+    # against the tag-object sha finds nothing and reads as "no CI ran" -- it produced three bogus
+    # verdicts before this dereference was added.
+    if kind.strip() == "tag":
         out2, rc2 = sh("gh", "api", f"repos/{slug}/git/tags/{sha}", "--jq", ".object.sha")
         return out2 or None if rc2 == 0 else None
     return sha or None
@@ -337,10 +354,26 @@ def main():
             checked.append((slug, verdict, detail))
 
         if not checked:
-            failures.append(
-                f"{name} {version}: UNRESOLVED — appVersion {app} matches no tag in any of "
-                f"{[repo_slug(s) for s in sources] or 'sources: (none declared)'}. "
-                f"Not a pass: an unresolvable pin is where an untested commit hides.")
+            # WHY it did not resolve matters: "no such tag" is the pin's problem, "cannot read
+            # the repo" is this gate's. Reporting the first when it is the second sends the reader
+            # hunting for a tag that exists.
+            slugs = [repo_slug(s) for s in sources if repo_slug(s)]
+            unreadable = [s for s in slugs if not repo_readable(s)]
+            if unreadable and len(unreadable) == len(slugs):
+                failures.append(
+                    f"{name} {version}: UNVERIFIABLE — this token cannot read "
+                    f"{', '.join(unreadable)}, so appVersion {app} could not be resolved to a "
+                    f"commit. The tag may well exist. In CI the repo-scoped GITHUB_TOKEN cannot "
+                    f"read a PRIVATE repo in another org, and 26 of this chart's pins are "
+                    f"cross-org — so a local run of this script is NOT equivalent to the CI run. "
+                    f"Fix by giving CI a token that can read it; do NOT 'fix' it by removing the "
+                    f"source or the appVersion. Still a failure: unverifiable is not a pass.")
+            else:
+                failures.append(
+                    f"{name} {version}: UNRESOLVED — appVersion {app} matches no tag in any of "
+                    f"{slugs or 'sources: (none declared)'}"
+                    f"{' (readable: ' + ', '.join(s for s in slugs if s not in unreadable) + ')' if unreadable else ''}. "
+                    f"Not a pass: an unresolvable pin is where an untested commit hides.")
             continue
 
         for slug, verdict, detail in checked:
