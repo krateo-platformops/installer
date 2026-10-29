@@ -279,7 +279,43 @@ Values worth knowing:
      -o jsonpath='{.metadata.finalizers}'
    ```
 
-   **Why this works, and the three sharp edges.** Verified at the primary source rather than from
+   > [!WARNING]
+   > **UNVERIFIED FOR DATA SAFETY. Do not rely on this to preserve Alerts yet.** The annotation
+   > exists and *is* consulted (traced below), but whether it reliably prevents the uninstall is
+   > **unestablished**, because of a race in the runtime that the pre-check below does **not** close.
+   >
+   > Traced in `unstructured-runtime` v1.6.0 (identical in v1.4.0 at the shifted line numbers):
+   >
+   > 1. `pkg/controller/controller.go:283` enqueues a `Delete` event on a **pending** delete — the
+   >    runtime's own comment says *"the resource has a deletion timestamp but was not effectively
+   >    deleted yet"*.
+   > 2. `pkg/controller/worker.go:333` removes the finalizer under the orphan policy and **does not
+   >    return** — there is no `return nil`, so execution falls through.
+   > 3. `worker.go:453` dispatches on `evt.EventType`, not on `WasDeleted`, so the orphan pass goes
+   >    straight into `handleDelete`.
+   > 4. `handleDelete` (`:827`) calls `c.fetch(ctx, ref, false)` at `:834` — a **live**
+   >    `dynamicClient.Resource(...).Get` (`:907`), not a cache read — and then
+   >    `c.externalClient.Delete(ctx, el)` at `:840`, which is the `helm uninstall`.
+   >
+   > So whether the uninstall runs depends on whether the apiserver has finished reaping the object
+   > between step 2 and step 4. That is apiserver timing, not control flow, and it cannot be settled
+   > by reading the code. The GET is issued immediately by the same goroutine, so **if it is a race
+   > at all it is biased toward the delete firing**, not away from it.
+   >
+   > **The `jsonpath` pre-check below does not help here.** It closes the earlier window — the
+   > annotation not having landed before the deletion event. This window opens *after* the policy was
+   > correctly honoured, which is what makes it dangerous.
+   >
+   > **The deterministic alternative**, which does not depend on how this resolves: strip
+   > `composition.krateo.io/finalizer` from the object explicitly, then delete. That is what the KOG
+   > sessions adopted for their own migration. Prefer it for anything whose loss matters.
+   >
+   > core-provider is settling this by experiment on a disposable cluster (set the annotation,
+   > confirm it is live, delete, check whether the helm release survived, repeated). The fix if it is
+   > a race is a `return nil` after a successful orphan finalizer removal, in **unstructured-runtime**
+   > — not in core-provider and not here. This note will be updated with the measured answer.
+
+   **Why the annotation is consulted at all, and the three sharp edges.** Verified at the primary source rather than from
    core-provider's tree, where the string does not appear: the annotation is defined in the
    **dependency**, `krateo-platformops/unstructured-runtime` at `v1.6.0` --
    `AnnotationKeyDeletionPolicy = "krateo.io/deletion-policy"` (`pkg/meta/meta.go:70`),
