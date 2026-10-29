@@ -1,0 +1,39 @@
+name: check-managed-drift
+
+# Operator-side guard: exercise hack/managed-drift.py, the comparison that is the ONLY thing in
+# this repo able to catch a composition losing its own managed set.
+#
+# WHY IT IS NOT REDUNDANT WITH check-ready-classify. That one guards the decision about a Ready
+# CONDITION. This one guards a case where the condition is actively wrong: core-provider#248 --
+# `setStatus` writes `managed` only when resources are present, and the rollup's `!found || len==0`
+# branch returns Available, so a composition with no managed set reports Ready=True/Available over
+# everything it renders and never evaluates. Every other arm of verify-roll.sh is blind to it:
+#   * identity    -- same uid
+#   * row count   -- 83 before, 83 after
+#   * umbrella    -- the umbrella manages component CRs, not their children, so its count holds
+#   * readiness   -- green, BECAUSE the evidence is gone
+#
+# Confirmed on krateo-057 at installer-0.3.466: 7 of 83 are already in that state.
+#
+# The test subprocesses the real script, and asserts an exit code AND a distinguishing substring
+# per case, because several very different findings share an exit code (a withheld verdict and a
+# no-shared-names verdict are both 2; "ok" and "asserted nothing" are both 0).
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  managed-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Exercise the per-composition managed-set comparison
+        run: python3 .github/scripts/check-managed-drift.py

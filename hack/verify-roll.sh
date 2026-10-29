@@ -21,7 +21,8 @@
 # zero-evidence children — a platform-wide stall, as opposed to a cosmetic status.
 #
 # USAGE
-#   verify-roll.sh <kube-context> <before.tsv> [--expect-uid-change <name>]... [--expect-zero-evidence <name>]...
+#   verify-roll.sh <kube-context> <before.tsv> [--expect-uid-change <name>]...
+#                  [--expect-zero-evidence <name>]... [--expect-managed-shrink <ns/name>]...
 #
 # EXIT CODES
 #   0  the roll changed exactly what was expected, and nothing is unhealthy
@@ -29,7 +30,7 @@
 #   2  the after-capture is incomplete — verdict withheld, NOT a pass
 #   3  identity: an unexpected uid changed, or an expected one did not
 #   4  health: a composition is Ready=False for a reason OTHER than Creating, or Unknown for an
-#      unexpected reason
+#      unexpected reason, or a composition's own managed set shrank without being declared
 #   5  WITHHELD: identity matched and nothing is unhealthy, but one or more compositions report
 #      Ready=False/Creating -- still converging. Not a pass; re-run when they settle.
 set -euo pipefail
@@ -40,10 +41,12 @@ shift 2
 
 EXPECT_UID=()
 EXPECT_ZE=()
+EXPECT_SHRINK=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --expect-uid-change)    EXPECT_UID+=("${2:?--expect-uid-change needs a name}"); shift 2 ;;
     --expect-zero-evidence) EXPECT_ZE+=("${2:?--expect-zero-evidence needs a name}"); shift 2 ;;
+    --expect-managed-shrink) EXPECT_SHRINK+=("${2:?--expect-managed-shrink needs a <ns/name>}"); shift 2 ;;
     *) echo "verify-roll: unknown argument '$1'" >&2; exit 1 ;;
   esac
 done
@@ -168,6 +171,34 @@ elif [ "$AFTER_MANAGED" -gt "$BEFORE_MANAGED" ]; then
   echo "       (expected when a roll adds components; stated so it is not mistaken for noise)"
 else
   echo "  ok   managed children unchanged at $AFTER_MANAGED — the render set is the same size"
+fi
+
+echo
+echo "== each composition's OWN managed set =="
+# The umbrella arm above is the umbrella's count and catches core-provider#230. This arm is the
+# other 82, and it exists because NO readiness check can cover them: core-provider#248 means a
+# composition that loses its `status.managed` reports Ready=True/Available over everything it
+# renders and never evaluates. The condition is green BECAUSE the evidence is gone.
+#
+# Confirmed on krateo-057 at installer-0.3.466: 7 of 83 are already in that state. They are named
+# as a baseline rather than failed, so a core-provider fix moving them to Unknown/ZeroEvidence
+# reads as the transition it is instead of as a regression here.
+#
+# The comparison is its own file so CI can exercise it against fixtures with no cluster -- the same
+# reason ready-classify.sh is its own file. .github/scripts/check-managed-drift.py shells into THIS
+# script rather than restating its rules.
+# Build the flag/value PAIRS as separate array elements. `"${ARR[@]/#/--expect-shrink }"` looks
+# equivalent and is not: it yields ONE argument per name with a space inside it, so the script
+# receives `--expect-shrink ns/name` as a single argv entry and dies on an unknown argument. Same
+# class of bug as putting flags in a scalar -- it is the quoting that keeps them together.
+SHRINK_ARGS=()
+for n in ${EXPECT_SHRINK[@]+"${EXPECT_SHRINK[@]}"}; do SHRINK_ARGS+=(--expect-shrink "$n"); done
+( python3 "$HERE/managed-drift.py" "$BEFORE" "$AFTER" \
+    ${SHRINK_ARGS[@]+"${SHRINK_ARGS[@]}"} ) && mrc=0 || mrc=$?
+if [ "$mrc" = 2 ]; then
+  echo "  (this arm asserted nothing — see above. It does NOT contribute to the verdict.)"
+elif [ "$mrc" != 0 ]; then
+  rc=4
 fi
 
 echo
