@@ -186,9 +186,49 @@ def ci_at(slug, sha):
         return "green", (f"all {len(runs)} passed at {sha[:8]}; no check-run NAME says test, but "
                          f"{len(invoked)} green job(s) invoke one: " +
                          ", ".join(f"{j} -> {s}" for j, s in sorted(invoked)[:3]))
+    # Distinguish "unrecognised" from "absent" by looking at the tree, not at names.
+    has_tests, examined, sample = _repo_has_test_paths(slug, sha)
+    if has_tests is False:
+        return "notests", (f"all {len(runs)} check-runs passed at {sha[:8]}; repo has NO test suite "
+                           f"— {examined} paths examined at that commit, none test-shaped. Nothing "
+                           f"to run, so green is honest here (chart-only repo).")
+    unreadable = "" if has_tests is True else " (could not read the repo tree to check for a suite)"
     return "notested", (f"all {len(runs)} check-runs passed at {sha[:8]} but NONE tests code — "
                         f"neither by name nor by what any green job runs "
-                        f"(saw: {sorted({r['n'].split(' /')[0] for r in runs})[:6]})")
+                        f"(saw: {sorted({r['n'].split(' /')[0] for r in runs})[:6]})"
+                        f"{unreadable}. The repo DOES contain test-shaped paths"
+                        f"{' e.g. ' + ', '.join(sample) if sample else ''}, so they exist and did "
+                        f"not run.")
+
+
+# A THIRD CASE, distinct from both green and notested: the repo HAS NO TEST SUITE AT ALL.
+#
+# `notested` conflates two very different things — "tests exist and this guard did not recognise
+# them" and "there is nothing to test". The guard's own remedy text offered only the first
+# ("wire tests, or widen TEST_RUN_RE"), which is unactionable for a chart-only blueprint repo that
+# ships YAML and has no code. Hit live on krateo-blueprints/github-provider-kog 0.6.0: 158 paths,
+# zero test-shaped, workflows limited to lint / preflight-refs / release-* / security.
+#
+# THE ABSENCE MUST BE PROVEN, NOT INFERRED. This reads the git tree AT THE PINNED COMMIT and looks
+# for test-shaped paths. A failure to match a NAME is not evidence of absence — that is the same
+# error as reading an empty list as a real zero. So a repo is exempt only when the tree itself
+# contains nothing testable, and the detail line says how many paths were examined so a reader can
+# see the instrument looked.
+TEST_PATH_RE = re.compile(r"(_test\.(go|py|ts|js)$|(^|/)tests?/|\.spec\.(ts|js)$|(^|/)test_[^/]+\.py$)")
+
+
+def _repo_has_test_paths(slug, sha):
+    """(has_tests, examined, sample). Reads the tree at `sha`; (None, 0, []) if unreadable."""
+    out, rc = sh("gh", "api", f"repos/{slug}/git/trees/{sha}?recursive=1",
+                 "--jq", "[.tree[].path]")
+    if rc != 0:
+        return None, 0, []
+    try:
+        paths = json.loads(out or "[]")
+    except json.JSONDecodeError:
+        return None, 0, []
+    hits = [p for p in paths if TEST_PATH_RE.search(p)]
+    return (len(hits) > 0), len(paths), hits[:3]
 
 
 # Invocations that constitute "this job tested the code". Deliberately about the COMMAND, not the
@@ -304,8 +344,11 @@ def main():
             continue
 
         for slug, verdict, detail in checked:
-            line = f"  {name} {pin['previous']} -> {version}  app {app}  {slug}: {verdict} ({detail})"
-            print(line)
+            # ONE line per pin per source. The `notests` arm used to print a second line, which
+            # read as the check disagreeing with itself — the same defect verify-roll.sh had when
+            # it emitted `ok` and `FAIL` for one object.
+            shown = "n/a" if verdict == "notests" else verdict
+            print(f"  {name} {pin['previous']} -> {version}  app {app}  {slug}: {shown} ({detail})")
             if verdict == "red":
                 failures.append(f"{name} {version}: {slug} CI was RED at the tagged commit — {detail}")
             elif verdict == "running":

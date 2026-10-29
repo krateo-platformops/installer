@@ -2247,7 +2247,26 @@ components:
   #   going 0.3.1 -> 0.3.2, and PullRequest .status.merged rising off its 0/24 baseline. (The pin
   #   comment above says 'rev33'; the release is on rev 35 now from ordinary reconciles, so the
   #   revision NUMBER is not the instrument — the chart version is.)
-  version: 0.3.2
+  # 0.6.0 renames the colliding kind Deployment -> RepoDeployment (CRD
+  # repodeployments.github.krateo.io). 0.3.2 declared `kind: Deployment`, whose generated plural
+  # `deployments` is already served by apps/v1 -- so oasgen's built-in-collision guard REFUSES to
+  # mint that CRD on a FRESH cluster and the whole chart sticks at "1 of 58 children not ready".
+  # Verified by pulling both charts and grepping: 0.3.2 has `kind: Deployment` x2, 0.6.0 has
+  # `kind: RepoDeployment` x2. It is the only colliding kind of the 30; DeploymentBranchPolicy and
+  # the rest are untouched.
+  # THE GUARD IS EIGHT RELEASES OLD, not new: oasgen shipped it in 0.32.0 (9801a693, closing #200),
+  # so 0.38.0 refuses identically. It had simply never been exercised, because nobody had done a
+  # fresh install carrying this kind. Floor: oasgen-provider >= 0.38.0, which this installer meets
+  # at 0.39.0 -- the pair matters, and 0.3.467 had the GUARD WITHOUT THE FIX, so it could never
+  # converge on a fresh cluster however many times it was retried.
+  # SAFE ON 057 WITHOUT MIGRATION, measured rather than assumed. The old kind carries a DELETE verb,
+  # so replacing the RestDefinition cascade-deletes its CRs and their finalizers delete the REAL
+  # GitHub deployment records. `kubectl get deployments.github.krateo.io -A` returns no resources on
+  # 057 -- 0 instances, apiserver-confirmed against a control of 15 `repositories` -- so the
+  # destructive path has nothing to act on. A cluster WITH instances needs
+  # krateo.io/deletion-policy=orphan reconciled FIRST, then migrate, then confirm zero old-kind CRs,
+  # then delete the orphaned RestDefinition. Orphan alone is a holding state, not a completion.
+  version: 0.6.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: portal
