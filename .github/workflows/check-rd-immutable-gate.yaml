@@ -1,0 +1,46 @@
+name: check-rd-immutable-gate
+
+# Operator-side guard: exercise hack/rd-immutable-gate.py, the pre-roll gate that refuses a
+# component bump which would change a RestDefinition field oasgen-provider treats as immutable
+# once the CRD has been generated.
+#
+# WHY THE GATE EXISTS: github-provider-kog's pullrequest RestDefinition has refused an in-place
+# upgrade THREE times on THREE different immutable fields -- additionalStatusFields (0.3.2),
+# the kind collision (0.6.0 on a fresh cluster), identifiers (0.6.0 in place) -- and each time
+# the pre-roll check had been written for the field that bit LAST time. The gate therefore
+# derives the whole field set from the live CRD's x-kubernetes-validations rather than naming
+# fields, so it tracks oasgen's releases instead of this repo's scar tissue
+# (oasgen-provider#290).
+#
+# WHY THIS NEEDS A TEST MORE THAN MOST: the thing most likely to go wrong with a gate built to
+# stop under-guarding is that it silently guards less than it claims. Two blindness modes are
+# asserted directly. Zero paired names must WITHHOLD rather than pass -- the real comparator
+# was vacuous on its first run, because the chart was rendered under release name `kog-probe`
+# while the cluster carried `github-provider-kog-*`, so nothing paired and it reported "0
+# immutable-field changes" with complete confidence. And a change in the CRD's rule COUNT must
+# WITHHOLD, so that an eighth immutable field added by a future oasgen release fails the gate
+# loudly instead of going unguarded.
+#
+# Each case asserts an exit code AND a distinguishing substring: exit 2 covers four different
+# withholdings and the code alone cannot tell them apart.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  rd-immutable-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+      - name: Exercise the RestDefinition immutable-field gate
+        run: python3 .github/scripts/check-rd-immutable-gate.py
