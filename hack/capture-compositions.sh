@@ -23,7 +23,9 @@
 #   namespace  name  kind  uid  generation  creationTimestamp
 #   composition-version  composition-origin-version  ownerRefs  helm-release-name
 #
-# A trailing `#MANAGED-CHILDREN <n>` line records the umbrella's own child count (see below).
+# A trailing `#MANAGED-CHILDREN <n>` line records the umbrella's own child count (see below),
+# `#MANAGED-CHILD` lines name each of those children, and one `#COMPOSITION-MANAGED` line per
+# composition records ITS OWN managed-set size (see the block near the end of this file).
 #
 # The last four are the core-provider#199 classifier: a composition with NEITHER a
 # `meta.helm.sh/release-name` NOR a `krateo.io/composition-name` is STANDALONE, and a
@@ -49,7 +51,9 @@ OUT="${2:?usage: capture-compositions.sh <kube-context> <output-file>}"
 # `2>/dev/null`, a wrong --context produced a SILENT exit 1 with no output whatsoever. Hit live on
 # 2026-10-28 while gating a roll: the script said nothing at all, and an empty result is
 # indistinguishable from a broken instrument through a silenced stderr.
-CRDERR=$(mktemp -t capture-crderr); trap 'rm -f "$CRDERR"' EXIT
+CRDERR=$(mktemp -t capture-crderr)
+CMANAGED=$(mktemp -t capture-cmanaged)
+trap 'rm -f "$CRDERR" "$CMANAGED"' EXIT
 crdrc=0
 CRDS=$(kubectl --context="$CTX" get crds -o json 2>"$CRDERR" \
   | jq -r '.items[] | select(.spec.group=="composition.krateo.io") | "\(.spec.names.plural).composition.krateo.io"') || crdrc=$?
@@ -78,6 +82,21 @@ while read -r kind; do
     continue
   fi
   SEEN=$((SEEN + $(printf '%s' "$RAW" | jq -r '.items | length')))
+  # Per-composition managed-set size, into a side file appended (sorted) after the rows. Kept out
+  # of the TSV columns ON PURPOSE: adding a column would make every capture taken before this
+  # change non-comparable, and the whole value of a baseline is that old ones stay usable. The
+  # `#MANAGED-CHILD` lines set that precedent already.
+  #
+  # present vs ABSENT is recorded, not collapsed to a number. core-provider#248: 7 of 83
+  # compositions on krateo-057 have NO `status.managed` key at all and report Ready=True/Available
+  # over everything they render and never evaluate. `managed: []` would be the opposite -- an
+  # evaluation that found nothing -- so a capture that printed 0 for both would destroy the only
+  # distinction that separates the bug from a legitimately empty render.
+  printf '%s' "$RAW" | jq -r '.items[]? |
+    "#COMPOSITION-MANAGED \(.metadata.namespace)/\(.metadata.name) " +
+    (((.status.managed // []) | length) | tostring) + " " +
+    (if (.status | type == "object") and (.status | has("managed")) then "present" else "ABSENT" end)
+  ' >> "$CMANAGED"
   printf '%s' "$RAW" | jq -r '.items[]? |
     [ .metadata.namespace, .metadata.name, .kind, .metadata.uid,
       (.metadata.generation | tostring), .metadata.creationTimestamp,
@@ -134,8 +153,35 @@ printf '%s' "$MANAGED_JSON" | jq -r '
   "#MANAGED-CHILD \(.apiVersion // "-") \(.resource // "-")/\(.namespace // "-")/\(.name // "-")"
 ' 2>/dev/null | sort >> "$OUT" || true
 
+# PER-COMPOSITION MANAGED SETS, appended sorted so a diff of two captures is stable.
+#
+# WHY THIS IS A SEPARATE ARM FROM `#MANAGED-CHILDREN` ABOVE. That line is the UMBRELLA's count and
+# catches core-provider#230 -- the umbrella's own render shrinking. It says nothing about the other
+# 82 compositions: if one of THEM lost its managed set, the umbrella's total would not move (the
+# umbrella manages component CRs, not their grandchildren), the row count would hold at 83, every
+# uid would be unchanged, and the composition would still report Ready=True. Nothing in a capture
+# taken before this change can see that happen.
+#
+# I found the gap by misreading my own column 9 as a managed count while confirming
+# core-provider#248. It is `ownerReferences|length`, which is 0 on all 83 for a structural reason,
+# so the misreading produced a plausible "all 83 have zero managed children" that was simply the
+# wrong field. The real per-composition number was never captured at all.
+sort -u "$CMANAGED" >> "$OUT"
+CM_COUNT=$(grep -c '^#COMPOSITION-MANAGED ' "$OUT" | tr -d ' ')
+CM_ABSENT=$(grep -c '^#COMPOSITION-MANAGED .* ABSENT$' "$OUT" | tr -d ' ' || true)
+
 ROWS=$(grep -vc '^#' "$OUT" | tr -d ' ')
 echo "captured $ROWS compositions from $CRD_COUNT CRDs; CRs seen $SEEN; read errors $ERRORS; umbrella managed children ${MANAGED:-unknown}"
+echo "per-composition managed sets recorded: $CM_COUNT (${CM_ABSENT:-0} with status.managed ABSENT — core-provider#248)"
+
+# The per-composition arm must have covered every row it claims to. A side file that came back
+# short would make verify-roll's drift check silently compare a subset, and a subset comparison
+# reports no drift for the rows it never saw.
+if [ "$CM_COUNT" != "$ROWS" ]; then
+  echo "#INCOMPLETE-CAPTURE per-composition managed lines $CM_COUNT != rows $ROWS — DO NOT DIFF" >> "$OUT"
+  echo "WARNING: recorded $CM_COUNT per-composition managed lines for $ROWS rows — capture INCOMPLETE" >&2
+  exit 2
+fi
 
 if [ "$ERRORS" -gt 0 ]; then
   # Mark the file itself, not just this output: a stderr warning is lost the moment
