@@ -43,6 +43,30 @@ Component version bumps are **not** releases of those components — they are ed
 installer tag; the pins are chart content, so the new installer version carries them
 ([api](./api.md#component-pinsyaml--the-version-source-of-truth)).
 
+> **The chart pin is the lever only when the cluster has not overridden it.** On an install whose
+> live `Installer` CR carries its own `spec.components` list — a hand-managed or long-lived cluster
+> where that list was frozen at some earlier version — **the CR wins and the chart pin is inert.**
+> core-provider's cdc *renders* the platform Helm release from the CR, so editing that release's
+> values (or bumping the chart) is reverted on the next reconcile, typically within minutes.
+>
+> Two consequences worth knowing before you touch such a cluster:
+>
+> - **The platform release looks operator-owned and is not.** Its Helm secret carries no krateo
+>   ownership labels and it does **not** appear in the umbrella's `status.managed`, because the cdc
+>   renders it *as* the umbrella's own output — so it can never appear as a child of itself. Absence
+>   of an ownership marker is not absence of an owner.
+> - **Changing it means editing `spec.components` on the CR**, which is otherwise something this
+>   repo tells you never to hand-edit. Guard the edit: a JSON-patch `test` op on both the component's
+>   `name` and its current `version` at that index, so a shifted index fails the patch instead of
+>   silently bumping the wrong component.
+>
+> Verify it **holds**, not that it converged: read the composition's version label, the component's
+> own Helm release, the running image and the CR field together, over several minutes. A change that
+> only moved the derived release looks correct for about two minutes and then reverts.
+>
+> See [upgrade-rollback](./runbooks/upgrade-rollback.md) for the same fact in its rollback context —
+> that the live `Installer` CR is the source of truth and a Helm rollback never re-patches it.
+
 ## What a version bump means downstream
 
 A chart version is not just a package label — it is the served version of the
