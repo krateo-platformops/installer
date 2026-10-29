@@ -274,46 +274,66 @@ Values worth knowing:
    ```bash
    kubectl annotate alerttroubleshootercrds alert-troubleshooter-crd -n krateo-system \
      krateo.io/deletion-policy=orphan
-   # Expect ["composition.krateo.io/finalizer"] and nothing else:
+   # MUST be exactly ["composition.krateo.io/finalizer"] -- a SECOND finalizer makes the
+   # uninstall run anyway (40/40 measured). Presence of ours is not sufficient; ALONENESS is.
    kubectl get alerttroubleshootercrds alert-troubleshooter-crd -n krateo-system \
      -o jsonpath='{.metadata.finalizers}'
    ```
 
-   > [!WARNING]
-   > **UNVERIFIED FOR DATA SAFETY. Do not rely on this to preserve Alerts yet.** The annotation
-   > exists and *is* consulted (traced below), but whether it reliably prevents the uninstall is
-   > **unestablished**, because of a race in the runtime that the pre-check below does **not** close.
+   > [!IMPORTANT]
+   > **SETTLED BY MEASUREMENT: this is safe if and only if `composition.krateo.io/finalizer` is the
+   > SOLE finalizer on the object. It is not a race — it is deterministic in both directions, and the
+   > variable is finalizer COUNT, not timing.**
    >
-   > Traced in `unstructured-runtime` v1.6.0 (identical in v1.4.0 at the shifted line numbers):
+   > 400 trials against the runtime's real `tools.Update`, asserting `meta.ShouldDelete` is false per
+   > trial so no trial could measure a branch the shipped code would not enter:
    >
-   > 1. `pkg/controller/controller.go:283` enqueues a `Delete` event on a **pending** delete — the
-   >    runtime's own comment says *"the resource has a deletion timestamp but was not effectively
-   >    deleted yet"*.
-   > 2. `pkg/controller/worker.go:333` removes the finalizer under the orphan policy and **does not
-   >    return** — there is no `return nil`, so execution falls through.
-   > 3. `worker.go:453` dispatches on `evt.EventType`, not on `WasDeleted`, so the orphan pass goes
-   >    straight into `handleDelete`.
-   > 4. `handleDelete` (`:827`) calls `c.fetch(ctx, ref, false)` at `:834` — a **live**
-   >    `dynamicClient.Resource(...).Get` (`:907`), not a cache read — and then
-   >    `c.externalClient.Delete(ctx, el)` at `:840`, which is the `helm uninstall`.
+   > ```
+   > arm                        gap        uninstall fires
+   > orphan, sole finalizer       0us          0/40
+   > orphan, sole finalizer     500us          0/40
+   > orphan, sole finalizer    2000us          0/40
+   > orphan, sole finalizer   10000us          0/40
+   > orphan + extra finalizer     0us         40/40
    >
-   > So whether the uninstall runs depends on whether the apiserver has finished reaping the object
-   > between step 2 and step 4. That is apiserver timing, not control flow, and it cannot be settled
-   > by reading the code. The GET is issued immediately by the same goroutine, so **if it is a race
-   > at all it is biased toward the delete firing**, not away from it.
+   > byte-identical on kind v1.35.0 AND GKE v1.37.1; controls passing on both
+   > (absent -> NotFound; present-with-finalizer -> found)
+   > ```
    >
-   > **The `jsonpath` pre-check below does not help here.** It closes the earlier window — the
-   > annotation not having landed before the deletion event. This window opens *after* the policy was
-   > correctly honoured, which is what makes it dangerous.
+   > **Why there is no window to widen:** when ours is the only finalizer, removing it completes the
+   > deletion *inside that same update request*. By the time `tools.Update` returns the object is
+   > gone, so the fall-through GET at `worker.go:907` always 404s and `externalClient.Delete` is never
+   > reached — hence identical results from 0 to 10ms. With a second finalizer present our removal
+   > does **not** complete the deletion, the GET succeeds, and the uninstall runs: **40 of 40**.
    >
-   > **The deterministic alternative**, which does not depend on how this resolves: strip
-   > `composition.krateo.io/finalizer` from the object explicitly, then delete. That is what the KOG
-   > sessions adopted for their own migration. Prefer it for anything whose loss matters.
+   > **THE PRE-CHECK BELOW WAS WRONG AND IS CORRECTED.** Confirming our finalizer is *present* does
+   > not confirm it is *alone*, so the original check passes in exactly the case that fails. Assert
+   > the list has **exactly one element**:
    >
-   > core-provider is settling this by experiment on a disposable cluster (set the annotation,
-   > confirm it is live, delete, check whether the helm release survived, repeated). The fix if it is
-   > a race is a `return nil` after a successful orphan finalizer removal, in **unstructured-runtime**
-   > — not in core-provider and not here. This note will be updated with the measured answer.
+   > ```bash
+   > kubectl get <kind> <name> -n <ns> -o jsonpath='{.metadata.finalizers}'
+   > # SAFE only if this is exactly ["composition.krateo.io/finalizer"].
+   > # Any second finalizer -> the uninstall runs anyway, every time.
+   > ```
+   >
+   > **This holds for all 83 compositions on krateo-057 today** — verified independently, every one
+   > carries ours and only ours. But nothing enforces it: one `kubectl patch`, one admission webhook
+   > or one other controller adding a finalizer flips it to the 40/40 arm, silently and completely.
+   >
+   > **Fidelity, stated rather than smoothed:** 057 is **v1.36.4-gke**, so the two tested versions
+   > **bracket** it rather than matching it — the GKE run was launched with `--cluster-version latest`
+   > and landed on 1.37.1 instead of the intended 1.36.4. core-provider disclosed that themselves. A
+   > bracket with identical ends is arguably stronger than one exact match, but it is a bracket.
+   >
+   > **KOG CRs are in the safe case too**, by an independent check: rest-dynamic-controller adds no
+   > finalizer of its own, so a KOG CR can carry only the runtime's one. The KOG sessions strip it
+   > explicitly anyway, on the reasoning that being safe by a property nothing enforces is not the
+   > same as being safe — **and that reasoning applies here. For Alert data, prefer stripping
+   > `composition.krateo.io/finalizer` explicitly, then deleting.**
+   >
+   > Upstream: **krateo-platformops/unstructured-runtime#23** — the missing `return nil` at
+   > `worker.go:333`, with both arms, the controls, and the note that a regression test needs **both**,
+   > because the sole-finalizer arm passes today and would keep passing with the bug present.
 
    **Why the annotation is consulted at all, and the three sharp edges.** Verified at the primary source rather than from
    core-provider's tree, where the string does not appear: the annotation is defined in the
