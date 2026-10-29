@@ -2287,9 +2287,31 @@ components:
   # so replacing the RestDefinition cascade-deletes its CRs and their finalizers delete the REAL
   # GitHub deployment records. `kubectl get deployments.github.krateo.io -A` returns no resources on
   # 057 -- 0 instances, apiserver-confirmed against a control of 15 `repositories` -- so the
-  # destructive path has nothing to act on. A cluster WITH instances needs
-  # krateo.io/deletion-policy=orphan reconciled FIRST, then migrate, then confirm zero old-kind CRs,
-  # then delete the orphaned RestDefinition. Orphan alone is a holding state, not a completion.
+  # destructive path has nothing to act on.
+  # A CLUSTER WITH INSTANCES: do NOT follow what this comment used to say. It prescribed reconciling
+  # `krateo.io/deletion-policy=orphan` first. THAT ANNOTATION IS REAL -- unstructured-runtime v1.6.0
+  # meta.go:70, honoured by worker.go:333 for cdc-driven COMPOSITION CRs (see docs/configuration.md)
+  # -- and WHETHER IT BITES DEPENDS ON THE FINALIZER, not on the controller. The worker removes
+  # exactly one, `composition.krateo.io/finalizer` (worker.go:30, same in v1.4.0 and v1.6.0), so a
+  # CR with no finalizer or a different one is unaffected: the annotation applies cleanly and does
+  # nothing. DO NOT reason "rdc never calls ShouldDelete" -- rdc embeds the same worker at v1.4.0,
+  # and measured on 057 `repositories.github.krateo.io` has 15 CRs that DO carry
+  # composition.krateo.io/finalizer, while actionsvariableorgconfigurations carries none and
+  # git.krateo.io LocalResources carry provider-runtime's finalizer.managedresource.krateo.io.
+  # So for THIS kind, check it per cluster before relying on anything:
+  #   kubectl get deployments.github.krateo.io -A -o jsonpath='{.items[*].metadata.finalizers}'
+  # WHAT ACTUALLY HAPPENS, code-read by oasgen-provider + openstack-ironic-operator-kog: a naive roll
+  # onto a populated cluster does NOT deprovision. oasgen's deploy.Undeploy (deploy.go:437) REFUSES
+  # to drop a CRD that still has live instances, counting them at the moment of the act and also
+  # refusing on a failed LIST. The old RestDefinition blocks in `Deleting`; the CRD, its CRs and the
+  # external GitHub records all survive. A mistaken roll STALLS rather than destroys.
+  # AND DO NOT REACH ZERO BY DELETING THE CRs: each delete fires composition.krateo.io/finalizer and
+  # the external DELETE /repos/.../deployments/{id}, i.e. hand-executing the cascade Undeploy would
+  # have blocked. Scaling the controller to 0 is not a substitute -- the CRs keep their finalizers,
+  # sit Terminating, and the CRD hangs. The order is: patch the finalizer off FIRST (better: adopt
+  # onto RepoDeployment, confirm it observes the same records, then strip), then delete.
+  # github-provider-kog is rehearsing that on a throwaway GitHub fixture and owes a verified runbook
+  # before any krateo-demo roll. Until then this cluster-with-instances path is NOT cleared.
   version: 0.6.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform

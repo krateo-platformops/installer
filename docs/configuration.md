@@ -279,6 +279,56 @@ Values worth knowing:
      -o jsonpath='{.metadata.finalizers}'
    ```
 
+   **Why this works, and the three sharp edges.** Verified at the primary source rather than from
+   core-provider's tree, where the string does not appear: the annotation is defined in the
+   **dependency**, `krateo-platformops/unstructured-runtime` at `v1.6.0` --
+   `AnnotationKeyDeletionPolicy = "krateo.io/deletion-policy"` (`pkg/meta/meta.go:70`),
+   `DeletionPolicyOrphan = "orphan"` (`:86`). `ShouldDelete` (`:335`) defaults `dp` to `delete` and
+   returns true only when `dp == delete && mp == default`, or when `mp == observe-delete`; with
+   `orphan` it returns **false**. The cdc embeds that runtime, and its worker acts on the annotation
+   before any uninstall: `pkg/controller/worker.go:333` reads
+   `if meta.WasDeleted(el) && !meta.ShouldDelete(el)` and removes the finalizer, so the apiserver
+   reaps the object and `helm uninstall` never runs.
+
+   1. **There is a race.** The finalizer removal and the apiserver's reap are not atomic with the
+      dispatch in the same pass. If the delete handler's fetch wins, the uninstall *does* run. So
+      **annotate as a separate, verified step** and confirm the annotation is on the live object
+      before deleting anything -- the `jsonpath` check above is that confirmation, not a formality.
+   2. **`krateo.io/management-policy: observe-delete` silently defeats it.** `ShouldDelete` returns
+      true for that management policy whatever the deletion policy says. Check for it first.
+   3. **It travels with the runtime version, not the core-provider tag.** "Which release is this safe
+      in" has a different answer than it would for a core-provider annotation; core-provider 2.13.41
+      reports embedding `unstructured-runtime v1.6.0`.
+
+   **What decides whether the annotation does anything is the FINALIZER, not the controller.** The
+   worker removes exactly one: `finalizerName = "composition.krateo.io/finalizer"`
+   (`pkg/controller/worker.go:30`, identical in v1.4.0 and v1.6.0). So before relying on
+   `deletion-policy: orphan` for any resource, confirm that resource carries that finalizer:
+
+   ```bash
+   kubectl get <kind> <name> -n <ns> -o jsonpath='{.metadata.finalizers}'
+   ```
+
+   A CR with **no** finalizer, or with a **different** one, is unaffected: the annotation applies
+   cleanly and does nothing. Measured on krateo-057:
+
+   | kind | finalizers | governed? |
+   |---|---|---|
+   | `portals.composition.krateo.io` | `composition.krateo.io/finalizer` | **yes** |
+   | `repositories.github.krateo.io` (15 CRs) | `composition.krateo.io/finalizer` | **yes** |
+   | `actionsvariableorgconfigurations.github.krateo.io` | `[]` | no |
+   | `localresources.git.krateo.io` (127 CRs) | `finalizer.managedresource.krateo.io` | no -- a **provider-runtime** finalizer, a different runtime with a different name |
+
+   **Do not reason from the controller.** "KOG kinds are exempt because the rest-dynamic controller
+   never calls `ShouldDelete`" is wrong twice over: rdc embeds the same worker (it pins
+   unstructured-runtime v1.4.0, which carries the same block), and `repositories.github.krateo.io`
+   is a KOG kind whose 15 live CRs on 057 **do** carry the governed finalizer. The finalizer is the
+   test; the controller is not.
+
+   Three axes have to be pinned for any claim of the form "X is honoured": **which repo** (the
+   annotation is in the dependency, not core-provider), **which runtime version** (rdc v1.4.0 vs cdc
+   v1.6.0), and **which finalizer the CR carries**.
+
    The CRD's helm ownership needs no hand edit: the composition controller installs with helm's
    take-ownership, so the `alert-provider-crd` release adopts the CRD. Leave the
    `alert-troubleshooter` Composition alone; its uninstall removes the old service.
