@@ -45,5 +45,20 @@ jobs:
       - name: Assert every bumped pin's component CI was green at its tagged commit
         env:
           BASE_REF: origin/${{ github.base_ref }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 .github/scripts/check-pin-ci.py
+          # PREFER the cross-org read token, FALL BACK to the repo-scoped one.
+          #
+          # 26 of 66 pins are private repos in another org, and the repo-scoped GITHUB_TOKEN cannot
+          # read them -- it reports UNVERIFIABLE, which is honest but checks nothing. A fine-grained
+          # PAT with contents:read + checks:read on those repos closes the gap.
+          #
+          # THE FALLBACK IS DELIBERATE AND MUST NOT BECOME SILENT. If PIN_CI_READ_TOKEN is unset or
+          # expired, this runs on GITHUB_TOKEN and those 26 pins go back to UNVERIFIABLE -- which
+          # still FAILS LOUDLY for a genuinely absent tag (that is UNRESOLVED, a different verdict),
+          # so the fallback degrades coverage without ever manufacturing a pass. The step below
+          # states which token was used, so a quietly expired PAT shows up in the log rather than as
+          # a mysterious drop in verified pins.
+          GH_TOKEN: ${{ secrets.PIN_CI_READ_TOKEN || secrets.GITHUB_TOKEN }}
+          PIN_CI_TOKEN_KIND: ${{ secrets.PIN_CI_READ_TOKEN && 'cross-org PAT' || 'repo-scoped GITHUB_TOKEN' }}
+        run: |
+          echo "pin-ci token: ${PIN_CI_TOKEN_KIND}"
+          python3 .github/scripts/check-pin-ci.py

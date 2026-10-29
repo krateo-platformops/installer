@@ -1,0 +1,37 @@
+name: check-identity-drift
+
+# Operator-side guard: exercise hack/identity-drift.py, the arm of verify-roll.sh that decides
+# which compositions were legitimately recreated, added or removed by a roll.
+#
+# WHY THIS ARM NEEDS A TEST MORE THAN THE OTHERS: it has already been structurally blind once. The
+# first version compared with join(1); BSD/macOS join has no -j flag, so it printed a usage error,
+# emitted ZERO rows, and reported "no unexpected changes" having compared nothing. A green line over
+# an empty comparison is the failure mode this suite exists to make impossible, which is why one
+# case asserts that a no-shared-names comparison WITHHOLDS rather than passes.
+#
+# --expect-new is tested because enabling a feature ADDS compositions: before it existed, turning on
+# features.auditWorm (which adds krateo-audit-worm) made this arm exit 3 on a roll that did exactly
+# what it was told, and the only alternative to declaring the addition was to read past a failing
+# gate by hand.
+#
+# Each case asserts an exit code AND a distinguishing substring: exit 3 covers five different
+# findings and the code alone cannot tell them apart.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  identity-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Exercise the composition-identity comparison
+        run: python3 .github/scripts/check-identity-drift.py

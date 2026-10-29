@@ -23,6 +23,12 @@
 # USAGE
 #   verify-roll.sh <kube-context> <before.tsv> [--expect-uid-change <name>]...
 #                  [--expect-zero-evidence <name>]... [--expect-managed-shrink <ns/name>]...
+#                  [--expect-new <name>]... [--expect-gone <name>]...
+#
+# --expect-new EXISTS BECAUSE ENABLING A FEATURE ADDS COMPOSITIONS. Before it, an appearing row was
+# unconditionally a failure, so turning on `features.auditWorm` (which adds krateo-audit-worm) made
+# the identity arm exit 3 on a roll that did exactly what it was told -- and the only alternative to
+# declaring it was to read past a failing gate by hand.
 #
 # EXIT CODES
 #   0  the roll changed exactly what was expected, and nothing is unhealthy
@@ -42,19 +48,23 @@ shift 2
 EXPECT_UID=()
 EXPECT_ZE=()
 EXPECT_SHRINK=()
+EXPECT_NEW=()
+EXPECT_GONE=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --expect-uid-change)    EXPECT_UID+=("${2:?--expect-uid-change needs a name}"); shift 2 ;;
     --expect-zero-evidence) EXPECT_ZE+=("${2:?--expect-zero-evidence needs a name}"); shift 2 ;;
     --expect-managed-shrink) EXPECT_SHRINK+=("${2:?--expect-managed-shrink needs a <ns/name>}"); shift 2 ;;
+    --expect-new)           EXPECT_NEW+=("${2:?--expect-new needs a name}"); shift 2 ;;
+    --expect-gone)          EXPECT_GONE+=("${2:?--expect-gone needs a name}"); shift 2 ;;
     *) echo "verify-roll: unknown argument '$1'" >&2; exit 1 ;;
   esac
 done
 
+HERE="$(cd "$(dirname "$0")" && pwd)"
 [ -r "$BEFORE" ] || { echo "verify-roll: cannot read before-capture '$BEFORE'" >&2; exit 1; }
 grep -q 'INCOMPLETE' "$BEFORE" && { echo "verify-roll: the BEFORE capture is marked INCOMPLETE" >&2; exit 2; }
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
 # The Ready-condition decision lives in ONE place and is exercised by CI
 # (.github/scripts/check-ready-classify.py). Keeping a second copy inline here would mean the test
 # proves a file nothing uses -- the exact failure it exists to prevent.
@@ -75,55 +85,14 @@ echo "== identity: which compositions were recreated =="
 # compared nothing, and prints a green line while being structurally blind. That is exactly what
 # this script's own detector proof caught before it was ever used on a roll.
 # Python also lets added/removed rows be named rather than inferred from a count mismatch.
-( python3 - "$BEFORE" "$AFTER" ${EXPECT_UID[@]+"${EXPECT_UID[@]}"} <<'PYIDENT'
-import sys
-before_path, after_path, *expected = sys.argv[1:]
-
-def load(path):
-    out = {}
-    with open(path) as fh:
-        for line in fh:
-            f = line.rstrip("\n").split("\t")
-            if len(f) > 3 and f[1] and f[3]:
-                out[f[1]] = f[3]
-    return out
-
-b, a = load(before_path), load(after_path)
-moved   = sorted(n for n in (b.keys() & a.keys()) if b[n] != a[n])
-added   = sorted(a.keys() - b.keys())
-removed = sorted(b.keys() - a.keys())
-exp     = sorted(set(expected))
-
-print(f"  rows: {len(b)} before, {len(a)} after, {len(b.keys() & a.keys())} comparable")
-print(f"  expected to change : {' '.join(exp) or '<none>'}")
-print(f"  actually changed   : {' '.join(moved) or '<none>'}")
-
-rc = 0
-for want in exp:
-    if want not in a:
-        print(f"  FAIL {want} was declared with --expect-uid-change but is not present after the roll"); rc = 3
-    elif want not in moved:
-        print(f"  FAIL expected {want} to be recreated; its uid did not change "
-              f"({b.get(want, '<absent before>')})"); rc = 3
-for got in moved:
-    if got not in exp:
-        print(f"  FAIL {got} was recreated and was NOT expected to be "
-              f"({b[got]} -> {a[got]}) — an uninstall/reinstall nobody asked for"); rc = 3
-for n in added:
-    print(f"  FAIL {n} APPEARED during the roll and was not there before"); rc = 3
-for n in removed:
-    print(f"  FAIL {n} DISAPPEARED during the roll"); rc = 3
-
-# The comparison must have had something to compare. An empty intersection would produce no
-# FAIL lines at all and read as a pass.
-if not (b.keys() & a.keys()):
-    print("  FAIL the two captures share no composition names — nothing was compared, verdict WITHHELD")
-    sys.exit(2)
-if rc == 0:
-    print("  ok  identity matches the declared expectation exactly, over every row in both captures")
-sys.exit(rc)
-PYIDENT
-) && irc=0 || irc=$?
+# Build flag/value PAIRS as separate array elements -- `"${ARR[@]/#/--flag }"` yields ONE argument
+# per name with a space inside it, which the script rejects as an unknown argument.
+IDENT_ARGS=()
+for n in ${EXPECT_UID[@]+"${EXPECT_UID[@]}"};  do IDENT_ARGS+=(--expect-uid-change "$n"); done
+for n in ${EXPECT_NEW[@]+"${EXPECT_NEW[@]}"};  do IDENT_ARGS+=(--expect-new "$n"); done
+for n in ${EXPECT_GONE[@]+"${EXPECT_GONE[@]}"}; do IDENT_ARGS+=(--expect-gone "$n"); done
+( python3 "$HERE/identity-drift.py" "$BEFORE" "$AFTER" \
+    ${IDENT_ARGS[@]+"${IDENT_ARGS[@]}"} ) && irc=0 || irc=$?
 # `|| irc=$?` is load-bearing, not style. Under `set -e` a bare command that exits non-zero kills
 # the script immediately — so the identity block exiting 3 meant health was NEVER CHECKED and no
 # VERDICT was printed at all. A gate that stops at its first finding reports less than it looked
