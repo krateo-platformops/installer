@@ -51,10 +51,21 @@ installer tag; the pins are chart content, so the new installer version carries 
 >
 > Two consequences worth knowing before you touch such a cluster:
 >
-> - **The platform release looks operator-owned and is not.** Its Helm secret carries no krateo
->   ownership labels and it does **not** appear in the umbrella's `status.managed`, because the cdc
->   renders it *as* the umbrella's own output — so it can never appear as a child of itself. Absence
->   of an ownership marker is not absence of an owner.
+> - **The platform release looks operator-owned and is not — and this is STRUCTURAL, not a quirk of
+>   that one release.** It holds for *every* composition, so do not read it as special-casing.
+>   Verified in core-provider's `go/composition-dynamic-controller/pkg/meta/meta.go`:
+>   `CalculateReleaseName` returns `obj.GetName()` (or `<name>-<uid-hash>` when safe names are on),
+>   so a composition's Helm release is named after the composition and **is** its output;
+>   `status.managed` is decoded from the objects rendered *inside* that release, so a release can
+>   never be a member of its own managed list; and `krateo.io/composition-name` is the
+>   `ParentCompositionNameLabel`, which marks a **child's parent** and is read only via
+>   `IsParentRendered` — the release is not a child, so nothing stamps it.
+>
+>   So **both absences are guaranteed by construction**, for any composition: the missing ownership
+>   label and the absence from `status.managed` are what correct behaviour looks like.
+>   **Absence of an ownership marker is not absence of an owner** — and here it can never be
+>   present, so it carries no information at all. Treating it as evidence is the same error as
+>   reading an empty list as a real zero.
 > - **Changing it means editing `spec.components` on the CR**, which is otherwise something this
 >   repo tells you never to hand-edit. Guard the edit: a JSON-patch `test` op on both the component's
 >   `name` and its current `version` at that index, so a shifted index fails the patch instead of
