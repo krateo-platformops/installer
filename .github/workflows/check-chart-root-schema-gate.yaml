@@ -1,0 +1,45 @@
+name: check-chart-root-schema-gate
+
+# Operator-side guard: exercise hack/chart-root-schema-gate.py, the pre-roll gate that refuses a
+# pin whose chart ROOT schema would reject values core-provider injects.
+#
+# WHY THE GATE EXISTS: krateo-audit-worm 0.1.1 closed its schema root without declaring `global`,
+# so chart-inspector returned 500 while templating and the composition could never deploy --
+# found on krateo-057 only AFTER the roll, and only because the component happened to be new. A
+# chart already deployed proves its own root is fine, so the latent cases are exactly the ones
+# nobody has installed yet: a first install on a fresh cluster, or a feature enabled years later.
+#
+# WHY THIS SUITE IS MOSTLY ABOUT FALSE POSITIVES. The gate's first two drafts were both too broad,
+# and the mixed real-chart set is what caught them:
+#   draft 1  refused any closed root       -> refused frontend 1.8.15, LIVE and Ready on 057
+#                                             (closed root, but it declares `global`)
+#   draft 2  refused any root `required:`  -> refused agentgateway, cert-manager-issuers and
+#                                             external-dns, whose required keys are all satisfied
+#                                             by their own values.yaml, since helm merges chart
+#                                             defaults BEFORE schema validation
+# A gate that refuses working charts teaches an operator to skip it, so every rule is asserted in
+# BOTH directions: the defect caught, and the legitimate shape beside it passed.
+#
+# Validated against all 66 pinned components: exactly one refusal (the real defect), zero false
+# positives, and krateo-audit-worm 0.1.2 passes.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  chart-root-schema-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+      - name: Exercise the chart root-schema gate
+        run: python3 .github/scripts/check-chart-root-schema-gate.py
