@@ -8544,7 +8544,7 @@
                 "GOMEMLIMIT": {
                   "type": "string",
                   "pattern": "^([0-9]+(B|KiB|MiB|GiB|TiB)|off)$",
-                  "description": "Go soft memory limit; must be below the container memory limit. THE SUFFIX IS GO'S, NOT KUBERNETES': the accepted forms are B/KiB/MiB/GiB/TiB (e.g. 192MiB) or `off`. A Kubernetes quantity such as `192Mi` does NOT parse — and Go IGNORES an unparseable GOMEMLIMIT rather than failing, so the process runs with NO soft limit and is indistinguishable from one where the variable was never set. The pattern exists to make that typo a schema rejection instead of a silent loss of the limit.",
+                  "description": "Go soft memory limit; must be below the container memory limit. THE SUFFIX IS GO'S, NOT KUBERNETES': the accepted forms are B/KiB/MiB/GiB/TiB (e.g. 192MiB) or `off`. A Kubernetes quantity such as `192Mi` does NOT parse \u2014 and Go IGNORES an unparseable GOMEMLIMIT rather than failing, so the process runs with NO soft limit and is indistinguishable from one where the variable was never set. The pattern exists to make that typo a schema rejection instead of a silent loss of the limit.",
                   "title": "GOMEMLIMIT"
                 },
                 "GOGC": {
@@ -16543,6 +16543,231 @@
                   "type": "string",
                   "title": "Workload Identity service account",
                   "description": "Google service account to impersonate via Workload Identity. Mutually exclusive with credentialSecretName."
+                }
+              }
+            }
+          }
+        },
+        "builder-gate": {
+          "type": "object",
+          "title": "builder-gate",
+          "description": "The MCP server that exposes validate_draft, the gate an authoring agent calls before handing a Builder draft back. One Deployment + Service + kagent RemoteMCPServer PER INSTANCE, each with RBAC narrowed to its own Builder.",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string",
+                  "description": "Empty means .Chart.Version, so chart X.Y.Z asks for image X.Y.Z. Set it only to test an unreleased build."
+                },
+                "pullPolicy": {
+                  "type": "string"
+                }
+              }
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "description": "Required for the private image, e.g. [{name: krateo-registry-image-pull}]. The Krateo installer wires this from registryAuth.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "resources": {
+              "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
+              "properties": {
+                "claims": {
+                  "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                  "items": {
+                    "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                    "properties": {
+                      "name": {
+                        "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                        "type": "string"
+                      },
+                      "request": {
+                        "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "x-kubernetes-list-map-keys": [
+                    "name"
+                  ],
+                  "x-kubernetes-list-type": "map"
+                },
+                "limits": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
+                },
+                "requests": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                    "x-kubernetes-int-or-string": true
+                  },
+                  "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "instances": {
+              "type": "array",
+              "title": "Gate instances (one per authoring agent)",
+              "description": "EVERY object in the chart is inside `range .Values.instances`, so an EMPTY list renders ZERO objects while the release still reports deployed -- a component that cannot be told apart from a working one by checking whether it is installed. builder-gate 1.8.16 does not yet refuse that render (frontend#549 adds the refusal and is unreleased), so this default is LOAD-BEARING, not belt-and-braces: it is what makes enabling the feature produce a working gate. The default is written onto the Installer CR by crdgen, so the leaf is not empty-able by omission -- to turn the gate off, disable the FEATURE rather than setting `instances: []`.",
+              "default": [
+                {
+                  "name": "portal-builder",
+                  "builders": [
+                    "portal-builder"
+                  ]
+                },
+                {
+                  "name": "blueprint-builder",
+                  "builders": [
+                    "blueprint-builder"
+                  ]
+                },
+                {
+                  "name": "controller-builder",
+                  "builders": [
+                    "controller-builder"
+                  ]
+                }
+              ],
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "builders"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "title": "Instance name",
+                    "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+                    "maxLength": 40
+                  },
+                  "builders": {
+                    "type": "array",
+                    "title": "Builders this instance validates for",
+                    "description": "Must name Builders that EXIST (builders.builders.templates.krateo.io -- note the doubled group; `builders.templates.krateo.io` resolves to a group that does not exist and answers NotFound). RBAC is narrowed per instance, so a typo silently narrows it to nothing on 1.8.16.",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+                    }
+                  }
+                }
+              }
+            },
+            "buildersNamespace": {
+              "type": "string",
+              "title": "Namespace holding the Builder objects",
+              "description": "Defaults to krateo-system in the chart, where all three Builders live."
+            },
+            "sandboxNamespace": {
+              "type": "string",
+              "title": "Preview sandbox namespace",
+              "description": "Chart default krateo-preview, matching the portal's preview sandbox."
+            },
+            "snowplowUrl": {
+              "type": "string",
+              "title": "snowplow base URL",
+              "description": "Chart default is the in-cluster Service http://snowplow.krateo-system.svc:8081, so no override is needed."
+            },
+            "remoteMCPServer": {
+              "type": "object",
+              "title": "kagent RemoteMCPServer registration",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "timeout": {
+                  "type": "string",
+                  "description": "Go duration, e.g. 110s. Chart default 110s."
                 }
               }
             }
