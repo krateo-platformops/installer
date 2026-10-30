@@ -9,7 +9,7 @@ components:
   # Found by sweeping all 52 pins against their registries, not by a report.
   kind: AuthnCrds
   chart: authn-crds
-  version: 0.27.3
+  version: 0.29.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -411,7 +411,31 @@ components:
   tier: platform
   feature: portal
 - name: authn
-  # KRATEO-DEMO CONSTRAINT -- DO NOT BUMP TO >= 0.28.0 AS A ROUTINE UPDATE (acmp, 2026-10-29).
+  # KRATEO-DEMO CONSTRAINT -- RESOLVED BY A PER-CLUSTER OVERRIDE, NOT BY HOLDING THIS PIN
+  # (Diego, 2026-10-30). This pin is now FLEET-CURRENT; krateo-demo alone stays behind, declared in
+  # ITS OWN values rather than here:
+  #     components:
+  #       - { name: authn,     version: 0.27.3 }
+  #       - { name: authn-crd, version: 0.27.3 }
+  # `version` is an explicitly whitelisted override field for a pinned component (_helpers.tpl,
+  # inst.componentsYaml) -- this is the documented mechanism, not a workaround.
+  #
+  # WHY THE HOLD MOVED OFF THIS FILE. The blocking object is krateo-demo's Kyverno ClusterPolicy
+  # `tenant-namespace-on-login`, and the installer does not own it: it is hand-created (no labels,
+  # no helm annotations, no ownerReferences), and `tenant-access`, `kyverno` and
+  # krateo-capability-roles are NOT pinned components and appear in ZERO files of this chart.
+  # Holding the fleet at 0.27.3 meant tracking an object this installer cannot see, ship or fix --
+  # and it had already blocked THREE releases (0.28.0, 0.28.2, 0.29.0).
+  #
+  # THE DEFECT ITSELF, for whoever fixes demo. The policy's own precondition lists the operations
+  # deliberately -- it is not a Kyverno default:
+  #     {"key": "{{ request.operation }}", "operator": "AnyIn", "value": ["CREATE", "UPDATE"]}
+  # Restricting that to ["CREATE"] on all five rules fixes it, after which the override above can
+  # be dropped. Measured blast radius if it is NOT fixed and demo takes >= 0.28.0: of the 8
+  # `*-clientconfig` Secrets the startup backfill UPDATEs, SIX already have their tenant namespace;
+  # only `tenant-admin` and `tenant-authn` would be newly minted -- the same two that exist today
+  # only because both clientconfigs predate the policy and every rule sets `generateExisting: false`.
+  #
   # authn 0.28.0 (authn#42) stamps an `authn.krateo.io/groups` annotation, and AT STARTUP it
   # BACKFILLS that annotation onto every existing `<user>-clientconfig` Secret. On krateo-demo the
   # legacy Kyverno policy `tenant-namespace-on-login` triggers on CREATE **or UPDATE** of any
@@ -420,18 +444,23 @@ components:
   # with a Role, a RoleBinding naming User/<name>, a LimitRange and a ResourceQuota. They do not
   # exist today only because both clientconfigs PREDATE the policy and every rule sets
   # `generateExisting: false`, so no backfill ever ran for them.
-  # The cutover runbook rolls authn >= 0.28.0 at STEP 3, after the legacy policy is orphaned and
-  # deleted, in Diego's window. Kyverno 3.9.2 is unaffected and still goes first.
-  # 057 IS NOT AFFECTED: it has no Kyverno at all, so there is no policy to trigger.
-  # If Diego directs an earlier bump that is his call -- but FLAG the two tenants when it happens;
-  # he has agreed to clean them up at the cutover with the other spurious service tenants.
+  # 057 IS NOT AFFECTED: it has no Kyverno at all, so there is no policy to trigger -- verified by
+  # measurement, not assumed.
+  # 0.29.0 (authn#51): /oidc/login now validates the ID token's iss, aud and exp. BREAKING for an
+  # OIDCConfig with neither `discoveryURL` nor the new `spec.issuer` -- every login 500s with
+  # IssuerUnknown until `issuer` is added, and authn-crds 0.29.0 is what adds that field, so the
+  # two MUST move together. Surveyed before pinning: this chart renders no OIDCConfig at all
+  # (`grep -rli oidc chart/` -> 0 files), and krateo-057 and krateo-installer-release each have ZERO
+  # OIDCConfig instances -- with the CRD served since 2026-08-24, so that zero is non-vacuous. NOTE
+  # THE GROUP: it is `oidcconfigs.oidc.authn.krateo.io`; querying `oidc.krateo.io` answers "server
+  # doesn't have a resource type", which reads exactly like "this cluster has no OIDC".
   kind: Authn
   chart: authn
   # 0.27.3 (#29): AUTHN_KUBECONFIG_SERVER_URL default kube-apiserver:6443 -> kubernetes.default.svc.
   # The old kubeadm-style placeholder was written verbatim into every <user>-clientconfig server-url
   # (unreachable NXDOMAIN on GKE, wrong port), breaking the cert-replay per-user RBAC hop. Users must
   # re-login after this rolls so authn re-issues the clientconfig with the corrected server-url.
-  version: 0.27.3
+  version: 0.29.0
   deps:
   - authn-crd
   tier: platform
@@ -3605,7 +3634,7 @@ components:
   # The near-miss worth recording: an earlier draft of this dep list named clickhouse-operator.
   # The OPERATOR being Ready does not mean a ClickHouse INSTANCE exists -- krateo-observability is
   # what deploys the instance, which is why every other consumer deps on that and not the operator.
-  version: 0.1.2
+  version: 0.1.3
   # 0.1.1 (observability#83, repo tag 3.1.27) drops `appVersion`, which 0.1.0 set to 0.1.0. The
   # chart builds NO image -- both CronJobs run upstream clickhouse/clickhouse-server:24.8-alpine --
   # so there is no component repo whose CI check-pin-ci could resolve, and appVersion 0.1.0 matched
