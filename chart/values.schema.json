@@ -4341,51 +4341,6 @@
                     "enabled": {
                       "type": "boolean"
                     },
-                    "image": {
-                      "type": "string"
-                    },
-                    "persistence": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "enabled": {
-                          "type": "boolean"
-                        },
-                        "size": {
-                          "type": "string"
-                        }
-                      }
-                    },
-                    "resources": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "limits": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "properties": {
-                            "cpu": {
-                              "x-kubernetes-int-or-string": true
-                            },
-                            "memory": {
-                              "type": "string"
-                            }
-                          }
-                        },
-                        "requests": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "properties": {
-                            "cpu": {
-                              "x-kubernetes-int-or-string": true
-                            },
-                            "memory": {
-                              "type": "string"
-                            }
-                          }
-                        }
-                      }
-                    },
                     "cluster": {
                       "type": "object",
                       "additionalProperties": false,
