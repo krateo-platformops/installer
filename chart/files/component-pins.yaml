@@ -60,7 +60,7 @@ components:
   # refuses below 1.36 rather than installing a label-selector mechanism nothing can satisfy.
   # 0.28.1: co-versioned with oasgen-provider. Same k8s >= 1.36 floor; carries no part of the
   # regression fix, which is provider-side only.
-  version: 0.39.0
+  version: 0.42.0
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -3441,7 +3441,29 @@ components:
   #   makes both charts unrenderable on the CI runner, and the workflow warns rather than fails).
   #   Images verified by hand instead. The .github fix is still unmerged and now blocks core-provider's
   #   tag too — the issue number was cited as #25 once and #24 once, so confirm which before chasing.
-  version: 0.39.0
+  version: 0.42.0
+  # 0.42.0 carries #293: the rdc gains an rdc.otel block whose template sets
+  # OTEL_EXPORTER_OTLP_ENDPOINT from the pod's status.hostIP, which is the only way to reach the
+  # node-local collector -- its Service is HEADLESS and has no cluster IP. Surfaced as the typed
+  # componentValues.oasgen-provider.rdc.otel knob added alongside this bump; the knob is inert
+  # before 0.42.0, so the two must move together or an operator sets a key nothing reads.
+  # THE JUMP IS 0.39.0 -> 0.42.0, three releases, characterised rather than assumed:
+  #   0.39.0 -> 0.40.0  Chart.yaml only
+  #   0.40.0 -> 0.41.0  Chart.yaml + clusterrole.yaml, and the clusterrole change is a COMMENT
+  #                     only -- the rule itself (mutatingadmissionpolicies + bindings,
+  #                     create/get/list/watch) is byte-identical to what is live at 0.39.0
+  #   0.41.0 -> 0.42.0  Chart.yaml + assets/rdc/deployment.yaml + values{,.schema}.json = #293
+  # PREREQUISITES CHECKED ON BOTH CLUSTERS, because 0.41.0's new comment makes the oas-version
+  # MutatingAdmissionPolicy REQUIRED rather than optional (version-scoped watching removed the
+  # stamp-on-first-reconcile fallback, so without the policy an instance is created, looks
+  # healthy, and is reconciled by nobody):
+  #   kubeVersion floor >=1.36.0-0   057 and demo both on v1.36.4-gke   OK
+  #   mutatingadmissionpolicies API  served on both                     OK
+  #   policies already in use        057 carries 5 krateo-oas-version-* MAPs at 0.39.0
+  # So this bump adds NO new prerequisite -- the floor was already declared at 0.39.0 and the
+  # policy mechanism is already live. Whether the generated CRs actually carry
+  # krateo.io/oas-version is oasgen-provider's runtime behaviour, not the installer's, and is
+  # reported to its owner rather than resolved here.
   deps:
   - oasgen-provider-crd
   tier: platform
