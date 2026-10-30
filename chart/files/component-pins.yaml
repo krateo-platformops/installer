@@ -4804,7 +4804,23 @@ components:
   feature: portal
 - name: incident-controller
   kind: IncidentController
-  version: 0.5.0
+  version: 0.5.1
+  # 0.5.1 is provider-runtime v1.7.0 + Go 1.26, step 3 of that sequence. Published charts differ
+  # from 0.5.0 in version fields ONLY (6 files vs 6), and the image DOES move -- rendered both,
+  # because a version-field-only diff is also exactly the shape a silent no-op has:
+  #   0.5.0 -> ghcr.io/krateo-platformops/incident-controller:0.5.0
+  #   0.5.1 -> ghcr.io/krateo-platformops/incident-controller:0.5.1
+  # THIS IS 057-ONLY WITHOUT AN OVERRIDE, by feature rather than by exception: feature is
+  # specialistAgents, which is OFF on krateo-demo, so demo carries no incident-controller release
+  # at all (verified: demo has incident-controller-crd and incidents-page, no controller).
+  # AND incident-controller-crd IS DELIBERATELY LEFT AT 0.5.0. That pin is feature: portal, so it
+  # is live on BOTH clusters -- bumping it would migrate demo's CompositionDefinition version and
+  # recreate a composition there, which is outside this step's scope. It buys nothing: the
+  # published incident-controller-crds 0.5.0 -> 0.5.1 diff is the version field alone, so the CRD
+  # CONTENT is identical and a controller at 0.5.1 over CRDs at 0.5.0 is content-equivalent. The
+  # skew is intentional and costs nothing; bump the crd when something in it actually changes.
+  # Not coupled to step 2 either -- that was checked at the published artifact, not the source
+  # compare, and is why these two can run in either order.
   deps:
   - incident-controller-crd
   tier: observability
