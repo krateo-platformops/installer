@@ -1,0 +1,40 @@
+name: check-imagepull-gate-parity
+
+# The image-pull Secret's render gate and the imagePullSecrets injection gate must be the SAME
+# predicate. compositions.yaml injects `imagePullSecrets: [<name>]` into every component in
+# inst.privateImageComponents under `inst.imagePullOn`; imagepull-secret.yaml renders the Secret that
+# name points at. If the gates differ, the injection fires while the Secret is never rendered -- the
+# dangling reference both files' comments warn about.
+#
+# They DID differ: the Secret hardcoded `coreAgents OR specialistAgents` while the injection has no
+# feature gate at all. Found by the snowplow session on bench cluster run19b2 -- agentGateway on,
+# both agent features off, registryAuth set, and agentgateway-policies-{ui-token-hop,cert-replay-hop}
+# in ImagePullBackOff for 43 minutes against a NotFound krateo-registry-image-pull.
+#
+# Never only agentGateway: four of seven inst.privateImageComponents entries had features outside the
+# old gate (structure-graph-mcp-server/structureGraph, agentgateway-policies/agentGateway x2,
+# alert-provider/portal). Both live clusters escaped for DIFFERENT reasons -- 057 has coreAgents on,
+# demo has registryAuth disabled so nothing is injected -- which is why a bench cluster found it.
+#
+# Structural, not render-based, and deliberately: `helm template` disables `lookup`, so this Secret
+# cannot render locally at all (no token -> no dockerconfigjson -> no object) and a render test would
+# pass vacuously.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  imagepull-gate-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Assert the Secret and the injection read one predicate
+        run: python3 -I .github/scripts/check-imagepull-gate-parity.py
