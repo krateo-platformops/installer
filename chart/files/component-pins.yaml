@@ -2327,6 +2327,17 @@ components:
   # github-provider-kog is rehearsing that on a throwaway GitHub fixture and owes a verified runbook
   # before any krateo-demo roll. Until then this cluster-with-instances path is NOT cleared.
   version: 0.6.0
+  # requiresApiGroups — HARD render-time requirements, found by hack/hard-dep-requires-gate.py.
+  # This chart renders objects of the groups below but does not ship them, so without their CRDs
+  # chart-inspector cannot render it AT ALL and the composition 500s every reconcile, forever.
+  # `deps` cannot express that: inst.depsReady SKIPS a dep whose own feature is disabled, so with
+  # this component's feature ON and the provider's OFF the dep reports ready and the component is
+  # emitted into a cluster that has no such kind. installer 0.3.474 did exactly that to
+  # krateo-demo through builder-gate. The unit is an API GROUP, not a component, because the
+  # group can be served by a hand-install: krateo-demo runs ingress:false yet serves six
+  # cert-manager.io CRDs, and clickhouse-operator/mongodb-operator are Ready there.
+  requiresApiGroups:
+  - ogen.krateo.io
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: portal
@@ -3443,11 +3454,33 @@ components:
 - name: clickhouse-operator
   kind: ClickhouseOperator
   version: 0.1.1
+  # requiresApiGroups — HARD render-time requirements, found by hack/hard-dep-requires-gate.py.
+  # This chart renders objects of the groups below but does not ship them, so without their CRDs
+  # chart-inspector cannot render it AT ALL and the composition 500s every reconcile, forever.
+  # `deps` cannot express that: inst.depsReady SKIPS a dep whose own feature is disabled, so with
+  # this component's feature ON and the provider's OFF the dep reports ready and the component is
+  # emitted into a cluster that has no such kind. installer 0.3.474 did exactly that to
+  # krateo-demo through builder-gate. The unit is an API GROUP, not a component, because the
+  # group can be served by a hand-install: krateo-demo runs ingress:false yet serves six
+  # cert-manager.io CRDs, and clickhouse-operator/mongodb-operator are Ready there.
+  requiresApiGroups:
+  - cert-manager.io
   tier: observability
   feature: portal
 - name: mongodb-operator
   kind: MongodbOperator
   version: 0.2.0
+  # requiresApiGroups — HARD render-time requirements, found by hack/hard-dep-requires-gate.py.
+  # This chart renders objects of the groups below but does not ship them, so without their CRDs
+  # chart-inspector cannot render it AT ALL and the composition 500s every reconcile, forever.
+  # `deps` cannot express that: inst.depsReady SKIPS a dep whose own feature is disabled, so with
+  # this component's feature ON and the provider's OFF the dep reports ready and the component is
+  # emitted into a cluster that has no such kind. installer 0.3.474 did exactly that to
+  # krateo-demo through builder-gate. The unit is an API GROUP, not a component, because the
+  # group can be served by a hand-install: krateo-demo runs ingress:false yet serves six
+  # cert-manager.io CRDs, and clickhouse-operator/mongodb-operator are Ready there.
+  requiresApiGroups:
+  - cert-manager.io
   tier: observability
   feature: portal
 - name: krateo-observability
@@ -3972,6 +4005,17 @@ components:
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - kagent
+  # requiresApiGroups — HARD render-time requirements, found by hack/hard-dep-requires-gate.py.
+  # This chart renders objects of the groups below but does not ship them, so without their CRDs
+  # chart-inspector cannot render it AT ALL and the composition 500s every reconcile, forever.
+  # `deps` cannot express that: inst.depsReady SKIPS a dep whose own feature is disabled, so with
+  # this component's feature ON and the provider's OFF the dep reports ready and the component is
+  # emitted into a cluster that has no such kind. installer 0.3.474 did exactly that to
+  # krateo-demo through builder-gate. The unit is an API GROUP, not a component, because the
+  # group can be served by a hand-install: krateo-demo runs ingress:false yet serves six
+  # cert-manager.io CRDs, and clickhouse-operator/mongodb-operator are Ready there.
+  requiresApiGroups:
+  - kagent.dev
   # Own feature, not coreAgents: both consumers reference it off by default, so coreAgents would
   # deploy a server nothing names.
   tier: observability
@@ -4472,6 +4516,17 @@ components:
   - repo-mcp-server
   - kagent
   - model-configs
+  # requiresApiGroups — HARD render-time requirements, found by hack/hard-dep-requires-gate.py.
+  # This chart renders objects of the groups below but does not ship them, so without their CRDs
+  # chart-inspector cannot render it AT ALL and the composition 500s every reconcile, forever.
+  # `deps` cannot express that: inst.depsReady SKIPS a dep whose own feature is disabled, so with
+  # this component's feature ON and the provider's OFF the dep reports ready and the component is
+  # emitted into a cluster that has no such kind. installer 0.3.474 did exactly that to
+  # krateo-demo through builder-gate. The unit is an API GROUP, not a component, because the
+  # group can be served by a hand-install: krateo-demo runs ingress:false yet serves six
+  # cert-manager.io CRDs, and clickhouse-operator/mongodb-operator are Ready there.
+  requiresApiGroups:
+  - kagent.dev
   tier: observability
   feature: specialistAgents
   agent: true
@@ -4536,6 +4591,17 @@ components:
   - repo-mcp-server
   - kagent
   - model-configs
+  # requiresApiGroups — HARD render-time requirements, found by hack/hard-dep-requires-gate.py.
+  # This chart renders objects of the groups below but does not ship them, so without their CRDs
+  # chart-inspector cannot render it AT ALL and the composition 500s every reconcile, forever.
+  # `deps` cannot express that: inst.depsReady SKIPS a dep whose own feature is disabled, so with
+  # this component's feature ON and the provider's OFF the dep reports ready and the component is
+  # emitted into a cluster that has no such kind. installer 0.3.474 did exactly that to
+  # krateo-demo through builder-gate. The unit is an API GROUP, not a component, because the
+  # group can be served by a hand-install: krateo-demo runs ingress:false yet serves six
+  # cert-manager.io CRDs, and clickhouse-operator/mongodb-operator are Ready there.
+  requiresApiGroups:
+  - kagent.dev
   tier: observability
   feature: specialistAgents
   agent: true
@@ -4649,6 +4715,17 @@ components:
   - kagent
   - model-configs
   - snowplow-agent
+  # requiresApiGroups — HARD render-time requirements, found by hack/hard-dep-requires-gate.py.
+  # This chart renders objects of the groups below but does not ship them, so without their CRDs
+  # chart-inspector cannot render it AT ALL and the composition 500s every reconcile, forever.
+  # `deps` cannot express that: inst.depsReady SKIPS a dep whose own feature is disabled, so with
+  # this component's feature ON and the provider's OFF the dep reports ready and the component is
+  # emitted into a cluster that has no such kind. installer 0.3.474 did exactly that to
+  # krateo-demo through builder-gate. The unit is an API GROUP, not a component, because the
+  # group can be served by a hand-install: krateo-demo runs ingress:false yet serves six
+  # cert-manager.io CRDs, and clickhouse-operator/mongodb-operator are Ready there.
+  requiresApiGroups:
+  - kagent.dev
   tier: observability
   feature: specialistAgents
   agent: true
@@ -4662,6 +4739,17 @@ components:
   - kagent
   - model-configs
   - clickhouse-mcp-server
+  # requiresApiGroups — HARD render-time requirements, found by hack/hard-dep-requires-gate.py.
+  # This chart renders objects of the groups below but does not ship them, so without their CRDs
+  # chart-inspector cannot render it AT ALL and the composition 500s every reconcile, forever.
+  # `deps` cannot express that: inst.depsReady SKIPS a dep whose own feature is disabled, so with
+  # this component's feature ON and the provider's OFF the dep reports ready and the component is
+  # emitted into a cluster that has no such kind. installer 0.3.474 did exactly that to
+  # krateo-demo through builder-gate. The unit is an API GROUP, not a component, because the
+  # group can be served by a hand-install: krateo-demo runs ingress:false yet serves six
+  # cert-manager.io CRDs, and clickhouse-operator/mongodb-operator are Ready there.
+  requiresApiGroups:
+  - kagent.dev
   tier: observability
   feature: specialistAgents
   agent: true
@@ -5326,6 +5414,18 @@ components:
   - nightly-review-crd
   - kagent
   - krateo-observability
+  # requiresApiGroups — HARD render-time requirements, found by hack/hard-dep-requires-gate.py.
+  # This chart renders objects of the groups below but does not ship them, so without their CRDs
+  # chart-inspector cannot render it AT ALL and the composition 500s every reconcile, forever.
+  # `deps` cannot express that: inst.depsReady SKIPS a dep whose own feature is disabled, so with
+  # this component's feature ON and the provider's OFF the dep reports ready and the component is
+  # emitted into a cluster that has no such kind. installer 0.3.474 did exactly that to
+  # krateo-demo through builder-gate. The unit is an API GROUP, not a component, because the
+  # group can be served by a hand-install: krateo-demo runs ingress:false yet serves six
+  # cert-manager.io CRDs, and clickhouse-operator/mongodb-operator are Ready there.
+  requiresApiGroups:
+  - kagent.dev
+  - serviceaccount.authn.krateo.io
   tier: observability
   feature: specialistAgents
 - name: agentgateway-controller
@@ -5514,6 +5614,19 @@ components:
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
+  # requiresApiGroups — HARD render-time requirements, found by hack/hard-dep-requires-gate.py.
+  # This chart renders objects of the groups below but does not ship them, so without their CRDs
+  # chart-inspector cannot render it AT ALL and the composition 500s every reconcile, forever.
+  # `deps` cannot express that: inst.depsReady SKIPS a dep whose own feature is disabled, so with
+  # this component's feature ON and the provider's OFF the dep reports ready and the component is
+  # emitted into a cluster that has no such kind. installer 0.3.474 did exactly that to
+  # krateo-demo through builder-gate. The unit is an API GROUP, not a component, because the
+  # group can be served by a hand-install: krateo-demo runs ingress:false yet serves six
+  # cert-manager.io CRDs, and clickhouse-operator/mongodb-operator are Ready there.
+  requiresApiGroups:
+  - agentgateway.dev
+  - serviceaccount.authn.krateo.io
+  - observability.krateo.io
   tier: platform
   feature: agentGateway
   # The portal's Autopilot rail calls an agent's A2A endpoint straight from the browser, so the
