@@ -4835,7 +4835,7 @@ components:
   # migration; the Incident CRD ships in incident-controller-crd). Its release takes over
   # alerts.observability.krateo.io from the alert-troubleshooter-crd release, whose uninstall deletes
   # the CRD and every Alert: follow docs/configuration.md#upgrading-from-alert-troubleshooter first.
-  version: 0.2.53
+  version: 0.2.54
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -4899,7 +4899,26 @@ components:
   # {precondition, apply, verify} and an optional rollback. The service's authn identity
   # (config.authnUrl) authenticates its A2A calls. The chart has no observer thread, and its schema
   # rejects config.reportCooldown and config.snowplowUrl.
-  version: 0.2.53
+  version: 0.2.54
+  # 0.2.54 is provider-runtime v1.7.0 + Go 1.26. The published charts differ from 0.2.53 in
+  # version fields ONLY (alert-provider: appVersion+version; alert-provider-crds: version), and
+  # the image DOES move -- verified by rendering both, since values has `tag: ""` and the template
+  # reads `.Values.image.tag | default .Chart.AppVersion`:
+  #   0.2.53 renders ghcr.io/krateo-platformops/alert-provider:0.2.53
+  #   0.2.54 renders ghcr.io/krateo-platformops/alert-provider:0.2.54
+  # A version-field-only diff is exactly the shape a silent no-op would also have, so the render
+  # is the check, not the diff.
+  # THIS BUMP IS THE ONLY LIVE TEST core-provider#263 WILL GET. It migrates this component's
+  # CompositionDefinition version (v0-2-53 -> v0-2-54), which is the retirement path where
+  # deploy.Undeploy used to delete the cdc Deployment and then revoke its ServiceAccount without
+  # waiting for the pod -- leaving the retiring controller alive for its 30s drain and unable to
+  # write. kog's own 2.13.45 upgrade does NOT exercise it: they bump core-provider, not a
+  # blueprint chart version, so nothing migrates and the retirement path never runs.
+  # And alert-provider is the worst candidate for that race, which is why it is the right test:
+  # it is the #175 subject at +1 revision per ~660s cycle (revision 6933 at the time of writing),
+  # so a helm operation is in flight every eleven minutes, forever. On a quiescent component the
+  # window needs bad luck; here it needs good luck. Requires core-provider >= 2.13.45, live since
+  # installer 0.3.479.
   deps:
   - alert-provider-crd
   - incident-controller-crd
