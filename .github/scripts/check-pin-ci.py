@@ -209,13 +209,79 @@ def ci_at(slug, sha):
         return "notests", (f"all {len(runs)} check-runs passed at {sha[:8]}; repo has NO test suite "
                            f"— {examined} paths examined at that commit, none test-shaped. Nothing "
                            f"to run, so green is honest here (chart-only repo).")
+    # A FOURTH CASE, and the message matters as much as the verdict. The tests may have RUN, green,
+    # on a DIFFERENT commit whose tree is byte-identical — which is the same code. This is the
+    # normal shape when a repo runs its test job on `pull_request` only: the squash commit pushed to
+    # main (the one that gets tagged) never acquires a test check-run, while the PR head it was
+    # squashed from has one. Hit live on krateo-platformops/authn 0.29.0: tagged 71cc990 and PR #51
+    # head 143d86d share tree 39c059b3, and `checks / test` passed on the head.
+    #
+    # Reporting that as "they exist and did not run" is FALSE and actively harmful: it sends someone
+    # to wire tests that already exist and already passed on this exact code. So resolve the
+    # commit's PR, compare TREES (not messages, not dates), and if a test check-run passed on an
+    # identical tree, say so and give the real remedy — run the checks job on push to main so the
+    # tagged commit carries its own evidence.
+    #
+    # It still REFUSES. The tag is what gets pinned, and a tag with no test evidence of its own is a
+    # genuine release-process gap; the component owner who hit this agreed and fixed the process
+    # rather than ask for the gate to be loosened. But it refuses for the true reason.
+    tt = _tested_on_identical_tree(slug, sha)
+    if tt:
+        other, tree, names = tt
+        return "tree-tested", (
+            f"the TAGGED COMMIT {sha[:8]} carries no test check-run ({len(runs)} green, none a "
+            f"test) — BUT THE CODE IS TESTED: {other[:8]} has the byte-identical tree "
+            f"{tree[:8]} and {names} "
+            f"passed there. So the tests exist AND ran — on the PR head, not on the squash commit "
+            f"that got tagged. The gap is the release process, not the suite: run the test job on "
+            f"push to main (or on the tag) so the tagged commit carries its own test check-run. Do "
+            f"NOT widen TEST_RUN_RE for this and do NOT wire new tests — both already exist.")
+
     unreadable = "" if has_tests is True else " (could not read the repo tree to check for a suite)"
     return "notested", (f"all {len(runs)} check-runs passed at {sha[:8]} but NONE tests code — "
                         f"neither by name nor by what any green job runs "
                         f"(saw: {sorted({r['n'].split(' /')[0] for r in runs})[:6]})"
                         f"{unreadable}. The repo DOES contain test-shaped paths"
-                        f"{' e.g. ' + ', '.join(sample) if sample else ''}, so they exist and did "
-                        f"not run.")
+                        f"{' e.g. ' + ', '.join(sample) if sample else ''}, and no commit with an "
+                        f"identical tree has a passing test check-run either, so they did not run.")
+
+
+def _tested_on_identical_tree(slug, sha):
+    """(other_sha, tree_sha, names) if a test check-run passed on a commit with the SAME tree.
+
+    Trees are compared, not commit messages or timestamps: an identical tree IS identical code,
+    which is the only thing that makes the other commit's test result transferable. Anything that
+    cannot be established is returned as None rather than guessed.
+    """
+    def api(path):
+        out, rc = sh("gh", "api", path, "-H", "Accept: application/vnd.github+json")
+        if rc != 0:
+            return None
+        try:
+            return json.loads(out)
+        except Exception:
+            return None
+
+    def tree_of(c):
+        d = api(f"repos/{slug}/commits/{c}")
+        return ((d or {}).get("commit") or {}).get("tree", {}).get("sha")
+
+    tree = tree_of(sha)
+    if not tree:
+        return None
+    prs = api(f"repos/{slug}/commits/{sha}/pulls")
+    for pr in prs if isinstance(prs, list) else []:
+        head = (pr.get("head") or {}).get("sha")
+        if not head or head == sha or tree_of(head) != tree:
+            continue
+        cr = ((api(f"repos/{slug}/commits/{head}/check-runs?per_page=100") or {})
+              .get("check_runs") or [])
+        green = sorted({c.get("name") for c in cr
+                        if c.get("conclusion") == "success"
+                        and TEST_RUN_RE.search(c.get("name") or "")})
+        if green:
+            return head, tree, green[:3]
+    return None
 
 
 # A THIRD CASE, distinct from both green and notested: the repo HAS NO TEST SUITE AT ALL.
@@ -399,6 +465,11 @@ def main():
                     f"Either wire tests in that repo, or widen TEST_RUN_RE if its suite is simply "
                     f"named something this guard does not recognise. Passing here would report "
                     f"'CI was green' for a commit nothing tested.")
+            elif verdict == "tree-tested":
+                # Distinct from notested ON PURPOSE. The remedy is the opposite: do not touch the
+                # suite or this regex, fix the release process. Saying "nothing tested the code"
+                # here would be false and would send someone to wire tests that already pass.
+                failures.append(f"{name} {version}: {slug} — {detail}")
 
     if failures:
         print("::error::pin-ci: a bumped pin points at a commit whose own repo CI is not green "
