@@ -4030,10 +4030,27 @@ components:
   #   portal-builder, all in krateo-system, 28d old. NOTE THE DOUBLED GROUP: querying
   #   `builders.templates.krateo.io` resolves to a group that does not exist and answers NotFound,
   #   which reads exactly like "there are no Builders" -- it gave two sessions a false zero.
-  # feature: portal, because the Builders are portal's: with features.portal off there is nothing
-  # to validate and the component would deploy a gate for Builders that do not exist. deps on
-  # portal for the same reason (the chart's lookup asserts each Builder EXISTS at install time) and
-  # on kagent, which serves the RemoteMCPServer CRD the chart registers into.
+  # feature: coreAgents, AND A `deps:` ENTRY CANNOT SUBSTITUTE FOR THIS -- learned by breaking
+  # krateo-demo with `feature: portal` in 0.3.474. `inst.depsReady` (_helpers.tpl:331) SKIPS a dep
+  # whose own feature is disabled: the readiness check sits INSIDE
+  # `if inst.featureEnabled $dep.feature`. That is deliberate and right for an optional dep -- a
+  # dependent that can function without it should not stall -- but it means a dep is NOT a
+  # render-time requirement. On krateo-demo (portal ON, coreAgents OFF) builder-gate was therefore
+  # emitted with `deps: [portal, kagent]` reporting ready, and chart-inspector 500'd on every
+  # reconcile:
+  #   no matches for kind "RemoteMCPServer" in version "kagent.dev/v1alpha2"
+  #   ensure CRDs are installed first
+  # because kagent ships that CRD and kagent was not installed. The umbrella went
+  # Ready=False/Unavailable on it.
+  # THE RULE: gate on the feature whose absence is a HARD failure, not the one that merely makes the
+  # component pointless. Without coreAgents the chart CANNOT RENDER (no RemoteMCPServer CRD);
+  # without portal it renders fine and gates Builders that do not exist -- useless, not broken. So
+  # coreAgents is the gate and portal is a soft expectation. The `deps` entries stay: on a cluster
+  # where both features are on they still order bring-up correctly.
+  # RESIDUAL, stated rather than hidden: a cluster with coreAgents ON and portal OFF gets three
+  # gates for Builders that do not exist. At 1.8.16 that is silent (RBAC narrowed to nothing); from
+  # the release carrying frontend#549 the chart's lookup FAILS the install instead, which is the
+  # better failure and the reason to bump the pin when it ships.
   # No appVersion in this chart, so pin-ci reports n/a (no image, no component CI to resolve).
   kind: BuilderGate
   chart: builder-gate
@@ -4042,7 +4059,7 @@ components:
     - portal
     - kagent
   tier: observability
-  feature: portal
+  feature: coreAgents
 - name: krateo-autopilot
   # 0.7.1 (ANNOTATED tag 57a2c4a -> commit 87ccab1). PROMPT-ONLY (#152). Four installer-agent
   # skills were unreachable — upgrade-preflight, rollback-advisor, migration-assessment,
