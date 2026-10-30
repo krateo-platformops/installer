@@ -1,0 +1,45 @@
+name: check-hard-dep-requires-gate
+
+on:
+  pull_request:
+    paths:
+      - hack/hard-dep-requires-gate.py
+      - .github/scripts/check-hard-dep-requires-gate.py
+      - .github/workflows/check-hard-dep-requires-gate.yaml
+      - chart/files/component-pins.yaml
+  push:
+    branches:
+      - main
+    paths:
+      - hack/hard-dep-requires-gate.py
+      - .github/scripts/check-hard-dep-requires-gate.py
+      - chart/files/component-pins.yaml
+
+jobs:
+  fixtures:
+    name: fixture suite (no registry)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install pyyaml
+        run: pip install --quiet pyyaml
+      - name: exercise the gate's rules against fixtures
+        run: python3 -I .github/scripts/check-hard-dep-requires-gate.py
+
+  pins:
+    name: every cross-feature CRD dependency is declared
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install pyyaml
+        run: pip install --quiet pyyaml
+      - name: log in to ghcr
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: run the gate against the pinned charts
+        run: python3 -I hack/hard-dep-requires-gate.py --self-test

@@ -116,7 +116,12 @@
      is preserved; real teardown is handled by the feature-OFF drain branch below, not by a lookup miss. */}}
 {{- $deps := include "inst.depsReady" (list $top $c.deps $components $allCRDs) }}
 {{- $exists := include "inst.compositionExists" (list $top $c.kind $c.name $c.version $allCRDs) }}
-{{- if and (eq $crd "true") (or (eq $deps "true") (eq $exists "true")) }}{{- $render = "true" }}{{- end }}
+{{/* HARD API-group requirements are ANDed OUTSIDE the `$exists` escape on purpose. That escape rides
+     out a momentary depsReady flap without pruning a live workload; a missing API GROUP is not a
+     flap — chart-inspector cannot render the chart at all, so emitting anyway buys an endless 500.
+     See inst.requiresApiGroups for the 0.3.474 defect this prevents and why the unit is a group. */}}
+{{- $req := include "inst.requiresApiGroups" (list $c.requiresApiGroups $allCRDs) }}
+{{- if and (eq $crd "true") (eq $req "true") (or (eq $deps "true") (eq $exists "true")) }}{{- $render = "true" }}{{- end }}
 {{- else }}
 {{/* feature OFF -> reverse-dependency DRAIN: keep rendering (alive) until every component that
      deps on this one is gone, so teardown is leaves-first and never deletes this component (or the

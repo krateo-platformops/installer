@@ -285,6 +285,13 @@
               "type": "string"
             }
           },
+          "requiresApiGroups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "HARD render-time requirements, as API GROUPS this component's chart renders objects of (e.g. kagent.dev). Pass B emits the Composition only once every listed group has a served CRD in the cluster. Unlike `deps` -- an ORDERING constraint that inst.depsReady SKIPS when the dep's own feature is disabled -- a missing group suppresses emission for any reason it is missing. Use it whenever the chart renders a kind it does not itself ship: without that kind chart-inspector cannot render the chart at all and the composition 500s every reconcile forever (installer 0.3.474 did exactly this to krateo-demo via builder-gate -> kagent.dev). The unit is a GROUP, not a component: krateo-demo serves six cert-manager.io CRDs from a hand-install while the installer's cert-manager component is absent, so a component-keyed requirement would wrongly suppress two working compositions. Pass A never renders the chart with values and so cannot fail this way, and is not gated."
+          },
           "tier": {
             "type": "string",
             "enum": [

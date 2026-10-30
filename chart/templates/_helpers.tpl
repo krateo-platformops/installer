@@ -335,6 +335,54 @@ components:
 {{- $all -}}
 {{- end -}}
 
+{{/* HARD-REQUIREMENT gate — args: (list (list "group.example.io" ...) $allCRDs)
+     Returns "true" if EVERY listed API GROUP has at least one served CRD in the cluster, "" if any
+     is missing. An empty or absent `requiresApiGroups:` is vacuously "true".
+
+     WHY IT EXISTS (installer 0.3.474 broke krateo-demo). builder-gate was pinned `feature: portal`
+     with `deps: [portal, kagent]`. On krateo-demo — portal ON, coreAgents OFF — it was emitted
+     anyway and chart-inspector 500'd on every reconcile:
+       no matches for kind "RemoteMCPServer" in version "kagent.dev/v1alpha2"
+       ensure CRDs are installed first
+     `deps` cannot prevent that: inst.depsReady SKIPS a dep whose own feature is disabled (the
+     readiness check sits INSIDE `if inst.featureEnabled $dep.feature`). That is correct for an
+     OPTIONAL dep but makes `deps` an ORDERING constraint and nothing more.
+
+     WHY THE UNIT IS AN API GROUP AND NOT A COMPONENT NAME — measured, not assumed. The first draft
+     of this gate required the NAMED COMPONENT's composition to be Ready. krateo-demo refutes that
+     design: it runs `ingress: false`, so the installer's cert-manager component is absent, yet SIX
+     cert-manager.io CRDs are served there from a hand-install, and clickhouse-operator and
+     mongodb-operator (which render cert-manager.io objects) are both Ready=Available. A
+     component-keyed requirement would have SUPPRESSED two working compositions. What a chart needs
+     is the KIND to be renderable, and any provider of that group satisfies it — installer-managed
+     or not. So this asks the cluster what is served, which is the question that actually decides
+     whether chart-inspector can render.
+
+     PASS B ONLY, deliberately. Pass A registers the CompositionDefinition, which makes core-provider
+     pull the chart and run crdgen; it never renders the chart with values, so it cannot produce the
+     500. Gating Pass A would also make CD emission lookup-dependent for all 67 components, changing
+     bring-up ordering fleet-wide and narrowing check-feature-render.py, which covers the CD layer
+     precisely because `helm template` disables lookup.
+
+     NO DRAIN BRANCH, unlike feature-OFF. A feature going off is an orderly teardown, so
+     inst.dependentsGone keeps the component alive until its dependents leave. A missing API group is
+     not orderly: continuing to emit buys an endless chart-inspector 500 rather than a graceful
+     drain, which is the failure this gate exists to stop. So it suppresses at once. */}}
+{{- define "inst.requiresApiGroups" -}}
+{{- $groups := index . 0 -}}{{- $allCRDs := index . 1 -}}
+{{- $all := "true" -}}
+{{- range $g := $groups -}}
+  {{- $found := "" -}}
+  {{- range $crd := $allCRDs -}}
+    {{- if eq $crd.spec.group $g -}}
+      {{- range $crd.spec.versions -}}{{- if .served -}}{{- $found = "true" -}}{{- end -}}{{- end -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if not $found -}}{{- $all = "" -}}{{- end -}}
+{{- end -}}
+{{- $all -}}
+{{- end -}}
+
 {{/* Reverse-dependency TEARDOWN gate — the mirror of inst.depsReady. args: (list $ "componentName" $components)
      Returns "true" if NO still-present Composition depends on <componentName> (so it is safe to stop
      rendering it and let the cdc delete it). Returns "" while ANY dependent's Composition still exists,
