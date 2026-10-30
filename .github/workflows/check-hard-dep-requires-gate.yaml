@@ -1,45 +1,55 @@
 name: check-hard-dep-requires-gate
 
+# Operator-side guard: exercise hack/hard-dep-requires-gate.py, the pre-roll gate that refuses a pin
+# whose chart RENDERS an API group another component SHIPS, across a feature boundary, without
+# declaring that group in `requiresApiGroups`.
+#
+# WHY THE GATE EXISTS: installer 0.3.474 pinned builder-gate `feature: portal` with
+# `deps: [portal, kagent]`. On krateo-demo -- portal ON, coreAgents OFF -- it was emitted anyway and
+# chart-inspector 500'd every reconcile with `no matches for kind "RemoteMCPServer" in version
+# "kagent.dev/v1alpha2"`. `deps` cannot prevent that: inst.depsReady SKIPS a dep whose own feature is
+# disabled, which makes `deps` an ORDERING constraint and nothing more. Measuring the pin file for
+# the same shape found NINE more, latent only because no live cluster had the exposing combination.
+#
+# WHY THIS SUITE IS MOSTLY ABOUT FALSE POSITIVES, like its sibling's. Two drafts were wrong in ways
+# only a mixed set of real components exposed, and acting on either would have been WORSE than the
+# defect, because a wrong requirement SUPPRESSES a working composition:
+#   draft 1  matched `^\s*apiVersion:` at any indent -> flagged portal-agents, reviews-page and
+#            github-provider-kog. krateo-demo refutes it: portal ON + coreAgents OFF and all three
+#            are Ready=Available. An INDENTED apiVersion is a field VALUE in a portal widget naming
+#            a resource it QUERIES; objects a chart creates are written at column 0.
+#   draft 2  keyed the requirement on the PROVIDING COMPONENT's readiness -> would have demanded
+#            cert-manager on clickhouse-operator and mongodb-operator. demo runs ingress:false, so
+#            that component is ABSENT, yet six cert-manager.io CRDs are served from a hand-install
+#            and both compositions are Ready. The requirement was real; the UNIT was wrong. Hence
+#            API GROUPS, which any provider can satisfy.
+#
+# WHY THE REGISTRY SWEEP IS NOT A CI JOB, stated so its absence is not mistaken for an oversight.
+# The sweep must pull all 67 pinned charts, and 17 of them are packages in another org
+# (krateo-agentiko, krateo-blueprints). The repo-scoped GITHUB_TOKEN cannot read those, and
+# PIN_CI_READ_TOKEN carries contents:read + checks:read -- not the packages:read a `helm pull`
+# needs. Run that way the gate WITHHOLDS on 17 charts, which is the honest verdict and a useless
+# check. So the sweep is operator-side and pre-roll, exactly like hack/chart-root-schema-gate.py,
+# and CI asserts the RULES against fixtures with no registry at all. If PIN_CI_READ_TOKEN ever gains
+# packages:read, add a job running `python3 -I hack/hard-dep-requires-gate.py --self-test`.
+
 on:
   pull_request:
-    paths:
-      - hack/hard-dep-requires-gate.py
-      - .github/scripts/check-hard-dep-requires-gate.py
-      - .github/workflows/check-hard-dep-requires-gate.yaml
-      - chart/files/component-pins.yaml
+    branches: [main]
   push:
-    branches:
-      - main
-    paths:
-      - hack/hard-dep-requires-gate.py
-      - .github/scripts/check-hard-dep-requires-gate.py
-      - chart/files/component-pins.yaml
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
 
 jobs:
-  fixtures:
-    name: fixture suite (no registry)
+  hard-dep-requires-gate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: install pyyaml
-        run: pip install --quiet pyyaml
-      - name: exercise the gate's rules against fixtures
-        run: python3 -I .github/scripts/check-hard-dep-requires-gate.py
-
-  pins:
-    name: every cross-feature CRD dependency is declared
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: install pyyaml
-        run: pip install --quiet pyyaml
-      - name: log in to ghcr
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
-      - name: run the gate against the pinned charts
-        run: python3 -I hack/hard-dep-requires-gate.py --self-test
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+      - name: Exercise the hard-dep requires gate
+        run: python3 .github/scripts/check-hard-dep-requires-gate.py
