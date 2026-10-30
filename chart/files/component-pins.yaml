@@ -4005,6 +4005,44 @@ components:
   # before the agent compiles its tool list (kagent compiles once, no requeue).
   tier: observability
   feature: coreAgents
+- name: builder-gate
+  # THE GATE THAT HAS NEVER RUN. builder-gate exposes ONE MCP tool, `validate_draft`, which an
+  # authoring agent is supposed to call before handing a Builder draft back. The chart has been
+  # published since at least 1.8.15 and is installed NOWHERE -- measured on 057: 0 builder-gate
+  # Deployments against a control of 170 total. So every draft an autopilot agent has published
+  # went through whatever the agent did locally, not through this. Wiring it is the point; #540's
+  # sixth step (judging what a widgetDataTemplate RESOLVES to, not just the template) is a step in
+  # a gate that does not run yet.
+  # IT IS ADDRESSABLE INFRASTRUCTURE, NOT A SIDECAR. The chart deploys a Deployment, a Service and
+  # a kagent `RemoteMCPServer` -- kagent's own registration CRD -- so the gate exists to be reached
+  # over the network by kagent agents. That is the opposite of core-provider's
+  # chart-gate-mcp-server, which runs INSIDE the core-provider pod because core-provider is its
+  # only caller. Same pattern name, different shape; do not "simplify" this into a sidecar.
+  # ONE INSTALL, N INSTANCES. Every object in the chart is inside `range .Values.instances`, one
+  # set per authoring agent with RBAC narrowed to that agent's Builder. An EMPTY list therefore
+  # renders ZERO objects while the release still reports deployed. 1.8.16 does NOT refuse that
+  # render (frontend#549 adds the refusal and is not yet released), so the
+  # componentValues.builder-gate.instances DEFAULT is load-bearing: it is what makes enabling the
+  # feature produce a working gate instead of a green no-op. Bump the pin when the guarded release
+  # lands, and until then do not rely on the chart to complain.
+  # THE THREE BUILDERS, read off 057 rather than guessed:
+  #   builders.builders.templates.krateo.io -A  ->  blueprint-builder / controller-builder /
+  #   portal-builder, all in krateo-system, 28d old. NOTE THE DOUBLED GROUP: querying
+  #   `builders.templates.krateo.io` resolves to a group that does not exist and answers NotFound,
+  #   which reads exactly like "there are no Builders" -- it gave two sessions a false zero.
+  # feature: portal, because the Builders are portal's: with features.portal off there is nothing
+  # to validate and the component would deploy a gate for Builders that do not exist. deps on
+  # portal for the same reason (the chart's lookup asserts each Builder EXISTS at install time) and
+  # on kagent, which serves the RemoteMCPServer CRD the chart registers into.
+  # No appVersion in this chart, so pin-ci reports n/a (no image, no component CI to resolve).
+  kind: BuilderGate
+  chart: builder-gate
+  version: 1.8.16
+  deps:
+    - portal
+    - kagent
+  tier: observability
+  feature: portal
 - name: krateo-autopilot
   # 0.7.1 (ANNOTATED tag 57a2c4a -> commit 87ccab1). PROMPT-ONLY (#152). Four installer-agent
   # skills were unreachable — upgrade-preflight, rollback-advisor, migration-assessment,
