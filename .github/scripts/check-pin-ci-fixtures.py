@@ -70,10 +70,50 @@ b: a
 \techo b
 """
 
+# provider-runtime's strictness catch on #600: vet is static analysis and runs no test code, so a
+# repo whose only green job is `make lint` must NOT read as tested. That was a false positive my
+# fix INTRODUCED -- TEST_CMD_RE has accepted `go vet` since before #600, and inheriting it into the
+# Makefile arm would have widened the acceptance under cover of a bug fix.
+VET_ONLY = """\
+build:
+\tgo build ./...
+
+lint:
+\tgo vet ./...
+
+ci: build lint
+"""
+
+# Recursive make inside a recipe. Not following it would be a fresh blind spot of exactly the
+# shape #600 fixes.
+RECURSIVE = """\
+test:
+\tgo test ./...
+
+ci:
+\t$(MAKE) test
+"""
+
+RECURSIVE_BRACE = """\
+test:
+\tgotestsum ./...
+
+ci:
+\t${MAKE} test
+"""
+
+# An included makefile is part of a graph this parser cannot see. It must say "cannot resolve",
+# never "no tests" -- the lesson of the false negative itself.
+INCLUDED = """\
+include common.mk
+
+ci: test
+"""
+
 CASES = [
     ("the real chain: make check reaches go test",        REAL,     ["check"],          True),
     ("make test directly",                                REAL,     ["test"],           True),
-    ("make lint reaches go vet, which is in scope",        REAL,     ["lint"],           True),
+    ("make lint reaches ONLY go vet -> not tested",         REAL,     ["lint"],           False),
     ("make build reaches NO test command",                 REAL,     ["build"],          False),
     ("make check-generate reaches no test command",        REAL,     ["check-generate"], False),
     ("a target that does not exist",                       REAL,     ["nope"],           False),
@@ -82,6 +122,10 @@ CASES = [
     ("a cyclic Makefile terminates and finds nothing",     CYCLIC,   ["a"],              False),
     ("several targets, one of which tests",                REAL,     ["build", "test"],  True),
     ("an empty Makefile",                                  "",       ["check"],          False),
+    ("vet-only: make ci reaches go vet and NOTHING else", VET_ONLY, ["ci"],             False),
+    ("vet-only: make lint directly is still not tested",  VET_ONLY, ["lint"],           False),
+    ("recursive $(MAKE) test is followed",                RECURSIVE, ["ci"],            True),
+    ("recursive ${MAKE} test is followed",                RECURSIVE_BRACE, ["ci"],      True),
 ]
 
 
@@ -98,6 +142,18 @@ def main():
     # make an untested green job pass.
     assert pc._resolve_make_targets(NO_TESTS, ["ci"]) is None, \
         "a make target that runs no tests must NOT be reported as tested"
+    assert pc._resolve_make_targets(VET_ONLY, ["ci"]) is None, \
+        "go vet runs no test code — a vet-only chain must NOT be reported as tested"
+
+    # An UNRESOLVABLE makefile must be distinguishable from an untested one. Returning None for
+    # both would reproduce the original defect in a new place: blindness reported as a finding.
+    inc = pc._resolve_make_targets(INCLUDED, ["ci"])
+    ok = inc is pc.UNRESOLVABLE
+    print(f"  {'ok  ' if ok else 'FAIL'} {'an include yields UNRESOLVABLE, not None':<48} -> "
+          f"{'UNRESOLVABLE' if ok else repr(inc)}")
+    if not ok:
+        failures.append("include must yield UNRESOLVABLE, not None")
+    assert inc is not None, "an included makefile must not read as 'no tests'"
 
     print()
     if failures:

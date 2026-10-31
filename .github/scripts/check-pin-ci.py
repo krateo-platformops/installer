@@ -317,6 +317,33 @@ def _repo_has_test_paths(slug, sha):
 MAKE_RE = re.compile(r"\bmake\s+(?:-[\w-]+\s+)*([\w.-]+(?:\s+[\w.-]+)*)")
 
 
+# STRICTER than TEST_CMD_RE, and used ONLY by the Makefile resolution below: a reached recipe line
+# must run an actual TEST RUNNER. `go vet` is static analysis -- it executes no test code -- so a
+# repo whose only green job is `make lint` must NOT read as tested. TEST_CMD_RE keeps `go vet`
+# because it predates this change and is also consulted by the direct-command arm; widening the
+# Makefile arm to inherit that would have been a NEW false positive introduced by a bug fix, which
+# is how the guard got into trouble in the first place. Raised by provider-runtime on #600.
+# The pre-existing `go vet` acceptance in the DIRECT arm is left alone deliberately and flagged in
+# the PR rather than changed silently here: tightening it could newly fail pins that already
+# passed, which is a behaviour change and not this fix.
+TEST_RUNNER_RE = re.compile(
+    r"(^|[\s/])test[-_][\w.-]+\.(py|sh|js|ts)"
+    r"|(^|[\s/])[\w.-]+[-_]test\.(py|sh|js|ts)"
+    r"|\bgo\s+test\b|\bpytest\b|\bnpm\s+(run\s+)?test\b|\byarn\s+test\b"
+    r"|\bvitest\b|\bjest\b|\bhelm\s+unittest\b|\bgotestsum\b|\bginkgo\b",
+    re.I)
+
+# Recursive make inside a recipe: `$(MAKE) test`, `${MAKE} test`, `make test`. Followed like a
+# prerequisite -- not following it would be a fresh blind spot of exactly the shape this PR fixes.
+RECURSIVE_MAKE_RE = re.compile(r"(?:\$[({]MAKE[)}]|\bmake)\s+(?:-[\w-]+\s+)*([\w.-]+)")
+
+# An `include`d makefile is a part of the recipe graph this parser cannot see. It must produce
+# "cannot resolve", NOT "no tests" -- the whole lesson of the false negative this PR fixes is that
+# an instrument's blindness must not be reported as a finding about the world.
+INCLUDE_RE = re.compile(r"^[-\s]*include\s+\S", re.M)
+UNRESOLVABLE = object()
+
+
 def _resolve_make_targets(makefile_text, targets):
     """PURE half of the Makefile resolution: does `make <targets>` reach a test command?
 
@@ -330,6 +357,8 @@ def _resolve_make_targets(makefile_text, targets):
 
     Returns the matched command string, or None.
     """
+    if INCLUDE_RE.search(makefile_text):
+        return UNRESOLVABLE
     rules, cur = {}, None
     for line in makefile_text.splitlines():
         if line.startswith("\t") and cur:
@@ -349,9 +378,12 @@ def _resolve_make_targets(makefile_text, targets):
         seen.add(t)
         deps, recipe = rules[t]
         for r in recipe:
-            m = TEST_CMD_RE.search(r)
+            m = TEST_RUNNER_RE.search(r)
             if m:
                 return m.group(0).strip()
+            rec = RECURSIVE_MAKE_RE.search(r)
+            if rec:
+                queue.append(rec.group(1))
         queue.extend(deps)
     return None
 
@@ -375,7 +407,7 @@ def _make_targets_test(repo, sha, targets):
 
     STRICTNESS IS PRESERVED. This widens what the guard can SEE, not what it will ACCEPT:
       make build -> `build:` reaches no test command        -> still not tested
-      make lint  -> `lint: go vet ./...`                    -> tested (go vet is in scope)
+      make lint  -> `lint: go vet ./...`                    -> NOT tested (vet runs no tests)
       make check -> reaches `go test -race -cover ./...`    -> tested
     A green job that genuinely runs no tests still fails: the match is on reached recipe text.
 
@@ -459,7 +491,13 @@ def _test_invocations(repo, sha, ran_names):
                 mk = MAKE_RE.search(run)
                 if mk:
                     cmd = _make_targets_test(repo, sha, mk.group(1).split())
-                    if cmd:
+                    if cmd is UNRESOLVABLE:
+                        # Say what we could not see. Reporting this as "no tests" is the exact
+                        # error this PR exists to fix.
+                        print(f"  note: {repo}'s Makefile at {sha[:8]} uses `include`, which this "
+                              f"parser does not follow — cannot resolve `make {mk.group(1)}`; "
+                              f"not claiming tested on its behalf")
+                    elif cmd:
                         out.add((label, f"make {mk.group(1)} -> {cmd}"))
                         break
     return out
