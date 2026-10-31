@@ -314,6 +314,115 @@ def _repo_has_test_paths(slug, sha):
     return (len(hits) > 0), len(paths), hits[:3]
 
 
+MAKE_RE = re.compile(r"\bmake\s+(?:-[\w-]+\s+)*([\w.-]+(?:\s+[\w.-]+)*)")
+
+
+# STRICTER than TEST_CMD_RE, and used ONLY by the Makefile resolution below: a reached recipe line
+# must run an actual TEST RUNNER. `go vet` is static analysis -- it executes no test code -- so a
+# repo whose only green job is `make lint` must NOT read as tested. TEST_CMD_RE keeps `go vet`
+# because it predates this change and is also consulted by the direct-command arm; widening the
+# Makefile arm to inherit that would have been a NEW false positive introduced by a bug fix, which
+# is how the guard got into trouble in the first place. Raised by provider-runtime on #600.
+# The pre-existing `go vet` acceptance in the DIRECT arm is left alone deliberately and flagged in
+# the PR rather than changed silently here: tightening it could newly fail pins that already
+# passed, which is a behaviour change and not this fix.
+TEST_RUNNER_RE = re.compile(
+    r"(^|[\s/])test[-_][\w.-]+\.(py|sh|js|ts)"
+    r"|(^|[\s/])[\w.-]+[-_]test\.(py|sh|js|ts)"
+    r"|\bgo\s+test\b|\bpytest\b|\bnpm\s+(run\s+)?test\b|\byarn\s+test\b"
+    r"|\bvitest\b|\bjest\b|\bhelm\s+unittest\b|\bgotestsum\b|\bginkgo\b",
+    re.I)
+
+# Recursive make inside a recipe: `$(MAKE) test`, `${MAKE} test`, `make test`. Followed like a
+# prerequisite -- not following it would be a fresh blind spot of exactly the shape this PR fixes.
+RECURSIVE_MAKE_RE = re.compile(r"(?:\$[({]MAKE[)}]|\bmake)\s+(?:-[\w-]+\s+)*([\w.-]+)")
+
+# An `include`d makefile is a part of the recipe graph this parser cannot see. It must produce
+# "cannot resolve", NOT "no tests" -- the whole lesson of the false negative this PR fixes is that
+# an instrument's blindness must not be reported as a finding about the world.
+INCLUDE_RE = re.compile(r"^[-\s]*include\s+\S", re.M)
+UNRESOLVABLE = object()
+
+
+def _resolve_make_targets(makefile_text, targets):
+    """PURE half of the Makefile resolution: does `make <targets>` reach a test command?
+
+    Split from the fetch so it is testable with no network -- the fetching wrapper below is a
+    thin shim, and every rule in here is exercised by fixtures in
+    .github/scripts/check-pin-ci-fixtures.py.
+
+    Minimal Makefile model: `target: prereqs ## help` plus tab-indented recipe lines. Resolves
+    the named targets transitively through their prerequisites, cycle-safe, and matches
+    TEST_CMD_RE against the recipe lines actually REACHED.
+
+    Returns the matched command string, or None.
+    """
+    if INCLUDE_RE.search(makefile_text):
+        return UNRESOLVABLE
+    rules, cur = {}, None
+    for line in makefile_text.splitlines():
+        if line.startswith("\t") and cur:
+            rules[cur][1].append(line.strip())
+            continue
+        m = re.match(r"^([A-Za-z0-9_.\-/%]+)\s*:(?!=)\s*(.*)$", line)
+        if m:
+            cur = m.group(1)
+            deps = m.group(2).split("##")[0].split()
+            rules.setdefault(cur, ([], []))
+            rules[cur] = (rules[cur][0] + deps, rules[cur][1])
+    seen, queue = set(), list(targets)
+    while queue:
+        t = queue.pop()
+        if t in seen or t not in rules:
+            continue
+        seen.add(t)
+        deps, recipe = rules[t]
+        for r in recipe:
+            m = TEST_RUNNER_RE.search(r)
+            if m:
+                return m.group(0).strip()
+            rec = RECURSIVE_MAKE_RE.search(r)
+            if rec:
+                queue.append(rec.group(1))
+        queue.extend(deps)
+    return None
+
+
+def _make_targets_test(repo, sha, targets):
+    """Does `make <target>` reach a test command, resolving the Makefile at `sha`?
+
+    WHY THIS EXISTS. A step that runs `make check` matches no TEST_CMD_RE pattern, and correctly
+    so -- the target name says nothing about what runs. But declining to resolve it produced a
+    FALSE verdict: this guard reported incident-controller 0.5.1 as "CI is green but NOTHING
+    TESTED THE CODE" when .github/workflows/check.yaml runs `make check`, whose chain is
+    `check: build lint test check-generate lint-charts` and whose `test:` recipe is
+    `go test -race -cover ./...`. The job log at 8bfc229a shows the race-enabled suite running
+    with coverage on three packages. alert-provider 0.2.54 is the same shape at 033e9476.
+
+    The pin was blocked on the guard's blindness, and I reported that blindness to the user as a
+    finding about the repo -- "6 _test.go files and ZERO go test references across five
+    workflows". The grep was true of the literal strings I searched (`go test`, `gotestsum`,
+    `ginkgo`, `make test`) and false as the claim I drew from it, because the repo spells it
+    `make check`. A fifth spelling I never looked for.
+
+    STRICTNESS IS PRESERVED. This widens what the guard can SEE, not what it will ACCEPT:
+      make build -> `build:` reaches no test command        -> still not tested
+      make lint  -> `lint: go vet ./...`                    -> NOT tested (vet runs no tests)
+      make check -> reaches `go test -race -cover ./...`    -> tested
+    A green job that genuinely runs no tests still fails: the match is on reached recipe text.
+
+    No Makefile is not a failure -- the caller falls back to the direct-command match.
+    """
+    raw, rc = sh("gh", "api", f"/repos/{repo}/contents/Makefile?ref={sha}", "--jq", ".content")
+    if rc != 0 or not raw:
+        return None
+    try:
+        text = base64.b64decode(raw).decode("utf-8", "replace")
+    except ValueError:
+        return None
+    return _resolve_make_targets(text, targets)
+
+
 # Invocations that constitute "this job tested the code". Deliberately about the COMMAND, not the
 # job's name: a script called test-*.py, a test runner, or a language's test subcommand.
 TEST_CMD_RE = re.compile(
@@ -377,6 +486,20 @@ def _test_invocations(repo, sha, ran_names):
                 if m:
                     out.add((label, m.group(0).strip()))
                     break
+                # `make <target>` matches nothing above, and must not: the target name says
+                # nothing about what runs. Resolve it through the Makefile at this commit.
+                mk = MAKE_RE.search(run)
+                if mk:
+                    cmd = _make_targets_test(repo, sha, mk.group(1).split())
+                    if cmd is UNRESOLVABLE:
+                        # Say what we could not see. Reporting this as "no tests" is the exact
+                        # error this PR exists to fix.
+                        print(f"  note: {repo}'s Makefile at {sha[:8]} uses `include`, which this "
+                              f"parser does not follow — cannot resolve `make {mk.group(1)}`; "
+                              f"not claiming tested on its behalf")
+                    elif cmd:
+                        out.add((label, f"make {mk.group(1)} -> {cmd}"))
+                        break
     return out
 
 

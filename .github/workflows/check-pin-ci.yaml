@@ -29,6 +29,23 @@ permissions:
   contents: read
 
 jobs:
+  fixtures:
+    name: Makefile-resolution fixtures (no network)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install pyyaml
+        run: pip install --quiet pyyaml
+      # Offline, because the arm being tested is the PURE resolver. check-pin-ci reported
+      # incident-controller 0.5.1 as "nothing tested the code" when its CI is one `make check`
+      # whose chain reaches `go test -race -cover ./...`. Both directions are asserted: the
+      # chain must be followed, and a target reaching no test command must still fail.
+      - name: exercise the Makefile resolution
+        run: python3 -I .github/scripts/check-pin-ci-fixtures.py
+
   pin-ci:
     runs-on: ubuntu-latest
     steps:
