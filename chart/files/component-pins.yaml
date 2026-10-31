@@ -4855,7 +4855,7 @@ components:
   # migration; the Incident CRD ships in incident-controller-crd). Its release takes over
   # alerts.observability.krateo.io from the alert-troubleshooter-crd release, whose uninstall deletes
   # the CRD and every Alert: follow docs/configuration.md#upgrading-from-alert-troubleshooter first.
-  version: 0.2.53
+  version: 0.2.55
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -4919,7 +4919,24 @@ components:
   # {precondition, apply, verify} and an optional rollback. The service's authn identity
   # (config.authnUrl) authenticates its A2A calls. The chart has no observer thread, and its schema
   # rejects config.reportCooldown and config.snowplowUrl.
-  version: 0.2.53
+  version: 0.2.55
+  # 0.2.55 is provider-runtime v1.7.0 + Go 1.26, step 2 of that sequence. The jump is
+  # 0.2.53 -> 0.2.55, skipping 0.2.54, which was never rolled: it declared no `sources:` in its
+  # Chart.yaml, so check-pin-ci could not follow the pin's provenance and refused it -- correctly.
+  # 0.2.55 is 0.2.54 plus that one metadata fix (+home, +sources), nothing else.
+  #   0.2.54 -> 0.2.55 diff: helm/alert-provider/Chart.yaml ONLY
+  #   published chart: 0.2.55 prints sources, 0.2.54 prints none (control)
+  #   image still moves: 0.2.53 -> ...:0.2.53, 0.2.55 -> ...:0.2.55 (rendered both)
+  # THE SWEEP ROW MEASURES NOTHING HERE, which is worth stating so a 0 is not over-read.
+  # alert-provider's Observe always reports ResourceExists:true for a live Alert and only reports
+  # by HyperDX IDs once it is deleted; Create is a no-op, commented "Create is never called".
+  # provider-runtime stamps krateo.io/external-create-pending only on the path that calls Create,
+  # so alerts never enter the stuck-create handshake on ANY runtime version -- 26 scanned, 0
+  # annotated, before and after. The meaningful checks are the Synced=True arm and the managed-set
+  # baseline, not the sweep.
+  # Requires core-provider >= 2.13.46: this migrates v0-2-53 -> v0-2-55, and on 2.13.45 EVERY path
+  # that retires a controller wedges (Update, both Deletes, and handOverController) because the
+  # drain LISTs pods without the RBAC rule to do it.
   deps:
   - alert-provider-crd
   - incident-controller-crd
