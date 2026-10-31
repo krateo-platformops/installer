@@ -324,6 +324,14 @@ components:
   # installer work around it: 0.1.1 requires only `clickhouse`, with `address` and `database` inside.
   # That is the gate catching a defect BEFORE a pin rather than diagnosing one after.
   #
+  # THEN 0.1.1 WAS REFUSED TOO, by a different gate and for the same reason alert-provider
+  # 0.2.54 was refused this morning: its Chart.yaml declared `home` but no `sources:`, so
+  # check-pin-ci could not resolve appVersion 0.1.1 to a tag in any repo and WITHHELD rather
+  # than passing -- an unresolvable pin is where an untested commit hides. showback#10 added
+  # sources and cut 0.1.2, whose only change over 0.1.1 is that one field. Verified at the
+  # published chart: sources present, root required still ['clickhouse'] with
+  # ['address','database'] inside, global declared, and both packages anonymously pullable (200).
+  #
   # THE NESTED REQUIRED IS NOT GATE-COVERED, so it is handled by hand here. The gate checks ROOT
   # required keys against componentValues; it does NOT verify that a nested `required:` inside one
   # is satisfiable. showback's `clickhouse.required: [address, database]` is exactly that shape, so
@@ -350,7 +358,7 @@ components:
   feature: showback
   kind: Showback
   tier: observability
-  version: 0.1.1
+  version: 0.1.2
 - name: snowplow-crd
   # 1.12.56: carried in lockstep with snowplow 1.12.56. CRD payload UNCHANGED -- verified by
   # unpacking: 4 files / 19,855 bytes on BOTH sides, identical outside Chart.yaml. Lockstep is
