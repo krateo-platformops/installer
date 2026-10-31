@@ -8934,7 +8934,7 @@
             "external-dns": {
               "type": "object",
               "title": "upstream external-dns passthrough",
-              "description": "Passthrough to the upstream external-dns chart. Required for DNS publication: provider.name, domainFilters, txtOwnerId, and env with the provider token.",
+              "description": "The chart marks `external-dns` root-required with domainFilters, txtOwnerId and env required inside it. The default is on THIS object, not only on its children: structural-schema defaulting fills fields of objects that are PRESENT, so child defaults never apply when the parent is absent and the CR is rejected for the missing required key. Values copied from the chart's own values.yaml \u2014 the chart defaulting them does NOT satisfy the generated CRD, because crdgen keeps `required` and the CR's spec is built from componentValues (installer#489).",
               "additionalProperties": false,
               "properties": {
                 "provider": {
@@ -9044,6 +9044,19 @@
                   },
                   "type": "object"
                 }
+              },
+              "default": {
+                "provider": {
+                  "name": "cloudflare"
+                },
+                "domainFilters": [],
+                "policy": "sync",
+                "sources": [
+                  "gateway-httproute",
+                  "service"
+                ],
+                "txtOwnerId": "",
+                "env": []
               }
             }
           }
@@ -9133,11 +9146,58 @@
           "properties": {
             "internalCA": {
               "type": "object",
-              "additionalProperties": false
+              "additionalProperties": false,
+              "description": "installer#489: declared as an object with NO properties, so the installer could only ever emit `{}` while the CRD requires `enabled` inside it \u2014 verified live on a cluster with features.ingress on. The default is on THIS object, not only on its children: structural-schema defaulting fills fields of objects that are PRESENT, so child defaults never apply when the parent is absent and the CR is rejected for the missing required key. Values copied from the chart's own values.yaml \u2014 the chart defaulting them does NOT satisfy the generated CRD, because crdgen keeps `required` and the CR's spec is built from componentValues (installer#489).",
+              "default": {
+                "enabled": true,
+                "name": "krateo-selfsigned-ca"
+              },
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
             },
             "acme": {
               "type": "object",
-              "additionalProperties": false
+              "additionalProperties": false,
+              "description": "installer#489, same shape as internalCA. The default is on THIS object, not only on its children: structural-schema defaulting fills fields of objects that are PRESENT, so child defaults never apply when the parent is absent and the CR is rejected for the missing required key. Values copied from the chart's own values.yaml \u2014 the chart defaulting them does NOT satisfy the generated CRD, because crdgen keeps `required` and the CR's spec is built from componentValues (installer#489).",
+              "default": {
+                "enabled": false,
+                "email": "",
+                "server": "https://acme-v02.api.letsencrypt.org/directory",
+                "gatewayRef": {
+                  "name": "krateo-gateway",
+                  "namespace": "krateo-system"
+                }
+              },
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "email": {
+                  "type": "string",
+                  "description": "ACME account email; the CA requires it when enabled."
+                },
+                "server": {
+                  "type": "string"
+                },
+                "gatewayRef": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "namespace": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
             }
           }
         },
@@ -9148,10 +9208,12 @@
           "additionalProperties": false,
           "properties": {
             "gatewayClassName": {
-              "type": "string"
+              "type": "string",
+              "default": "agentgateway"
             },
             "controllerName": {
-              "type": "string"
+              "type": "string",
+              "default": "agentgateway.dev/agentgateway"
             },
             "gateway": {
               "type": "object",
@@ -9166,7 +9228,23 @@
                     "type": "object"
                   }
                 }
-              }
+              },
+              "default": {
+                "name": "krateo-gateway",
+                "listeners": [
+                  {
+                    "name": "http",
+                    "protocol": "HTTP",
+                    "port": 80,
+                    "allowedRoutes": {
+                      "namespaces": {
+                        "from": "All"
+                      }
+                    }
+                  }
+                ]
+              },
+              "description": "The chart marks `gateway` root-required with `name` and `listeners` required inside it. The default is on THIS object, not only on its children: structural-schema defaulting fills fields of objects that are PRESENT, so child defaults never apply when the parent is absent and the CR is rejected for the missing required key. Values copied from the chart's own values.yaml \u2014 the chart defaulting them does NOT satisfy the generated CRD, because crdgen keeps `required` and the CR's spec is built from componentValues (installer#489)."
             },
             "agentgateway": {
               "type": "object",
