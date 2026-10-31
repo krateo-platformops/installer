@@ -9,7 +9,7 @@ components:
   # Found by sweeping all 52 pins against their registries, not by a report.
   kind: AuthnCrds
   chart: authn-crds
-  version: 0.27.3
+  version: 0.31.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -431,7 +431,52 @@ components:
   # The old kubeadm-style placeholder was written verbatim into every <user>-clientconfig server-url
   # (unreachable NXDOMAIN on GKE, wrong port), breaking the cert-replay per-user RBAC hop. Users must
   # re-login after this rolls so authn re-issues the clientconfig with the corrected server-url.
-  version: 0.27.3
+  version: 0.31.0
+  # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
+  # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
+  # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
+  # fleet and both live clusters were on 0.27.3. Worth recording because the mistake is easy:
+  # a per-cluster override is invisible in component-pins.yaml, so 'what a0 runs' says nothing
+  # about what the fleet pins.
+  #
+  # EVERY SKIPPED RELEASE, accounted for rather than assumed harmless:
+  #   0.28.0  /serviceaccount/login stops returning the kubeconfig; <user>-clientconfig Secrets
+  #           gain strategy and groups stamps; authn renews its own client cert
+  #   0.28.1  leader election via the authn-cert-renewal Lease, so authn can run HA.
+  #           CHART CHANGE: the Role gains get/create/update on leases (coordination.k8s.io)
+  #   0.28.2  /serviceaccount/login failures become Kubernetes Status with a stable
+  #           details.causes[0].reason; 401/403 = caller refused, 500 = authn's dependency
+  #   0.29.0  *** BREAKING *** an OIDCConfig with hand-set endpoints and NEITHER discoveryURL
+  #           NOR the new spec.issuer is refused: /oidc/login now validates the ID token first
+  #   0.30.0  step-up login, POST /oidc/stepup, group krateo:loa:2 (needs authn-crds 0.30.0)
+  #   0.30.1  the ServiceAccount mapping CRD listed `serviceaccount` among its categories, which
+  #           broke `kubectl get serviceaccount` on clusters with authn; also a login that cannot
+  #           sign answers 500 rather than an empty 200
+  #   0.31.0  OIDC `state` was 32 RAW random bytes, so ~1 authCodeURL in 8 carried a NUL and
+  #           Keycloak answered 400 -- roughly 1 login in 8 failing, masked by the portal.
+  #           Also /strategies gains stepUp extension keys, and GET /info is REMOVED (404).
+  #
+  # THE BREAKING CHANGE IS MEASURABLY INERT, checked with 0.29.0's own procedure rather than by
+  # reasoning about it. ZERO OIDCConfig objects exist on 057 or demo, so there is nothing for the
+  # new validation to refuse. The release notes warn about the exact trap that would have faked
+  # this result -- querying the wrong group makes kubectl say the TYPE does not exist, which is
+  # not the same as none existing -- so the read used the full name
+  # oidcconfigs.oidc.authn.krateo.io, with api-resources as a control proving the type is served.
+  #
+  # GET /info's removal is why this went today rather than tomorrow: a route that should not be
+  # live is a standing exposure. All 15 peers confirmed nothing calls it; this repo has ZERO
+  # references (control: 12 files do mention authn).
+  #
+  # 0.30.1's cause is PRESENT on both clusters -- the CRD's categories are
+  # [krateo, authn, serviceaccount] -- but the symptom did NOT reproduce for me: `kubectl get
+  # serviceaccount` works. Consistent with the notes' caveat that kubectl caches discovery for
+  # ~10 minutes. So this roll fixes a latent cause, not an observed outage.
+  #
+  # VERIFIED INDEPENDENTLY, not taken from authn's message: tag 0.31.0 is a LIGHTWEIGHT tag whose
+  # ref object IS commit fddf920a (my first read tried to peel it and got an error body, which I
+  # nearly reported as a mismatch); 0 non-success check-runs there; image index
+  # sha256:fc25ef85... read from GHCR's manifest endpoint; charts sha256:ba67652f... and
+  # sha256:4016268a...; helm template renders ghcr.io/krateo-platformops/authn:0.31.0.
   deps:
   - authn-crd
   tier: platform
