@@ -6,6 +6,41 @@ annotations:
 apiVersion: v2
 appVersion: CHART_VERSION
 dependencies:
+# 2.13.46 IS A FLOOR, not merely the current version. Do not pin below it.
+#
+# 2.13.45 shipped #263's controller-drain wait, which LISTs the retiring controller's pods, WITHOUT
+# the RBAC rule to do it. The informer swallows the resulting 403 and reports a SYNC TIMEOUT, so the
+# error names the informer and never the permission:
+#   Synced=False (ReconcileError) waiting for retiring controller to drain: listing pods of
+#   retiring controller ...: Timeout: failed waiting for *v1.Pod Informer to sync
+# ...with the cluster already correct. The reconcile then errors, retries and errors again, forever.
+#
+# IT IS NOT ONLY VERSION BUMPS. Both core-provider and this session said so, repeatedly, and both
+# were wrong -- the boundary read as the operator-friendly summary, which is exactly what made it
+# harmful: a narrow claim that SOUNDS exculpatory does not get interrogated. Four paths reach
+# waitForControllerDrained:
+#   Update              compositiondefinitions.go:1560   a version migration
+#   Delete              compositiondefinitions.go:1973   removing a CompositionDefinition
+#   Delete              compositiondefinitions.go:2015   removing a CompositionDefinition
+#   handOverController  controllerowner.go:384           handing a shared controller to a successor
+#   CONTROL: zero Undeploy calls inside Create -- so a FRESH INSTALL genuinely is unaffected.
+# So: a fresh install is fine; EVERY path that retires a controller wedges. Component removal wedges.
+# handOverController is the one nobody predicts -- a shared controller passing between two
+# definitions retires a controller while NEITHER is deleted or bumped.
+#
+# Proven live, not inferred: on a0-openstack a CompositionDefinition delete hung from 08:42:57Z with
+# that exact message, and completed with NO intervention the moment 2.13.46 reached the cluster.
+#
+# Verified in the PUBLISHED chart rather than the template that feeds it, with a negative control:
+#   helm template of the published chart, --kube-version 1.36.0
+#     2.13.45   pods-rules=0  deployments-rules=1
+#     2.13.46   pods-rules=1  deployments-rules=1
+#
+# AND THE MANAGED-SET BASELINE CANNOT SEE THIS. A wedge leaves every status.managed set perfect --
+# the failure is in the retirement path, after the work succeeded -- so hack/managed-drift.py returns
+# a true result about the wrong quantity. Assert Synced=True per composition as well; on its first
+# run that arm found three non-Synced compositions on krateo-057 that the managed-set arm reported
+# nothing about.
 - condition: bootstrap.coreProvider.enabled
   name: core-provider
   repository: oci://ghcr.io/krateo-platformops/charts
