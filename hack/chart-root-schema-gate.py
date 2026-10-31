@@ -55,11 +55,38 @@ except ImportError:
     sys.exit(2)
 
 
-def verdict(schema, defaults=None):
+def verdict(schema, defaults=None, cv_props=None):
     """(ok, reason). Only the ROOT is examined; a closed sub-object is legitimate.
 
-    `defaults` is the chart's own values.yaml. helm merges it BEFORE schema validation, so a
-    root `required:` key the chart defaults itself is already satisfied and is not a defect.
+    THE `defaults` EXEMPTION WAS WRONG AND THIS IS THE CORRECTION. This function used to read:
+
+        `defaults` is the chart's own values.yaml. helm merges it BEFORE schema validation, so a
+        root `required:` key the chart defaults itself is already satisfied and is not a defect.
+
+    True for `helm install`. FALSE for the path every pinned component actually takes. A pin is
+    deployed as a COMPOSITION: core-provider's crdgen builds a CRD from the chart's
+    values.schema.json -- `required:` included -- and the CR's spec is built from the INSTALLER's
+    componentValues. The chart's own values.yaml never participates in that validation.
+
+    PROVEN on the one instance that reached a cluster, installer#489. cert-manager-issuers 0.10.0
+    DOES default the key in its own values.yaml:
+
+        values.yaml:  acme = {enabled: false, email: "", server: "https://...", gatewayRef: {...}}
+        schema:       root required = [internalCA, acme],  acme.required = [enabled]
+
+    and the composition was STILL rejected, because componentValues.cert-manager-issuers declared
+    `acme: {type: object, additionalProperties: false}` with NO properties, so the installer could
+    only emit `acme: {}`. Chart defaults present, CR rejected anyway.
+
+    THE EXEMPTION HID A RECURRING CLASS -- all three instances default the key in values.yaml,
+    which is exactly why it passed all three:
+      Config Connector      spec.operator: Required value
+      cert-manager-issuers  acme.enabled                      (installer#489, live)
+      agentgateway 0.10.0   controllerName, gateway, gatewayClassName
+    The last was reported `ok ... root required satisfied by chart defaults` by this gate.
+
+    `defaults` is still accepted and still REPORTED, because knowing which keys the chart defaults
+    is useful when deciding what the installer should declare. It no longer excuses anything.
     """
     if schema is None:
         return True, "no values.schema.json (nothing constrains the root)"
@@ -71,15 +98,64 @@ def verdict(schema, defaults=None):
     if closed and not declares_global:
         bad.append("root additionalProperties: false AND does not declare 'global'")
     req = schema.get("required") or []
-    unmet = [k for k in req if k not in defaults]
-    if unmet:
-        bad.append(f"root required keys not defaulted by the chart: {unmet}")
+    if req:
+        if cv_props is None:
+            # The component has no componentValues block, so nothing can supply these keys.
+            bad.append(f"root required {req} and the installer declares NO componentValues block "
+                       f"for this component — nothing can supply them")
+        else:
+            # cv_props may be a plain set (self-test shorthand) or the loader's detail dict.
+            detail = cv_props if isinstance(cv_props, dict) else {k: {"default": True, "inexpressible": False} for k in cv_props}
+            missing = [k for k in req if k not in detail]
+            inexpr = [k for k in req if k in detail and detail[k]["inexpressible"]]
+            nodefault = [k for k in req if k in detail and not detail[k]["inexpressible"]
+                         and not detail[k]["default"]]
+            if missing:
+                bad.append(f"root required keys componentValues does not declare at all: {missing}")
+            if inexpr:
+                bad.append(f"root required keys componentValues declares as EMPTY objects, so the "
+                           f"installer can only emit {{}}: {inexpr} (installer#489)")
+            if nodefault:
+                dflt = [k for k in nodefault if k in defaults]
+                extra = (f"; the chart defaults {dflt} in its own values.yaml, which does NOT help -- "
+                         f"crdgen keeps `required` in the CRD and the CR is built from "
+                         f"componentValues, not values.yaml") if dflt else ""
+                bad.append(f"root required keys declared with NO default, so an install that sets "
+                           f"no componentValues emits a CR missing them: {nodefault}{extra}")
     if bad:
         return False, "; ".join(bad)
-    note = (" / root required satisfied by chart defaults: " + str(req)) if req else ""
+    note = (" / root required " + str(req) + " expressible via componentValues") if req else ""
     if closed:
         return True, "root closed but declares 'global' (injected value validates)" + note
     return True, f"root open (additionalProperties={schema.get('additionalProperties')})" + note
+
+
+def componentvalues_props(component, installer_schema_path="chart/values.schema.json"):
+    """Root property names the INSTALLER's componentValues declares for `component`.
+
+    This is the surface a Composition CR's spec is built from, so it -- not the component chart's
+    values.yaml -- decides whether a root `required:` key can be supplied. Returns None when the
+    component has no componentValues block at all, which verdict() refuses.
+    """
+    try:
+        sch = json.loads(pathlib.Path(installer_schema_path).read_text())
+    except Exception:
+        return None
+    cv = (((sch.get("properties") or {}).get("componentValues") or {}).get("properties") or {})
+    block = cv.get(component)
+    if block is None:
+        return None
+    out = {}
+    for k, v in (block.get("properties") or {}).items():
+        v = v if isinstance(v, dict) else {}
+        has_default = "default" in v
+        # An object declared with NO properties is inexpressible whatever its default says: the
+        # installer can only ever emit `{}` for it. That is the installer#489 shape.
+        inexpressible_object = v.get("type") == "object" and not (v.get("properties") or {}) \
+            and not v.get("additionalProperties", False) \
+            and not v.get("x-kubernetes-preserve-unknown-fields", False)
+        out[k] = {"default": has_default, "inexpressible": inexpressible_object}
+    return out
 
 
 def pull(repo, name, version, into):
@@ -109,17 +185,56 @@ def pull(repo, name, version, into):
 
 # (schema, defaults, expected-ok)
 SELF_TEST = [
-    # The conjunction, both ways round. These two are the whole point of the gate.
-    ("closed + no global -> refuse", {"additionalProperties": False, "properties": {}}, False),
-    ("closed + declares global -> ok",
-     {"additionalProperties": False, "properties": {"global": {"type": "object"}}}, True),
-    ("open + no global -> ok", {"additionalProperties": True, "properties": {}}, True),
-    ("root required NOT defaulted -> refuse", {"required": ["clickhouse"], "properties": {}}, False),
-    ("root required defaulted by the chart -> ok",
-     {"required": ["gateway"], "properties": {}}, True, {"gateway": {}}),
-    ("unspecified root passes", {"properties": {}}, True),
-    ("closed SUB-object passes", {"properties": {"rdc": {"additionalProperties": False}}}, True),
-    ("empty required passes", {"required": [], "properties": {}}, True),
+    # THE CORRECTION, with each case's premise taken from the real schemas rather than invented.
+    # An earlier version of this list gave agentgateway an EMPTY componentValues surface and so
+    # "passed" on fiction -- the live --all run, which refused nothing, is what exposed it.
+
+    # installer#489: componentValues declares the keys as objects with NO properties, so the
+    # installer can only ever emit `{}`. Live-verified rejection.
+    ("cert-manager-issuers#489",
+     {"required": ["internalCA", "acme"],
+      "properties": {"acme": {"type": "object"}, "internalCA": {"type": "object"},
+                     "global": {"type": "object"}},
+      "additionalProperties": False},
+     False,
+     {"acme": {"enabled": False}, "internalCA": {"enabled": True}},
+     {"acme": {"default": False, "inexpressible": True},
+      "internalCA": {"default": False, "inexpressible": True}}),
+
+    # agentgateway 0.10.0: the keys ARE declared and expressible, each with default: null. So an
+    # install setting no componentValues emits a CR missing all three.
+    ("agentgateway 0.10.0",
+     {"required": ["gatewayClassName", "controllerName", "gateway"],
+      "properties": {"gatewayClassName": {"type": "string"}, "controllerName": {"type": "string"},
+                     "gateway": {"type": "object"}, "global": {"type": "object"}},
+      "additionalProperties": False},
+     False,
+     {"gatewayClassName": "agentgateway", "controllerName": "agentgateway.dev/agentgateway",
+      "gateway": {"name": "krateo-gateway"}},
+     {"gatewayClassName": {"default": False, "inexpressible": False},
+      "controllerName": {"default": False, "inexpressible": False},
+      "gateway": {"default": False, "inexpressible": False}}),
+
+    # THE CONTROL that keeps the fix honest: a root required key that componentValues declares
+    # WITH a default must still pass, or the gate refuses working charts.
+    ("root required, declared with a default",
+     {"required": ["foo"], "properties": {"foo": {"type": "string"}, "global": {"type": "object"}},
+      "additionalProperties": False},
+     True, {}, {"foo": {"default": True, "inexpressible": False}}),
+
+    # A SECOND CONTROL: the shorthand set form must still mean "expressible and defaulted".
+    ("root required, shorthand set form",
+     {"required": ["bar"], "properties": {"bar": {"type": "string"}, "global": {"type": "object"}},
+      "additionalProperties": False},
+     True, {}, {"bar"}),
+
+    # The two arms already validated, which must not regress.
+    ("closed root, declares global",
+     {"additionalProperties": False, "properties": {"global": {"type": "object"}}}, True, {}, set()),
+    ("closed root, NO global (audit-worm)",
+     {"additionalProperties": False, "properties": {}}, False, {}, set()),
+    ("open root, no global (builders-page)",
+     {"additionalProperties": True, "properties": {}}, True, {}, set()),
 ]
 
 
@@ -138,7 +253,8 @@ def main(argv):
         for case in SELF_TEST:
             label, schema, want = case[0], case[1], case[2]
             defaults = case[3] if len(case) > 3 else {}
-            got, reason = verdict(schema, defaults)
+            cvp = case[4] if len(case) > 4 else set()
+            got, reason = verdict(schema, defaults, cvp)
             mark = "ok  " if got == want else "FAIL"
             if got != want:
                 ok = False
@@ -182,7 +298,7 @@ def main(argv):
                 print(f"  ok   {name:<26} {version:<10} no values.schema.json")
                 continue
             examined += 1
-            good, reason = verdict(schema, defaults)
+            good, reason = verdict(schema, defaults, componentvalues_props(name))
             if good:
                 print(f"  ok   {name:<26} {version:<10} {reason}")
             else:
