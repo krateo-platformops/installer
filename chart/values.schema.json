@@ -4644,6 +4644,59 @@
                               "format": "int32",
                               "minimum": 0,
                               "type": "integer"
+                            },
+                            "settings": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "description": "ClickHouseCluster spec.settings. Declared so ClickHouse USERS are expressible through the installer at all -- before this there was no path: cluster.spec declared only containerTemplate/dataVolumeClaimSpec/podTemplate/replicas/shards behind additionalProperties:false, so adding a user meant a hand edit to the cluster CR that the cdc reverts. Found on the A0 test day, where an OpenStack usage emitter and showback each needed their own scoped principal and there was no way to give them one.",
+                              "properties": {
+                                "extraUsersConfig": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "description": "Extra ClickHouse users, rendered into the cluster's users config. The CRD types this as x-kubernetes-preserve-unknown-fields, so the shape is ClickHouse's own.",
+                                  "properties": {
+                                    "users": {
+                                      "type": "object",
+                                      "description": "username -> user definition. USE password_sha256_hex, NOT password.\n\nWHY THIS MATTERS MORE THAN STYLE. The component chart's own defaults are PLAINTEXT literals (hyperdx.secrets.CLICKHOUSE_PASSWORD: \"otelcollectorpass\", CLICKHOUSE_APP_PASSWORD: \"hyperdx\") and the chart offers no secret reference for them -- its only *SecretName knob is mongodb's scram. A `password:` set here therefore travels as cleartext into the Installer CR, into etcd, and into the helm release Secret, readable by anything with get on them. `password_sha256_hex` is a verifier rather than a secret and is ClickHouse's native field for exactly this, so it is what this knob is for. The installer's own credential-reference pattern (registryAuth.passwordRef, a name/namespace/key Secret ref) is NOT available here, because the chart templates the password as a plain string into the cluster CR and resolves no ref. Making a ref work is a krateo-observability chart change.\n\nSCOPE THE GRANTS. `INSERT ON default.*` includes default.krateo_audit, so a third-party writer granted it can insert rows that krateo_audit_worm_mv hashes and seals as genuine -- a forgery path through the tamper-evidence the audit trail exists to provide. Grant per table, never per database, for anything that is not the audit writer itself.",
+                                      "additionalProperties": {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "password_sha256_hex": {
+                                            "type": "string",
+                                            "pattern": "^[0-9a-f]{64}$",
+                                            "description": "sha256 hex of the user's password. The pattern is enforced so a plaintext password cannot be put here by mistake -- a cleartext value will fail schema validation rather than silently become a credential in the CR."
+                                          },
+                                          "profile": {
+                                            "type": "string",
+                                            "description": "ClickHouse settings profile, e.g. default."
+                                          },
+                                          "grants": {
+                                            "type": "array",
+                                            "description": "Grant statements applied to this user.",
+                                            "items": {
+                                              "type": "object",
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "query": {
+                                                  "type": "string",
+                                                  "description": "A single GRANT statement."
+                                                }
+                                              },
+                                              "required": [
+                                                "query"
+                                              ]
+                                            }
+                                          }
+                                        },
+                                        "required": [
+                                          "password_sha256_hex"
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              }
                             }
                           }
                         }
