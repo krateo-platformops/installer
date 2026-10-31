@@ -4804,7 +4804,27 @@ components:
   feature: portal
 - name: incident-controller
   kind: IncidentController
-  version: 0.5.0
+  version: 0.5.1
+  # 0.5.1 is provider-runtime v1.7.0 + Go 1.26, step 3 of that sequence. Published charts differ
+  # from 0.5.0 in version fields ONLY (6 files vs 6), and the image DOES move -- rendered both,
+  # because a version-field-only diff is also exactly the shape a silent no-op has:
+  #   0.5.0 -> ghcr.io/krateo-platformops/incident-controller:0.5.0
+  #   0.5.1 -> ghcr.io/krateo-platformops/incident-controller:0.5.1
+  # 057-ONLY WITHOUT AN OVERRIDE, by feature rather than by exception: feature specialistAgents
+  # is OFF on krateo-demo, so demo carries no incident-controller release at all (verified: demo
+  # has incident-controller-crd and incidents-page, no controller).
+  # incident-controller-crd IS DELIBERATELY LEFT AT 0.5.0. That pin is feature: portal, so it is
+  # live on BOTH clusters; bumping it would migrate demo's CompositionDefinition version and
+  # recreate a composition there, outside this step's scope -- and it buys nothing, because the
+  # published crds diff is the version field alone, so the CRD CONTENT is identical.
+  # THIS PIN WAS BLOCKED ONCE BY MY OWN GATE, WRONGLY, and the history is worth keeping:
+  # check-pin-ci reported "CI is green but NOTHING TESTED THE CODE" at 8bfc229a. False. The repo
+  # runs `make check`, whose chain is `check: build lint test check-generate lint-charts` with
+  # `test: go test -race -cover ./...`, and the job log shows three packages passing with
+  # coverage. The gate matched test COMMANDS in a step's `run:` and never resolved
+  # `make <target>`; I then "confirmed" it by grepping for four spellings, none of them the fifth
+  # the repo uses. installer#600 fixed the gate to resolve the Makefile (strictly: a reached TEST
+  # RUNNER, not `go vet`), so this pin is now certified rather than argued around.
   deps:
   - incident-controller-crd
   tier: observability
