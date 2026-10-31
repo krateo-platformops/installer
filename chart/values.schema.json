@@ -259,6 +259,11 @@
           "type": "boolean",
           "default": false,
           "description": "Opt-in Google Config Connector: the operator and its two CRDs (components gcp-configconnector-crd + gcp-configconnector, from oci://ghcr.io/krateo-blueprints/charts), letting Compositions provision real Google Cloud resources. Runs in CLUSTER mode by default, which means ONE Google service account for the entire cluster and a controller that watches every namespace -- namespaced mode exists but requires Workload Identity and cannot use a key Secret. Needs a Google service-account key in the Secret named by componentValues.gcp-configconnector.configConnector.credentialSecretName, created in cnrm-system after the operator first runs. Applying the ConfigConnector CR makes the operator install ~635 further CRDs, so this measurably grows the cluster's API surface."
+        },
+        "showback": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in showback (usage/cost records). Default false because it is only useful once its ClickHouse target exists: the chart's migration creates the `showback` database and its tables on first start, against the clickstack ClickHouse that features.portal brings up via krateo-observability. Enabling it without that ClickHouse leaves the pod retrying its migration. NOTE: features.* is EXCLUDED from the self-bootstrap upgrade patch, so setting this in a values file on an UPGRADE is silently inert \u2014 enabling it on a live cluster is an Installer CR edit."
         }
       }
     },
@@ -16800,6 +16805,126 @@
                 "timeout": {
                   "type": "string",
                   "description": "Go duration, e.g. 110s. Chart default 110s."
+                }
+              }
+            }
+          }
+        },
+        "showback": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "showback's ClickHouse target. The chart's own values.yaml defaults address to `clickhouse.observability.svc:9000`, which is NOT this platform's service, so these defaults exist to point it at the clickstack ClickHouse instead.",
+          "properties": {
+            "clickhouse": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The chart's schema makes `clickhouse` root-REQUIRED with `address` and `database` required inside it. THE DEFAULT IS ON THIS OBJECT, not only on its children, and that distinction is load-bearing: Kubernetes structural-schema defaulting fills fields of objects that are PRESENT, so defaults on address/database alone would never be applied when `clickhouse` itself is absent \u2014 and the CR would be rejected for the missing required key. core-provider applies schema defaults into the Installer CR spec, so this object materialises with both keys when an install sets no componentValues. The per-child defaults are kept so a partial override (just `address`) still yields a valid `database`.",
+              "properties": {
+                "address": {
+                  "type": "string",
+                  "default": "krateo-clickstack-clickhouse-clickhouse-headless:9000",
+                  "description": "Native-protocol address, port 9000 (service port name `tcp`). Deliberately a SHORT, namespace-less DNS name: a JSON-schema `default` is a static value and cannot template namespaces.krateo, so hardcoding `krateo-system` would break an install that renames the namespace. The short name resolves same-namespace, and components deploy into namespaces.krateo. The service is HEADLESS \u2014 it has no cluster IP, so this resolves to pod addresses."
+                },
+                "database": {
+                  "type": "string",
+                  "default": "showback",
+                  "description": "Created by showback's own migration (MIGRATE=true by default in the chart), not by the installer. So the database need not exist before first start."
+                },
+                "username": {
+                  "type": "string"
+                },
+                "existingSecret": {
+                  "type": "string",
+                  "description": "Secret holding showback's ClickHouse password. PREFER this over a literal: the installer#603 `showback` user is declared with password_sha256_hex, and a plaintext password set here would travel into the Installer CR, etcd and the helm release Secret in cleartext."
+                },
+                "existingSecretKey": {
+                  "type": "string"
+                }
+              },
+              "default": {
+                "address": "krateo-clickstack-clickhouse-clickhouse-headless:9000",
+                "database": "showback"
+              }
+            },
+            "migrate": {
+              "type": "boolean",
+              "description": "Run the schema migration on start. The chart defaults it true."
+            },
+            "replicaCount": {
+              "type": "integer"
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
                 }
               }
             }

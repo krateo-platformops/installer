@@ -312,6 +312,45 @@ components:
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
   # rather than assumed. Lockstep only.
+- name: showback
+  # NEW COMPONENT (acmp's A0 day-2 requirement, built as a component rather than a hand install so
+  # the ordering is the installer's rather than someone remembering to run a migration first).
+  #
+  # PIN 0.1.1, NOT 0.1.0, and the reason is this repo's own gate. 0.1.0's values.schema.json had
+  # root `required: [image, service, clickhouse]`, which hack/chart-root-schema-gate.py refuses:
+  # a pin is deployed as a COMPOSITION, so crdgen keeps `required` in the generated CRD and the CR's
+  # spec is built from componentValues -- the chart's own values.yaml defaults never participate
+  # (installer#489). acmp owns showback and fixed it at source in showback#9 rather than having the
+  # installer work around it: 0.1.1 requires only `clickhouse`, with `address` and `database` inside.
+  # That is the gate catching a defect BEFORE a pin rather than diagnosing one after.
+  #
+  # THE NESTED REQUIRED IS NOT GATE-COVERED, so it is handled by hand here. The gate checks ROOT
+  # required keys against componentValues; it does NOT verify that a nested `required:` inside one
+  # is satisfiable. showback's `clickhouse.required: [address, database]` is exactly that shape, so
+  # componentValues.showback.clickhouse gives BOTH a default -- an install setting no componentValues
+  # must still emit a CR the CRD accepts.
+  #
+  # The chart's own default address is `clickhouse.observability.svc:9000`, which is not this
+  # platform's service. The installer default points at clickstack's headless service on 9000
+  # (service port name `tcp`), as a SHORT namespace-less name: a schema `default` is static and
+  # cannot template namespaces.krateo.
+  #
+  # deps, NOT requiresApiGroups, and the distinction matters. requiresApiGroups is a render-time gate
+  # for a chart that RENDERS objects of a group it does not ship -- without those CRDs
+  # chart-inspector cannot template it at all. showback renders only plain workloads, so that
+  # construct does not apply: its dependency is that ClickHouse is RUNNING, which is a readiness
+  # property and not an API-group one. `deps` expresses the ordering. Note the known limit, recorded
+  # here because it bit the builder gate: inst.depsReady SKIPS a dep whose own feature is disabled,
+  # so this is an ordering constraint and NOT a render-time requirement.
+  #
+  # No svcMatch: that is for browser-facing components (HTTPRoutes, peer URLs, derived hostnames).
+  # showback is a backend writer, reached by nothing in the browser.
+  deps:
+  - krateo-observability
+  feature: showback
+  kind: Showback
+  tier: observability
+  version: 0.1.1
 - name: snowplow-crd
   # 1.12.56: carried in lockstep with snowplow 1.12.56. CRD payload UNCHANGED -- verified by
   # unpacking: 4 files / 19,855 bytes on BOTH sides, identical outside Chart.yaml. Lockstep is
