@@ -1,0 +1,55 @@
+# Run the chart root-schema gate against EVERY PINNED CHART, nightly.
+#
+# WHY THIS IS SEPARATE FROM check-chart-root-schema-gate.yaml, which runs on every pull_request.
+# That workflow runs the OFFLINE FIXTURE SUITE: it guards the gate's RULES and needs no network, so
+# it stays fast and cannot flake. This one runs `--all`, which pulls all 68 pinned charts from GHCR
+# and is the only check that guards the PINS themselves.
+#
+# WHY NOT ON pull_request. Two reasons, and the first is not just speed:
+#   - it would make every unrelated PR depend on GHCR being reachable. A gate that flakes is a gate
+#     people learn to re-run until it passes, which is worse than not having it.
+#   - it needs packages:read, which the PR workflows' token does not carry. check-pin-ci's own
+#     comment records this: PIN_CI_READ_TOKEN is contents:read + checks:read, "not the packages:read
+#     a `helm pull` needs".
+#
+# WHAT IT CATCHES THAT NOTHING ELSE DOES. A pin whose chart's ROOT schema the installer's
+# componentValues cannot satisfy renders a CR the generated CRD rejects, so the composition can
+# never deploy. Three such charts sat latent until 2026-10-31 -- agentgateway, cert-manager-issuers
+# and external-dns -- and they were only found because someone ran `--all` by hand. All three were
+# behind features that default false, which is exactly why nobody noticed: the latent cases are the
+# ones nobody has installed yet.
+#
+# REQUIRES the secret CHART_READ_TOKEN with packages:read. Until it exists this workflow fails at
+# the login step, loudly, which is the correct failure: a gate that silently skips is worse than a
+# gate that is absent, because its green tells you nothing.
+name: nightly-chart-root-schema-all
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  all-pins:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install helm
+        uses: azure/setup-helm@v4
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+      - name: Log in to GHCR
+        run: |
+          if [ -z "${{ secrets.CHART_READ_TOKEN }}" ]; then
+            echo "::error::CHART_READ_TOKEN is not set. This gate pulls every pinned chart and needs"
+            echo "::error::packages:read. Failing rather than skipping: a gate that silently skips"
+            echo "::error::reports green without having checked anything."
+            exit 1
+          fi
+          echo "${{ secrets.CHART_READ_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Gate every pinned chart's root schema
+        run: python3 hack/chart-root-schema-gate.py --pins chart/files/component-pins.yaml --all
