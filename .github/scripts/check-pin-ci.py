@@ -314,6 +314,83 @@ def _repo_has_test_paths(slug, sha):
     return (len(hits) > 0), len(paths), hits[:3]
 
 
+MAKE_RE = re.compile(r"\bmake\s+(?:-[\w-]+\s+)*([\w.-]+(?:\s+[\w.-]+)*)")
+
+
+def _resolve_make_targets(makefile_text, targets):
+    """PURE half of the Makefile resolution: does `make <targets>` reach a test command?
+
+    Split from the fetch so it is testable with no network -- the fetching wrapper below is a
+    thin shim, and every rule in here is exercised by fixtures in
+    .github/scripts/check-pin-ci-fixtures.py.
+
+    Minimal Makefile model: `target: prereqs ## help` plus tab-indented recipe lines. Resolves
+    the named targets transitively through their prerequisites, cycle-safe, and matches
+    TEST_CMD_RE against the recipe lines actually REACHED.
+
+    Returns the matched command string, or None.
+    """
+    rules, cur = {}, None
+    for line in makefile_text.splitlines():
+        if line.startswith("\t") and cur:
+            rules[cur][1].append(line.strip())
+            continue
+        m = re.match(r"^([A-Za-z0-9_.\-/%]+)\s*:(?!=)\s*(.*)$", line)
+        if m:
+            cur = m.group(1)
+            deps = m.group(2).split("##")[0].split()
+            rules.setdefault(cur, ([], []))
+            rules[cur] = (rules[cur][0] + deps, rules[cur][1])
+    seen, queue = set(), list(targets)
+    while queue:
+        t = queue.pop()
+        if t in seen or t not in rules:
+            continue
+        seen.add(t)
+        deps, recipe = rules[t]
+        for r in recipe:
+            m = TEST_CMD_RE.search(r)
+            if m:
+                return m.group(0).strip()
+        queue.extend(deps)
+    return None
+
+
+def _make_targets_test(repo, sha, targets):
+    """Does `make <target>` reach a test command, resolving the Makefile at `sha`?
+
+    WHY THIS EXISTS. A step that runs `make check` matches no TEST_CMD_RE pattern, and correctly
+    so -- the target name says nothing about what runs. But declining to resolve it produced a
+    FALSE verdict: this guard reported incident-controller 0.5.1 as "CI is green but NOTHING
+    TESTED THE CODE" when .github/workflows/check.yaml runs `make check`, whose chain is
+    `check: build lint test check-generate lint-charts` and whose `test:` recipe is
+    `go test -race -cover ./...`. The job log at 8bfc229a shows the race-enabled suite running
+    with coverage on three packages. alert-provider 0.2.54 is the same shape at 033e9476.
+
+    The pin was blocked on the guard's blindness, and I reported that blindness to the user as a
+    finding about the repo -- "6 _test.go files and ZERO go test references across five
+    workflows". The grep was true of the literal strings I searched (`go test`, `gotestsum`,
+    `ginkgo`, `make test`) and false as the claim I drew from it, because the repo spells it
+    `make check`. A fifth spelling I never looked for.
+
+    STRICTNESS IS PRESERVED. This widens what the guard can SEE, not what it will ACCEPT:
+      make build -> `build:` reaches no test command        -> still not tested
+      make lint  -> `lint: go vet ./...`                    -> tested (go vet is in scope)
+      make check -> reaches `go test -race -cover ./...`    -> tested
+    A green job that genuinely runs no tests still fails: the match is on reached recipe text.
+
+    No Makefile is not a failure -- the caller falls back to the direct-command match.
+    """
+    raw, rc = sh("gh", "api", f"/repos/{repo}/contents/Makefile?ref={sha}", "--jq", ".content")
+    if rc != 0 or not raw:
+        return None
+    try:
+        text = base64.b64decode(raw).decode("utf-8", "replace")
+    except ValueError:
+        return None
+    return _resolve_make_targets(text, targets)
+
+
 # Invocations that constitute "this job tested the code". Deliberately about the COMMAND, not the
 # job's name: a script called test-*.py, a test runner, or a language's test subcommand.
 TEST_CMD_RE = re.compile(
@@ -377,6 +454,14 @@ def _test_invocations(repo, sha, ran_names):
                 if m:
                     out.add((label, m.group(0).strip()))
                     break
+                # `make <target>` matches nothing above, and must not: the target name says
+                # nothing about what runs. Resolve it through the Makefile at this commit.
+                mk = MAKE_RE.search(run)
+                if mk:
+                    cmd = _make_targets_test(repo, sha, mk.group(1).split())
+                    if cmd:
+                        out.add((label, f"make {mk.group(1)} -> {cmd}"))
+                        break
     return out
 
 
