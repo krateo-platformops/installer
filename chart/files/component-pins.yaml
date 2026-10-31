@@ -60,7 +60,7 @@ components:
   # refuses below 1.36 rather than installing a label-selector mechanism nothing can satisfy.
   # 0.28.1: co-versioned with oasgen-provider. Same k8s >= 1.36 floor; carries no part of the
   # regression fix, which is provider-side only.
-  version: 0.39.0
+  version: 0.43.0
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -3441,7 +3441,50 @@ components:
   #   makes both charts unrenderable on the CI runner, and the workflow warns rather than fails).
   #   Images verified by hand instead. The .github fix is still unmerged and now blocks core-provider's
   #   tag too — the issue number was cited as #25 once and #24 once, so confirm which before chasing.
-  version: 0.39.0
+  version: 0.43.0
+  # 0.43.0, NOT the 0.42.0 this PR first proposed. The two extra releases are correctness fixes a
+  # consumer feels, both reported by the openstack-nova-operator-kog session and CLOSED upstream:
+  #   #322 a populated spec object compared EQUAL to an EMPTY remote object, so
+  #        rest-dynamic-controller could report Synced=True having NEVER applied desired state.
+  #        Auditing it needs care: the exposure needs DESIRED state, so it reaches an object-typed
+  #        field only if that field is reachable from the create/update body. Response-only object
+  #        fields are NOT exposed -- there is no spec field and nothing for an empty remote to
+  #        compare equal to. Grepping `type: object` OVER-REPORTS and on the nova subsets it
+  #        inverted the answer, flagging a response-only field and missing the real one.
+  #   #325 oasgen added a required top-level spec.<pathParam> for EVERY path parameter and ignored
+  #        requestFieldMapping.inCustomResource. Any blueprint mapping a path parameter from
+  #        status.* -- which is correct, since the API mints the id at create -- got an
+  #        UNSATISFIABLE required field and a blocked create path. All five nova resources were
+  #        uncreatable. If a blueprint we ship maps a path parameter from status, it had this too.
+  # 0.43.0 is stable (prerelease=false, draft=false, published 2026-10-30) per the hard rule against
+  # pinning pre-releases, and oasgen-provider-crds 0.43.0 is published alongside it.
+  # OPERATIONAL, for whoever debugs this next: from 0.41.0 oasgen-provider is DISTROLESS, as
+  # rest-dynamic-controller has been since 0.20.0. Neither image has a shell, so
+  # `kubectl exec -- env` finds NOTHING -- it is not that the variable is unset. Use
+  # `kubectl get -o jsonpath`, `kubectl set env --list`, `kubectl logs`, or `kubectl debug
+  # --target` when you need the pod's namespaces. People discover this mid-incident.
+  # 0.42.0 carries #293: the rdc gains an rdc.otel block whose template sets
+  # OTEL_EXPORTER_OTLP_ENDPOINT from the pod's status.hostIP, which is the only way to reach the
+  # node-local collector -- its Service is HEADLESS and has no cluster IP. Surfaced as the typed
+  # componentValues.oasgen-provider.rdc.otel knob added alongside this bump; the knob is inert
+  # before 0.42.0, so the two must move together or an operator sets a key nothing reads.
+  # THE JUMP IS 0.39.0 -> 0.42.0, three releases, characterised rather than assumed:
+  #   0.39.0 -> 0.40.0  Chart.yaml only
+  #   0.40.0 -> 0.41.0  Chart.yaml + clusterrole.yaml, and the clusterrole change is a COMMENT
+  #                     only -- the rule itself (mutatingadmissionpolicies + bindings,
+  #                     create/get/list/watch) is byte-identical to what is live at 0.39.0
+  #   0.41.0 -> 0.42.0  Chart.yaml + assets/rdc/deployment.yaml + values{,.schema}.json = #293
+  # PREREQUISITES CHECKED ON BOTH CLUSTERS, because 0.41.0's new comment makes the oas-version
+  # MutatingAdmissionPolicy REQUIRED rather than optional (version-scoped watching removed the
+  # stamp-on-first-reconcile fallback, so without the policy an instance is created, looks
+  # healthy, and is reconciled by nobody):
+  #   kubeVersion floor >=1.36.0-0   057 and demo both on v1.36.4-gke   OK
+  #   mutatingadmissionpolicies API  served on both                     OK
+  #   policies already in use        057 carries 5 krateo-oas-version-* MAPs at 0.39.0
+  # So this bump adds NO new prerequisite -- the floor was already declared at 0.39.0 and the
+  # policy mechanism is already live. Whether the generated CRs actually carry
+  # krateo.io/oas-version is oasgen-provider's runtime behaviour, not the installer's, and is
+  # reported to its owner rather than resolved here.
   deps:
   - oasgen-provider-crd
   tier: platform

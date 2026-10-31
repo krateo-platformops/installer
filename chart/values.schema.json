@@ -6094,6 +6094,23 @@
                   "additionalProperties": {
                     "type": "string"
                   }
+                },
+                "otel": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Node-local OTLP endpoint for the RestDefinition controllers (oasgen-provider#293, chart 0.42.0+). Mirrors the component chart's own rdc.otel block, whose template reads it at assets/rdc/deployment.yaml. NO DEFAULTS HERE, deliberately: the component chart already defaults nodeLocalEndpoint:false and nodeLocalPort:4318 in its values.yaml, and a default declared at this level would be materialised onto the Installer CR by crdgen whether or not anyone set it -- so the key would stop being absent and start being an explicit false, which is a different statement. Declared only so an operator CAN set it.",
+                  "properties": {
+                    "nodeLocalEndpoint": {
+                      "type": "boolean",
+                      "description": "Set OTEL_EXPORTER_OTLP_ENDPOINT from the pod's status.hostIP. Required to reach a node-local collector, whose Service is HEADLESS and therefore has no cluster IP -- the endpoint cannot be reached by Service name. Not sufficient on its own: the audit trail also needs OTEL_LOGS_ENABLED=true via componentValues.oasgen-provider.rdc.env, and the two must be set TOGETHER or the correlation is silently absent rather than broken."
+                    },
+                    "nodeLocalPort": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535,
+                      "description": "OTLP/HTTP port on the node-local collector. Chart default 4318."
+                    }
+                  }
                 }
               }
             },
