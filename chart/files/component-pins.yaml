@@ -622,8 +622,12 @@ components:
   # paths -- all 88 templated paths are relative, so no host is ever synthesised. No exposure.
   # MIND THE INSTRUMENT: the Secret key is `server-url`, NOT `server`, and there is no
   # endpoints.templates.krateo.io CRD. Both wrong probes return a vacuous 0 that looks like a pass.
-  # COLD START: expect ~6m30 (measured 6m33, down from 12m+), still under the 480s structural seed
-  # ceiling. DO NOT RESTART IT, and do not call it wedged at minute 6.
+  # COLD START: expect ~6m30 (measured 6m33, down from 12m+). The readiness bound is
+  # PHASE1_TIMEOUT_SECONDS, default 900s. RETRACTED: an earlier version of this comment called it a
+  # 480s structural seed ceiling. That bound never existed -- snowplow read main.go at 1.12.48/.51/.56
+  # and found env.Int("PHASE1_TIMEOUT_SECONDS", 900), with no such bound anywhere in the readiness
+  # code. Past the bound, readiness is released with /readyz outcome "deadline" -- THAT is the wedge
+  # signal, not a clock reading. DO NOT RESTART IT, and do not call it wedged at minute 6.
   # ROLLBACK: re-upgrade the installer to 0.3.450, which pins 1.12.51. The roll request proposed an
   # image override back to 1.12.51 -- DO NOT. An image-tag override on THIS component takes effect
   # and then PERMANENTLY MASKS every future chart bump (the krateo-sse-proxy 0.1.15 trap).
@@ -1266,7 +1270,8 @@ components:
   # tag; the opposite of cdc, where an override is inert).
   # EXPECTED ON THE ROLL, so it is not mistaken for a failure: snowplow cold-starts for ~11-15 MINUTES
   # serving 503 before Ready (1.12.46 took 11m08s to ContainersReady). DO NOT RESTART IT during that window.
-  # The 480s boot seed ceiling is structural and unchanged by this release.
+  # The readiness bound is PHASE1_TIMEOUT_SECONDS, default 900s, unchanged by this release.
+  # RETRACTED: this line used to say 480s. That bound never existed -- see the 1.12.51 note.
   # 1.12.48 (ANNOTATED tag 0e6414eb, PEELS to commit eb055b77291238e38caaf4898a838f5ef181aa1d).
   # HEADLINE: #710 PR-1 (#717) single-flight content fill -- concurrent readers of one list now share ONE
   # rebuild instead of each triggering their own. Arrival-burst heap 1,089 -> 56 MiB in a 5K x 200 test.
@@ -1340,8 +1345,9 @@ components:
   # GATE: whole module -race, unit+integration tags, -p 1 -> 36 packages ok, 0 FAIL, 0 races;
   # evaltest x50 ok.
   # COLD START: expect ~5 MINUTES, not the 11-15 the older comments above describe. 1.12.49 measured
-  # 5m17s to Ready with /readyz outcome "latch" and seed_ms 218408 (3m38s), well under the 480s
-  # structural ceiling. DO NOT RESTART IT, and do not call it wedged at minute 6.
+  # 5m17s to Ready with /readyz outcome "latch" and seed_ms 218408 (3m38s), well under the 900s
+  # PHASE1_TIMEOUT_SECONDS bound (RETRACTED: this line used to say 480s; that bound never existed).
+  # DO NOT RESTART IT, and do not call it wedged at minute 6.
   # ROLLBACK: re-upgrade the installer to 0.3.429, which pins 1.12.49. Do NOT roll back via
   # componentValues.snowplow.image.tag -- an image-tag override on THIS component takes effect and
   # then PERMANENTLY MASKS every future chart bump (the krateo-sse-proxy 0.1.15 trap).
