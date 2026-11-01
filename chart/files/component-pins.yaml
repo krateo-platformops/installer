@@ -332,6 +332,19 @@ components:
   # published chart: sources present, root required still ['clickhouse'] with
   # ['address','database'] inside, global declared, and both packages anonymously pullable (200).
   #
+  # THEN 0.1.2 TURNED OUT NOT TO START AT ALL, and this is a third defect class on one component.
+  # The chart sets pod securityContext runAsNonRoot:true with NO runAsUser, so the kubelet must
+  # read the image's USER to verify non-root -- and 0.1.2's image declared the NAME `nonroot`,
+  # which cannot be verified. Every pod failed CreateContainerConfigError. Found by the acmp
+  # session on kind; same class as their identity-lifecycle and access-review bug.
+  # THERE IS NO VALUES WORKAROUND: securityContext is not in this chart's values at all, it is
+  # hardcoded in the template, so no operator can set runAsUser to compensate. showback#11 fixed
+  # it at source with `USER 65532:65532` (plus rejecting unknown payload fields) and cut 0.1.3.
+  # Verified at the registry, anonymously: image config User = '65532:65532', numeric.
+  # acmp also proved it RUNS: published chart 0.1.3 on kind with ClickHouse 26.8, pod Running
+  # and ready with 0 restarts, `schema migrated` (13 statements), /readyz 200, and a POST with
+  # an unknown field answering 400 so the decode fix is live.
+  #
   # THE NESTED REQUIRED IS NOT GATE-COVERED, so it is handled by hand here. The gate checks ROOT
   # required keys against componentValues; it does NOT verify that a nested `required:` inside one
   # is satisfiable. showback's `clickhouse.required: [address, database]` is exactly that shape, so
@@ -358,7 +371,7 @@ components:
   feature: showback
   kind: Showback
   tier: observability
-  version: 0.1.2
+  version: 0.1.3
 - name: snowplow-crd
   # 1.12.56: carried in lockstep with snowplow 1.12.56. CRD payload UNCHANGED -- verified by
   # unpacking: 4 files / 19,855 bytes on BOTH sides, identical outside Chart.yaml. Lockstep is
