@@ -48,7 +48,7 @@ def sh(*args, check=False):
     if check and p.returncode != 0:
         print(f"::error::command failed: {' '.join(args)}\n{p.stderr.strip()[:500]}")
         sys.exit(1)
-    return p.stdout.strip(), p.returncode
+    return p.stdout.strip(), p.returncode, p.stderr.strip()
 
 
 def changed_pins(base_ref):
@@ -56,7 +56,7 @@ def changed_pins(base_ref):
     out = []
     for path, loader in (("chart/files/component-pins.yaml", "pins"),
                          ("chart/Chart.yaml", "deps")):
-        before, rc = sh("git", "show", f"{base_ref}:{path}")
+        before, rc, _err = sh("git", "show", f"{base_ref}:{path}")
         if rc != 0:
             continue
         try:
@@ -87,7 +87,7 @@ def changed_pins(base_ref):
 
 
 def chart_metadata(oci_repo, chart, version):
-    txt, rc = sh("helm", "show", "chart", f"{oci_repo}/{chart}", "--version", version)
+    txt, rc, _err = sh("helm", "show", "chart", f"{oci_repo}/{chart}", "--version", version)
     if rc != 0:
         return None
     try:
@@ -111,12 +111,12 @@ def repo_readable(slug):
     sends the reader looking for a tag that exists. Measured: the same lookup succeeds from a
     developer token and fails in CI, so a local run is NOT equivalent to the CI run.
     """
-    _, rc = sh("gh", "api", f"repos/{slug}", "--jq", ".full_name")
+    _, rc, _err = sh("gh", "api", f"repos/{slug}", "--jq", ".full_name")
     return rc == 0
 
 
 def tag_sha(slug, tag):
-    out, rc = sh("gh", "api", f"repos/{slug}/git/ref/tags/{tag}",
+    out, rc, _err = sh("gh", "api", f"repos/{slug}/git/ref/tags/{tag}",
                  "--jq", '.object.sha + " " + .object.type')
     if rc != 0:
         return None
@@ -125,7 +125,7 @@ def tag_sha(slug, tag):
     # against the tag-object sha finds nothing and reads as "no CI ran" -- it produced three bogus
     # verdicts before this dereference was added.
     if kind.strip() == "tag":
-        out2, rc2 = sh("gh", "api", f"repos/{slug}/git/tags/{sha}", "--jq", ".object.sha")
+        out2, rc2, _err = sh("gh", "api", f"repos/{slug}/git/tags/{sha}", "--jq", ".object.sha")
         return out2 or None if rc2 == 0 else None
     return sha or None
 
@@ -161,10 +161,14 @@ def ci_at(slug, sha):
     Any failed check-run is a failure, including lint or image verification: if a
     component's own CI is red for any reason, that is not a commit to pin.
     """
-    out, rc = sh("gh", "api", f"repos/{slug}/commits/{sha}/check-runs?per_page=100",
+    out, rc, _err = sh("gh", "api", f"repos/{slug}/commits/{sha}/check-runs?per_page=100",
                  "--jq", '[.check_runs[] | {n:.name, c:.conclusion, s:.status}]')
     if rc != 0:
-        return "norun", f"could not read check-runs for {sha[:8]}"
+        # Say what the API actually refused with. Collapsing 403/404/rate-limit into one
+        # opaque "could not read" cost an afternoon of guessing at token scopes: the gate
+        # knew the reason and threw it away.
+        why = (_err or "no stderr").replace("\n", " ")[:200]
+        return "norun", f"could not read check-runs for {sha[:8]}: {why}"
     try:
         runs = json.loads(out or "[]")
     except json.JSONDecodeError:
@@ -254,7 +258,7 @@ def _tested_on_identical_tree(slug, sha):
     cannot be established is returned as None rather than guessed.
     """
     def api(path):
-        out, rc = sh("gh", "api", path, "-H", "Accept: application/vnd.github+json")
+        out, rc, _err = sh("gh", "api", path, "-H", "Accept: application/vnd.github+json")
         if rc != 0:
             return None
         try:
@@ -302,7 +306,7 @@ TEST_PATH_RE = re.compile(r"(_test\.(go|py|ts|js)$|(^|/)tests?/|\.spec\.(ts|js)$
 
 def _repo_has_test_paths(slug, sha):
     """(has_tests, examined, sample). Reads the tree at `sha`; (None, 0, []) if unreadable."""
-    out, rc = sh("gh", "api", f"repos/{slug}/git/trees/{sha}?recursive=1",
+    out, rc, _err = sh("gh", "api", f"repos/{slug}/git/trees/{sha}?recursive=1",
                  "--jq", "[.tree[].path]")
     if rc != 0:
         return None, 0, []
@@ -413,7 +417,7 @@ def _make_targets_test(repo, sha, targets):
 
     No Makefile is not a failure -- the caller falls back to the direct-command match.
     """
-    raw, rc = sh("gh", "api", f"/repos/{repo}/contents/Makefile?ref={sha}", "--jq", ".content")
+    raw, rc, _err = sh("gh", "api", f"/repos/{repo}/contents/Makefile?ref={sha}", "--jq", ".content")
     if rc != 0 or not raw:
         return None
     try:
@@ -444,7 +448,7 @@ def _test_invocations(repo, sha, ran_names):
     # a blanket `except` turned the breakage into "no tests here". A fallback that cannot
     # distinguish its own failure from a negative result is worse than no fallback, so the
     # excepts below are narrow and anything unexpected is REPORTED rather than swallowed.
-    body, rc = sh("gh", "api", f"/repos/{repo}/contents/.github/workflows?ref={sha}")
+    body, rc, _err = sh("gh", "api", f"/repos/{repo}/contents/.github/workflows?ref={sha}")
     if rc != 0:
         print(f"  note: could not list {repo}'s workflows at {sha[:8]} (gh rc={rc}); "
               f"falling back to the name check alone")
@@ -460,7 +464,7 @@ def _test_invocations(repo, sha, ran_names):
         name = entry.get("name", "")
         if not name.endswith((".yml", ".yaml")):
             continue
-        raw, rc = sh("gh", "api", f"/repos/{repo}/contents/.github/workflows/{name}?ref={sha}",
+        raw, rc, _err = sh("gh", "api", f"/repos/{repo}/contents/.github/workflows/{name}?ref={sha}",
                      "--jq", ".content")
         if rc != 0 or not raw:
             print(f"  note: could not read {repo}:.github/workflows/{name} at {sha[:8]}")
