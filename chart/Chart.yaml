@@ -18,7 +18,14 @@ dependencies:
 #            handler's own retry wins the race there.
 #   2.13.51  #287: a chart named y/no/on/off -- all valid Helm names -- crashed the controller.
 #            A day-2 build is when unfamiliar charts get installed for the first time.
-# The .46 floor notes below still stand; .51 is above them.
+# The .46 floor notes below still stand; .53 is above them.
+#
+# MOVED .51 -> .53 (2026-11-01) to unblock krateo-demo: PR 294 fixes the CDC's "installing rbac"
+# step full-PUTting the tenant Namespace, which Kyverno's protect-generation-labels webhook (Fail,
+# */*) DENIES -- so demo could not create a Krateo child for any tenant onboarded since Kyverno
+# 1.19.2 on 30 Oct. acme and globex are unaffected (Helm-created namespaces). 2.13.53 also carries
+# #293 (the managedDigest status-schema prune), measured on a0-openstack-d2 as a fleet-wide ~1/min
+# drift-report loop that did NOT produce a revision storm.
 #
 # 2.13.45 shipped #263's controller-drain wait, which LISTs the retiring controller's pods, WITHOUT
 # the RBAC rule to do it. The informer swallows the resulting 403 and reports a SYNC TIMEOUT, so the
@@ -56,11 +63,11 @@ dependencies:
 - condition: bootstrap.coreProvider.enabled
   name: core-provider
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.51
+  version: 2.13.53
 - condition: bootstrap.coreProvider.enabled
   name: core-provider-crds
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.51
+  version: 2.13.53
 description: Umbrella orchestrator blueprint that sequences the per-component Krateo
   PlatformOps blueprints into one ordered, readiness-gated install.
 home: https://krateo.io
