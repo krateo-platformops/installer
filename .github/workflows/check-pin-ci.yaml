@@ -59,23 +59,42 @@ jobs:
           version: v3.16.3
       - name: Install PyYAML
         run: pip install --quiet pyyaml
+      # Mint a short-lived installation token from the krateo-pin-ci GitHub App.
+      #
+      # WHY AN APP AND NOT A PAT. This gate reads CHECK-RUNS. GitHub offers no `Checks`
+      # permission for fine-grained PATs in this org -- in the picker, Attestations is
+      # followed directly by Code quality -- so a PAT with contents:read resolves the tag
+      # and then gets `HTTP 403: Resource not accessible by personal access token` on
+      # /commits/{sha}/check-runs. Adding Actions:Read does NOT help: Actions covers
+      # "workflows, workflow runs and artifacts", not the Checks API. That was measured,
+      # not assumed. A GitHub App has a real Checks:Read -- exactly, and only, what this
+      # gate needs. The app holds checks:read + contents:read and nothing else.
+      - name: Mint a read-only token from the pin-ci GitHub App
+        id: app-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.PIN_CI_APP_ID }}
+          private-key: ${{ secrets.PIN_CI_APP_KEY }}
+          owner: ${{ github.repository_owner }}
       - name: Assert every bumped pin's component CI was green at its tagged commit
         env:
           BASE_REF: origin/${{ github.base_ref }}
-          # PREFER the cross-org read token, FALL BACK to the repo-scoped one.
+          # PREFER the App installation token, FALL BACK to the repo-scoped one.
           #
           # 26 of 66 pins are private repos in another org, and the repo-scoped GITHUB_TOKEN cannot
-          # read them -- it reports UNVERIFIABLE, which is honest but checks nothing. A fine-grained
-          # PAT with contents:read + checks:read on those repos closes the gap.
+          # read them -- it reports UNVERIFIABLE, which is honest but checks nothing. The App's
+          # checks:read + contents:read closes the gap.
           #
-          # THE FALLBACK IS DELIBERATE AND MUST NOT BECOME SILENT. If PIN_CI_READ_TOKEN is unset or
-          # expired, this runs on GITHUB_TOKEN and those 26 pins go back to UNVERIFIABLE -- which
-          # still FAILS LOUDLY for a genuinely absent tag (that is UNRESOLVED, a different verdict),
-          # so the fallback degrades coverage without ever manufacturing a pass. The step below
-          # states which token was used, so a quietly expired PAT shows up in the log rather than as
-          # a mysterious drop in verified pins.
-          GH_TOKEN: ${{ secrets.PIN_CI_READ_TOKEN || secrets.GITHUB_TOKEN }}
-          PIN_CI_TOKEN_KIND: ${{ secrets.PIN_CI_READ_TOKEN && 'cross-org PAT' || 'repo-scoped GITHUB_TOKEN' }}
+          # THE FALLBACK IS DELIBERATE AND MUST NOT BECOME SILENT. If the app secrets are unset or
+          # the key is rotated, this runs on GITHUB_TOKEN and those 26 pins go back to UNVERIFIABLE
+          # -- which still FAILS LOUDLY for a genuinely absent tag (that is UNRESOLVED, a different
+          # verdict), so the fallback degrades coverage without ever manufacturing a pass. The step
+          # below states which token was used, so a quietly broken App shows up in the log rather
+          # than as a mysterious drop in verified pins -- and since ci_at() now reports the API's
+          # own error, a permission failure reads as "HTTP 403" instead of a bare "could not read".
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PIN_CI_TOKEN_KIND: ${{ steps.app-token.outputs.token && 'krateo-pin-ci GitHub App (checks:read)' || 'repo-scoped GITHUB_TOKEN -- DEGRADED, cross-org pins UNVERIFIABLE' }}
         run: |
           echo "pin-ci token: ${PIN_CI_TOKEN_KIND}"
           python3 .github/scripts/check-pin-ci.py

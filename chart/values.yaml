@@ -257,7 +257,8 @@ features:
                                   #   ModelConfigs are pointed straight back at the provider (componentValues.
                                   #   model-configs.agentgateway.modelRoute.enabled=false, fill-if-absent, so an explicit
                                   #   override still wins).
-  auditWorm: false                 # OPT-IN tamper-EVIDENT mirror of the krateo_audit table (component
+  auditWorm: false
+  showback: false                 # OPT-IN tamper-EVIDENT mirror of the krateo_audit table (component
                                   #   krateo-audit-worm). The audit table is ordinary ClickHouse — whoever can
                                   #   write it can rewrite it — so this keeps a separate WORM copy plus a
                                   #   hash-chained seal, and a verifier that reports RED when the chain breaks,
