@@ -8,6 +8,18 @@ appVersion: CHART_VERSION
 dependencies:
 # 2.13.46 IS A FLOOR, not merely the current version. Do not pin below it.
 #
+# PINNED 2.13.51 (2026-11-01), above that floor, for FRESH-INSTALL reasons specifically -- not
+# newest-is-better. core-provider's argument, which is why this moved off .46:
+#   2.13.50  unstructured-runtime v1.7.2: tools.UpdateStatus had NO conflict retry at all, so a
+#            stale resourceVersion was a RETURNED ERROR the caller recorded on the object -- one
+#            lost race became a PERMANENT ReconcileError. A fresh install, with every object
+#            created at once and every status written for the first time, is the highest-
+#            contention moment there is. Not firing on 057 (Synced=True 84/85) because the
+#            handler's own retry wins the race there.
+#   2.13.51  #287: a chart named y/no/on/off -- all valid Helm names -- crashed the controller.
+#            A day-2 build is when unfamiliar charts get installed for the first time.
+# The .46 floor notes below still stand; .51 is above them.
+#
 # 2.13.45 shipped #263's controller-drain wait, which LISTs the retiring controller's pods, WITHOUT
 # the RBAC rule to do it. The informer swallows the resulting 403 and reports a SYNC TIMEOUT, so the
 # error names the informer and never the permission:
@@ -44,11 +56,11 @@ dependencies:
 - condition: bootstrap.coreProvider.enabled
   name: core-provider
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.46
+  version: 2.13.51
 - condition: bootstrap.coreProvider.enabled
   name: core-provider-crds
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.46
+  version: 2.13.51
 description: Umbrella orchestrator blueprint that sequences the per-component Krateo
   PlatformOps blueprints into one ordered, readiness-gated install.
 home: https://krateo.io
