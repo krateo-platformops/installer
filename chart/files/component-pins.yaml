@@ -5124,6 +5124,38 @@ components:
 #   # these CRDs (core-provider#89). crdgen kind = PascalCase(chart): crds -> Crds. Versioned in lockstep
 #   # with alert-provider (same repo tag). Public krateo-platformops chart.
 #
+
+# STEP 3 OF 3: the replacement component. Tag and roll this ONLY after CD krateo-system/
+# incident-controller reads NotFound on krateo-057 (see step 2).
+- name: incident-provider
+  # The chart is `incident-provider` (name == chart, so no `chart:` field) at 0.6.0 in
+  # ghcr.io/krateo-platformops/charts -- the same registry as before; only the name moved.
+  # incident-controller 0.5.3 and 0.6.0 are both HTTP 404: 0.5.2 is the last release under the old
+  # name, and 0.6.0 exists only as incident-provider / incident-provider-crds. So this is a rename of
+  # a live component, not a parallel line, and there is no version at which both names are current.
+  #
+  # deps stay ['incident-controller-crd'] -- the CRD COMPONENT keeps that name by design (step 1), so
+  # this is not a stale reference. The CHART it pulls is incident-provider-crds 0.6.0.
+  #
+  # SERVICE NAME CHANGES, AND THREE COMPONENTS NEEDED TELLING. provider-runtime read tag 0.6.0:
+  # main.go:34 sets serviceName = "incident-provider" and main.go:63 passes it to the OTel handler,
+  # with no OTEL_SERVICE_NAME override in the rendered chart, and the chart's
+  # app.kubernetes.io/name is incident-provider too. At 0.5.2 it was incident-controller. So every
+  # reconcile-error detector that excludes this component by ServiceName had to learn the new name:
+  #   alert-provider 0.2.57      DEFAULT_ALERTS_JSON NOT IN list       -- SHIPPED in installer 0.3.489
+  #   krateo-observability 0.1.24  five detectors (reconcile-error, panic/traceback, OOM,
+  #                                cert-expiry, JWT-leak)              -- HELD, see its own pin
+  # All of those lists name BOTH the old and the new service, so they are additive: a component
+  # rolled late costs alert noise during the window, not breakage. krateo-observability 0.1.24 being
+  # held by pin-ci therefore does NOT block this cutover -- it means that until it lands,
+  # incident-provider's own reconcile errors can open Incidents about incident-provider. Known, not
+  # discovered later.
+  kind: IncidentProvider
+  version: 0.6.0
+  deps:
+  - incident-controller-crd
+  tier: observability
+  feature: specialistAgents
 - name: alert-provider-crd
   kind: AlertProviderCrds
   chart: alert-provider-crds
