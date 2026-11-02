@@ -4985,7 +4985,46 @@ components:
   # alert-provider is now portal-gated (below). A CRDs chart with no controller is inert -- that is
   # precisely the precedent #482 set for alert-provider-crd.
   kind: IncidentControllerCrds
-  chart: incident-controller-crds
+  # STEP 1 OF 3 of the incident-controller -> incident-provider cutover. ONLY the chart's published
+  # NAME moves here. `name` stays incident-controller-crd and `kind` stays IncidentControllerCrds
+  # DELIBERATELY, so core-provider ADOPTS the existing release in place instead of uninstalling and
+  # reinstalling it. An uninstall of this release would delete crd/incidents.observability.krateo.io
+  # and crd/incidentapplies.observability.krateo.io, and with them every Incident object -- a lower
+  # bound of 810 live across the fleet when measured on 2026-11-02 (189 on krateo-057, 621 on
+  # krateo-demo, and still being created). 0.5.2 put `helm.sh/resource-policy: keep` on both CRDs, so
+  # that destruction is already guarded; this step does not rely on the guard, it avoids the uninstall.
+  #
+  # AND DO NOT OVERREAD `keep`. core-provider (#300, cdc 2.13.46) established that the cdc's own
+  # teardown IGNORES helm.sh/resource-policy: keep for any child carrying a finalizer at rest. So
+  # "the chart says keep" and "these objects survive our teardown" are two different claims. The
+  # residual is narrow HERE and measured, not assumed: the finalizer survey of 2026-11-02 found zero
+  # finalizers across 545 CRDs on krateo-057 and 269 on krateo-demo, with an unrelated-chart control
+  # so the zero is not vacuous. But that is a fact about those clusters on that date and about THIS
+  # chart version -- it is a version property, not a component property, and it decays in the
+  # dangerous direction: if a later version drops `keep`, or an object gains a finalizer, a sentence
+  # like this one still reads as reassurance while being false, and the consequence is irreversible.
+  # Anyone planning a teardown on the strength of this note must re-ask: WHICH VERSION, and DOES THE
+  # DRAIN TOUCH IT.
+  #
+  # Preconditions, all MEASURED on both clusters before this was written (core-provider reviewed the
+  # selection path at cdc 2.13.46 and confirmed a chart-name change alters the OCI Url and so the
+  # specOfKind key, but an ALREADY-RECONCILED CD answers from status -- CurrentGVK, or
+  # Managed.VersionInfo which lists the old version on both sides of the update -- and never reaches
+  # specOfKind, so adoption.go:91 does not apply):
+  #   status.Managed populated on CD incident-controller-crd  -- 3 entries on 057, 3 on demo
+  #   exactly one CR of kind IncidentControllerCrds per cluster, Ready/Synced, none mid-reconcile
+  #   kind unchanged (it is)
+  #   spec.deploy and targetRef NOT touched in this release (they are not)
+  # Honest limit on the first of those: 70/70 CDs on 057 and 42/42 on demo have status.managed
+  # populated, so that check could not have come out the other way on either cluster. It confirms the
+  # precondition holds HERE; it does not demonstrate the selection path discriminates.
+  #
+  # The OCI repo does NOT change -- both charts resolve at ghcr.io/krateo-platformops/charts, so no
+  # `repo:` field is needed. Only the chart name and the github `sources` move.
+  # No `deps` anywhere need editing: alert-provider and the controller both reference this component
+  # by the name `incident-controller-crd`, which is unchanged, and incidents-page deps are ['portal']
+  # alone. Verified rather than assumed.
+  chart: incident-provider-crds
   # 0.5.2: LOAD-BEARING, and the single most important pin of the incident-provider cutover. It adds
   # `helm.sh/resource-policy: keep` to BOTH CRDs -- incidents.observability.krateo.io and
   # incidentapplies.observability.krateo.io -- with the Incident schema UNCHANGED (18 schema paths on
@@ -4994,7 +5033,7 @@ components:
   # today, 189 on 057 and 444 on demo. With it, the rename in 0.6.0 cannot take the data.
   # CONTROL: incident-provider-crds 0.6.0 carries the same keep annotation on both CRDs, so the
   # protection survives the chart rename rather than being a property of the old name.
-  version: 0.5.2
+  version: 0.6.0
   tier: observability
   feature: portal
 - name: incident-controller
