@@ -4984,15 +4984,38 @@ components:
   # installer#482: alert-provider WRITES Incident CRs, so it needs this CRD wherever it runs, and
   # alert-provider is now portal-gated (below). A CRDs chart with no controller is inert -- that is
   # precisely the precedent #482 set for alert-provider-crd.
-  kind: IncidentControllerCrds
-  # STEP 1 OF 3 of the incident-controller -> incident-provider cutover. ONLY the chart's published
-  # NAME moves here. `name` stays incident-controller-crd and `kind` stays IncidentControllerCrds
-  # DELIBERATELY, so core-provider ADOPTS the existing release in place instead of uninstalling and
-  # reinstalling it. An uninstall of this release would delete crd/incidents.observability.krateo.io
-  # and crd/incidentapplies.observability.krateo.io, and with them every Incident object -- a lower
-  # bound of 810 live across the fleet when measured on 2026-11-02 (189 on krateo-057, 621 on
-  # krateo-demo, and still being created). 0.5.2 put `helm.sh/resource-policy: keep` on both CRDs, so
-  # that destruction is already guarded; this step does not rely on the guard, it avoids the uninstall.
+  kind: IncidentProviderCrds
+  # STEP 1 OF 3 of the incident-controller -> incident-provider cutover.
+  #
+  # THE ADOPTION PLAN WAS IMPOSSIBLE AND THE pin-kinds GATE CAUGHT IT. The plan (mine, reviewed by
+  # provider-runtime and core-provider, and wrong in all three readings) was to move `chart:` to
+  # incident-provider-crds while holding `kind: IncidentControllerCrds`, so the CD would be adopted in
+  # place and nothing uninstalled. That cannot be expressed: core-provider's crdgen DERIVES the kind
+  # from the chart name --
+  #     flect.Pascalize(strutil.ToGolangName(chartName))        core-provider chart.go:179
+  # -- so chart incident-provider-crds yields kind IncidentProviderCrds and nothing else. Pinning the
+  # old kind beside the new chart declares a kind crdgen will never produce, and Pass B's
+  # inst.crdExists matches spec.names.kind by EXACT string: the CD would go Ready and NO Composition
+  # CR would ever be emitted. That is installer#31's silent wedge, and it is the same outward
+  # signature (CD Ready=True, zero composition CRs) seen on a0-openstack-d3 the same evening from an
+  # unrelated cause -- which is exactly why it is worth having a gate rather than an eye for it.
+  #
+  # SO THIS IS A KIND CHANGE, NOT AN ADOPTION, and the consequences invert:
+  #   - the kind moves IncidentControllerCrds -> IncidentProviderCrds, i.e. a GVK migration
+  #   - core-provider's review precondition (c) "the kind stays IncidentControllerCrds (it does)" is
+  #     now FALSE, so their adoption analysis -- that an already-reconciled CD answers from status and
+  #     never reaches specOfKind -- does not apply here. Routed back to them rather than reasoned
+  #     about from this repo.
+  #   - the 810 live Incident objects (lower bound, 2026-11-02: 189 on krateo-057, 621 on krateo-demo,
+  #     still being created) are protected SOLELY by `helm.sh/resource-policy: keep`. The previous
+  #     version of this comment said "this step does not rely on the guard, it avoids the uninstall".
+  #     That was the reassuring reading and it was wrong. It relies on the guard entirely.
+  #
+  # WHICH MAKES 0.5.2 AND 0.6.0 BOTH LOAD-BEARING, verified by reading the charts rather than assuming
+  # the annotation carries forward: incident-controller-crds 0.5.2 added `keep` to
+  # crd/incidents.observability.krateo.io and crd/incidentapplies.observability.krateo.io, and
+  # incident-provider-crds 0.6.0 carries it on both as well. If either lacked it this step would
+  # destroy the estate's Incident history.
   #
   # AND DO NOT OVERREAD `keep`. core-provider (#300, cdc 2.13.46) established that the cdc's own
   # teardown IGNORES helm.sh/resource-policy: keep for any child carrying a finalizer at rest. So
