@@ -5020,109 +5020,187 @@ components:
 # the incident Open -> Verifying -> Resolved on their exit codes. alert-provider opens the
 # Incidents; this component and a human close them. The Incident CRD ships in its own *-crds chart,
 # like every CRD-owning component, and installs first. Public krateo-platformops charts and images.
-- name: incident-controller-crd
-  # RE-GATED specialistAgents -> portal, same move and same reason as alert-provider-crd in
-  # installer#482: alert-provider WRITES Incident CRs, so it needs this CRD wherever it runs, and
-  # alert-provider is now portal-gated (below). A CRDs chart with no controller is inert -- that is
-  # precisely the precedent #482 set for alert-provider-crd.
-  kind: IncidentControllerCrds
-  chart: incident-controller-crds
-  # 0.5.2: LOAD-BEARING, and the single most important pin of the incident-provider cutover. It adds
-  # `helm.sh/resource-policy: keep` to BOTH CRDs -- incidents.observability.krateo.io and
-  # incidentapplies.observability.krateo.io -- with the Incident schema UNCHANGED (18 schema paths on
-  # 0.5.0 and on 0.5.2; the only other diff is Chart.yaml's version, 6 files each side). Without it a
-  # helm uninstall of this release deletes the CRDs and with them every Incident object: 633 live
-  # today, 189 on 057 and 444 on demo. With it, the rename in 0.6.0 cannot take the data.
-  # CONTROL: incident-provider-crds 0.6.0 carries the same keep annotation on both CRDs, so the
-  # protection survives the chart rename rather than being a property of the old name.
-  version: 0.5.2
+# CUTOVER STEP 2 OF 3, AND IT IS ONE RELEASE BY DESIGN: `incident-controller-crd` is removed and
+# `incident-provider-crd` is added in the SAME release, with alert-provider's dep repointed in the
+# same change. Diego's decision, on the following reasoning.
+#
+# WHY ONE RELEASE HERE WHEN THE CONTROLLER NEEDS THREE. The hazard that forced the controller side
+# apart is two concurrently-reconciling CDs each holding a lease and each able to run an
+# IncidentApply's apply script -- the same script could run TWICE. THIS component has no controller
+# logic at all: it ships two CRDs and nothing else. Two concurrent CDs of IncidentControllerCrds and
+# IncidentProviderCrds can only assert CRDs that already exist and that `keep` protects. There is
+# nothing to run twice.
+#
+# AND SPLITTING IT WOULD HAVE COST A REAL RELEASE. Measured before proposing it: with the removal and
+# the addition in separate tags, alert-provider's dep DANGLES for one release. No CI gate refuses that
+# -- five gates run locally against the state, all rc=0 -- but the UMBRELLA does. inst.depsReady looks
+# the dep up in $components by name; a removed dep leaves $kind/$ver/$feat empty; inst.featureEnabled
+# returns "true" for an EMPTY feature so the readiness check is NOT skipped; and inst.crdExists
+# matches .spec.names.kind == "", which no CRD satisfies. depsReady goes FALSE. On 057 and demo
+# alert-provider already exists, so compositions.yaml's `$exists` clause keeps it rendering -- but on
+# a FRESH INSTALL from that tag `$exists` is false too and ALERT-PROVIDER IS NEVER CREATED: CD Ready,
+# zero composition CRs, installer#31's silent signature. The template says it itself -- "depsReady
+# still gates the FIRST creation". One release removes that window instead of documenting it.
+#
+# THE PRECONDITION, in core-provider's words because they read the code and I did not:
+#   `keep` must be present on BOTH incident-controller-crds 0.5.2 AND incident-provider-crds 0.6.0,
+#   and the CRDs must be finalizer-free, read LIVE -- "if a future chart version drops keep, this
+#   sequence deletes the Incident history".
+# Both charts were checked by unpacking them rather than assuming the annotation crosses a rename:
+# 0.5.2 carries it on crd/incidents.observability.krateo.io and
+# crd/incidentapplies.observability.krateo.io, and 0.6.0 carries it on both.
+# Nothing in the cdc deletes a keep-annotated finalizer-free CRD (all core-provider, read in source):
+#   drainFinalizerBoundChildren  GETs the object and SKIPS on empty finalizers before any delete
+#                                (teardown.go:82-98). Measured: 545 CRDs on 057 and 269 on demo,
+#                                zero finalizers, with an unrelated-chart control.
+#   helm uninstall               honours keep via filterManifestsToKeep (uninstall.go:224); no option
+#                                in the cdc's UninstallConfig or in helm disables it
+#   Undeploy                     deletes ONLY the generated composition CRD, scoped to
+#                                opts.GVR.GroupResource() (deploy.go:812-819)
+#   everything else              all 9 CRD mentions in the cdc are in crdwatch.go, a READ-ONLY watch.
+#                                core-provider's control: Namespace has 33 hits in the RBAC
+#                                installer, so that search does find special-casing where it exists.
+# And Install ADOPTS rather than recreates: TakeOwnership at composition.go:504/735/947,
+# setMetadataVisitor(force=true) re-stamps meta.helm.sh/release-name BEFORE helm's requireAdoption
+# gate, templates/ CRDs take the ordinary apply path (installCRDs handles only chrt.CRDObjects(),
+# install.go:261), and the cdc never sets Wait. So the CRDs are patched in place and their CRs are
+# never at risk from a recreate.
+#
+# GATE, READ LIVE IMMEDIATELY BEFORE TAGGING, both clusters, ALL FOUR IN ONE SCRIPT so none of them
+# is a remembered value:
+#   both Incident CRDs present, each carrying helm.sh/resource-policy: keep
+#   metadata.finalizers == [] on both
+#   the Incident COUNT at that moment, not from a note -- mine moved 444 -> 621 -> 623 in one evening
+#   installer 0.3.489 live, and step 1's CD krateo-system/incident-controller already NotFound on 057
+# If any is false, STOP.
+#
+# VERIFY AFTER, BEFORE TAGGING STEP 3:
+#   both Incident CRDs still exist, counts matching the gate's reading plus new arrivals only
+#   meta.helm.sh/release-name on both CRDs re-stamped to the new release
+#   helm.sh/resource-policy: keep still present after the re-stamp
+#   CD krateo-system/incident-controller-crd NotFound; helm release incident-controller-crd gone
+#
+# The removed pin, verbatim, so this addition reads as a diff rather than a reconstruction:
+#   - name: incident-controller-crd
+#     # RE-GATED specialistAgents -> portal, same move and same reason as alert-provider-crd in
+#     # installer#482: alert-provider WRITES Incident CRs, so it needs this CRD wherever it runs, and
+#     # alert-provider is now portal-gated (below). A CRDs chart with no controller is inert -- that is
+#     # precisely the precedent #482 set for alert-provider-crd.
+#     kind: IncidentControllerCrds
+#     chart: incident-controller-crds
+#     # 0.5.2: LOAD-BEARING, and the single most important pin of the incident-provider cutover. It adds
+#     # `helm.sh/resource-policy: keep` to BOTH CRDs -- incidents.observability.krateo.io and
+#     # incidentapplies.observability.krateo.io -- with the Incident schema UNCHANGED (18 schema paths on
+#     # 0.5.0 and on 0.5.2; the only other diff is Chart.yaml's version, 6 files each side). Without it a
+#     # helm uninstall of this release deletes the CRDs and with them every Incident object: 633 live
+#     # today, 189 on 057 and 444 on demo. With it, the rename in 0.6.0 cannot take the data.
+#     # CONTROL: incident-provider-crds 0.6.0 carries the same keep annotation on both CRDs, so the
+#     # protection survives the chart rename rather than being a property of the old name.
+#     version: 0.5.2
+#     tier: observability
+#     feature: portal
+#   # CUTOVER STEP 1 OF 3 (incident-controller -> incident-provider). The `incident-controller`
+#   # component is REMOVED and nothing is added. Steps 2 and 3 follow as separate tags; the PRs are
+#   # stacked so they cannot land out of order.
+#   #
+#   # WHY NOT ONE RELEASE (provider-runtime, reviewing the single-PR draft installer#615): one release
+#   # that removes the old component and adds the new one makes the umbrella stop rendering the old
+#   # composition and start rendering the new one IN THE SAME PASS. The two CDs then reconcile
+#   # concurrently -- nothing in core-provider sequences across Kinds -- so the old controller (lease
+#   # incident-controller.<ns>) and the new one (lease incident-provider.<ns>) can hold their leases
+#   # simultaneously and an IncidentApply's apply script could run TWICE. A comment cannot prevent that;
+#   # an unmergeable-out-of-order stack can.
+#   #
+#   # GATE BEFORE TAGGING THIS: installer 0.3.489 must be live on krateo-057. 0.5.2 is what puts
+#   # `helm.sh/resource-policy: keep` on ClusterRole/krateo-incident-viewer and
+#   # ClusterRole/krateo-incident-responder, so removing this component does not revoke the RBAC that the
+#   # surviving CRDs need. 057 was on 0.3.485 when this was written.
+#   #
+#   # WAIT CONDITION BEFORE STEP 2, and core-provider confirmed WHY this single check is sufficient
+#   # rather than needing a longer checklist: CD krateo-system/incident-controller reaching NotFound
+#   # transitively certifies the whole chain, because the CD's finalizer is released only at the end of it
+#   # -- helm uninstalled -> composition CR reaped -> cdc Deployment deleted -> pod drained -> RBAC
+#   # revoked -> generated CRD deleted.
+#   #   kubectl --context <057> -n krateo-system get compositiondefinition incident-controller
+#   #   kubectl --context <057> -n krateo-system get incidentcontrollers.composition.krateo.io
+#   #
+#   # 057 IS THE ONLY CLUSTER THIS AFFECTS. Measured 2026-11-02 with the apiserver endpoint checked per
+#   # cluster: krateo-demo does not serve incidentcontrollers.composition.krateo.io at all -- no CRD, no
+#   # CD, no helm release. It carries only incident-controller-crd (rev 1) and incidents-page, which is
+#   # why demo's 621 Incident objects have a CRD and no reconciler. 057 has the CD, the CR, and helm rev
+#   # 18 at chart 0.5.1.
+#   #
+#   # The removed pin, verbatim, so step 3's addition reads as a diff rather than a reconstruction:
+#   #   - name: incident-controller
+#   #     kind: IncidentController
+#   #     # 0.5.2: also about `resource-policy: keep`, on ClusterRole/krateo-incident-viewer and
+#   #     # ClusterRole/krateo-incident-responder. That makes step A of the cutover (remove the
+#   #     # `incident-controller` component, verify its CD reaches NotFound, then add `incident-provider`)
+#   #     # non-destructive on RBAC as well as on the CRDs -- the two roles survive the window between the
+#   #     # old composition going away and the new one arriving, so there is no interval with the CRDs
+#   #     # present and nothing authorised to read them.
+#   #     # Measured, not assumed: render rc=0 both sides, 483 -> 487 lines, object KINDS identical, and
+#   #     # after filtering pure helm.sh/chart + app.kubernetes.io/version churn the whole substantive diff is
+#   #     # 10 lines: the two keep annotations, the check-pod checksum, and the two image tags
+#   #     # (incident-controller:0.5.2, incident-controller-check:0.5.2). No schema or behaviour change.
+#   #     version: 0.5.2
+#   #     # 0.5.1 is provider-runtime v1.7.0 + Go 1.26, step 3 of that sequence. Published charts differ
+#   #     # from 0.5.0 in version fields ONLY (6 files vs 6), and the image DOES move -- rendered both,
+#   #     # because a version-field-only diff is also exactly the shape a silent no-op has:
+#   #     #   0.5.0 -> ghcr.io/krateo-platformops/incident-controller:0.5.0
+#   #     #   0.5.1 -> ghcr.io/krateo-platformops/incident-controller:0.5.1
+#   #     # 057-ONLY WITHOUT AN OVERRIDE, by feature rather than by exception: feature specialistAgents
+#   #     # is OFF on krateo-demo, so demo carries no incident-controller release at all (verified: demo
+#   #     # has incident-controller-crd and incidents-page, no controller).
+#   #     # incident-controller-crd IS DELIBERATELY LEFT AT 0.5.0. That pin is feature: portal, so it is
+#   #     # live on BOTH clusters; bumping it would migrate demo's CompositionDefinition version and
+#   #     # recreate a composition there, outside this step's scope -- and it buys nothing, because the
+#   #     # published crds diff is the version field alone, so the CRD CONTENT is identical.
+#   #     # THIS PIN WAS BLOCKED ONCE BY MY OWN GATE, WRONGLY, and the history is worth keeping:
+#   #     # check-pin-ci reported "CI is green but NOTHING TESTED THE CODE" at 8bfc229a. False. The repo
+#   #     # runs `make check`, whose chain is `check: build lint test check-generate lint-charts` with
+#   #     # `test: go test -race -cover ./...`, and the job log shows three packages passing with
+#   #     # coverage. The gate matched test COMMANDS in a step's `run:` and never resolved
+#   #     # `make <target>`; I then "confirmed" it by grepping for four spellings, none of them the fifth
+#   #     # the repo uses. installer#600 fixed the gate to resolve the Makefile (strictly: a reached TEST
+#   #     # RUNNER, not `go vet`), so this pin is now certified rather than argued around.
+#   #     deps:
+#   #     - incident-controller-crd
+#   #     tier: observability
+#   #     feature: specialistAgents
+#   #   # alert-provider (repo krateo-platformops/alert-troubleshooter): the "auto-troubleshoot on fire"
+#   #   # bridge. Every 60 s it reads each Alert's HyperDX state; while it is ALERT, a firing opens an Incident
+#   #   # with an incident-agent A2A root-cause analysis and its how-to-fix scripts, unless one LLM call on
+#   #   # the model-configs slot config.compareModelConfig names one of the alert's open Incidents as the
+#   #   # cause, which then counts it. NOT a kagent Agent (a plain service that CALLS incident-agent and a
+#   #   # ModelConfig's model), so no `agent`. Needs the observability stack (HyperDX API + the
+#   #   # hyperdx-api-token secret, from krateo-observability), incident-agent and model-configs, so it deps all three
+#   #   # and rides the specialistAgents feature — the same portal cross-dep pattern clickhouse-mcp-server
+#   #   # uses. It writes Incidents, so it deps incident-controller-crd. Public krateo-platformops chart, so
+#   #   # no repo override.
+#   #   # Dedicated CRD composition (Alert). Every CRD-owning component ships a
+#   #   # *-crds composition (cf. authn-crd/frontend-crd/snowplow-crd) so the CRD lifecycle is DECOUPLED from
+#   #   # the app's version churn — an app-only bump no longer migrates or (on a handover mis-fire) tears down
+#   #   # these CRDs (core-provider#89). crdgen kind = PascalCase(chart): crds -> Crds. Versioned in lockstep
+#   #   # with alert-provider (same repo tag). Public krateo-platformops chart.
+#   #
+#
+- name: incident-provider-crd
+  # Renamed from incident-controller-crd. The kind MUST follow the chart name -- it is not a free
+  # choice. core-provider's crdgen derives it as
+  #     flect.Pascalize(strutil.ToGolangName(name))      core-provider chart.go:189-192
+  # from Chart.yaml's `name`, so incident-provider-crds yields IncidentProviderCrds and nothing else.
+  # The first draft of this cutover held the OLD kind beside the NEW chart to get an in-place
+  # adoption. pin-kinds refused it and was right: Pass B's inst.crdExists matches spec.names.kind by
+  # EXACT string, so the CD would have gone Ready with NO Composition CR ever emitted (installer#31).
+  # I wrote that plan, provider-runtime reviewed it, core-provider reviewed the selection path FOR it
+  # -- three readings, none caught it, and the gate caught it in nine seconds.
+  # The OCI repo does not change: both charts resolve at ghcr.io/krateo-platformops/charts.
+  kind: IncidentProviderCrds
+  chart: incident-provider-crds
+  version: 0.6.0
   tier: observability
   feature: portal
-# CUTOVER STEP 1 OF 3 (incident-controller -> incident-provider). The `incident-controller`
-# component is REMOVED and nothing is added. Steps 2 and 3 follow as separate tags; the PRs are
-# stacked so they cannot land out of order.
-#
-# WHY NOT ONE RELEASE (provider-runtime, reviewing the single-PR draft installer#615): one release
-# that removes the old component and adds the new one makes the umbrella stop rendering the old
-# composition and start rendering the new one IN THE SAME PASS. The two CDs then reconcile
-# concurrently -- nothing in core-provider sequences across Kinds -- so the old controller (lease
-# incident-controller.<ns>) and the new one (lease incident-provider.<ns>) can hold their leases
-# simultaneously and an IncidentApply's apply script could run TWICE. A comment cannot prevent that;
-# an unmergeable-out-of-order stack can.
-#
-# GATE BEFORE TAGGING THIS: installer 0.3.489 must be live on krateo-057. 0.5.2 is what puts
-# `helm.sh/resource-policy: keep` on ClusterRole/krateo-incident-viewer and
-# ClusterRole/krateo-incident-responder, so removing this component does not revoke the RBAC that the
-# surviving CRDs need. 057 was on 0.3.485 when this was written.
-#
-# WAIT CONDITION BEFORE STEP 2, and core-provider confirmed WHY this single check is sufficient
-# rather than needing a longer checklist: CD krateo-system/incident-controller reaching NotFound
-# transitively certifies the whole chain, because the CD's finalizer is released only at the end of it
-# -- helm uninstalled -> composition CR reaped -> cdc Deployment deleted -> pod drained -> RBAC
-# revoked -> generated CRD deleted.
-#   kubectl --context <057> -n krateo-system get compositiondefinition incident-controller
-#   kubectl --context <057> -n krateo-system get incidentcontrollers.composition.krateo.io
-#
-# 057 IS THE ONLY CLUSTER THIS AFFECTS. Measured 2026-11-02 with the apiserver endpoint checked per
-# cluster: krateo-demo does not serve incidentcontrollers.composition.krateo.io at all -- no CRD, no
-# CD, no helm release. It carries only incident-controller-crd (rev 1) and incidents-page, which is
-# why demo's 621 Incident objects have a CRD and no reconciler. 057 has the CD, the CR, and helm rev
-# 18 at chart 0.5.1.
-#
-# The removed pin, verbatim, so step 3's addition reads as a diff rather than a reconstruction:
-#   - name: incident-controller
-#     kind: IncidentController
-#     # 0.5.2: also about `resource-policy: keep`, on ClusterRole/krateo-incident-viewer and
-#     # ClusterRole/krateo-incident-responder. That makes step A of the cutover (remove the
-#     # `incident-controller` component, verify its CD reaches NotFound, then add `incident-provider`)
-#     # non-destructive on RBAC as well as on the CRDs -- the two roles survive the window between the
-#     # old composition going away and the new one arriving, so there is no interval with the CRDs
-#     # present and nothing authorised to read them.
-#     # Measured, not assumed: render rc=0 both sides, 483 -> 487 lines, object KINDS identical, and
-#     # after filtering pure helm.sh/chart + app.kubernetes.io/version churn the whole substantive diff is
-#     # 10 lines: the two keep annotations, the check-pod checksum, and the two image tags
-#     # (incident-controller:0.5.2, incident-controller-check:0.5.2). No schema or behaviour change.
-#     version: 0.5.2
-#     # 0.5.1 is provider-runtime v1.7.0 + Go 1.26, step 3 of that sequence. Published charts differ
-#     # from 0.5.0 in version fields ONLY (6 files vs 6), and the image DOES move -- rendered both,
-#     # because a version-field-only diff is also exactly the shape a silent no-op has:
-#     #   0.5.0 -> ghcr.io/krateo-platformops/incident-controller:0.5.0
-#     #   0.5.1 -> ghcr.io/krateo-platformops/incident-controller:0.5.1
-#     # 057-ONLY WITHOUT AN OVERRIDE, by feature rather than by exception: feature specialistAgents
-#     # is OFF on krateo-demo, so demo carries no incident-controller release at all (verified: demo
-#     # has incident-controller-crd and incidents-page, no controller).
-#     # incident-controller-crd IS DELIBERATELY LEFT AT 0.5.0. That pin is feature: portal, so it is
-#     # live on BOTH clusters; bumping it would migrate demo's CompositionDefinition version and
-#     # recreate a composition there, outside this step's scope -- and it buys nothing, because the
-#     # published crds diff is the version field alone, so the CRD CONTENT is identical.
-#     # THIS PIN WAS BLOCKED ONCE BY MY OWN GATE, WRONGLY, and the history is worth keeping:
-#     # check-pin-ci reported "CI is green but NOTHING TESTED THE CODE" at 8bfc229a. False. The repo
-#     # runs `make check`, whose chain is `check: build lint test check-generate lint-charts` with
-#     # `test: go test -race -cover ./...`, and the job log shows three packages passing with
-#     # coverage. The gate matched test COMMANDS in a step's `run:` and never resolved
-#     # `make <target>`; I then "confirmed" it by grepping for four spellings, none of them the fifth
-#     # the repo uses. installer#600 fixed the gate to resolve the Makefile (strictly: a reached TEST
-#     # RUNNER, not `go vet`), so this pin is now certified rather than argued around.
-#     deps:
-#     - incident-controller-crd
-#     tier: observability
-#     feature: specialistAgents
-#   # alert-provider (repo krateo-platformops/alert-troubleshooter): the "auto-troubleshoot on fire"
-#   # bridge. Every 60 s it reads each Alert's HyperDX state; while it is ALERT, a firing opens an Incident
-#   # with an incident-agent A2A root-cause analysis and its how-to-fix scripts, unless one LLM call on
-#   # the model-configs slot config.compareModelConfig names one of the alert's open Incidents as the
-#   # cause, which then counts it. NOT a kagent Agent (a plain service that CALLS incident-agent and a
-#   # ModelConfig's model), so no `agent`. Needs the observability stack (HyperDX API + the
-#   # hyperdx-api-token secret, from krateo-observability), incident-agent and model-configs, so it deps all three
-#   # and rides the specialistAgents feature — the same portal cross-dep pattern clickhouse-mcp-server
-#   # uses. It writes Incidents, so it deps incident-controller-crd. Public krateo-platformops chart, so
-#   # no repo override.
-#   # Dedicated CRD composition (Alert). Every CRD-owning component ships a
-#   # *-crds composition (cf. authn-crd/frontend-crd/snowplow-crd) so the CRD lifecycle is DECOUPLED from
-#   # the app's version churn — an app-only bump no longer migrates or (on a handover mis-fire) tears down
-#   # these CRDs (core-provider#89). crdgen kind = PascalCase(chart): crds -> Crds. Versioned in lockstep
-#   # with alert-provider (same repo tag). Public krateo-platformops chart.
-#
 - name: alert-provider-crd
   kind: AlertProviderCrds
   chart: alert-provider-crds
@@ -5238,9 +5316,24 @@ components:
   # Requires core-provider >= 2.13.46: this migrates v0-2-53 -> v0-2-55, and on 2.13.45 EVERY path
   # that retires a controller wedges (Update, both Deletes, and handOverController) because the
   # drain LISTs pods without the RBAC rule to do it.
+  # CUTOVER STEP 2: repointed incident-controller-crd -> incident-provider-crd IN THE SAME RELEASE
+  # that swaps the component, so nothing dangles in either direction and no tag exists from which a
+  # fresh install would skip alert-provider.
+  #
+  # requiresApiGroups ADDED, and it is NOT needed for that window any more -- it is here because the
+  # right unit for this component's hard requirement is the API GROUP being RENDERABLE, not a
+  # component name. inst.requiresApiGroups asks the cluster what is served and any provider satisfies
+  # it, installer-managed or not, whereas `deps` is "an ORDERING constraint and nothing more" by this
+  # chart's own documentation. It is satisfied continuously across all three cutover steps precisely
+  # because `keep` means the Incident CRDs never stop being served.
+  # HONEST LIMIT: the gate's unit is the GROUP, and alerts AND incidents both live in
+  # observability.krateo.io, so it cannot distinguish "Alerts served" from "Incidents served". It is
+  # strictly better than a name-keyed dep and it is not a precise guard.
+  requiresApiGroups:
+  - observability.krateo.io
   deps:
   - alert-provider-crd
-  - incident-controller-crd
+  - incident-provider-crd
   - krateo-observability
   tier: observability
   feature: portal
