@@ -4952,13 +4952,29 @@ components:
   # alert-provider is now portal-gated (below). A CRDs chart with no controller is inert -- that is
   # precisely the precedent #482 set for alert-provider-crd.
   kind: IncidentControllerCrds
-  chart: incident-controller-crds
-  version: 0.5.0
+  # RENAME, CRD SIDE: component name and kind are DELIBERATELY unchanged, so the existing
+  # composition is ADOPTED and upgraded in place and the release is NEVER uninstalled. Only the
+  # chart package is renamed. 633 live Incident objects depend on that -- 189 on 057, 444 on demo.
+  # Both CRDs carry helm.sh/resource-policy: keep from 0.5.2, and core-provider #300 establishes
+  # keep actually holds: the teardown drain reads each child's finalizers BEFORE deleting, and
+  # at-rest CRDs have none. Measured on both clusters: 545/269 CRDs, zero finalizers, including an
+  # unrelated-chart control. The OCI path is unchanged (ghcr.io/krateo-platformops/charts); only the
+  # chart name and the github `sources` move to krateo-platformops/incident-provider.
+  chart: incident-provider-crds
+  version: 0.6.0
   tier: observability
   feature: portal
-- name: incident-controller
-  kind: IncidentController
-  version: 0.5.1
+- name: incident-provider
+  kind: IncidentProvider
+  # RENAME, CONTROLLER SIDE: this IS a replacement, not an adoption. Applying this pin removes the
+  # incident-controller component and adds incident-provider. core-provider's required ordering:
+  # the old CompositionDefinition krateo-system/incident-controller must reach NotFound BEFORE the
+  # new composition is created -- that NotFound certifies the old helm release was uninstalled and
+  # the old controller (old lease) stopped. The kept ClusterRoles krateo-incident-viewer and
+  # krateo-incident-responder are adopted by the new release's Install. Only 057 runs this
+  # component; demo has the CRD chart alone (14 matching objects vs 057's 59).
+  chart: incident-provider
+  version: 0.6.0
   # 0.5.1 is provider-runtime v1.7.0 + Go 1.26, step 3 of that sequence. Published charts differ
   # from 0.5.0 in version fields ONLY (6 files vs 6), and the image DOES move -- rendered both,
   # because a version-field-only diff is also exactly the shape a silent no-op has:
