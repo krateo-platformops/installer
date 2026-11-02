@@ -5066,6 +5066,37 @@ components:
 # install.go:261), and the cdc never sets Wait. So the CRDs are patched in place and their CRs are
 # never at risk from a recreate.
 #
+# BLOCKED: THIS PIN MUST MOVE TO 0.6.1, AND A PRE-STEP MUST ROLL 0.5.3 FIRST. core-provider's
+# interleaving check on this single release found a second exposure, and I verified it here by
+# rendering both charts rather than relaying it:
+#
+#   object (both charts)                                             old 0.5.2   new 0.6.0
+#   CustomResourceDefinition/incidents.observability.krateo.io        keep        keep
+#   CustomResourceDefinition/incidentapplies.observability.krateo.io  keep        keep
+#   MutatingAdmissionPolicy/incidentapply-requested-by                <NONE>      <NONE>
+#   MutatingAdmissionPolicyBinding/incidentapply-requested-by         <NONE>      <NONE>
+#   (4 shared objects, identical sets -- nothing is only-in-old or only-in-new)
+#
+# `helm uninstall` deletes non-keep objects in the OLD manifest with NO ownership check. So if the new
+# install wins the race, the admission policy and its binding are deleted and later recreated. Per
+# provider-runtime, the controller's `vouched` check then refuses every IncidentApply older than the
+# recreation -- fail-closed, but lossy. THAT CONSEQUENCE IS THEIRS AND I HAVE NOT VERIFIED IT; what I
+# verified is the exposure above, which is the installer-side half.
+#
+# Diego's fix, and the reason the `keep` audit must cover the WHOLE manifest and not just the data
+# objects: incident-controller-crds 0.5.3 (keep on the policy AND the binding, cut from the 0.5.2 tag)
+# rolls IN PLACE -- no rename, same chart name -- as a PRE-STEP before this release, and this pin then
+# takes incident-provider-crds 0.6.1 with the same four keeps.
+# As of writing, BOTH TAGS ARE HTTP 404: incident-controller-crds 0.5.3 and incident-provider-crds
+# 0.6.1 do not exist yet. This pin therefore still reads 0.6.0 and MUST NOT BE TAGGED until it says
+# 0.6.1 and the pre-step has rolled. provider-runtime's PRs are in progress.
+#
+# THE LESSON WORTH KEEPING, because it generalises past this cutover: `keep` was audited on the two
+# objects whose loss was obvious -- the CRDs holding 810 Incident records -- and the audit stopped
+# there. The two objects nobody thought about were the ones left exposed. For any rename of a chart
+# whose release is replaced rather than upgraded, diff the FULL rendered object sets and check the
+# policy on every shared object, not on the ones that look valuable.
+#
 # GATE, READ LIVE IMMEDIATELY BEFORE TAGGING, both clusters, ALL FOUR IN ONE SCRIPT so none of them
 # is a remembered value:
 #   both Incident CRDs present, each carrying helm.sh/resource-policy: keep
