@@ -5009,7 +5009,10 @@ components:
   # migration; the Incident CRD ships in incident-controller-crd). Its release takes over
   # alerts.observability.krateo.io from the alert-troubleshooter-crd release, whose uninstall deletes
   # the CRD and every Alert: follow docs/configuration.md#upgrading-from-alert-troubleshooter first.
-  version: 0.2.55
+  # 0.2.57: PURE LOCKSTEP. Diffed, not inferred, per the note above: 0.2.55 vs 0.2.57 differ in exactly
+  # one line -- Chart.yaml's own `version` -- with 5 files on each side, so the empty diff is not a failed
+  # pull. Non-load-bearing, unlike 0.2.39/0.2.41/0.2.45. Taken only to keep the pair in lockstep.
+  version: 0.2.57
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -5073,7 +5076,26 @@ components:
   # {precondition, apply, verify} and an optional rollback. The service's authn identity
   # (config.authnUrl) authenticates its A2A calls. The chart has no observer thread, and its schema
   # rejects config.reportCooldown and config.snowplowUrl.
-  version: 0.2.55
+  version: 0.2.57
+  # 0.2.57 carries alert-provider#76 (provider-runtime v1.7.2) and #77, which adds 'incident-provider' to
+  # DEFAULT_ALERTS_JSON's reconcile-error `NOT IN` list. Measured on the published chart here, not taken
+  # from the release notes: rendered at --kube-version 1.33.0, rc=0, 294 -> 331 lines (floor asserted, so
+  # neither side is a silently failed render); `incident-provider` 0 -> 1 occurrences; image resolves to
+  # alert-provider:0.2.57; and 0.2.58 is a 404, so 0.2.57 is the head and not merely the first tag tried.
+  #
+  # THE EXCLUSION IS ADDITIVE, WHICH SOFTENS THE ORDERING. 0.2.57's list names BOTH 'incident-controller'
+  # AND 'incident-provider' (the only other occurrence of the old name in the render is a comment). So
+  # rolling this AFTER the incident-provider cutover costs alert noise during the window, not breakage --
+  # the old name stays excluded either way. acmp and provider-runtime both describe it as a hard
+  # prerequisite of the cutover; on this evidence it is a soft one, and the step I did NOT verify is which
+  # ServiceName incident-provider 0.6.0 actually emits -- that is the component's to confirm, not the
+  # installer's. Roll it first regardless: it is free, and it is the only way the window is quiet.
+  #
+  # INVENTORY DELTA, so the roll's diff is expected rather than explained afterwards: +2 objects,
+  # ClusterRole and ClusterRoleBinding `krateo-alert-provider-alerts` -- 0.2.56's cluster-wide Alert read
+  # for tenant namespaces, which neither 057 nor demo has today (both run 0.2.55). The version-suffixed
+  # Job `hyperdx-key-bootstrap-0-2-55` is replaced by `-0-2-57`; that create+delete happens on every bump
+  # of this chart and is not new here.
   # 0.2.55 is provider-runtime v1.7.0 + Go 1.26, step 2 of that sequence. The jump is
   # 0.2.53 -> 0.2.55, skipping 0.2.54, which was never rolled: it declared no `sources:` in its
   # Chart.yaml, so check-pin-ci could not follow the pin's provenance and refused it -- correctly.
