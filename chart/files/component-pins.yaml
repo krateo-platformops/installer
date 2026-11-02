@@ -60,7 +60,7 @@ components:
   # refuses below 1.36 rather than installing a label-selector mechanism nothing can satisfy.
   # 0.28.1: co-versioned with oasgen-provider. Same k8s >= 1.36 floor; carries no part of the
   # regression fix, which is provider-side only.
-  version: 0.43.0
+  version: 0.48.0
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -3451,7 +3451,7 @@ components:
   # 0.28.0: co-versioned with oasgen-provider (the triple moves together). Declares NO kubeVersion
   # floor — it ships no CRDs and no controller, so it installs anywhere.
   # 0.28.1: co-versioned with oasgen-provider (the triple moves together). No kubeVersion floor.
-  version: 0.28.1
+  version: 0.48.0
   tier: platform
   feature: portal
   chart: controller-render-service
@@ -3552,7 +3552,20 @@ components:
   #   makes both charts unrenderable on the CI runner, and the workflow warns rather than fails).
   #   Images verified by hand instead. The .github fix is still unmerged and now blocks core-provider's
   #   tag too — the issue number was cited as #25 once and #24 once, so confirm which before chasing.
-  version: 0.43.0
+  # 0.48.0: oasgen-provider, its CRD chart and controller-render-service move together, which closes a
+  # REAL skew rather than merely advancing a number. controller-render-service's chart version IS the
+  # oasgen-provider image tag -- verified by pulling three of them: 0.28.1 -> oasgen-provider:0.28.1,
+  # 0.30.0 -> :0.30.0, 0.48.0 -> :0.48.0, one line throughout, not two. So pinning it at 0.28.1 beside a
+  # provider at 0.43.0 ran the render service on a 15-minor-old binary. That stale pin was mine.
+  #
+  # STOPPING AT 0.48.0 DELIBERATELY. 0.49.0 exists (HTTP 200) and is NOT taken. oasgen#373 changes
+  # interrupted-create RECOVERY: a create that was dispatched but never landed is re-created after a
+  # grace period on 0.48.0, and on 0.49.0 errors and stays wedged with "cannot determine creation result
+  # - remove the krateo.io/external-create-pending annotation if it is safe to proceed", whose escape
+  # needs a human to confirm on the provider's side that the object does not exist. First creates are
+  # unaffected either way because Observe is unchanged. github-provider-kog and the oasgen-provider
+  # session both confirmed 0.48.0 sits outside that blast radius, each from source.
+  version: 0.48.0
   # 0.43.0, NOT the 0.42.0 this PR first proposed. The two extra releases are correctness fixes a
   # consumer feels, both reported by the openstack-nova-operator-kog session and CLOSED upstream:
   #   #322 a populated spec object compared EQUAL to an EMPTY remote object, so
