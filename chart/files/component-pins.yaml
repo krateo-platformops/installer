@@ -5238,6 +5238,29 @@ components:
 # incidentcontrollers.composition.krateo.io and never ran the controller.
 # TAG AND ROLL ONLY AFTER step 1's CD krateo-system/incident-controller reads NotFound and step 2's
 # CRD swap has been verified (both CRDs present, counts intact, release-name re-stamped, keep intact).
+#
+# AND AFTER Namespace/krateo-incident-checks IS GONE. provider-runtime found this and I verified it on
+# both sides: incident-controller 0.5.2 AND incident-provider 0.6.1 each render
+# `kind: Namespace` krateo-incident-checks with NO helm.sh/resource-policy: keep (only the two CRDs
+# and the viewer/responder ClusterRoles carry keep), both labelled managed-by: Helm. On krateo-057 it
+# is live and Active, 31d, and the LIVE release manifest confirms keep=<NONE>.
+#   -> step 1's uninstall DELETES it
+#   -> Namespace deletion is ASYNCHRONOUS: it sits Terminating while its pods, ServiceAccount and
+#      Roles finalize
+#   -> if step 3 installs during that window the create is REFUSED --
+#      "namespace krateo-incident-checks is being terminated" -- and the composition errors
+# A CD being NotFound does NOT imply the Namespace is gone, which is exactly why this needs its own
+# line rather than riding on step 1's check:
+#   kubectl --context <057> get ns krateo-incident-checks   -> must be NotFound, not Terminating
+# Read the name from the LIVE release values rather than assuming the default, since
+# .Values.checks.namespace is overridable; on 057 today it resolves to krateo-incident-checks.
+# Note there is also a SEPARATE Namespace krateo-incidents (12d) on 057 which this does not touch.
+#
+# core-provider 2.13.54, which 0.3.492 ships, does not change this: provider-runtime checked that
+# #299 ("never take Namespace ownership from another manager") does not apply because both charts'
+# Namespace carries managed-by: Helm, and deletesInstances / drainFinalizerBoundChildren /
+# TakeOwnership / keep handling are unchanged from 2.13.46 through 2.13.54. #270's leaked-controller
+# code only reports.
 - name: incident-provider
   # chart == name, so no `chart:` field; incident-provider 0.6.1 in
   # ghcr.io/krateo-platformops/charts -- the same registry, only the name moved.
