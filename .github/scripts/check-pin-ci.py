@@ -64,7 +64,9 @@ def _token_env_for(args):
         owner = m.group(1)
         key = "PIN_CI_TOKEN_" + re.sub(r"[^A-Za-z0-9]", "_", owner).upper()
         tok = os.environ.get(key)
-        TOKEN_USE.setdefault(owner, "per-org App token" if tok else "DEFAULT (no per-org token)")
+        TOKEN_USE.setdefault(owner, "per-org App token" if tok else
+                             "default GITHUB_TOKEN (no per-org App token)")
+        LAST_OWNER.append(owner)
         return tok
     return None
 
@@ -72,6 +74,23 @@ def _token_env_for(args):
 # Which token answered for which owner. Printed at the end, because "26 pins went unverified" must
 # name the org whose App installation is missing rather than read as a mysterious drop in coverage.
 TOKEN_USE = {}
+
+# Owners whose read ACTUALLY FAILED on a permission/visibility error. Separate from TOKEN_USE on
+# purpose: having no per-org token is only a PROBLEM if something was then unreadable. The first
+# version warned on "no token" alone and cried wolf the moment krateo-blueprints was made public --
+# the repo read fine, the gate passed, and it still told the reader to go install a GitHub App. A
+# warning that fires on a successful run is worse than none, because it trains the next person to
+# scroll past the one that matters.
+BLIND_OWNERS = set()
+LAST_OWNER = []
+
+
+def note_unreadable(slug):
+    """Called where a repo read is refused, so the warning names only orgs we were actually blind to."""
+    owner = slug.split("/")[0] if "/" in slug else slug
+    key = "PIN_CI_TOKEN_" + re.sub(r"[^A-Za-z0-9]", "_", owner).upper()
+    if not os.environ.get(key):
+        BLIND_OWNERS.add(owner)
 
 
 def sh(*args, check=False):
@@ -147,6 +166,8 @@ def repo_readable(slug):
     developer token and fails in CI, so a local run is NOT equivalent to the CI run.
     """
     _, rc, _err = sh("gh", "api", f"repos/{slug}", "--jq", ".full_name")
+    if rc != 0:
+        note_unreadable(slug)
     return rc == 0
 
 
@@ -646,12 +667,14 @@ def main():
         print("pin-ci: credential used per source org:")
         for owner in sorted(TOKEN_USE):
             print(f"  {owner}: {TOKEN_USE[owner]}")
-        missing = sorted(o for o, v in TOKEN_USE.items() if v.startswith("DEFAULT"))
-        if missing:
-            print(f"::warning::pin-ci: no per-org App token for {', '.join(missing)} — a PRIVATE repo "
-                  f"in those orgs cannot be read by the repo-scoped GITHUB_TOKEN, so its pins report "
-                  f"UNVERIFIABLE. Fix by installing the krateo-pin-ci GitHub App on each of them; the "
-                  f"workflow already mints a token per org and uses it when present.")
+        if BLIND_OWNERS:
+            print(f"::warning::pin-ci: could not read a repo in {', '.join(sorted(BLIND_OWNERS))} and "
+                  f"has no per-org App token for it, so those pins are UNVERIFIABLE. Either install "
+                  f"the krateo-pin-ci GitHub App on that org — the workflow already mints a token per "
+                  f"org and uses it when present — or make the source repo public, which is what "
+                  f"krateo-blueprints/github-provider-kog did. Do NOT reach for a fine-grained PAT: "
+                  f"this org's picker has no Checks permission at all, so a PAT resolves the tag and "
+                  f"then 403s on /check-runs.")
 
     if failures:
         print("::error::pin-ci: a bumped pin points at a commit whose own repo CI is not green "
