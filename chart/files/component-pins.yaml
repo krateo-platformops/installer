@@ -9,7 +9,8 @@ components:
   # Found by sweeping all 52 pins against their registries, not by a report.
   kind: AuthnCrds
   chart: authn-crds
-  version: 0.31.0
+  # Lockstep with authn 0.32.0. authn reports no CRD content change; not independently diffed.
+  version: 0.32.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -491,7 +492,31 @@ components:
   # The old kubeadm-style placeholder was written verbatim into every <user>-clientconfig server-url
   # (unreachable NXDOMAIN on GKE, wrong port), breaking the cert-replay per-user RBAC hop. Users must
   # re-login after this rolls so authn re-issues the clientconfig with the corrected server-url.
-  version: 0.31.0
+  # 0.32.0 SUPERSEDES the 0.31.1 that was queued and never pinned. Verified by rendering 0.31.0 and
+  # 0.32.0 and diffing, not from the release report:
+  #   10 objects both sides, none added, none removed
+  #   image ghcr.io/krateo-platformops/authn:0.31.0 -> :0.32.0
+  #   5 of 6 RBAC objects show a byte diff -- AND NONE OF IT GRANTS ANYTHING. Comparing only
+  #     rules/subjects/roleRef/aggregationRule, all six are IDENTICAL; the whole delta is
+  #     app.kubernetes.io/version and helm.sh/chart label churn. authn said "no RBAC change" and that
+  #     is correct. Recorded because the byte diff looks alarming and the next person will see it too.
+  #
+  # IT IS THE PRECONDITION FOR agentgateway ENFORCEMENT (roadmap A3), which is the real reason it is
+  # pinned now rather than when something needs it. 0.32.0 adds the optional chart value
+  # `jwt.previousKeys` (default empty; the template defaults it, so the composition path renders
+  # nothing new). Without it, turning token validation from permissive into enforcing means every
+  # signing-key ROTATION signs every user out. So enforcement must not be scheduled until this is
+  # pinned AND rolled -- authn and marketing flagged that ordering independently, and pinning it early
+  # is cheap insurance against someone scheduling enforcement who does not know the dependency.
+  #
+  # BEHAVIOUR CHANGES THAT ARE NOT RBAC AND NOT BREAKING HERE, from authn, unverified by me:
+  # basic/ldap failures now answer 500 with a cause (was 403); a missing basic Authorization header
+  # gives JSON 401; an unknown LDAPConfig gives 404 (was 417). frontend read their own source and the
+  # portal reads only the status code. A SMOKE CHECK ASSERTING 403 FOR A BROKEN BASIC SETUP WOULD NOW
+  # SEE 500 -- if one exists anywhere, it needs updating with this roll, not after it.
+  # Also includes 0.31.1's expired step-up Secret sweep, verified on GKE by authn and unverified on
+  # 057/demo because neither has step-up Secrets.
+  version: 0.32.0
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
