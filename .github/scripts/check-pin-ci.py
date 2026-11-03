@@ -43,8 +43,43 @@ import yaml
 
 
 
+# A GitHub App token is PER INSTALLATION, i.e. per org, and `create-github-app-token` mints it for
+# exactly one owner. The workflow used to mint one for ${{ github.repository_owner }} alone, which
+# made every pin outside krateo-platformops unreadable -- 26 of 68 (krateo-agentiko 17,
+# krateo-blueprints 9), all of them private, so the repo-scoped GITHUB_TOKEN cannot see them either.
+# That is not a permissions bug to tune: one token CANNOT span two orgs.
+#
+# So the workflow now mints one token per org and exports each as PIN_CI_TOKEN_<OWNER>, and every
+# `gh api repos/<owner>/...` call is routed to the token for THAT owner. The owner is already in the
+# slug at every call site, so it is read out of the argv here rather than threaded through a dozen
+# signatures -- one place to get right instead of twelve to keep in step.
+_OWNER_IN_PATH = re.compile(r"^/?repos/([^/]+)/")
+
+def _token_env_for(args):
+    """GH_TOKEN override for a `gh api repos/<owner>/...` call, or None to use the default."""
+    for a in args:
+        m = _OWNER_IN_PATH.match(str(a))
+        if not m:
+            continue
+        owner = m.group(1)
+        key = "PIN_CI_TOKEN_" + re.sub(r"[^A-Za-z0-9]", "_", owner).upper()
+        tok = os.environ.get(key)
+        TOKEN_USE.setdefault(owner, "per-org App token" if tok else "DEFAULT (no per-org token)")
+        return tok
+    return None
+
+
+# Which token answered for which owner. Printed at the end, because "26 pins went unverified" must
+# name the org whose App installation is missing rather than read as a mysterious drop in coverage.
+TOKEN_USE = {}
+
+
 def sh(*args, check=False):
-    p = subprocess.run(args, capture_output=True, text=True)
+    env = None
+    tok = _token_env_for(args)
+    if tok:
+        env = dict(os.environ, GH_TOKEN=tok, GITHUB_TOKEN=tok)
+    p = subprocess.run(args, capture_output=True, text=True, env=env)
     if check and p.returncode != 0:
         print(f"::error::command failed: {' '.join(args)}\n{p.stderr.strip()[:500]}")
         sys.exit(1)
@@ -559,9 +594,14 @@ def main():
                     f"commit. The tag may well exist. In CI the repo-scoped GITHUB_TOKEN cannot "
                     f"read a PRIVATE repo in another org, and 26 of this chart's pins are "
                     f"cross-org — so a local run of this script is NOT equivalent to the CI run. "
-                    f"Fix by setting the org secret PIN_CI_READ_TOKEN to a fine-grained PAT with "
-                    f"contents:read + checks:read on the cross-org repos; the workflow prefers it "
-                    f"and falls back to GITHUB_TOKEN, and its first log line says which it used. "
+                    f"FIX: install the krateo-pin-ci GitHub App on the owning org — the workflow "
+                    f"already mints a token PER ORG and uses it when present, and the "
+                    f"'credential used per source org' lines above name the org that has none. "
+                    f"DO NOT reach for a fine-grained PAT: this org's picker offers no Checks "
+                    f"permission at all (verified across the whole contiguous A-C range), so a PAT "
+                    f"resolves the tag and then 403s on /check-runs. Adding Actions:Read does not "
+                    f"help either — Actions covers workflows, runs and artifacts, not the Checks "
+                    f"API. That was measured, and an afternoon was spent on it. "
                     f"Do NOT 'fix' it by removing the source or the appVersion. Still a failure: "
                     f"unverifiable is not a pass.")
             else:
@@ -597,6 +637,21 @@ def main():
                 # suite or this regex, fix the release process. Saying "nothing tested the code"
                 # here would be false and would send someone to wire tests that already pass.
                 failures.append(f"{name} {version}: {slug} — {detail}")
+
+    # WHICH TOKEN ANSWERED FOR WHICH OWNER. Printed on success AND failure, because the whole reason
+    # this gate was silently useless for 26 of 68 pins is that it never said which credential it had
+    # used. "UNVERIFIABLE" has to name the org whose App installation is missing, or the next person
+    # debugs token scopes for an afternoon -- which is exactly what it cost me.
+    if TOKEN_USE:
+        print("pin-ci: credential used per source org:")
+        for owner in sorted(TOKEN_USE):
+            print(f"  {owner}: {TOKEN_USE[owner]}")
+        missing = sorted(o for o, v in TOKEN_USE.items() if v.startswith("DEFAULT"))
+        if missing:
+            print(f"::warning::pin-ci: no per-org App token for {', '.join(missing)} — a PRIVATE repo "
+                  f"in those orgs cannot be read by the repo-scoped GITHUB_TOKEN, so its pins report "
+                  f"UNVERIFIABLE. Fix by installing the krateo-pin-ci GitHub App on each of them; the "
+                  f"workflow already mints a token per org and uses it when present.")
 
     if failures:
         print("::error::pin-ci: a bumped pin points at a commit whose own repo CI is not green "
