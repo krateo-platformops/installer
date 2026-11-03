@@ -5234,6 +5234,34 @@ components:
 #   #   # with alert-provider (same repo tag). Public krateo-platformops chart.
 #   #
 #
+# CUTOVER STEP 3 OF 3: the replacement controller. 057 ONLY -- krateo-demo does not serve
+# incidentcontrollers.composition.krateo.io and never ran the controller.
+# TAG AND ROLL ONLY AFTER step 1's CD krateo-system/incident-controller reads NotFound and step 2's
+# CRD swap has been verified (both CRDs present, counts intact, release-name re-stamped, keep intact).
+- name: incident-provider
+  # chart == name, so no `chart:` field; incident-provider 0.6.1 in
+  # ghcr.io/krateo-platformops/charts -- the same registry, only the name moved.
+  # incident-controller 0.5.3 and 0.6.0 are BOTH HTTP 404: 0.5.2 is the last release under the old
+  # name, so this is a rename of a live component and there is no version at which both are current.
+  #
+  # SERVICE NAME CHANGES, AND IT REACHED TWO OTHER COMPONENTS. provider-runtime read tag 0.6.0:
+  # main.go:34 sets serviceName = "incident-provider", main.go:63 passes it to the OTel handler, the
+  # rendered chart carries no OTEL_SERVICE_NAME override, and app.kubernetes.io/name is
+  # incident-provider. At 0.5.2 it was incident-controller. So each reconcile-error detector that
+  # excludes this component BY ServiceName had to learn the new name:
+  #   alert-provider 0.2.57         NOT IN list      SHIPPED, and live on 057 since installer 0.3.491
+  #   krateo-observability 0.1.24   five detectors   HELD by pin-ci, see its own pin
+  # Both lists name the OLD and the NEW service, so they are additive and a late roll costs alert
+  # noise in the window rather than breakage. krateo-observability 0.1.24 being held therefore does
+  # NOT block this cutover -- it means that until it lands, incident-provider's own reconcile errors
+  # can open Incidents ABOUT incident-provider. A known cost, not a surprise.
+  kind: IncidentProvider
+  version: 0.6.1
+  deps:
+  - incident-provider-crd
+  tier: observability
+  feature: specialistAgents
+
 - name: incident-provider-crd
   # Renamed from incident-controller-crd. The kind MUST follow the chart name -- it is not a free
   # choice. core-provider's crdgen derives it as
