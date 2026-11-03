@@ -594,9 +594,14 @@ def main():
                     f"commit. The tag may well exist. In CI the repo-scoped GITHUB_TOKEN cannot "
                     f"read a PRIVATE repo in another org, and 26 of this chart's pins are "
                     f"cross-org — so a local run of this script is NOT equivalent to the CI run. "
-                    f"Fix by setting the org secret PIN_CI_READ_TOKEN to a fine-grained PAT with "
-                    f"contents:read + checks:read on the cross-org repos; the workflow prefers it "
-                    f"and falls back to GITHUB_TOKEN, and its first log line says which it used. "
+                    f"FIX: install the krateo-pin-ci GitHub App on the owning org — the workflow "
+                    f"already mints a token PER ORG and uses it when present, and the "
+                    f"'credential used per source org' lines above name the org that has none. "
+                    f"DO NOT reach for a fine-grained PAT: this org's picker offers no Checks "
+                    f"permission at all (verified across the whole contiguous A-C range), so a PAT "
+                    f"resolves the tag and then 403s on /check-runs. Adding Actions:Read does not "
+                    f"help either — Actions covers workflows, runs and artifacts, not the Checks "
+                    f"API. That was measured, and an afternoon was spent on it. "
                     f"Do NOT 'fix' it by removing the source or the appVersion. Still a failure: "
                     f"unverifiable is not a pass.")
             else:
