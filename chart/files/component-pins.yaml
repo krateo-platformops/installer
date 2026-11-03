@@ -2437,7 +2437,23 @@ components:
   # onto RepoDeployment, confirm it observes the same records, then strip), then delete.
   # github-provider-kog is rehearsing that on a throwaway GitHub fixture and owes a verified runbook
   # before any krateo-demo roll. Until then this cluster-with-instances path is NOT cleared.
-  version: 0.6.0
+  version: 0.7.0
+  # 0.7.0 adds two kinds and removes none -- measured on the published chart, not read from the
+  # release notes: rendered at --kube-version 1.33.0, rc=0 on both sides, 8104 -> 8882 lines (floor
+  # asserted), RestDefinition docs 30 -> 32, ADDED {RepoContent, UserRepository}, REMOVED {} . 0.7.1
+  # is a 404, so 0.7.0 is the head and not the first tag that happened to resolve.
+  #
+  # DELIBERATELY NOT PAIRED WITH AN OASGEN BUMP. github-provider-kog asked for this hold and then
+  # narrowed it themselves with the oasgen-provider session: oasgen 0.49.0 (#373) changes
+  # interrupted-create RECOVERY only -- a first create of UserRepository/PullRequest/Collaborator is
+  # unaffected because Observe is unchanged. On 0.49.0 a create that was dispatched but never landed
+  # errors and stays wedged instead of re-creating after a grace period, with the fixed message
+  # "cannot determine creation result - remove the krateo.io/external-create-pending annotation if it
+  # is safe to proceed". That escape requires confirming on GitHub that the repo/PR does not exist.
+  # 0.48.0 is OUTSIDE that blast radius (the synthesised-404 marking and the new Exists case arrive in
+  # 0.49.0), so the queued oasgen 0.43.0 -> 0.48.0 bump can land independently of this pin.
+  # Both clusters run oasgen 0.43.0 today, re-read live by github-provider-kog rather than carried
+  # forward from either of our notes.
   # requiresApiGroups — HARD render-time requirements, found by hack/hard-dep-requires-gate.py.
   # This chart renders objects of the groups below but does not ship them, so without their CRDs
   # chart-inspector cannot render it AT ALL and the composition 500s every reconcile, forever.
