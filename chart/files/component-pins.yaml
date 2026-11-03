@@ -10,7 +10,9 @@ components:
   kind: AuthnCrds
   chart: authn-crds
   # Lockstep with authn 0.32.0. authn reports no CRD content change; not independently diffed.
-  version: 0.32.0
+  # Lockstep with authn 0.33.0, and NOT a no-op this time: the LDAPConfig schema gains optional
+  # spec.groupSearch (6 -> 7 keys, required unchanged). Diffed, not assumed.
+  version: 0.33.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -516,7 +518,31 @@ components:
   # SEE 500 -- if one exists anywhere, it needs updating with this roll, not after it.
   # Also includes 0.31.1's expired step-up Secret sweep, verified on GKE by authn and unverified on
   # 057/demo because neither has step-up Secrets.
-  version: 0.32.0
+  # 0.33.0 supersedes the 0.32.0 pinned and rolled an hour earlier; it contains everything in 0.32.0
+  # plus LDAP-only changes. PINNED, NOT ROLLED, on Diego's direction -- a third authn version to 057
+  # inside an hour buys nothing when the delta has no live exposure. It rolls with whatever goes next.
+  #
+  # THE CRD MOVES WITH IT, and it is ADDITIVE -- verified by diffing the rendered LDAPConfig schema,
+  # not from the release note:
+  #   0.32.0  spec keys (6): baseDN bindDN bindSecret dialURL graphics tls
+  #   0.33.0  spec keys (7): + groupSearch
+  #   spec.required UNCHANGED on both: [baseDN, dialURL] -- groupSearch is OPTIONAL
+  #   no existing key changed shape
+  # So existing LDAPConfig objects stay valid. authn-crds must still move in lockstep because the
+  # schema differs; a split pair would serve 0.32.0's schema to a 0.33.0 controller.
+  #
+  # NO LIVE EXPOSURE ON EITHER CLUSTER: neither krateo-057 nor krateo-demo has any LDAPConfig, so the
+  # three behaviour changes (configurable group search; LDAP groups NO LONGER taken from the user's
+  # `ou`, which IS a behaviour change; no userPassword requested from the directory) cannot affect
+  # anything today. That is why this is safe to pin ahead of a roll -- and also why rolling it in a
+  # hurry would prove nothing.
+  #
+  # 0.32.0's notes all still apply and are the reason the PAIR matters: jwt.previousKeys is the
+  # precondition for agentgateway enforcement (A3), and the basic/ldap response codes changed
+  # (403 -> 500 with a cause, JSON 401 for a missing basic header, 404 instead of 417 for an unknown
+  # LDAPConfig). A SMOKE CHECK ASSERTING 403 FOR A BROKEN BASIC SETUP SEES 500 FROM 0.32.0 ONWARD,
+  # which is already live on 057.
+  version: 0.33.0
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
@@ -2462,7 +2488,21 @@ components:
   # onto RepoDeployment, confirm it observes the same records, then strip), then delete.
   # github-provider-kog is rehearsing that on a throwaway GitHub fixture and owes a verified runbook
   # before any krateo-demo roll. Until then this cluster-with-instances path is NOT cleared.
-  version: 0.7.0
+  # 0.7.1: ADDITIVE WITHIN THE EXISTING KINDS -- measured, not read from the release note.
+  # Rendered both at --kube-version 1.33.0: rc=0 either side, 8882 -> 9286 lines, RestDefinition
+  # documents 32 -> 32, and the set of nested kinds is IDENTICAL (none added, none removed). So the
+  # six new ruleset rule types and the BranchProtection dismissal/bypass review lists are new FIELDS
+  # inside kinds that already existed, which is a different and much safer shape than 0.7.0's
+  # +RepoContent +UserRepository. 0.7.2 is a 404, so 0.7.1 is the head.
+  # appVersion moves 0.1.6 -> 0.1.7; in this repo appVersion tracks the OpenAPI mapping revision
+  # rather than a binary, and #27/#28/#29 changed those assets.
+  # github-provider-kog reports a ZERO 7-field immutable diff against 0.7.0 across all 32 RDs, and
+  # that all 15 Repository CRs on 057 already carry status.name so #386's keying change is a no-op
+  # for them. Both of those are THEIRS; I verified the render shape, not the immutable-field diff.
+  #
+  # PINNED, NOT ROLLED. Their own sequencing discipline is the reason: one change in flight on
+  # production at a time, and 057 took 0.7.0 only an hour ago. Rolling needs Diego's direct go.
+  version: 0.7.1
   # 0.7.0 adds two kinds and removes none -- measured on the published chart, not read from the
   # release notes: rendered at --kube-version 1.33.0, rc=0 on both sides, 8104 -> 8882 lines (floor
   # asserted), RestDefinition docs 30 -> 32, ADDED {RepoContent, UserRepository}, REMOVED {} . 0.7.1
