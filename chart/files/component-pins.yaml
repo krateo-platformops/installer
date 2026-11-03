@@ -60,7 +60,7 @@ components:
   # refuses below 1.36 rather than installing a label-selector mechanism nothing can satisfy.
   # 0.28.1: co-versioned with oasgen-provider. Same k8s >= 1.36 floor; carries no part of the
   # regression fix, which is provider-side only.
-  version: 0.43.0
+  version: 0.48.0
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -3467,7 +3467,7 @@ components:
   # 0.28.0: co-versioned with oasgen-provider (the triple moves together). Declares NO kubeVersion
   # floor — it ships no CRDs and no controller, so it installs anywhere.
   # 0.28.1: co-versioned with oasgen-provider (the triple moves together). No kubeVersion floor.
-  version: 0.28.1
+  version: 0.48.0
   tier: platform
   feature: portal
   chart: controller-render-service
@@ -3568,7 +3568,20 @@ components:
   #   makes both charts unrenderable on the CI runner, and the workflow warns rather than fails).
   #   Images verified by hand instead. The .github fix is still unmerged and now blocks core-provider's
   #   tag too — the issue number was cited as #25 once and #24 once, so confirm which before chasing.
-  version: 0.43.0
+  # 0.48.0: oasgen-provider, its CRD chart and controller-render-service move together, which closes a
+  # REAL skew rather than merely advancing a number. controller-render-service's chart version IS the
+  # oasgen-provider image tag -- verified by pulling three of them: 0.28.1 -> oasgen-provider:0.28.1,
+  # 0.30.0 -> :0.30.0, 0.48.0 -> :0.48.0, one line throughout, not two. So pinning it at 0.28.1 beside a
+  # provider at 0.43.0 ran the render service on a 15-minor-old binary. That stale pin was mine.
+  #
+  # STOPPING AT 0.48.0 DELIBERATELY. 0.49.0 exists (HTTP 200) and is NOT taken. oasgen#373 changes
+  # interrupted-create RECOVERY: a create that was dispatched but never landed is re-created after a
+  # grace period on 0.48.0, and on 0.49.0 errors and stays wedged with "cannot determine creation result
+  # - remove the krateo.io/external-create-pending annotation if it is safe to proceed", whose escape
+  # needs a human to confirm on the provider's side that the object does not exist. First creates are
+  # unaffected either way because Observe is unchanged. github-provider-kog and the oasgen-provider
+  # session both confirmed 0.48.0 sits outside that blast radius, each from source.
+  version: 0.48.0
   # 0.43.0, NOT the 0.42.0 this PR first proposed. The two extra releases are correctness fixes a
   # consumer feels, both reported by the openstack-nova-operator-kog session and CLOSED upstream:
   #   #322 a populated spec object compared EQUAL to an EMPTY remote object, so
@@ -3667,6 +3680,26 @@ components:
   # against 9.7G of real data. ClickHouse needs free space to merge, so its own logs were degrading
   # SELECTs beside them. This is the 2026-07 incident's missing half — that one bounded the log
   # TABLES, not the log FILES.
+  # 0.1.24 IS AVAILABLE AND DELIBERATELY NOT TAKEN YET -- held by pin-ci, correctly.
+  #   krateo-observability 0.1.24: UNRESOLVED -- appVersion 3.2.0 matches no tag in any of
+  #   ['krateo-platformops/clickstack-chart']
+  # The chart has declared appVersion 3.2.0 since 0.1.22 while that repo's highest tag is 3.1.30, so
+  # the appVersion names no commit and pin-ci cannot establish which code was tested. This is NOT a
+  # regression from the bump: 0.1.22, 0.1.23 and 0.1.24 all declare 3.2.0. It is this component's
+  # FIRST encounter with the gate -- 0.1.23 was pinned in #491, before the gate landed in #541 -- and
+  # before today's stderr fix the gate would have swallowed the reason and passed it silently.
+  #
+  # What 0.1.24 contains, measured so the work isn't lost: it adds 'incident-provider' to the
+  # `ServiceName NOT IN (...)` list of FIVE detectors (reconcile-error, panic/traceback,
+  # out-of-memory, certificate-expiry, JWT-leak). All five keep 'incident-controller', so it is
+  # additive like alert-provider 0.2.57's, and holding it costs alert noise after the cutover rather
+  # than breakage. Both renders are rc=0 at 737 lines with an identical object-kind inventory, and the
+  # entire diff is those five `where` clauses.
+  #
+  # THE FIX BELONGS IN THE COMPONENT, not here: tag 3.2.0 in clickstack-chart, or tag by chart version
+  # (that repo already has a krateo-observability-0.1.10 tag as precedent), or adopt snowplow's
+  # proposal to stamp the source commit SHA onto the chart artifact so pin-ci stops inferring
+  # provenance from appVersion at all. Do NOT unblock this by deleting `sources` or the appVersion.
   version: 0.1.23
   deps:
   - clickhouse-operator
@@ -4969,12 +5002,30 @@ components:
   # precisely the precedent #482 set for alert-provider-crd.
   kind: IncidentControllerCrds
   chart: incident-controller-crds
-  version: 0.5.0
+  # 0.5.2: LOAD-BEARING, and the single most important pin of the incident-provider cutover. It adds
+  # `helm.sh/resource-policy: keep` to BOTH CRDs -- incidents.observability.krateo.io and
+  # incidentapplies.observability.krateo.io -- with the Incident schema UNCHANGED (18 schema paths on
+  # 0.5.0 and on 0.5.2; the only other diff is Chart.yaml's version, 6 files each side). Without it a
+  # helm uninstall of this release deletes the CRDs and with them every Incident object: 633 live
+  # today, 189 on 057 and 444 on demo. With it, the rename in 0.6.0 cannot take the data.
+  # CONTROL: incident-provider-crds 0.6.0 carries the same keep annotation on both CRDs, so the
+  # protection survives the chart rename rather than being a property of the old name.
+  version: 0.5.2
   tier: observability
   feature: portal
 - name: incident-controller
   kind: IncidentController
-  version: 0.5.1
+  # 0.5.2: also about `resource-policy: keep`, on ClusterRole/krateo-incident-viewer and
+  # ClusterRole/krateo-incident-responder. That makes step A of the cutover (remove the
+  # `incident-controller` component, verify its CD reaches NotFound, then add `incident-provider`)
+  # non-destructive on RBAC as well as on the CRDs -- the two roles survive the window between the
+  # old composition going away and the new one arriving, so there is no interval with the CRDs
+  # present and nothing authorised to read them.
+  # Measured, not assumed: render rc=0 both sides, 483 -> 487 lines, object KINDS identical, and
+  # after filtering pure helm.sh/chart + app.kubernetes.io/version churn the whole substantive diff is
+  # 10 lines: the two keep annotations, the check-pod checksum, and the two image tags
+  # (incident-controller:0.5.2, incident-controller-check:0.5.2). No schema or behaviour change.
+  version: 0.5.2
   # 0.5.1 is provider-runtime v1.7.0 + Go 1.26, step 3 of that sequence. Published charts differ
   # from 0.5.0 in version fields ONLY (6 files vs 6), and the image DOES move -- rendered both,
   # because a version-field-only diff is also exactly the shape a silent no-op has:
@@ -5025,7 +5076,10 @@ components:
   # migration; the Incident CRD ships in incident-controller-crd). Its release takes over
   # alerts.observability.krateo.io from the alert-troubleshooter-crd release, whose uninstall deletes
   # the CRD and every Alert: follow docs/configuration.md#upgrading-from-alert-troubleshooter first.
-  version: 0.2.55
+  # 0.2.57: PURE LOCKSTEP. Diffed, not inferred, per the note above: 0.2.55 vs 0.2.57 differ in exactly
+  # one line -- Chart.yaml's own `version` -- with 5 files on each side, so the empty diff is not a failed
+  # pull. Non-load-bearing, unlike 0.2.39/0.2.41/0.2.45. Taken only to keep the pair in lockstep.
+  version: 0.2.57
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -5089,7 +5143,26 @@ components:
   # {precondition, apply, verify} and an optional rollback. The service's authn identity
   # (config.authnUrl) authenticates its A2A calls. The chart has no observer thread, and its schema
   # rejects config.reportCooldown and config.snowplowUrl.
-  version: 0.2.55
+  version: 0.2.57
+  # 0.2.57 carries alert-provider#76 (provider-runtime v1.7.2) and #77, which adds 'incident-provider' to
+  # DEFAULT_ALERTS_JSON's reconcile-error `NOT IN` list. Measured on the published chart here, not taken
+  # from the release notes: rendered at --kube-version 1.33.0, rc=0, 294 -> 331 lines (floor asserted, so
+  # neither side is a silently failed render); `incident-provider` 0 -> 1 occurrences; image resolves to
+  # alert-provider:0.2.57; and 0.2.58 is a 404, so 0.2.57 is the head and not merely the first tag tried.
+  #
+  # THE EXCLUSION IS ADDITIVE, WHICH SOFTENS THE ORDERING. 0.2.57's list names BOTH 'incident-controller'
+  # AND 'incident-provider' (the only other occurrence of the old name in the render is a comment). So
+  # rolling this AFTER the incident-provider cutover costs alert noise during the window, not breakage --
+  # the old name stays excluded either way. acmp and provider-runtime both describe it as a hard
+  # prerequisite of the cutover; on this evidence it is a soft one, and the step I did NOT verify is which
+  # ServiceName incident-provider 0.6.0 actually emits -- that is the component's to confirm, not the
+  # installer's. Roll it first regardless: it is free, and it is the only way the window is quiet.
+  #
+  # INVENTORY DELTA, so the roll's diff is expected rather than explained afterwards: +2 objects,
+  # ClusterRole and ClusterRoleBinding `krateo-alert-provider-alerts` -- 0.2.56's cluster-wide Alert read
+  # for tenant namespaces, which neither 057 nor demo has today (both run 0.2.55). The version-suffixed
+  # Job `hyperdx-key-bootstrap-0-2-55` is replaced by `-0-2-57`; that create+delete happens on every bump
+  # of this chart and is not new here.
   # 0.2.55 is provider-runtime v1.7.0 + Go 1.26, step 2 of that sequence. The jump is
   # 0.2.53 -> 0.2.55, skipping 0.2.54, which was never rolled: it declared no `sources:` in its
   # Chart.yaml, so check-pin-ci could not follow the pin's provenance and refused it -- correctly.

@@ -69,14 +69,43 @@ jobs:
       # "workflows, workflow runs and artifacts", not the Checks API. That was measured,
       # not assumed. A GitHub App has a real Checks:Read -- exactly, and only, what this
       # gate needs. The app holds checks:read + contents:read and nothing else.
-      - name: Mint a read-only token from the pin-ci GitHub App
+      #
+      # ONE TOKEN PER ORG, BECAUSE ONE TOKEN CANNOT SPAN TWO. A GitHub App token is issued per
+      # INSTALLATION, and create-github-app-token mints it for exactly one `owner`. This step used to
+      # pass `owner: ${{ github.repository_owner }}`, which made the token krateo-platformops-only --
+      # so the 26 pins in the other two orgs (krateo-agentiko 17, krateo-blueprints 9, all private)
+      # stayed unreadable, and the repo-scoped GITHUB_TOKEN cannot see a private repo in another org
+      # either. The earlier fix made that failure LOUD, which is how it was found; this one closes it.
+      #
+      # Each step is continue-on-error so a missing installation degrades that ONE org to
+      # UNVERIFIABLE instead of failing the job, and check-pin-ci.py prints which credential answered
+      # for which owner and warns by name when an org has none. Adding an org here is a two-line
+      # change plus the App installation; the script needs no edit, since it routes on the owner in
+      # the slug.
+      - name: Mint a read-only token for krateo-platformops
         id: app-token
         continue-on-error: true
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.PIN_CI_APP_ID }}
           private-key: ${{ secrets.PIN_CI_APP_KEY }}
-          owner: ${{ github.repository_owner }}
+          owner: krateo-platformops
+      - name: Mint a read-only token for krateo-agentiko
+        id: app-token-agentiko
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.PIN_CI_APP_ID }}
+          private-key: ${{ secrets.PIN_CI_APP_KEY }}
+          owner: krateo-agentiko
+      - name: Mint a read-only token for krateo-blueprints
+        id: app-token-blueprints
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.PIN_CI_APP_ID }}
+          private-key: ${{ secrets.PIN_CI_APP_KEY }}
+          owner: krateo-blueprints
       - name: Assert every bumped pin's component CI was green at its tagged commit
         env:
           BASE_REF: origin/${{ github.base_ref }}
@@ -94,6 +123,11 @@ jobs:
           # than as a mysterious drop in verified pins -- and since ci_at() now reports the API's
           # own error, a permission failure reads as "HTTP 403" instead of a bare "could not read".
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          # Per-org tokens. check-pin-ci.py reads the owner out of each `gh api repos/<owner>/...`
+          # call and uses PIN_CI_TOKEN_<OWNER>, falling back to GH_TOKEN above when an org has none.
+          PIN_CI_TOKEN_KRATEO_PLATFORMOPS: ${{ steps.app-token.outputs.token }}
+          PIN_CI_TOKEN_KRATEO_AGENTIKO: ${{ steps.app-token-agentiko.outputs.token }}
+          PIN_CI_TOKEN_KRATEO_BLUEPRINTS: ${{ steps.app-token-blueprints.outputs.token }}
           PIN_CI_TOKEN_KIND: ${{ steps.app-token.outputs.token && 'krateo-pin-ci GitHub App (checks:read)' || 'repo-scoped GITHUB_TOKEN -- DEGRADED, cross-org pins UNVERIFIABLE' }}
         run: |
           echo "pin-ci token: ${PIN_CI_TOKEN_KIND}"
