@@ -5430,7 +5430,19 @@ components:
   # between/not_between, so a range alert would be silently malformed rather than refused.
   # That is the exact failure the 0.2.42 note warns about, arriving from the other direction: there the
   # risk was holding a load-bearing -crd bump, here it is the APP being bumped past a held -crd.
-  version: 0.2.59
+  # 0.2.60: LOCKSTEP WITH alert-provider 0.2.60, and a verified NO-OP on the CRDs. I unpacked both
+  # charts rather than relay acmp's statement: 2 -> 2 CRDs, none added or removed, and BOTH schemas
+  # byte-identical -- alerts spec properties and required unchanged with schema length 8098 on both
+  # sides, metrics unchanged at 855. So this pin moves only to keep the pair co-versioned.
+  # The CEL rules that refuse between/not_between without thresholdMax, and thresholdMax below
+  # threshold, arrived in 0.2.58 and are unchanged here. Those are acmp's measurement, not mine.
+  # PRUNING POSTURE, measured at this version because a claim about it was going into a deck:
+  # neither alerts nor metrics sets additionalProperties:false or x-kubernetes-preserve-unknown-fields
+  # (at spec OR root), so an UNDECLARED field is accepted, dropped, and nothing is emitted -- no
+  # error, no event. A field the CRD DECLARES AS REQUIRED can never be pruned, because pruning only
+  # removes fields absent from properties; the real hazard is a field the BACKEND requires that the
+  # CRD does not declare.
+  version: 0.2.60
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -5494,7 +5506,37 @@ components:
   # {precondition, apply, verify} and an optional rollback. The service's authn identity
   # (config.authnUrl) authenticates its A2A calls. The chart has no observer thread, and its schema
   # rejects config.reportCooldown and config.snowplowUrl.
-  version: 0.2.59
+  # 0.2.60: FIRST v1.8.x-BUILT PROVIDER TO REACH A CLUSTER, which makes this roll the only
+  # opportunity to measure core-provider#310 before four more adopters land on top of it.
+  # Built on provider-runtime v1.8.2. Lockstep pair with alert-provider-crds 0.2.60 (a verified
+  # CRD no-op -- see that pin). REQUIRES core-provider 2.13.56 live on the target cluster, which
+  # 0.3.502 delivered: 42/42 managed cdc controllers on demo, 70/70 on 057, Ready AND Synced.
+  # WHAT CHANGES BEHAVIOURALLY: refusals now surface as Ready=Unavailable rather than passing. That
+  # is why this is pinned ALONE rather than batched with access-review 0.1.6 and
+  # identity-lifecycle 0.1.3 -- provider-runtime asked for it to carry its own blast radius, and
+  # those two are NOT PINNED HERE AT ALL, so wiring them is new-component work (feature gate,
+  # dependency order, componentValues schema) rather than a bump. Diego's call, taken separately.
+  # THE #310 MEASUREMENT, with the criterion cited rather than invented: provider-runtime
+  # docs/usage.md on main (#25, 5564088), "Rollout order" -> "Verifying the rollup during a
+  # provider rollout". In its EXHAUSTIVE form, which matters:
+  #   EXCLUDED parent = has any child that is NOT (Ready=True | Unknown/ZeroEvidence |
+  #                     Unknown/NotObserved). Any FUTURE Unknown reason therefore excludes until
+  #                     someone deliberately adds it, so the rule fails closed to "inconclusive".
+  #   ELIGIBLE parent = >=1 child at Unknown/NotObserved, and not excluded.
+  #   PASS = every eligible parent reads Ready=True (Available|AvailablePartialCoverage), or
+  #          Unknown/ZeroEvidence when every child is unevaluated.
+  #   FAIL = an eligible parent reads Ready=False, any reason.
+  # Report eligible / excluded / total-parents-with-a-NotObserved-child, and name which of THREE
+  # outcomes occurred: "never caught" (no child reached NotObserved in the window), "inconclusive"
+  # (NotObserved appeared but every parent was excluded), or a real verdict. Only the third is
+  # evidence; collapsing them produces a green that means nothing.
+  # WHY THE EXCLUSION RULE EXISTS: oasgen-provider found that a parent with one NotObserved child
+  # AND one legitimately-Creating child reads Ready=False/Creating because of the CREATING child --
+  # recorded as a violation while #310 works perfectly. `converging` outranks any number of
+  # `unevaluated` in the rollup's precedence. And oasgen 0.52.0 adds six new ways for a
+  # RestDefinition child to be legitimately Creating, so mixed parents get MORE likely during
+  # exactly the sampling window. Found before the run, not after.
+  version: 0.2.60
   # 0.2.57 carries alert-provider#76 (provider-runtime v1.7.2) and #77, which adds 'incident-provider' to
   # DEFAULT_ALERTS_JSON's reconcile-error `NOT IN` list. Measured on the published chart here, not taken
   # from the release notes: rendered at --kube-version 1.33.0, rc=0, 294 -> 331 lines (floor asserted, so
