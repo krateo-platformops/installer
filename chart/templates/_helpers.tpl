@@ -696,6 +696,98 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- end -}}
 
 {{/* ---------------------------------------------------------------------------------------
+     inst.unmetApiGroups — the API groups a component DECLARES and the cluster does not serve.
+     Returns a comma-joined list, or "" when every declared group is present.
+
+     inst.crdExists answers "is this component's own CRD served"; inst.requiresApiGroups answers
+     "true"/"" for the gate. Neither can say WHICH group is missing, and the gate's whole failure
+     mode is that it emits nothing and explains nothing. This names them.
+     --------------------------------------------------------------------------------------- */}}
+{{- define "inst.unmetApiGroups" -}}
+{{- $want := index . 0 -}}{{- $allCRDs := index . 1 -}}
+{{- $missing := list -}}
+{{- range $g := ($want | default list) -}}
+{{- $found := "" -}}
+{{- range $allCRDs -}}{{- if eq .spec.group $g -}}{{- $found = "true" -}}{{- end -}}{{- end -}}
+{{- if not $found -}}{{- $missing = append $missing $g -}}{{- end -}}
+{{- end -}}
+{{- $missing | sortAlpha | join "," -}}
+{{- end -}}
+
+{{/* ---------------------------------------------------------------------------------------
+     inst.withheldReason — why a DECLARED component is not being emitted, in words, on the
+     component the operator actually named.
+
+     THE DEFECT THIS EXISTS FOR (#614). krateo-observability declares no unsatisfied API group of
+     its own. It is withheld because clickhouse-operator is, and clickhouse-operator's declaration
+     is the only place the real condition is recorded — a component the operator had no reason to
+     look at. Every CompositionDefinition in the chain reports True/True, the composition CRs are
+     simply never created, and there is no error anywhere. An operator who enables the
+     observability tier without features.ingress gets an install that looks entirely healthy and
+     emits nothing.
+
+     Measured as a REGRESSION, not a standing gap: installer 0.3.477 has no requiresApiGroups at
+     all and installed the whole tier on a fresh cluster with no cert-manager; 0.3.478 introduced
+     them (#594) and a fresh install stops at 33 of 40 declared CRs. The snowplow bench bracketed
+     it from outside on 0.3.468 (40/40) and 0.3.506 (33/40).
+
+     Reasons are ordered by what the gate checks first, so the reported reason is the one that
+     actually blocks. The transitive arm is bounded rather than recursive because helm templates
+     cannot recurse; 6 passes covers this chart's deepest chain (operator -> observability ->
+     collector-deployment -> collector-daemonset) with room to spare, and a chain deeper than that
+     reports the direct cause rather than silently reporting none.
+     --------------------------------------------------------------------------------------- */}}
+{{- define "inst.withheldReason" -}}
+{{- $top := index . 0 -}}{{- $c := index . 1 -}}{{- $components := index . 2 -}}{{- $allCRDs := index . 3 -}}
+{{- $own := include "inst.unmetApiGroups" (list $c.requiresApiGroups $allCRDs) -}}
+{{- if $own -}}
+{{- printf "withheld: this component requires API group(s) %s, which the cluster does not serve" $own -}}
+{{- else -}}
+{{/* build the set of components whose OWN declared groups are unmet */}}
+{{- $unmet := dict -}}
+{{- range $x := $components -}}
+{{- if $x.requiresApiGroups -}}
+{{- $m := include "inst.unmetApiGroups" (list $x.requiresApiGroups $allCRDs) -}}
+{{- if $m -}}{{- $_ := set $unmet $x.name $m -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{/* bounded transitive walk over deps */}}
+{{- $seen := dict -}}
+{{- $frontier := ($c.deps | default list) -}}
+{{- range $pass := until 6 -}}
+{{- $next := list -}}
+{{- range $d := $frontier -}}
+{{- if not (hasKey $seen $d) -}}
+{{- $_ := set $seen $d true -}}
+{{- range $x := $components -}}{{- if eq $x.name $d -}}{{- $next = concat $next ($x.deps | default list) -}}{{- end -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $frontier = $next -}}
+{{- end -}}
+{{- $blockers := list -}}
+{{- range $d, $_v := $seen -}}
+{{- if hasKey $unmet $d -}}{{- $blockers = append $blockers (printf "%s needs %s" $d (index $unmet $d)) -}}{{- end -}}
+{{- end -}}
+{{- if $blockers -}}
+{{- printf "withheld: a dependency requires an API group the cluster does not serve -- %s" ($blockers | sortAlpha | join "; ") -}}
+{{- else -}}
+{{- $crd := include "inst.crdExists" (list $c.kind $c.version $allCRDs) -}}
+{{- if ne $crd "true" -}}
+{{- printf "withheld: no served CRD for kind %s at version %s yet (normal during a bump; persistent means crdgen rejected it)" $c.kind (toString $c.version) -}}
+{{- else if ($c.deps | default list) -}}
+{{- printf "withheld: dependencies not Ready yet -- %s" (($c.deps | default list) | sortAlpha | join ",") -}}
+{{- else -}}
+{{/* No deps, CRD served, no unmet groups -- the gate's own terms are all satisfied, so this
+     component should have been emitted. Reaching here means the gate and this reporter disagree,
+     which is a defect in one of them and must not print as a reason. An empty dep list rendered
+     into "dependencies not Ready yet -- " is the shape that would hide it. */}}
+{{- printf "withheld: NO REASON FOUND -- this component has no dependencies, its CRD is served and its declared API groups are present, so the emission gate and this reporter disagree. That is a bug in one of them; please report it." -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/* ---------------------------------------------------------------------------------------
      inst.servedTags — the apiVersion tags a Kind's generated CRD actually SERVES, space-joined.
 
      inst.crdExists answers "is THIS version served" and cannot say what else is. This can, which

@@ -1,0 +1,56 @@
+name: check-withheld-reason
+
+# Installer-specific guard: exercise inst.withheldReason, the explanation a WITHHELD component
+# gives for its own absence (#614).
+#
+# WHY IT EXISTS. compositions.yaml withholds a component silently: every CompositionDefinition
+# reports True/True, the composition CR is simply never created, and there is no event, no failed
+# resource and no degraded condition anywhere. An operator who enables the observability tier
+# without `features.ingress` gets an install that looks entirely healthy and emits nothing. The
+# only instrument that ever caught it was an EXTERNAL benchmark harness comparing declared CRs
+# against created ones -- nothing in this chart published that comparison.
+#
+# AND THE EXPLANATION SITS TWO LEVELS FROM WHAT THE OPERATOR ENABLED. krateo-observability
+# declares no unsatisfied API group of its own; it is withheld because clickhouse-operator is, and
+# that component's declaration is the only place the condition is recorded. A prerequisite
+# discoverable only by walking the dependency graph by hand is, in practice, not declared at all.
+#
+# A REGRESSION, measured: 0.3.477 has no requiresApiGroups and installed the whole tier on a fresh
+# cluster with no cert-manager; 0.3.478 introduced them (#594) and a fresh install stops at 33 of
+# 40 declared CRs. Bracketed from outside by the snowplow bench -- 0.3.468 at 40/40, 0.3.506 at
+# 33/40.
+#
+# THE SELF-CHECK IS THE POINT, as with check-signing-key: the script mutates the real helper to
+# delete the transitive arm, re-renders, and fails unless that mutant is caught. A reporter that
+# merely returns SOME string passes a test whose subject is "a reason was given".
+#
+# WHAT A GREEN TICK DOES NOT MEAN: it exercises the REPORTER, not the emission gate. A reporter
+# that agreed with a wrong gate would pass. It also never calls `lookup`, so it cannot show that
+# the CRD list threaded in at runtime is the one the chart would see.
+
+on:
+  pull_request:
+      # NO `branches:` filter, deliberately -- same reason as check-ready-gate and
+      # check-signing-key. With one, the gate does not run on a STACKED pull request, which then
+      # shows CLEAN with "all checks passed" while every gate in this directory was skipped.
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  withheld-reason:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Exercise the withheld-component explanation
+        run: python3 .github/scripts/check-withheld-reason.py
