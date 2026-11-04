@@ -373,6 +373,27 @@ def main():
                     continue  # every shared group is declared
                 findings.append((a_name, ac.get("feature"), b_name, bc.get("feature"), missing))
 
+        # THE OTHER DIRECTION: a group DECLARED that the chart does not render. Reported because
+        # #614 is this defect, not the missing kind: clickhouse-operator and mongodb-operator both
+        # declared cert-manager.io, neither renders a cert-manager object (their wrappers disable
+        # the Certificate templates), and the declaration withheld them on every portal install
+        # whose cluster lacked cert-manager. A guard that only finds MISSING requirements cannot
+        # see that, and a requirement that is not real is not harmless -- it suppresses a working
+        # component, which is the same damage as the defect this guard was built for.
+        #
+        # Judged against the values the UMBRELLA sends (schema defaults). A requirement that exists
+        # only under a non-default componentValues override is NOT expressible in
+        # `requiresApiGroups` anyway -- it is a static field -- so there is no legitimate shape this
+        # report can be wrong about. Excluded charts are skipped: nothing was rendered for them.
+        overdeclared = []
+        for name, groups in sorted(((c["name"], set(c.get("requiresApiGroups") or []))
+                                    for c in pins if c.get("requiresApiGroups")), key=lambda x: x[0]):
+            if name in UNRENDERABLE_BY_DESIGN or name not in rendered:
+                continue
+            extra = sorted(groups - rendered[name])
+            if extra:
+                overdeclared.append((name, extra))
+
         checked = sum(len(v) for v in rendered.values())
         print(f"  scanned {len(rendered)} charts; {checked} rendered non-builtin group refs; "
               f"{sum(1 for v in shipped.values() if v)} charts ship CRDs")
@@ -413,6 +434,22 @@ def main():
                 return 2
             print(f"  self-test OK — dropping `requires` from {probe} is detected "
                   f"(would demand: {', '.join(refound)})")
+
+        if overdeclared:
+            print(f"::error::{len(overdeclared)} component(s) DECLARE a `requiresApiGroups` group "
+                  f"their chart does not render. The declaration is not harmless: it withholds the "
+                  f"component on every cluster that lacks the group, for a dependency it does not "
+                  f"have (installer#614):")
+            for name, extra in overdeclared:
+                print(f"  {name} declares {', '.join(extra)} but renders "
+                      f"{sorted(rendered[name]) or 'no foreign group at all'}")
+                print(f"    -> remove {', '.join(extra)} from its pin's `requiresApiGroups`")
+            print("  NOT a failure, deliberately. Removing a requirement that IS real re-creates "
+                  "the 0.3.474 defect -- the component is emitted into a cluster with no such "
+                  "kind, chart-inspector cannot render it, and the composition 500s forever. This "
+                  "guard renders with DEFAULT values, so it cannot see a requirement that only "
+                  "exists under a componentValues override. Each line above is a candidate for a "
+                  "human to verify and remove, not an instruction.")
 
         if findings:
             print(f"::error::{len(findings)} component(s) render a kind another component ships, "

@@ -46,11 +46,27 @@ def check(label, got, want):
         failures.append(label)
 
 
-def scan_text(tmp_path, name, text):
+def scan_text(tmp_path, name, text, crds=None, values=None):
+    """Build a minimal chart, RENDER it, and scan the output -- which is what the guard now does.
+
+    The suite used to call hdg.scan() on template TEXT. The guard no longer reads template text at
+    all: it renders, because a template body under a false `{{- if }}` is not an object the chart
+    creates (installer#614). So these fixtures render too, or they would be testing a code path
+    that no longer exists."""
     d = tmp_path / name
     (d / "templates").mkdir(parents=True, exist_ok=True)
+    (d / "Chart.yaml").write_text(f"apiVersion: v2\nname: {name}\nversion: 0.0.1\n")
     (d / "templates" / "x.yaml").write_text(text)
-    return hdg.scan(str(d))
+    if crds:
+        (d / "crds").mkdir(parents=True, exist_ok=True)
+        (d / "crds" / "c.yaml").write_text(crds)
+    out, err = hdg.render(name, str(d), values)
+    if out is None:
+        raise AssertionError(f"fixture {name!r} did not render, so it tests nothing: {err}")
+    rendered, shipped, errs = hdg.scan_rendered(out, str(d))
+    if errs:
+        raise AssertionError(f"fixture {name!r} produced parse errors: {errs}")
+    return rendered, shipped
 
 
 def main():
@@ -116,14 +132,69 @@ metadata:
     rendered, shipped = scan_text(tmp, "builtin", builtin)
     check("core k8s groups are not requirements", sorted(rendered), [])
 
-    # --- a templated group must not become a literal requirement ---
+    # --- a value-driven apiVersion is RESOLVED, not skipped ---
+    # The old fixture here asserted that a `{{ }}`-containing apiVersion was NOT treated as a
+    # group, because the guard read template text and could only have taken the literal string.
+    # That behaviour no longer exists: the guard renders, so the value is resolved and the real
+    # group is detected. Asserting the old expectation would be asserting a bug.
     templated = """apiVersion: {{ .Values.api.group }}/v1
 kind: Thing
 metadata:
   name: x
 """
-    rendered, shipped = scan_text(tmp, "templated", templated)
-    check("a go-templated apiVersion is not treated as a group", sorted(rendered), [])
+    rendered, shipped = scan_text(tmp, "templated", templated,
+                                  values={"api": {"group": "vendor.example"}})
+    check("a value-driven apiVersion is resolved to its real group",
+          sorted(rendered), ["vendor.example"])
+
+    # And the other half: a chart that cannot render must not read as "renders nothing". The guard
+    # withholds on that, and here we assert the primitive it withholds on actually fails.
+    d = tmp / "unrenderable"
+    (d / "templates").mkdir(parents=True, exist_ok=True)
+    (d / "Chart.yaml").write_text("apiVersion: v2\nname: unrenderable\nversion: 0.0.1\n")
+    (d / "templates" / "x.yaml").write_text(templated)   # same template, NO values
+    out, err = hdg.render("unrenderable", str(d))
+    check("a template whose value is missing FAILS to render rather than rendering empty",
+          out is None and err is not None, True)
+
+    # --- a `group:` FIELD is not a shipped CRD (the builders-page false positive) ---
+    # An earlier version of the render-based guard matched any `group:` line in the output, so a
+    # RESTAction naming the group it QUERIES was recorded as PROVIDING it. builders-page was
+    # credited with shipping ogen.krateo.io on three RESTAction templates and zero CRDs, which made
+    # github-provider-kog's real requirement look satisfied and disabled this suite's own self-test.
+    restaction = """apiVersion: templates.krateo.io/v1
+kind: RestAction
+metadata:
+  name: kog-restdefinitions
+spec:
+  api:
+  - name: rds
+    path: /apis/ogen.krateo.io/v1alpha1/restdefinitions
+    filter:
+      group: ogen.krateo.io
+"""
+    rendered, shipped = scan_text(tmp, "restaction", restaction)
+    check("a `group:` field inside a RestAction is NOT a shipped CRD group",
+          sorted(shipped), [])
+    check("and the RestAction's own group is what it renders",
+          sorted(rendered), ["templates.krateo.io"])
+
+    # --- a CRD in crds/ IS shipped, even though helm never renders that directory ---
+    crdsdir = """apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: things.vendor.example
+spec:
+  group: vendor.example
+"""
+    rendered, shipped = scan_text(tmp, "crdsdir", """apiVersion: vendor.example/v1
+kind: Thing
+metadata:
+  name: x
+""", crds=crdsdir)
+    check("a CRD under crds/ is recorded as shipped though helm does not render it",
+          sorted(shipped), ["vendor.example"])
+    check("so the chart is not held to require its own group", sorted(rendered), [])
 
     # --- pull() must honour a full oci:// base (the bug that made it withhold on 9 charts) ---
     check("pull() treats an oci:// repo as a base, not an org",
