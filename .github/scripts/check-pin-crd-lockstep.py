@@ -6,10 +6,20 @@ WHY THIS EXISTS. installer#632 bumped `alert-provider` 0.2.57 -> 0.2.59 and left
 spec.thresholdMax -- are declared ONLY in the CRD chart, and the 0.2.57 CRD sets neither
 `additionalProperties: false` nor `x-kubernetes-preserve-unknown-fields`. So the apiserver
 PRUNES them: an Alert carrying either is accepted, returns no error, emits no event, and comes
-back without the field. `thresholdMax` is required for thresholdType between/not_between, so a
-range alert is silently malformed rather than refused. All 25 CI checks passed on that PR,
-because nothing compared a component against its own CRD chart. Tag 0.3.495 was cut from it 38
-seconds after merge and published. Fixed by installer#634 / 0.3.496; this closes the class.
+back without the field.
+
+The FIELD LOSS is silent; the CONSEQUENCE, for this component, is not. Measured from
+alert-provider's code (main 8d83011) and HyperDX 2.35.0: a `between` Alert missing thresholdMax is
+refused by HyperDX's own schema with a 400, so the push fails and the Alert does not go Synced. So
+this particular skew fails visibly. That is NOT guaranteed in general -- whether a dropped field
+becomes a loud failure or a silently wrong computation depends entirely on what reads it
+downstream, which this gate cannot see. It refuses the skew either way.
+
+All 25 CI checks passed on that PR, because nothing compared a component against its own CRD chart.
+A whole-suite green says nothing about a dimension none of the checks measure: 25 of 25 is a
+denominator problem, and the only answer to a denominator problem is to add the missing dimension.
+Tag 0.3.495 was cut from it 38 seconds after merge and published. installer#634 fixed the instance;
+this closes the class.
 
 WHAT IT CHECKS, per `<x>` / `<x>-crd` pair in files/component-pins.yaml:
   versions equal                      -> OK, nothing to compare.

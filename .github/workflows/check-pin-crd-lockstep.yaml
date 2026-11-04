@@ -7,10 +7,17 @@ name: check-pin-crd-lockstep
 # 0.2.57. The two fields 0.2.59 adds (spec.ratio, spec.thresholdMax) are declared ONLY in the CRD
 # chart, and the 0.2.57 CRD sets neither `additionalProperties: false` nor
 # `x-kubernetes-preserve-unknown-fields` -- so the apiserver PRUNES them. An Alert carrying either
-# is accepted, returns no error, emits no event, and comes back without the field; thresholdMax is
-# required for thresholdType between/not_between, so a range alert is silently malformed rather
-# than refused. All 25 checks passed on that PR because nothing compared a component against its
-# own CRD chart, and tag 0.3.495 was cut from it 38 seconds after merge and published.
+# is accepted, returns no error, emits no event, and comes back without the field.
+#
+# The FIELD LOSS is silent; the consequence is not always. For THIS component a `between` Alert
+# missing thresholdMax is refused by HyperDX's schema with a 400, so it fails visibly (measured
+# 2026-11-04 from alert-provider main 8d83011 and HyperDX 2.35.0). Whether a dropped field becomes
+# a loud failure or a silently wrong computation depends on what reads it downstream, which this
+# gate cannot see -- so it refuses the skew either way.
+#
+# All 25 checks passed on that PR because nothing compared a component against its own CRD chart.
+# A whole-suite green says nothing about a dimension none of the checks measure. Tag 0.3.495 was
+# cut from it 38 seconds after merge and published.
 #
 # CALIBRATION, measured when this was written -- it is sensitive AND specific:
 #   main's pins (lockstep correct)                     -> pass, 9 compared, 1 named skip
