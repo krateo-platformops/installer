@@ -1,0 +1,65 @@
+{{/*
+  krateo-withheld-components — the comparison that made #614 findable, emitted by the installer
+  itself instead of requiring a benchmark harness to notice an absence.
+
+  WHAT IT IS FOR. The gate in compositions.yaml withholds a component silently: every
+  CompositionDefinition reports True/True, the composition CR is simply never created, and there is
+  no event, no failed resource and no degraded condition anywhere. An operator who enables the
+  observability tier without features.ingress gets an install that looks entirely healthy and emits
+  nothing, and the only way to notice is to observe an absence.
+
+  The one instrument that caught it was the snowplow bench's `declared CRs created 33/40`. Nothing
+  in the installer published that comparison, so it took an external harness to see a defect in
+  this chart. This publishes it: `declared`, `emitted`, `withheld`, and a line per withheld
+  component saying why IN WORDS.
+
+  THE INDIRECTION IS THE WHOLE POINT. krateo-observability declares no unsatisfied API group of its
+  own -- it is withheld because clickhouse-operator is, and clickhouse-operator's declaration is
+  the only place the real condition was recorded. So the reason is resolved transitively and
+  reported on the component the operator actually named.
+
+  Pure-data, no `lookup` of its own: it consumes the same $allCRDs slice compositions.yaml already
+  looked up, so it costs no extra API call. Composition-mode only and no managed-by label, for the
+  same reasons as installed-versions.yaml / secret.yaml.
+
+  NOT gated on a feature: a diagnostic that is only present when things are going well is useless.
+  It renders whenever the chart does, and is empty-but-present when nothing is withheld -- an empty
+  map and a missing map are different, and only one of them says "checked, nothing withheld".
+*/}}
+{{- if not .Values.bootstrap.coreProvider.enabled }}
+{{- $top := . }}
+{{- $components := (include "inst.componentsYaml" $ | fromYaml).components }}
+{{- $allCRDs := (lookup "apiextensions.k8s.io/v1" "CustomResourceDefinition" "" "").items }}
+{{- $declared := 0 }}
+{{- $emitted := 0 }}
+{{- $withheld := dict }}
+{{- range $c := $components }}
+{{- if not $c.registerOnly }}
+{{- if eq (include "inst.featureEnabled" (list $top $c.feature)) "true" }}
+{{- $declared = add1 $declared }}
+{{- $crd := include "inst.crdExists" (list $c.kind $c.version $allCRDs) }}
+{{- $deps := include "inst.depsReady" (list $top $c.deps $components $allCRDs) }}
+{{- $exists := include "inst.compositionExists" (list $top $c.kind $c.name $c.version $allCRDs) }}
+{{- $req := include "inst.requiresApiGroups" (list $c.requiresApiGroups $allCRDs) }}
+{{- if and (eq $crd "true") (eq $req "true") (or (eq $deps "true") (eq $exists "true")) }}
+{{- $emitted = add1 $emitted }}
+{{- else }}
+{{- $_ := set $withheld $c.name (include "inst.withheldReason" (list $top $c $components $allCRDs)) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: krateo-withheld-components
+  namespace: {{ .Values.namespaces.krateo }}
+data:
+  summary: {{ printf "declared=%d emitted=%d withheld=%d" $declared $emitted (len $withheld) | quote }}
+  {{- if not $withheld }}
+  note: "nothing withheld: every declared component passed the emission gate"
+  {{- end }}
+{{- range $name, $reason := $withheld }}
+  {{ $name }}: {{ $reason | quote }}
+{{- end }}
+{{- end }}
