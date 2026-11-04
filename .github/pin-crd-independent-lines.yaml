@@ -1,0 +1,27 @@
+# Pairs whose `<x>` and `<x>-crd` charts are on INDEPENDENT version lines, so the app's version is
+# not a CRD version and check-pin-crd-lockstep.py has nothing to compare.
+#
+# WHY THIS FILE EXISTS RATHER THAN A 404 PROBE. The gate originally inferred "independent lines"
+# from the CRD chart being absent at the app's version. That reads correctly from a workstation
+# logged in to ghcr.io -- and in CI, where the runner is anonymous, a PRIVATE cross-org package
+# answers `401 unauthorized` instead of `404 not found`. Same pin, same command, different verdict,
+# decided by whether the caller happens to hold credentials. An exemption that depends on the
+# reader's authentication state is not an exemption, so it is declared here instead.
+#
+# The gate VERIFIES each declaration whenever the chart is readable: if the CRD chart turns out to
+# exist at the app's version, the declaration is stale and the gate FAILS. So this file cannot rot
+# into a silent allowlist -- it is a claim that gets checked, not a suppression.
+
+independent:
+  - app: kagent
+    crd: kagent-crds
+    # Established 2026-11-04 by reading the registry with credentials:
+    #   oci://ghcr.io/krateo-agentiko/charts/kagent       0.1.18  -> exists
+    #   oci://ghcr.io/krateo-agentiko/charts/kagent-crds  0.1.18  -> 404 (does not exist)
+    #   oci://ghcr.io/krateo-agentiko/charts/kagent-crds  0.1.6   -> exists (the pinned version)
+    # kagent ships as two dependency-wrapper compositions (kagent-crds -> kagent) whose charts are
+    # versioned separately upstream, so the two numbers were never meant to line up.
+    reason: >-
+      kagent-crds has no release matching kagent's version line; the two charts are versioned
+      independently upstream. Verified by registry read on 2026-11-04 (kagent-crds 0.1.18 is a
+      404 while kagent 0.1.18 exists).

@@ -13,10 +13,14 @@ seconds after merge and published. Fixed by installer#634 / 0.3.496; this closes
 
 WHAT IT CHECKS, per `<x>` / `<x>-crd` pair in files/component-pins.yaml:
   versions equal                      -> OK, nothing to compare.
-  CRD chart ABSENT at the app version -> the two charts are on INDEPENDENT version lines
-                                         (kagent 0.1.18 vs kagent-crds 0.1.6, where
-                                         kagent-crds 0.1.18 is a 404). Reported as SKIP with
-                                         that reason -- NOT silently.
+  pair DECLARED independent            -> SKIP, named, from
+                                         .github/pin-crd-independent-lines.yaml. The declaration
+                                         is VERIFIED when the chart is readable: if the CRD chart
+                                         does exist at the app's version the declaration is stale
+                                         and this FAILS. A 404 is NOT used as the evidence -- an
+                                         authenticated reader sees 404 where an anonymous CI
+                                         runner sees 401 for the same private package, so that
+                                         inference depended on the caller's credentials.
   CRD chart present at both versions  -> render both and compare. FAIL if the app's version
                                          declares spec properties the PINNED crd version lacks,
                                          or adds a CRD, or changes an immutable field.
@@ -30,6 +34,7 @@ import json, os, subprocess, sys, tempfile
 PINS = os.environ.get("PINS", "chart/files/component-pins.yaml")
 DEFAULT_REPO = os.environ.get("OCI_REPO", "oci://ghcr.io/krateo-platformops/charts")
 IMMUTABLE = ("group", "scope", "conversion", "preserveUnknownFields")
+DECL_FILE = os.environ.get("DECL", ".github/pin-crd-independent-lines.yaml")
 
 def die(msg):
     print("::error::%s" % msg, file=sys.stderr)
@@ -43,14 +48,21 @@ except ImportError:
 def sh(args, timeout=180):
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
 
-def render(repo, chart, version):
-    """(docs, None) on success; (None, 'absent') when the version does not exist; dies otherwise."""
+def render(repo, chart, version, fatal=True):
+    """(docs, None) | (None, 'absent') | (None, 'unreadable'). Dies on anything else when fatal."""
     p = sh(["helm", "template", "probe", "%s/%s" % (repo.rstrip("/"), chart),
             "--version", version, "--namespace", "probe", "--include-crds"])
     if p.returncode != 0:
         blob = (p.stdout + p.stderr).lower()
+        # 401/403 must NOT be read as "absent": a private package answers 401 to an anonymous
+        # reader and 404 to an authenticated one, so conflating them makes the verdict depend on
+        # who is asking.
+        if "401" in blob or "403" in blob or "unauthorized" in blob or "denied" in blob:
+            return None, "unreadable"
         if "not found" in blob or "404" in blob:
             return None, "absent"
+        if not fatal:
+            return None, "unreadable"
         die("could not render %s/%s %s -- this gate cannot vouch for a chart it could not "
             "render, so it fails rather than skipping: %s"
             % (repo, chart, version, p.stderr.strip()[:300]))
@@ -81,6 +93,15 @@ def guards(crd):
         if spec.get("additionalProperties") is False: return True
         if spec.get("x-kubernetes-preserve-unknown-fields"): return True
     return False
+
+DECLARED = {}
+if os.path.exists(DECL_FILE):
+    dd = yaml.safe_load(open(DECL_FILE, encoding="utf-8")) or {}
+    for e in (dd.get("independent") or []):
+        DECLARED[(e["app"], e["crd"])] = (e.get("reason") or "").strip()
+    print("declared independent-line pairs: %d (from %s)" % (len(DECLARED), DECL_FILE))
+else:
+    print("no %s present; every differing pair must be comparable" % DECL_FILE)
 
 doc = yaml.safe_load(open(PINS, encoding="utf-8"))
 items = doc["components"] if isinstance(doc, dict) else doc
@@ -116,12 +137,35 @@ for app_name, crd_name, app, crd in pairs:
         checked += 1
         continue
 
-    at_app, absent = render(repo, crd_chart, av)
-    if absent:
-        skips.append((app_name, av, crd_name, cv, crd_chart))
-        print("  SKIP    %-26s %-10s vs %-26s %-10s  -- %s has no %s (404): the two charts are "
-              "on INDEPENDENT version lines, so the app version is not a CRD version"
-              % (app_name, av, crd_name, cv, crd_chart, av))
+    declared = DECLARED.get((app_name, crd_name))
+    at_app, why = render(repo, crd_chart, av, fatal=not declared)
+    if declared:
+        if at_app is not None:
+            failures.append(
+                "%s/%s is DECLARED on independent version lines in %s, but %s %s DOES exist -- the "
+                "declaration is stale and must be removed, then the pair compared properly. Reason "
+                "on file: %s" % (app_name, crd_name, DECL_FILE, crd_chart, av, declared))
+            continue
+        skips.append((app_name, av, crd_name, cv, crd_chart, why))
+        print("  SKIP    %-26s %-10s vs %-26s %-10s  -- declared independent lines (%s); probe "
+              "said %s, declaration holds"
+              % (app_name, av, crd_name, cv, DECL_FILE, why))
+        continue
+    if why == "unreadable":
+        failures.append(
+            "%s is pinned at %s and %s at %s, and %s/%s could not be READ (401/403) so the pair "
+            "cannot be compared. Either grant this job read access to that registry, or -- if the "
+            "two charts are genuinely on independent version lines -- declare the pair in %s with "
+            "the registry evidence. This is NOT skipped: an unreadable pair is indistinguishable "
+            "from the data-losing one." % (app_name, av, crd_name, cv, repo, crd_chart, DECL_FILE))
+        continue
+    if why == "absent":
+        failures.append(
+            "%s is pinned at %s but %s/%s does not exist at %s. If the two charts are on "
+            "independent version lines, declare the pair in %s with the registry evidence rather "
+            "than leaving the gate to infer it from a 404 -- that inference changes answer "
+            "depending on whether the reader is authenticated."
+            % (app_name, av, repo.rstrip("/"), crd_chart, av, DECL_FILE))
         continue
 
     at_pin, absent2 = render(repo, crd_chart, cv)

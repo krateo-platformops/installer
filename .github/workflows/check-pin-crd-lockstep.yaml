@@ -21,9 +21,16 @@ name: check-pin-crd-lockstep
 #                                                         the pin file documents pure-lockstep
 #                                                         holds as legitimate.
 #
-# kagent / kagent-crds are on INDEPENDENT version lines (kagent-crds has no 0.1.18; it is a 404),
-# so the app version is not a CRD version. The script reports that as a NAMED skip rather than
-# silently passing it, and no allowlist is needed -- the 404 is the evidence.
+# kagent / kagent-crds are on INDEPENDENT version lines, declared in
+# .github/pin-crd-independent-lines.yaml with the registry evidence.
+#
+# The first version of this gate inferred that from the CRD chart being ABSENT at the app's
+# version. That was wrong in a way only CI could show: a workstation logged in to ghcr.io gets
+# `404 not found` for krateo-agentiko's private package, while this anonymous runner gets
+# `401 unauthorized` for the same pin and the same command. The verdict depended on whether the
+# caller held credentials. So the exemption is now DECLARED, and the script VERIFIES the
+# declaration whenever the chart is readable -- if the CRD chart does exist at the app's version,
+# the declaration is stale and the gate fails. 401/403 is never read as "absent".
 #
 # NO `branches:` filter, deliberately -- see installer#633. A `branches: [main]` here means the
 # gate does not run on a stacked pull request, which then reports CLEAN with "all checks passed"
@@ -35,6 +42,10 @@ on:
 
 permissions:
   contents: read
+  # Needed to read this org's own private chart packages from ghcr.io. It does NOT grant
+  # cross-org access -- a private package in another org still answers 401, which the script
+  # reports as a named failure rather than skipping.
+  packages: read
 
 jobs:
   pin-crd-lockstep:
@@ -55,9 +66,12 @@ jobs:
       - name: Install PyYAML
         run: python3 -m pip install --quiet 'pyyaml==6.0.2'
 
-      # Anonymous read is enough: every pin's chart repo answered a `helm show chart` without
-      # credentials when this was written, across krateo-platformops, krateo-agentiko and
-      # krateo-blueprints. If one ever stops being readable the script FAILS rather than skipping,
-      # because a gate that cannot complete its check reads exactly like one that found nothing.
+      # Anonymous read is NOT enough, which is the thing CI taught this gate: the private
+      # packages in this org answer 401 to an unauthenticated runner. Log in with the run's own
+      # token so same-org charts are readable. Cross-org private packages remain unreadable and
+      # the script names them as failures rather than skipping.
+      - name: Registry login
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
       - name: Check app pins against their -crd pins
         run: python3 .github/scripts/check-pin-crd-lockstep.py
