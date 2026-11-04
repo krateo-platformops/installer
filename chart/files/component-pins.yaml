@@ -320,7 +320,7 @@ components:
   # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
   # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
   # holds anyway because none is at the path that matters -- but check the path, not the presence.)
-  version: 1.8.20
+  version: 1.8.21
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -2348,7 +2348,48 @@ components:
   # UNBLOCKS two acmp items: the X5 SLO alerts, which Diego's D4 gates on the frontend telemetry
   # fix (#588/#589), and the per-tenant "Service desk" nav entry plus retiring /support (#601,
   # which also needs portal 1.8.88 -- NOT pinned here, portal is still 1.8.87).
-  version: 1.8.20
+  # 1.8.21, AFTER 1.8.20 WAS PINNED, ROLLED TO DEMO AND ROLLED BACK. Recording the whole thing
+  # because the near-miss is worth more than the fix.
+  # 1.8.20 shipped 44 of 45 widget CRDs with an UNSATISFIABLE schema: `required: ['id']` under
+  # spec.resourcesRefsTemplate.items where properties are only {iterator, template}, with pruning
+  # on. A structural schema prunes unknown fields BEFORE validation, so supplying `id` does not
+  # help -- it is pruned, then `required` fails. No object can ever validate.
+  # Measured, published artifacts, discovery by `kind` recursively:
+  #   frontend-crds 1.8.16 -> 45 CRDs, 0 unsatisfiable
+  #   frontend-crds 1.8.20 -> 45 CRDs, 44 unsatisfiable
+  #   frontend-crds 1.8.21 -> 45 CRDs, 0 unsatisfiable
+  # 29 of 601 live widget CRs on demo (and 29 of 683 on 057) carry a resourcesRefsTemplate -- real
+  # action surfaces: alert pause/resume/delete, composition sync/pause/delete, incident
+  # apply/close/discard. Stored objects are NOT revalidated on a CRD change, so nothing broke on
+  # the CRD roll; the NEXT APPLY would have rejected all 29, surfacing at the PORTAL step after
+  # frontend reported success. The cdc's Observe is apply-if-changed, so with the widgets unchanged
+  # no apply was attempted and demo sat latent, everything green, for the ~25 minutes it took to
+  # find out. PINNING PORTAL 1.8.88 WOULD HAVE BEEN THE TRIGGER.
+  # NEVER PIN 1.8.17, 1.8.18, 1.8.19 or 1.8.20. 1.8.17-19 are image-only (chart stayed at 1.8.16,
+  # so a pin to 1.8.19 silently gives a 1.8.16 chart). 1.8.20 is published and POISONED; Diego
+  # declined deleting the tag, because removing a published OCI tag breaks referrers loudly rather
+  # than silently.
+  # THREE OF OUR INSTRUMENTS MISSED IT IN A ROW, each individually correct:
+  #   schema LENGTH         44 of 45 changed         noise
+  #   top-level spec props  +[] -[]                  the old lockstep check, blind
+  #   nested property PATHS 42 added / 0 removed     blind -- a `required` entry is a CONSTRAINT,
+  #                                                  not a path
+  # "Purely additive, safe to pin" followed VALIDLY from an instrument blind to the thing that
+  # mattered, and the nested walk had been built BECAUSE the gate above it was already known blind.
+  # check-pin-crd-lockstep.py now carries frontend's assertion -- no `required` entry may name a
+  # property its sibling `properties` does not define -- plus constraint diffing. Calibrated against
+  # these exact charts: fires 44 on 1.8.20, silent on 1.8.16 and 1.8.21.
+  # 1.8.21's fix is surgical: the diff across all 44 generated CRDs is exactly 44x `required:` and
+  # 44x `- id`, so none of #604's intentional changes are reverted.
+  # MY COUNT OF 45 vs frontend's 44 WAS A FINDING: the 45th is the hand-written
+  # templates/builders/Builder.yaml, in a subdirectory with a different extension, which their
+  # `templates/*.crd.yaml` glob could not see -- the one CRD a person can get wrong was the one
+  # their generator-defect gate skipped. Their #611 now discovers by `kind`. Mine always did.
+  # The 1.8.17-19 outage note in 0.3.505's tag said the broken chart-images gate stranded three
+  # GOOD releases. frontend has since corrected that: it also WITHHELD this defect, authored in
+  # that same window. Fixing the gate shipped it. A gate failing closed for the wrong reason is
+  # indistinguishable from protection while it holds.
+  version: 1.8.21
   deps:
   - frontend-crd
   - authn
@@ -3302,7 +3343,24 @@ components:
   # have silently dropped the `// empty` fix. Verified on the published chart -- 1 occurrence of
   # `[.compdef.status.resource // empty]`, 0 of the bare pre-fix form.
   # ARTIFACT: 625 files, 1515560 -> 1516342 bytes; only Chart.yaml and that one template differ.
-  version: 1.8.87
+  # 1.8.88: ONE commit, 4ee8b13 "feat(nav): map krateo.io/nav-link-only onto the nav item (#355)".
+  # Verified by rendering both versions rather than parsing the package: portal ships its CRD in
+  # templates/, so a raw parse of the chart sees ZERO CRDs and that is an artifact, not a finding.
+  # Rendered: 1 CRD at both versions, auditrecords.audit.krateo.io, spec sha256 IDENTICAL
+  # (2e46a518fb22c7163a848e8e). values.schema.json: 18 paths -> 18, none added or removed.
+  # Files differing: Chart.yaml, templates/rbac.cyberjoker-rbac.yaml,
+  # templates/restaction.sidebar-nav.yaml, values.schema.json, values.yaml.
+  # PORTAL IS THE ONE COMPONENT OF 68 THAT SHIPS CRDs IN templates/ WITH NO -crd SIBLING, so
+  # check-pin-crd-lockstep.py cannot pair it and does not cover it. That is stated in the gate's
+  # own docstring as a known hole. This pin was diffed by hand for exactly that reason.
+  # PAIRED WITH frontend #601 (1.8.20+, here 1.8.21): #601 + #355 together are acmp's per-tenant
+  # "Service desk" nav entry and retiring /support. Either alone is insufficient.
+  # The nav mechanism, from the template's own comment: a shared root carries the templated
+  # nav-path and NO label (it routes and owns the content); one generated object per tenant carries
+  # the label, the concrete path and krateo.io/nav-link-only (it links and owns nothing). ONLY the
+  # exact string "true" enables it, so a half-recognised truthy value fails visibly instead of
+  # silently claiming the route back.
+  version: 1.8.88
   deps:
   - frontend
   - git-provider
@@ -4452,7 +4510,7 @@ components:
   # No appVersion in this chart, so pin-ci reports n/a (no image, no component CI to resolve).
   kind: BuilderGate
   chart: builder-gate
-  version: 1.8.20
+  version: 1.8.21
   deps:
     - portal
     - kagent
