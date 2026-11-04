@@ -2763,6 +2763,61 @@ components:
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
 - name: portal
+  #
+  # 1.8.88 -> 1.8.90. Carries portal#362: the values.schema.json that service-desk-page needs for
+  # crdgen to derive its kind, which existed on main and in no release until 1.8.90.
+  #
+  # 17 of 17 charts published at 1.8.90, verified by frontend against the registry with 1.8.89 as
+  # the control -- their first probe reported 0 of 17 because it queried the wrong registry path,
+  # and the control returning "not found" too is what identified the probe rather than the release.
+  #
+  # ALSO VISIBLE AT 1.8.90, named rather than left to be found:
+  #   #360  a composition child's Ready=Unknown no longer renders as "pending" (which read as
+  #         progress). Ready=False is split: Pending/Updating were rendering red while genuinely in
+  #         progress, DriftNotConverging/AuthorizationDenied as transient when they are TERMINAL.
+  #   #363  a new Coverage column on the compositions table, blank except for
+  #         AvailablePartialCoverage. On 057 that is 30 of 85 compositions.
+  #
+  # MOVED TO 1.8.91 from 1.8.90 while this change was open, because 1.8.91 carries portal#365 --
+  # the retention fix -- so the schema and the data protection arrive in ONE pin instead of two.
+  # Verified in the PULLED charts with 1.8.90 beside them as the control, since a green release run
+  # is not a published chart:
+  #
+  #   portal 1.8.91             auditrecords.audit.krateo.io   resource-policy=keep  (1 of 39)
+  #   portal 1.8.90             auditrecords.audit.krateo.io   policy=None           (0 of 39)
+  #   service-desk-page 1.8.91  tickets.servicedesk.krateo.io  keep
+  #                             Namespace krateo-service-desk   keep                 (2 of 30)
+  #   service-desk-page 1.8.90  both policy=None                                     (0 of 30)
+  #
+  # The control is what makes "keep" mean anything: the same probe over 1.8.90 returns None for
+  # both, so a present reading is not the probe inventing a field.
+  #
+  # `krateo-service-desk-raise` deliberately gets NO keep: three widgets, no data, so keeping it
+  # would leave an empty namespace behind on every uninstall and protect nothing. Retention follows
+  # the DATA, not the chart.
+  #
+  # WHY THIS PIN WAS HELD FIRST, kept because the reasoning is what made it safe to take. Before
+  # 1.8.91, portal shipped `auditrecords.audit.krateo.io` with NO keep, measured live:
+  #   057   policy=None, owned by helm release `portal`, 2803 AuditRecord objects
+  #   demo  policy=None, 0 objects       CONTROL: incidents.observability.krateo.io -> keep
+  # The pin was held until the bump path was shown not to reach the delete, then taken:
+  #   isVersionMigrationHandover (cdc composition.go:1472, read at tag 2.13.57 -- the image BOTH
+  #   clusters run) compares compositionMeta.GetOriginVersion(mg), the write-once origin stamp,
+  #   falling back to the delivered apiVersion only for pre-stamp objects. That is core-provider
+  #   #168's fixed shape: a parent-rendered composition's bump reaches Delete and DECLINES to
+  #   uninstall. The earlier form compared the SERVED version and could lose the race -- portal
+  #   1.8.70 -> 1.8.71 lost it on 2026-10-13 and was saved only by an unrelated RBAC fault.
+  # So the bump cannot delete that CRD on these clusters. A genuine TEARDOWN still can, and there
+  # `keep` is the only protection -- which 1.8.91 now provides. Both halves are covered: the guard
+  # declines the uninstall on a bump, the annotation survives a real teardown.
+  #
+  # ONE PREDICTION NOT YET OBSERVED, flagged because this is the first bump after the keep lands. A
+  # kept object retains the PREVIOUS release's ownership metadata, and helm 3 re-adopts an existing
+  # object only when the new release's name and namespace match. frontend established that the
+  # umbrella renders the leaf CR WITH its release-name label already stamped, so a recreate brings
+  # `portal` back rather than minting a new name and there is nothing for the kept CRD to fail to
+  # adopt. That is REASONED, not observed. An ownership error on auditrecords is the signature if
+  # the reasoning is wrong, and the next bump is where it gets tested.
   # 1.8.86: COMMENT TEXT ONLY -- frontend#531 stage 3 of the composer->builder rename. PROVEN, not
   # inspected by eye. Seven files differ vs 1.8.85 (41 files, 168323 -> 168310 bytes):
   #   templates/_builder.tpl, restaction.blueprint-palette.yaml, restaction.blueprint-render-draft.yaml,
@@ -3418,7 +3473,7 @@ components:
   # the label, the concrete path and krateo.io/nav-link-only (it links and owns nothing). ONLY the
   # exact string "true" enables it, so a half-recognised truthy value fails visibly instead of
   # silently claiming the route back.
-  version: 1.8.88
+  version: 1.8.91
   deps:
   - frontend
   - git-provider
