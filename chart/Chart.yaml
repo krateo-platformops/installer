@@ -4,6 +4,29 @@ annotations:
   krateo.io/maturity: stable
   krateoSupportedVersion: '>= 2.5.1'
 apiVersion: v2
+# DECLARED FLOOR, enforced at RENDER so a cluster below it fails before anything installs.
+# Measured on published 0.3.504 BEFORE this line existed: helm template rendered IDENTICALLY
+# (rc=0, 2826 lines) at --kube-version 1.33.0, 1.35.0, 1.36.0 and 1.37.1. So the requirement
+# was documented at docs/usage.md:38 and in the README and enforced NOWHERE in the path a
+# customer takes -- core-provider and core-provider-crds both declare >=1.36.0-0 as
+# dependencies, and helm does NOT propagate a dependency kubeVersion to the parent render.
+# A customer on 1.33-1.35 installed cleanly and met the floor as a downstream failure.
+# WHAT IS ACTUALLY BINDING, and the precision matters because the obvious note overstates it:
+# the binding requirement is MutatingAdmissionPolicy, GA and on by default from 1.36 --
+# oasgen-provider stamps krateo.io/oas-version onto instances with it so a controller can
+# select the generation it owns. Below 1.36 nothing writes that label, the selector matches
+# nothing, and resources are SILENTLY UNMANAGED -- which looks like a stopped controller
+# rather than a version problem. CRD schema ratcheting is the other feature usually cited
+# with it and it is NOT binding: available since 1.33, so it constrains nobody here.
+# AND THERE IS NO REDUCED-FUNCTION PATH. oasgen-provider has a repair, backfillVersionLabel,
+# which stamps the CURRENT SERVED version because the storage version erases the apiVersion an
+# object was written as -- so under version coexistence it binds an instance to the WRONG
+# generation. The fallback is not less function, it is wrong and late, which is why refusing
+# is correct rather than conservative.
+# COST, stated: three currently-supported Kubernetes versions (1.33-1.35) are excluded, and
+# the failure is a refusal rather than a warning. Deliberate -- an install that comes up green
+# and reconciles nothing points at the controller instead of the cluster.
+kubeVersion: '>=1.36.0-0'
 appVersion: CHART_VERSION
 dependencies:
 # 2.13.46 IS A FLOOR, not merely the current version. Do not pin below it.
