@@ -6518,6 +6518,52 @@ components:
   # sibling of internalUrls: compositions.yaml sets this to exposure.port when it is set.
   internalPorts:
   - path: jwt.jwks.port
+- name: access-review-crd
+  # NEW COMPONENT, wired 2026-11-04. The CRD half of access-review, split into its own chart by
+  # acmp so it follows the 11-of-12 `-crds` convention instead of shipping crds/ inside the app
+  # chart. Verified: the main chart ships 0 files under crds/.
+  #
+  # ITS CRD CARRIES `helm.sh/resource-policy: keep` -- `accessreviewcampaigns.accessreview.krateo.io`
+  # holds campaign data, and without the keep an uninstall of this chart would cascade-delete every
+  # AccessReviewCampaign. Verified by rendering the published chart, not from the release note.
+  #
+  # No componentValues block: like alert-provider-crd and identity-lifecycle-crd, this chart exposes
+  # nothing overridable. Only a handful of the pins carry a -crd block and they are the ones with
+  # values worth setting.
+  kind: AccessReviewCrds
+  chart: access-review-crds
+  version: 0.1.8
+  tier: platform
+  feature: accessReview
+- name: access-review
+  # NEW COMPONENT, wired 2026-11-04 at 0.1.8. LANDS DARK: feature `accessReview` defaults FALSE,
+  # the convention for any new component -- `features.*` is inert on an upgrade, so enabling it is
+  # a deliberate CR edit rather than something a version bump can switch on.
+  #
+  # 0.1.7 WAS HELD AND NOT WIRED, and the reason is worth keeping because no offline check catches
+  # it. Its values.schema.json was `additionalProperties: false` and did NOT declare a `global`
+  # property, so the composition would have failed at install with a chart-inspector 500:
+  # chart-inspector injects helm's reserved `global` key at INSTALL time, and `helm lint` and
+  # `helm template` both pass because values.yaml has no `global`, so every offline check validates
+  # a document that never contains the field. Measured with two sibling controls:
+  #
+  #   access-review       0.1.7   additionalProperties=False  global=ABSENT   -> 500 at install
+  #   access-review       0.1.8   additionalProperties=False  global=present  -> OK
+  #   identity-lifecycle  0.1.4   additionalProperties=False  global=present  (control)
+  #   alert-provider      0.2.60  additionalProperties=False  global=present  (control)
+  #
+  # 0.1.8 is the fix (acmp #22, tag 710a81c) and carries a test that fails if the block is removed.
+  # Re-read from the PUBLISHED chart rather than taken on report, with 0.1.7 pulled beside it so the
+  # "present" reading could not be a mis-parse.
+  #
+  # The same class cost alert-troubleshooter a release in August (0.2.20 -> 0.2.21) and was found
+  # only by a live deploy. Four of five validation layers pass it.
+  kind: AccessReview
+  version: 0.1.8
+  deps:
+  - access-review-crd
+  tier: platform
+  feature: accessReview
 - name: gcp-configconnector-crd
   # 0.1.0: the ConfigConnector and ConfigConnectorContext CRDs, repackaged verbatim from the
   # upstream Config Connector operator release bundle (1.99.0). Published from the NEW
