@@ -5536,6 +5536,30 @@ components:
 # TakeOwnership / keep handling are unchanged from 2.13.46 through 2.13.54. #270's leaked-controller
 # code only reports.
 - name: incident-provider
+  #
+  # 0.6.1 -> 0.7.0, pinned ALONE. incident-provider and incident-provider-crd move together: one
+  # version line, and an app bumped past its -crd pin silently prunes fields.
+  #
+  # THE KEEP ANNOTATIONS ARE THE RISK HERE, and they were checked rather than relayed. This -crds
+  # chart carries `helm.sh/resource-policy: keep` on four objects; losing one on a bump would let
+  # helm delete a CRD and cascade-delete every Incident/IncidentApply instance with it. Rendered
+  # both versions and compared the whole set:
+  #
+  #   0.6.1 and 0.7.0, each: 4 objects rendered, 4 carrying helm.sh/resource-policy=keep
+  #     CustomResourceDefinition        incidentapplies.observability.krateo.io   keep
+  #     CustomResourceDefinition        incidents.observability.krateo.io         keep
+  #     MutatingAdmissionPolicy         incidentapply-requested-by                keep
+  #     MutatingAdmissionPolicyBinding  incidentapply-requested-by                keep
+  #   the two sets are IDENTICAL.
+  #
+  # The component owner had already verified this by rendering both; it is re-verified here rather
+  # than taken on report, because a lost keep annotation destroys data and the pin gate cannot see
+  # it -- that gate diffs CRD CONSTRAINTS and an annotation is not one.
+  #
+  # PRECONDITION, from the owner: the parents of this provider's kinds served by a cdc on >= 2.13.56.
+  # On krateo-demo the whole cdc population is {2.13.57: 42, 2.13.45: 2}, and the two below the floor
+  # are installers-v0-3-479/480-controller -- leaked controllers with no CompositionDefinition behind
+  # them (core-provider#327), driving nothing. So no live parent is below the floor.
   # chart == name, so no `chart:` field; incident-provider 0.6.1 in
   # ghcr.io/krateo-platformops/charts -- the same registry, only the name moved.
   # incident-controller 0.5.3 and 0.6.0 are BOTH HTTP 404: 0.5.2 is the last release under the old
@@ -5553,7 +5577,7 @@ components:
   # NOT block this cutover -- it means that until it lands, incident-provider's own reconcile errors
   # can open Incidents ABOUT incident-provider. A known cost, not a surprise.
   kind: IncidentProvider
-  version: 0.6.1
+  version: 0.7.0
   deps:
   - incident-provider-crd
   tier: observability
@@ -5572,7 +5596,7 @@ components:
   # The OCI repo does not change: both charts resolve at ghcr.io/krateo-platformops/charts.
   kind: IncidentProviderCrds
   chart: incident-provider-crds
-  version: 0.6.1
+  version: 0.7.0
   tier: observability
   feature: portal
 - name: alert-provider-crd
