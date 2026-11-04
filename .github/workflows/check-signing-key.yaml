@@ -1,0 +1,56 @@
+name: check-signing-key
+
+# Installer-specific guard: exercise inst.jwtSigningKeyPEM, the decision that either REUSES the
+# existing authn RS256 JWT signing key or generates a new one.
+#
+# WHY THIS ONE MATTERS MORE THAN ITS SIZE SUGGESTS. That key signs every JWT authn issues. If the
+# reuse arm stops firing, the else-arm generates a fresh key, helm applies it without complaint,
+# authn restarts with it, and every outstanding token is invalidated at once. Nothing errors. The
+# render succeeds, the Secret applies cleanly, and the only symptom is that every signed-in user
+# is logged out with no log line saying why. Silent rotation is indistinguishable from correct
+# operation in every signal this chart produces, so the only place to catch it is before it ships.
+#
+# WHY IT WAS UNTESTABLE UNTIL NOW. The decision used to sit inline in secret.yaml beside its own
+# `lookup` call, and `helm template` DISABLES lookup -- so a render could only ever exercise the
+# GENERATE arm, and the arm that runs on a live cluster was the one no test could reach. The
+# decision now takes the looked-up Secret as a parameter, which makes both arms reachable with no
+# cluster and no fake-cluster plugin.
+#
+# THE SELF-CHECK IS THE POINT. A gate asserting "a key came back" passes just as happily when the
+# WRONG key comes back, which is the actual failure mode. So the script mutates the real helper to
+# delete the reuse branch, re-renders, and refuses to pass unless that mutant is caught.
+#
+# WHAT A GREEN TICK HERE DOES NOT MEAN: it never executes `lookup` -- nothing cluster-free can. It
+# proves that IF the lookup finds the Secret, the key is reused. The lookup itself, its name and
+# its namespace are asserted textually against secret.yaml, which catches a rename or a deleted
+# call but not a lookup that returns empty for a reason only a cluster exhibits.
+
+on:
+  pull_request:
+      # NO `branches:` filter, deliberately -- same reason as check-ready-gate. A
+      # `branches: [main]` here means the gate does not run on a STACKED pull request, one whose
+      # base is another PR's branch. Such a PR then reports only the workflows that never had the
+      # filter and shows mergeable/CLEAN with "all checks passed", which reads as verified while
+      # every gate in this directory was skipped. Measured 2026-11-03 on the #623->#624->#625
+      # stack: #623 (base main) ran 25 checks, #624 and #625 ran 2.
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  signing-key:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Exercise the signing-key reuse decision
+        run: python3 .github/scripts/check-signing-key.py
