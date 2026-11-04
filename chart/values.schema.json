@@ -7981,7 +7981,7 @@
             },
             "enableIncidentResponse": {
               "type": "boolean",
-              "description": "Ships the sre-incident-responder ClusterRoleBinding (portal 1.8.85+, portal#341 fixing portal#340). DELIBERATELY WITHOUT A `default:`. It used to ride on enableDemoSystemNamespace, which granted it on installs that have no incident-controller \u2014 krateo-demo, where the dangling binding made snowplow emit a WARN per RBAC evaluation at ~790/s, 95% of all otel_logs, and filled ClickHouse. So unset must mean not-shipped. SET IT TRUE ON ANY INSTALL THAT HAS incident-controller, IN THE SAME UPGRADE THAT MOVES THE PORTAL PIN: the pin alone revokes the binding, and nothing fails closed or alerts when a binding disappears \u2014 which is how the original defect stayed invisible for six days. krateo-057 is such an install (incident-controller 0.5.0, enableDemoSystemNamespace true, the binding live). A `default:` here would propagate into the CR and re-create the original bug on every install that lacks the controller."
+              "description": "Ships the sre-incident-responder ClusterRoleBinding (portal 1.8.85+, portal#341 fixing portal#340). DELIBERATELY WITHOUT A `default:`. It used to ride on enableDemoSystemNamespace, which granted it on installs that have no incident-provider \u2014 krateo-demo, where the dangling binding made snowplow emit a WARN per RBAC evaluation at ~790/s, 95% of all otel_logs, and filled ClickHouse. So unset must mean not-shipped. SET IT TRUE ON ANY INSTALL THAT HAS incident-provider, IN THE SAME UPGRADE THAT MOVES THE PORTAL PIN: the pin alone revokes the binding, and nothing fails closed or alerts when a binding disappears \u2014 which is how the original defect stayed invisible for six days. krateo-057 is such an install (incident-provider present, enableDemoSystemNamespace true, the binding live as read on 2026-11-03). The component VERSION is deliberately not quoted here: it changes discontinuously, so a version in prose reads as a current fact long after it stops being one. A `default:` here would propagate into the CR and re-create the original bug on every install that lacks the controller."
             },
             "observability": {
               "type": "object",
@@ -9473,10 +9473,10 @@
             }
           }
         },
-        "incident-controller": {
+        "incident-provider": {
           "type": "object",
           "title": "Incident controller",
-          "description": "Runs each Incident's precondition and verify scripts in a read-only check pod and moves the incident through Open, Verifying, Resolved and Closed, and runs an IncidentApply's apply script as the user who created it. Full-coverage schema for the incident-controller chart (pinned 0.3.0). NOTE: no key here carries a `default` \u2014 a default on a componentValues leaf is applied into the live composition spec by core-provider and is therefore a silent override, not documentation.",
+          "description": "Runs each Incident's precondition and verify scripts in a read-only check pod and moves the incident through Open, Verifying, Resolved and Closed, and runs an IncidentApply's apply script as the user who created it. Full-coverage schema for the incident-provider chart (pinned 0.6.1). NOTE: no key here carries a `default` \u2014 a default on a componentValues leaf is applied into the live composition spec by core-provider and is therefore a silent override, not documentation.",
           "additionalProperties": false,
           "properties": {
             "global": {
@@ -9780,7 +9780,7 @@
                 "readerRefresh": {
                   "type": "string",
                   "pattern": "^[0-9]+(ns|us|ms|s|m|h)$",
-                  "description": "How often incident-controller rewrites the check pods' read role from discovery: get, list and watch on every resource but Secrets and subresources."
+                  "description": "How often incident-provider rewrites the check pods' read role from discovery: get, list and watch on every resource but Secrets and subresources."
                 },
                 "image": {
                   "type": "object",
