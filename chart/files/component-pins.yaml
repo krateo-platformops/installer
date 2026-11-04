@@ -6676,3 +6676,47 @@ components:
     - gcp-configconnector-crd
   tier: platform
   feature: configConnector
+- name: identity-lifecycle-crd
+  # NEW COMPONENT, wired 2026-11-04. The CRD half of identity-lifecycle, split out by acmp into its
+  # own chart so it follows the 11-of-12 `-crds` convention rather than shipping crds/ inside the
+  # app chart. Verified: the main chart ships 0 files under crds/.
+  #
+  # ITS CRD CARRIES `helm.sh/resource-policy: keep`, which is why this pin is safe to add at all:
+  # `userlifecycles.identity.krateo.io` holds user data, and without the keep an uninstall of this
+  # chart would cascade-delete every UserLifecycle. Verified by rendering the chart, not from the
+  # release note. (portal shipped `auditrecords.audit.krateo.io` without one on a cluster holding
+  # 2803 records; service-desk-page shipped its Ticket CRD the same way. acmp put keep on theirs
+  # before anyone asked.)
+  #
+  # No componentValues block: this chart exposes nothing overridable, same as alert-provider-crd.
+  # Only 5 of the 68 pins carry a -crd block and they are the ones with values worth setting.
+  kind: IdentityLifecycleCrds
+  chart: identity-lifecycle-crds
+  version: 0.1.4
+  tier: platform
+  feature: identityLifecycle
+- name: identity-lifecycle
+  # NEW COMPONENT, wired 2026-11-04. Reconciles downstream identity CRs for a user's lifecycle.
+  #
+  # LANDS DARK: feature `identityLifecycle` defaults FALSE, which is the convention for any new
+  # component. `features.*` is inert on an upgrade, so enabling it is a deliberate CR edit rather
+  # than something a version bump can switch on by accident.
+  #
+  # deps is the -crd half only. acmp confirmed there is no hard install order against anything
+  # else, and a cross-feature dep whose feature is OFF is safely suppressed rather than stalled.
+  #
+  # ARTIFACT VERIFIED BEFORE PINNING: identity-lifecycle and identity-lifecycle-crds both PULL at
+  # 0.1.4, same version from the same tag (f02fe9f). The -crds chart has NO appVersion, like
+  # alert-provider-crds, so check-pin-ci reports it CRD-only (n/a) rather than unverifiable.
+  #
+  # SCHEMA TRAP CHECKED, because its sibling failed it: a top-level `additionalProperties: false`
+  # schema MUST declare a `global` property, since chart-inspector injects helm's reserved `global`
+  # key at INSTALL time and neither `helm lint` nor `helm template` can see it (values.yaml has no
+  # `global`, so every offline check validates a document that never contains the field). This
+  # chart declares it. access-review 0.1.7 does NOT and is held unwired until 0.1.8 ships the fix.
+  kind: IdentityLifecycle
+  version: 0.1.4
+  deps:
+  - identity-lifecycle-crd
+  tier: platform
+  feature: identityLifecycle
