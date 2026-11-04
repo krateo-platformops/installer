@@ -5155,7 +5155,12 @@ components:
 #   metadata.finalizers == [] on both CRDs
 #   the Incident COUNT at that moment, not from a note -- mine read 444, then 621, then 623, then 665
 #     on demo across one night, which is what a counted population does
-#   installer 0.3.489 live, and step 1's CD krateo-system/incident-controller already NotFound on 057
+#   incident-controller AND incident-controller-crd at 0.5.2 live on both clusters -- NOT 0.5.3,
+#     which is unreleasable and 404 (see above). The installer version is deliberately NOT gated on
+#     here: it moves with every unrelated pin (it was 0.3.489 when this was written and is 0.3.494
+#     today), so a version in a gate line goes stale and invites whoever reads it to skip the line.
+#     What matters is the COMPONENT version the old release is at.
+#   step 1's CD krateo-system/incident-controller already NotFound on 057
 # If any is false, STOP.
 #
 # POST-READ, and this is the one that decides whether anything was lost:
@@ -5355,7 +5360,25 @@ components:
   # 0.2.57: PURE LOCKSTEP. Diffed, not inferred, per the note above: 0.2.55 vs 0.2.57 differ in exactly
   # one line -- Chart.yaml's own `version` -- with 5 files on each side, so the empty diff is not a failed
   # pull. Non-load-bearing, unlike 0.2.39/0.2.41/0.2.45. Taken only to keep the pair in lockstep.
-  version: 0.2.57
+  # 0.2.59: LOAD-BEARING, and #632 bumped alert-provider to 0.2.59 WITHOUT this, leaving main in a state
+  # that silently DROPS DATA. Diffed per the 0.2.42 note above rather than inferred from history:
+  #
+  #   alerts.observability.krateo.io   spec.properties   0.2.57: 10   0.2.59: 12
+  #     added: ratio (object), thresholdMax (number).   removed: none.   existing: unchanged.
+  #   metrics.observability.krateo.io  byte-identical across 0.2.57 -> 0.2.59
+  #   immutable fields (group / scope / names / versions[name,served,storage] / conversion /
+  #     preserveUnknownFields): ZERO diff on both CRDs
+  #   0.2.58 -> 0.2.59 is byte-identical on both CRDs, so 0.2.59 costs nothing over 0.2.58
+  #
+  # WHY HOLDING THIS AT 0.2.57 IS NOT MERELY STALE. The 0.2.57 alerts CRD declares NEITHER
+  # `additionalProperties: false` NOR `x-kubernetes-preserve-unknown-fields` -- measured, both absent at
+  # the root AND at spec -- so the apiserver PRUNES an undeclared field rather than rejecting it. An Alert
+  # written with `ratio` or `thresholdMax` against the 0.2.57 CRD is ACCEPTED, returns no error, emits no
+  # event, and comes back without the field. `thresholdMax` is required for thresholdType
+  # between/not_between, so a range alert would be silently malformed rather than refused.
+  # That is the exact failure the 0.2.42 note warns about, arriving from the other direction: there the
+  # risk was holding a load-bearing -crd bump, here it is the APP being bumped past a held -crd.
+  version: 0.2.59
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -5419,7 +5442,7 @@ components:
   # {precondition, apply, verify} and an optional rollback. The service's authn identity
   # (config.authnUrl) authenticates its A2A calls. The chart has no observer thread, and its schema
   # rejects config.reportCooldown and config.snowplowUrl.
-  version: 0.2.57
+  version: 0.2.59
   # 0.2.57 carries alert-provider#76 (provider-runtime v1.7.2) and #77, which adds 'incident-provider' to
   # DEFAULT_ALERTS_JSON's reconcile-error `NOT IN` list. Measured on the published chart here, not taken
   # from the release notes: rendered at --kube-version 1.33.0, rc=0, 294 -> 331 lines (floor asserted, so
