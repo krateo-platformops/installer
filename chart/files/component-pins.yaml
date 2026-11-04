@@ -320,7 +320,7 @@ components:
   # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
   # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
   # holds anyway because none is at the path that matters -- but check the path, not the presence.)
-  version: 1.8.21
+  version: 1.8.22
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1477,6 +1477,42 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+  #
+  # 1.8.21 -> 1.8.22 pinned ALONE, for portal#612: `template.id` is now REQUIRED on every
+  # resourcesRefsTemplate item. frontend, frontend-crd and builder-gate move together because they
+  # are one version line -- bumping an app past its -crd pin silently prunes fields.
+  #
+  # THIS IS A TIGHTENING, which is the dangerous shape: a new `required` REJECTS data that already
+  # exists, and the rejection lands at admission on whoever next applies the object, not on the
+  # roll. So it was measured against the live data BEFORE pinning, on both clusters:
+  #
+  #   what 1.8.22 actually tightens (required-list diff 1.8.21 -> 1.8.22):
+  #     exactly ONE new required key, `id`, at spec.resourcesRefsTemplate[].template, in 44 CRDs
+  #     45 CRDs on both sides, 0 unsatisfiable on both sides, 44 of 45 specs changed
+  #
+  #   live data, with the denominator at every step:
+  #     057   683 widget CRs -> 29 with a non-empty resourcesRefsTemplate -> 36 items carrying a
+  #           `template` object -> 0 whose template lacks `id`
+  #     demo  596 widget CRs -> 29 -> 36 -> 0
+  #
+  # So nothing live violates it. The denominators are reported because "0 violations" out of an
+  # unknown population is a claim about the query: 0 of 36 is a finding, 0 of 0 would have meant the
+  # tightening was simply unreachable in today's data and proved nothing about tomorrow's.
+  #
+  # RIDING ALONG, named rather than discovered -- #612 could not ship alone, because #608 and #611
+  # merged before it and no commit in main carries one without the others:
+  #   #611  CI only: the CRD satisfiability gate now discovers by `kind: CustomResourceDefinition`
+  #         recursively rather than by `*.crd.yaml`. No chart content.
+  #   #608  A REAL LOGIN-PATH CHANGE: the oidc/oauth callback page never rendered its error view at
+  #         all -- the mutation did not throw, so react-query read failure as success and a refused
+  #         sign-in sat on "Authentication in progress..." indefinitely. It also stops an unknown
+  #         4xx telling someone to check a password on a page with no password field. Diego approved
+  #         it riding along: it only changes what a FAILED sign-in shows, and replaces an infinite
+  #         spinner with an error. Watch the login path after the roll.
+  #
+  # "A pin of its own" means the ROLL is isolated, not the release: this bump is the only component
+  # moving, so anything that changes on a cluster afterwards is attributable to it or is not caused
+  # by it. Attribution was the property needed; release purity was not available.
   # 1.8.15: NO RUNTIME BEHAVIOUR CHANGE. Cut for provenance symmetry so portal 1.8.86's byte copies
   # reference a released revision rather than an unreleased main. Contents: frontend#530 (a jqcheck
   # fix that runs only in CI), #531 stage 3 of the composer->builder rename, #532 a corrected
@@ -2389,7 +2425,7 @@ components:
   # GOOD releases. frontend has since corrected that: it also WITHHELD this defect, authored in
   # that same window. Fixing the gate shipped it. A gate failing closed for the wrong reason is
   # indistinguishable from protection while it holds.
-  version: 1.8.21
+  version: 1.8.22
   deps:
   - frontend-crd
   - authn
@@ -4510,7 +4546,7 @@ components:
   # No appVersion in this chart, so pin-ci reports n/a (no image, no component CI to resolve).
   kind: BuilderGate
   chart: builder-gate
-  version: 1.8.21
+  version: 1.8.22
   deps:
     - portal
     - kagent
