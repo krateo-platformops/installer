@@ -6141,10 +6141,15 @@
                   "title": "Debug logging"
                 },
                 "OASGEN_PROVIDER_MAX_RECONCILE_RATE": {
-                  "type": [
-                    "integer",
-                    "string"
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string"
+                    }
                   ],
+                  "x-kubernetes-int-or-string": true,
                   "title": "Max reconcile rate"
                 }
               }
