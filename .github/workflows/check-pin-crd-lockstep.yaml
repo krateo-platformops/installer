@@ -1,0 +1,77 @@
+name: check-pin-crd-lockstep
+
+# Installer-specific guard: a component pin must not be AHEAD of its paired -crd pin in a way
+# that loses data.
+#
+# WHY. installer#632 bumped `alert-provider` 0.2.57 -> 0.2.59 and left `alert-provider-crd` at
+# 0.2.57. The two fields 0.2.59 adds (spec.ratio, spec.thresholdMax) are declared ONLY in the CRD
+# chart, and the 0.2.57 CRD sets neither `additionalProperties: false` nor
+# `x-kubernetes-preserve-unknown-fields` -- so the apiserver PRUNES them. An Alert carrying either
+# is accepted, returns no error, emits no event, and comes back without the field; thresholdMax is
+# required for thresholdType between/not_between, so a range alert is silently malformed rather
+# than refused. All 25 checks passed on that PR because nothing compared a component against its
+# own CRD chart, and tag 0.3.495 was cut from it 38 seconds after merge and published.
+#
+# CALIBRATION, measured when this was written -- it is sensitive AND specific:
+#   main's pins (lockstep correct)                     -> pass, 9 compared, 1 named skip
+#   0.3.495's exact pins (the real bug)                -> FAIL, naming [ratio, thresholdMax]
+#   mutant: snowplow-crd held one release back         -> pass, because 1.12.55 -> 1.12.56 adds
+#                                                         no spec property. A "versions must be
+#                                                         equal" gate would have failed this, and
+#                                                         the pin file documents pure-lockstep
+#                                                         holds as legitimate.
+#
+# kagent / kagent-crds are on INDEPENDENT version lines, declared in
+# .github/pin-crd-independent-lines.yaml with the registry evidence.
+#
+# The first version of this gate inferred that from the CRD chart being ABSENT at the app's
+# version. That was wrong in a way only CI could show: a workstation logged in to ghcr.io gets
+# `404 not found` for krateo-agentiko's private package, while this anonymous runner gets
+# `401 unauthorized` for the same pin and the same command. The verdict depended on whether the
+# caller held credentials. So the exemption is now DECLARED, and the script VERIFIES the
+# declaration whenever the chart is readable -- if the CRD chart does exist at the app's version,
+# the declaration is stale and the gate fails. 401/403 is never read as "absent".
+#
+# NO `branches:` filter, deliberately -- see installer#633. A `branches: [main]` here means the
+# gate does not run on a stacked pull request, which then reports CLEAN with "all checks passed"
+# while every gate was skipped.
+
+on:
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  # Needed to read this org's own private chart packages from ghcr.io. It does NOT grant
+  # cross-org access -- a private package in another org still answers 401, which the script
+  # reports as a named failure rather than skipping.
+  packages: read
+
+jobs:
+  pin-crd-lockstep:
+    name: pin-crd-lockstep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Helm setup
+        uses: azure/setup-helm@v5.0.0
+        with:
+          version: v3.19.0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet 'pyyaml==6.0.2'
+
+      # Anonymous read is NOT enough, which is the thing CI taught this gate: the private
+      # packages in this org answer 401 to an unauthenticated runner. Log in with the run's own
+      # token so same-org charts are readable. Cross-org private packages remain unreadable and
+      # the script names them as failures rather than skipping.
+      - name: Registry login
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Check app pins against their -crd pins
+        run: python3 .github/scripts/check-pin-crd-lockstep.py
