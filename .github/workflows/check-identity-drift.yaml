@@ -19,7 +19,13 @@ name: check-identity-drift
 
 on:
   pull_request:
-    branches: [main]
+      # NO `branches:` filter, deliberately. A `branches: [main]` here means the gate does
+      # not run on a STACKED pull request -- one whose base is another PR's branch rather than
+      # main. Such a PR then reports only `lint` (the one workflow that never had the filter)
+      # and shows mergeable/CLEAN with "all checks passed", which reads as verified while every
+      # gate in this directory was skipped. Measured 2026-11-03 on the #623->#624->#625 stack:
+      # #623 (base main) ran 25 checks, #624 and #625 ran 2. A gate that silently does not run
+      # is worse than no gate, because the green tick is read as its verdict.
   push:
     branches: [main]
   workflow_dispatch: {}
