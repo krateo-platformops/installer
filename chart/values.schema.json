@@ -269,6 +269,11 @@
           "type": "boolean",
           "default": false,
           "description": "Opt-in. Reconciles downstream identity CRs for a user's lifecycle (component identity-lifecycle, with identity-lifecycle-crd for its UserLifecycle CRD). Defaults false because it is a new component and `features.*` is inert on an upgrade, so enabling it is a deliberate CR edit rather than something a version bump can switch on. The CRD carries helm.sh/resource-policy: keep, so disabling the feature drains the component without deleting any UserLifecycle object."
+        },
+        "accessReview": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in. Periodic access-review campaigns over the roles Krateo binds (component access-review, with access-review-crd for its AccessReviewCampaign CRD). Defaults false because it is a new component and `features.*` is inert on an upgrade, so enabling it is a deliberate CR edit. The CRD carries helm.sh/resource-policy: keep, so disabling the feature drains the component without deleting any campaign."
         }
       }
     },
@@ -17214,6 +17219,219 @@
                           "fieldPath": {
                             "type": "string"
                           }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "podSecurityContext": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "runAsNonRoot": {
+                  "type": "boolean"
+                },
+                "runAsUser": {
+                  "type": "integer"
+                },
+                "runAsGroup": {
+                  "type": "integer"
+                }
+              }
+            },
+            "securityContext": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "allowPrivilegeEscalation": {
+                  "type": "boolean"
+                },
+                "readOnlyRootFilesystem": {
+                  "type": "boolean"
+                },
+                "capabilities": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "drop": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "access-review": {
+          "type": "object",
+          "additionalProperties": false,
+          "title": "Access Review",
+          "description": "Full-coverage override surface for the access-review chart (pinned 0.1.8). Every key of the chart's values.yaml is typed and nothing is left open: componentValues is additionalProperties:false and check-no-unknowns.py fails any PR reintroducing additionalProperties:true or x-kubernetes-preserve-unknown-fields. `resources`, `podSecurityContext` and `securityContext` are type:object with NO additionalProperties in the chart's own schema -- neither false nor true, so permissive -- and acmp confirmed the chart does not mean to accept arbitrary fields, so they are closed here to exactly the keys its values.yaml sets.",
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string"
+                },
+                "pullPolicy": {
+                  "type": "string"
+                }
+              }
+            },
+            "serviceAccount": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            },
+            "controller": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "debug": {
+                  "type": "boolean"
+                },
+                "pollInterval": {
+                  "type": "string"
+                },
+                "syncPeriod": {
+                  "type": "string"
+                },
+                "maxReconcileRate": {
+                  "type": "integer"
+                },
+                "leaderElection": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "rbac": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Roles the controller may bind, scoped by resourceNames. The chart's own schema forbids a wildcard and an empty name; those constraints are MIRRORED here so a componentValues override cannot widen what the chart itself refuses.",
+              "properties": {
+                "rebindableClusterRoles": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[^*/\\s]+$"
+                  }
+                },
+                "rebindableRoles": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "namespace",
+                      "names"
+                    ],
+                    "properties": {
+                      "namespace": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+                      },
+                      "names": {
+                        "type": "array",
+                        "minItems": 1,
+                        "uniqueItems": true,
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "pattern": "^[^*/\\s]+$"
                         }
                       }
                     }
