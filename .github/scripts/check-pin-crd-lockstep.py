@@ -21,6 +21,19 @@ denominator problem, and the only answer to a denominator problem is to add the 
 Tag 0.3.495 was cut from it 38 seconds after merge and published. installer#634 fixed the instance;
 this closes the class.
 
+COVERAGE, stated because it is NOT universal. This gate sees the CRDs of charts reachable
+through an `<x>`/`<x>-crd` PAIR. Per a survey of all 68 pins (2026-11-04): 11 components ship
+CRDs via a separate `-crds` chart and are covered here; `portal` ships its CRD inside
+`templates/` and has NO `-crd` sibling, so it is NOT covered by this gate and must be diffed by
+hand until it is paired or a second gate renders it; the other 56 pins ship no CRDs at all.
+A new CRD-shipping chart outside a pair would be invisible here -- that is a known hole, not an
+oversight, and it is why the coverage is written down.
+
+Discovery is by `kind: CustomResourceDefinition` over the RENDERED documents, never by filename.
+frontend's own equivalent gate globbed `templates/*.crd.yaml` and thereby skipped the one
+hand-written CRD in a subdirectory with a different extension -- the file a person is most likely
+to get wrong. A filename convention is a naming habit, not a contract.
+
 WHAT IT CHECKS, per `<x>` / `<x>-crd` pair in files/component-pins.yaml:
   versions equal                      -> OK, nothing to compare.
   pair DECLARED independent            -> SKIP, named, from
@@ -104,6 +117,89 @@ def guards(crd):
         if spec.get("x-kubernetes-preserve-unknown-fields"): return True
     return False
 
+CONSTRAINT_KEYS = ("required", "enum", "type", "format",
+                   "x-kubernetes-preserve-unknown-fields", "additionalProperties")
+
+def unsatisfiable(crd):
+    """Every `required` entry naming a property its SIBLING `properties` does not define.
+
+    This is a STANDALONE assertion: it needs no pair, no baseline, no fixtures and no cluster.
+    A structural schema prunes unknown fields BEFORE validation, so supplying the field does not
+    help -- it is pruned, then `required` fails. Such an item can NEVER validate. It is not a
+    tightening, it is unsatisfiable, and no amount of data makes it pass.
+
+    WHY THIS EXISTS (frontend 1.8.20, 2026-11-04). 44 of 45 widget CRDs shipped
+    `required: ['id']` under spec.resourcesRefsTemplate.items with properties only
+    {iterator, template}. Three of our instruments missed it IN A ROW and each was individually
+    correct: schema LENGTH changed on 44 of 45 (noise), top-level spec properties read +[] -[]
+    (this file's old check), and a deep walk of nested property PATHS read 42 added / 0 removed.
+    A `required` entry is a CONSTRAINT, not a path, so the path walk could not see it -- and
+    "purely additive, safe to pin" followed validly from an instrument blind to the thing that
+    mattered. 29 live widget CRs on each cluster carry a resourcesRefsTemplate and would have
+    been rejected on the next apply, surfacing at the PORTAL step, after frontend reported success.
+    """
+    out = []
+    def walk(node, path):
+        if isinstance(node, dict):
+            req, props = node.get("required"), node.get("properties")
+            if isinstance(req, list):
+                if isinstance(props, dict):
+                    for r in req:
+                        if r not in props:
+                            out.append((path or ".", r, sorted(props)))
+                else:
+                    for r in req:
+                        out.append((path or ".", r, "NO sibling `properties` at all"))
+            for k, v in node.items():
+                if isinstance(v, (dict, list)):
+                    walk(v, "%s.%s" % (path, k))
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                walk(v, "%s[%d]" % (path, i))
+    walk(crd.get("spec", {}), "")
+    return out
+
+def constraints(crd):
+    """{path: {key: value}} for every CONSTRAINT-bearing schema node.
+
+    The property-path set is not enough: a pin can tighten a schema without adding or removing a
+    single path -- a new `required`, a narrowed `enum`, a changed `type`, or pruning switched on.
+    Those reject or drop data that validated before, and the old check could not see any of them.
+    """
+    out = {}
+    def walk(node, path):
+        if isinstance(node, dict):
+            got = {k: node[k] for k in CONSTRAINT_KEYS if k in node}
+            if got:
+                out[path or "."] = got
+            for k, v in node.items():
+                if isinstance(v, (dict, list)):
+                    walk(v, "%s.%s" % (path, k))
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                walk(v, "%s[%d]" % (path, i))
+    walk(crd.get("spec", {}), "")
+    return out
+
+def tightened(old, new):
+    """Constraint changes in `new` that would REJECT or DROP data `old` accepted."""
+    bad = []
+    for path, nc in new.items():
+        oc = old.get(path, {})
+        on, nn = set(oc.get("required") or []), set(nc.get("required") or [])
+        if nn - on:
+            bad.append("%s: `required` GAINS %s" % (path, sorted(nn - on)))
+        oe, ne = oc.get("enum"), nc.get("enum")
+        if isinstance(oe, list) and isinstance(ne, list) and set(oe) - set(ne):
+            bad.append("%s: `enum` LOSES %s" % (path, sorted(set(oe) - set(ne))))
+        if "type" in oc and "type" in nc and oc["type"] != nc["type"]:
+            bad.append("%s: `type` %r -> %r" % (path, oc["type"], nc["type"]))
+        if oc.get("x-kubernetes-preserve-unknown-fields") and not nc.get("x-kubernetes-preserve-unknown-fields"):
+            bad.append("%s: preserve-unknown-fields WITHDRAWN -- unknown fields now pruned" % path)
+        if oc.get("additionalProperties") is not False and nc.get("additionalProperties") is False:
+            bad.append("%s: additionalProperties now false -- unknown fields now REJECTED" % path)
+    return bad
+
 DECLARED = {}
 if os.path.exists(DECL_FILE):
     dd = yaml.safe_load(open(DECL_FILE, encoding="utf-8")) or {}
@@ -185,6 +281,34 @@ for app_name, crd_name, app, crd in pairs:
         continue
 
     ca, cp = crds_of(at_app), crds_of(at_pin)
+
+    # --- STANDALONE: is the CRD this pin would INSTALL even satisfiable?
+    # Needs no pair, no baseline, no cluster. Runs on the PINNED side, because that is what the
+    # cluster gets. Also on the app side, since that is what the pin is being compared against.
+    for side, label, ver in ((cp, crd_name, cv), (ca, crd_chart, av)):
+        for cname, cobj in sorted(side.items()):
+            bad = unsatisfiable(cobj)
+            if bad:
+                shown = "; ".join("%s requires %r but siblings are %s" % (pth, r, sib)
+                                  for pth, r, sib in bad[:3])
+                failures.append(
+                    "%s %s ships an UNSATISFIABLE CRD %s: %d `required` entry/entries name a "
+                    "property their sibling `properties` does not define -- %s%s. Pruning strips "
+                    "unknown fields BEFORE validation, so supplying the field does not help: it is "
+                    "pruned, then `required` fails. No object can ever validate against this."
+                    % (label, ver, cname, len(bad), shown,
+                       " (+%d more)" % (len(bad) - 3) if len(bad) > 3 else ""))
+
+    # --- CONSTRAINT TIGHTENING between the two sides, which the property-path set cannot see
+    for cname in sorted(set(ca) & set(cp)):
+        t = tightened(constraints(cp[cname]), constraints(ca[cname]))
+        if t:
+            failures.append(
+                "%s: %s TIGHTENS constraints between pinned %s and app %s, which rejects or drops "
+                "data the pinned schema accepts: %s%s"
+                % (app_name, cname, cv, av, "; ".join(t[:4]),
+                   " (+%d more)" % (len(t) - 4) if len(t) > 4 else ""))
+
     added_crds = sorted(set(ca) - set(cp))
     if added_crds:
         failures.append("%s %s ships CRD(s) the pinned %s %s does not: %s"
