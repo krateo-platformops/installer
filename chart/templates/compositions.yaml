@@ -102,68 +102,15 @@
 {{/* registerOnly (catalog) blueprints are registered (definitions.yaml) but never auto-emitted —
      the operator/end-user instantiates them from the portal on demand. */}}
 {{- if $c.registerOnly }}{{- continue }}{{- end }}
-{{- $featOn := eq (include "inst.featureEnabled" (list $top $c.feature)) "true" }}
-{{/* THE SINGLE RESOLUTION of which apiVersion this component is emitted at (#477). The gate, the
-     existence check and the emitted `apiVersion:` all read $emit, because deriving that fact at
-     more than one call site is exactly how they came to disagree. See inst.emitTag: it returns the
-     target when the CRD serves it, the tag the LIVE INSTANCE is served at when the target is not
-     yet served (the bump instant -- this is the fix), and "" when there is nothing to preserve and
-     no version to emit at. */}}
-{{- $emit := include "inst.emitTag" (list $top $c.kind $c.name $c.version $allCRDs) }}
-{{- $crd  := ternary "true" "" (ne $emit "") }}
-{{- $render := "" }}
-{{- if $featOn }}
-{{/* install / steady-state: emit once the CRD is served and all deps are Ready (forward dep order).
-     THEN keep emitting it as long as the instance still EXISTS -- even if a dep goes transiently
-     not-Ready during churn (e.g. an engine restart flips dep instances not-Ready for a moment).
-     Without the `$exists` clause a momentary depsReady=false drops the instance from the manifest and
-     the cdc/helm PRUNES the live workload on that blip (observed 2026-07-08: frontend + kagent
-     instances, Deployments and Services deleted during an engine restart though their deps were Ready
-     seconds later). depsReady still gates the FIRST creation, so forward dependency order on bring-up
-     is preserved; real teardown is handled by the feature-OFF drain branch below, not by a lookup miss.
-     AND A VERSION BUMP IS NOT AMONG THE FLIPS THIS ESCAPE PROTECTS AGAINST. Everything above is
-     true of a dep going transiently not-Ready at a FIXED version, which is what it was written
-     for. It is NOT true across a bump: `$crd` is ANDed OUTSIDE the gate below, and inst.crdExists
-     demands a CRD SERVING the component's NEW version -- which no CRD does at the instant the
-     CompositionDefinition advances, because that advance is what causes crdgen to create it. So
-     the `and` short-circuits, `$exists` is never consulted, and a live composition is dropped from
-     the manifest exactly as if this escape did not exist. installer#477.
-
-     THE SAME CONSTRUCTION PRUNED 34 LIVE COMPOSITION CRs IN A SIBLING CHART on 2026-11-04: the
-     openstack umbrella's 0.3.32 -> 0.3.33 bump left 27 helm releases with no composition CR
-     driving them. Their escape is MORE permissive than ours -- version-agnostic where
-     inst.compositionExists is version-keyed -- and it made no difference, because the outer
-     conjunct fails first. A permissive escape is worth nothing inside a conjunct that goes false
-     before it is reached.
-
-     NOT A THEORETICAL WINDOW. core-provider measured their side: ApplyOrUpdateCRD waited on
-     `crd.IsReady`, which checks only `Established` -- already True from the PREVIOUS version and
-     never False across an update -- so the wait proved the CRD object existed, not that the new
-     version was served. core-provider#343 makes the update path's wait version-aware, bounding
-     the window by the apply instead of leaving it open-ended. It does NOT order that return
-     against this template's next render, and nothing on their side can.
-
-     So the remaining fix is here, and check-bump-instant.py pins the current behaviour as a
-     characterization written to FAIL when the expression below changes, so a fix cannot land
-     unnoticed. The shape proven in the sibling chart: resolve the emit version to one the cluster
-     actually SERVES, preferring the target, and have the gate and the emitted apiVersion call the
-     SAME resolver -- deriving that fact at two call sites is how theirs came to disagree. */}}
-{{- $deps := include "inst.depsReady" (list $top $c.deps $components $allCRDs) }}
-{{- $exists := include "inst.compositionExistsAtTag" (list $top $c.kind $c.name $emit) }}
-{{/* HARD API-group requirements are ANDed OUTSIDE the `$exists` escape on purpose. That escape rides
-     out a momentary depsReady flap without pruning a live workload; a missing API GROUP is not a
-     flap — chart-inspector cannot render the chart at all, so emitting anyway buys an endless 500.
-     See inst.requiresApiGroups for the 0.3.474 defect this prevents and why the unit is a group. */}}
-{{- $req := include "inst.requiresApiGroups" (list $c.requiresApiGroups $allCRDs) }}
-{{- if and (eq $crd "true") (eq $req "true") (or (eq $deps "true") (eq $exists "true")) }}{{- $render = "true" }}{{- end }}
-{{- else }}
-{{/* feature OFF -> reverse-dependency DRAIN: keep rendering (alive) until every component that
-     deps on this one is gone, so teardown is leaves-first and never deletes this component (or the
-     CRDs its release ships) out from under a still-present dependent. Dropped from the render — and
-     thus deleted by the cdc — only once inst.dependentsGone reports clear. */}}
-{{- if and (eq $crd "true") (ne (include "inst.dependentsGone" (list $top $c.name $components $allCRDs)) "true") }}{{- $render = "true" }}{{- end }}
-{{- end }}
-{{- if eq $render "true" }}
+{{/* THE EMISSION DECISION. One helper, read here and by withheld-components.yaml, returning the
+     apiVersion tag to emit at or "" to withhold -- see inst.emitDecision for why the gate, the
+     reporter and the explanation must not each derive this. It resolves to the target version when
+     the CRD serves it, to the tag the LIVE INSTANCE is served at when the target is not yet served
+     (the bump instant -- installer#477), and to "" when there is nothing to preserve and no version
+     to emit at. Feature-OFF reverse-dependency drain is inside it too, so a draining component is
+     likewise emitted at a tag the cluster actually serves. */}}
+{{- $emit := include "inst.emitDecision" (list $top $c $components $allCRDs) }}
+{{- if ne $emit "" }}
 {{- $spec := dict }}
 {{/* agentgateway-policies: the Service exists but no VALUES key of this chart creates it (the
      agentgateway controller provisions it from the Gateway), so there is nothing to flip — writing

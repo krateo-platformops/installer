@@ -37,11 +37,12 @@
 {{- if not $c.registerOnly }}
 {{- if eq (include "inst.featureEnabled" (list $top $c.feature)) "true" }}
 {{- $declared = add1 $declared }}
-{{- $crd := include "inst.crdExists" (list $c.kind $c.version $allCRDs) }}
-{{- $deps := include "inst.depsReady" (list $top $c.deps $components $allCRDs) }}
-{{- $exists := include "inst.compositionExists" (list $top $c.kind $c.name $c.version $allCRDs) }}
-{{- $req := include "inst.requiresApiGroups" (list $c.requiresApiGroups $allCRDs) }}
-{{- if and (eq $crd "true") (eq $req "true") (or (eq $deps "true") (eq $exists "true")) }}
+{{/* Read the DECISION, never a copy of it. This file used to restate the gate expression so it
+     could report on it; #477 then changed the gate and left the copy keyed on the pinned version,
+     so at the bump instant this reporter would have called "withheld" the component the gate
+     emits -- a report that contradicts the thing it reports on. inst.emitDecision is now the only
+     place the expression exists. */}}
+{{- if ne (include "inst.emitDecision" (list $top $c $components $allCRDs)) "" }}
 {{- $emitted = add1 $emitted }}
 {{- else }}
 {{- $_ := set $withheld $c.name (include "inst.withheldReason" (list $top $c $components $allCRDs)) }}

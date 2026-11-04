@@ -426,6 +426,42 @@ components:
 {{- $all -}}
 {{- end -}}
 
+{{/* THE EMISSION DECISION, in ONE place. args: (list $ $component $components $allCRDs)
+     Returns the apiVersion TAG to emit the component at, or "" to withhold it. Callers render iff
+     the result is non-empty and MUST use the returned tag as the emitted apiVersion.
+
+     It is one helper because it was three expressions. compositions.yaml held the live gate,
+     withheld-components.yaml held a SECOND copy of it for reporting, and inst.withheldReason
+     re-derived a third answer to explain the outcome. While every copy was keyed on the pinned
+     version they agreed by accident. #477 changed the live gate to resolve the emit tag to one the
+     cluster actually SERVES -- and the copies did not change, so at the bump instant the reporter
+     now calls "withheld" the very component the gate emits. Two gates cannot be kept in step by
+     care; the duplication is the defect. Hence: one decision, three readers.
+
+     registerOnly (catalog) blueprints are excluded by the CALLER (they are registered but never
+     auto-emitted), so this helper is never asked about them. */}}
+{{- define "inst.emitDecision" -}}
+{{- $top := index . 0 -}}{{- $c := index . 1 -}}{{- $comps := index . 2 -}}{{- $allCRDs := index . 3 -}}
+{{- $emit := include "inst.emitTag" (list $top $c.kind $c.name $c.version $allCRDs) -}}
+{{- if $emit -}}
+{{- if eq (include "inst.featureEnabled" (list $top $c.feature)) "true" -}}
+{{/* HARD API-group requirements are ANDed OUTSIDE the $exists escape on purpose: that escape rides
+     out a momentary depsReady flap without pruning a live workload, but a missing API GROUP is not a
+     flap -- chart-inspector cannot render the chart at all, so emitting anyway buys an endless 500. */}}
+{{- if eq (include "inst.requiresApiGroups" (list $c.requiresApiGroups $allCRDs)) "true" -}}
+{{- $deps := include "inst.depsReady" (list $top $c.deps $comps $allCRDs) -}}
+{{- $exists := include "inst.compositionExistsAny" (list $top $c.kind $c.name $allCRDs) -}}
+{{- if or (eq $deps "true") (eq $exists "true") -}}{{- $emit -}}{{- end -}}
+{{- end -}}
+{{- else -}}
+{{/* feature OFF -> reverse-dependency DRAIN: keep emitting until every component that deps on this
+     one is gone, so teardown is leaves-first and never deletes this component (or the CRDs its
+     release ships) out from under a still-present dependent. */}}
+{{- if ne (include "inst.dependentsGone" (list $top $c.name $comps $allCRDs)) "true" -}}{{- $emit -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
 {{/* Reverse-dependency TEARDOWN gate — the mirror of inst.depsReady. args: (list $ "componentName" $components)
      Returns "true" if NO still-present Composition depends on <componentName> (so it is safe to stop
      rendering it and let the cdc delete it). Returns "" while ANY dependent's Composition still exists,
@@ -441,24 +477,33 @@ components:
 {{- range $c := $comps -}}{{- if and (eq $c.name $name) $c.agent -}}{{- $isAgent = "true" -}}{{- end -}}{{- end -}}
 {{- range $c := $comps -}}
   {{- if and (has $name ($c.deps | default list)) (not (and $c.orchestrator (eq $isAgent "true"))) -}}
-    {{- if eq (include "inst.crdExists" (list $c.kind $c.version $allCRDs)) "true" -}}
-      {{- if (lookup (include "inst.apiVersion" (list $c.version)) $c.kind $top.Values.namespaces.krateo $c.name) -}}{{- $gone = "" -}}{{- end -}}
-    {{- end -}}
+    {{/* Ask about the dependent at the tag it is actually SERVED at, not at its pinned version
+         (#477 follow-on). The pinned form was correct while a composition could only exist at its
+         pinned GVK. inst.emitTag now deliberately keeps a live composition at an OLDER served tag
+         across a bump, so a lookup at the PINNED version MISSES an object that exists, $gone stays
+         "true", and the draining component is deleted WHILE A DEPENDENT IS STILL THERE -- the
+         exact outcome this helper exists to prevent, reintroduced by the fix for the other one. */}}
+    {{- if eq (include "inst.compositionExistsAny" (list $top $c.kind $c.name $allCRDs)) "true" -}}{{- $gone = "" -}}{{- end -}}
   {{- end -}}
 {{- end -}}
 {{- $gone -}}
 {{- end -}}
 
 {{/* Does a component's OWN Composition CR currently exist? args: (list $ "Kind" "name" "version")
-     Guarded by inst.crdExists (an unserved Kind is a hard error in chart-inspector), like inst.ready.
+     The typed lookup is safe because inst.emitTag only ever returns a SERVED tag (an unserved Kind
+     is a hard error in chart-inspector), so no unserved GVK is ever looked up.
      Used by Pass A (definitions.yaml) to keep a CompositionDefinition registered while its component
      is still present/draining — so the generated CRD OUTLIVES the Composition it serves and is never
      GC'd out from under a still-draining component (the Pass-A counterpart to inst.dependentsGone). */}}
 {{- define "inst.compositionExists" -}}
 {{- $top := index . 0 -}}{{- $kind := index . 1 -}}{{- $name := index . 2 -}}{{- $ver := index . 3 -}}{{- $allCRDs := index . 4 -}}
-{{- if eq (include "inst.crdExists" (list $kind $ver $allCRDs)) "true" -}}
-{{- if (lookup (include "inst.apiVersion" (list $ver)) $kind $top.Values.namespaces.krateo $name) -}}true{{- end -}}
-{{- end -}}
+{{/* Keyed on the tag the instance is actually SERVED at, not on $ver (#477 follow-on). This helper
+     answers "is this component still present?" for definitions.yaml, which uses it to keep a
+     CompositionDefinition REGISTERED while the component drains. A pinned-version lookup misses a
+     live CR that inst.emitTag is holding at an older served tag, so the definition would be
+     deregistered and the generated CRD GC'd out from under the live composition -- the orphaned-CR
+     outcome this helper was added to prevent. */}}
+{{- include "inst.compositionExistsAny" (list $top $kind $name $allCRDs) -}}
 {{- end -}}
 
 {{/* External IP of a browser-facing component's LoadBalancer Service. args: (list $ "svcNameSubstring")
@@ -771,11 +816,23 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- if $blockers -}}
 {{- printf "withheld: a dependency requires an API group the cluster does not serve -- %s" ($blockers | sortAlpha | join "; ") -}}
 {{- else -}}
-{{- $crd := include "inst.crdExists" (list $c.kind $c.version $allCRDs) -}}
-{{- if ne $crd "true" -}}
-{{- printf "withheld: no served CRD for kind %s at version %s yet (normal during a bump; persistent means crdgen rejected it)" $c.kind (toString $c.version) -}}
+{{/* Read the SAME resolver inst.emitDecision read, not a separately derived answer to a similar
+     question (#477 follow-on). A crdExists-at-the-pin check here names a reason the decision did
+     not act on, because the decision now accepts an older served tag. */}}
+{{- $etag := include "inst.emitTag" (list $top $c.kind $c.name $c.version $allCRDs) -}}
+{{/* Ask existence the way inst.emitDecision asks it -- version-agnostically. A reason derived from
+     a different question than the decision acted on is how this reporter came to contradict the
+     gate once already. */}}
+{{- $any := include "inst.compositionExistsAny" (list $top $c.kind $c.name $allCRDs) -}}
+{{- if not $etag -}}
+{{- printf "withheld: no CRD serves kind %s at version %s and no live instance exists at any served version to keep alive (normal before first creation; persistent means crdgen rejected the CRD)" $c.kind (toString $c.version) -}}
+{{- else if and ($c.deps | default list) (ne $any "true") -}}
+{{- printf "withheld: dependencies not Ready yet and no live instance to keep alive -- %s" (($c.deps | default list) | sortAlpha | join ",") -}}
 {{- else if ($c.deps | default list) -}}
-{{- printf "withheld: dependencies not Ready yet -- %s" (($c.deps | default list) | sortAlpha | join ",") -}}
+{{/* A live instance EXISTS and the CRD serves a version, so inst.emitDecision would have emitted
+     it on the $exists escape. If this component is nonetheless withheld, the gate and this
+     reporter disagree and that must be said, not papered over with the deps message. */}}
+{{- printf "withheld: NO REASON FOUND -- a live instance of %s/%s exists at a served version and the $exists escape should have emitted it, so the emission gate and this reporter disagree. That is a bug in one of them; please report it." $c.kind $c.name -}}
 {{- else -}}
 {{/* No deps, CRD served, no unmet groups -- the gate's own terms are all satisfied, so this
      component should have been emitted. Reaching here means the gate and this reporter disagree,
@@ -882,15 +939,32 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- include "inst.emitTagFrom" (list $want $servedStr $existing) -}}
 {{- end -}}
 
-{{/* inst.compositionExistsAtTag — does the live instance exist at THIS apiVersion tag?
+{{/* inst.compositionExistsAny — does the live instance exist at ANY SERVED tag?
+     args: (list $ "Kind" "name" $allCRDs)
 
-     inst.compositionExists takes a PIN version and derives the tag itself, which is right for a
-     caller that only knows the pin. The emission path already knows the tag it is going to emit at
-     (inst.emitTag), so it must ask about THAT tag rather than re-derive a possibly different one.
-     Deriving the same fact twice is how the gate and the emitter came to disagree (#477). */}}
-{{- define "inst.compositionExistsAtTag" -}}
-{{- $top := index . 0 -}}{{- $kind := index . 1 -}}{{- $name := index . 2 -}}{{- $tag := index . 3 -}}
-{{- if $tag -}}
-{{- if lookup (printf "composition.krateo.io/%s" $tag) $kind $top.Values.namespaces.krateo $name -}}true{{- end -}}
+     This is the right shape for every EXISTENCE question, and the wrong one for the emitted
+     apiVersion. The two must not share a helper, which is the mistake this replaces.
+
+     inst.emitTag PREFERS THE TARGET, correctly: once crdgen serves the new version that is what a
+     composition should be emitted at, so the cdc performs the origin-version migration. But asking
+     "does this still exist?" at the tag we would EMIT it at is a DIFFERENT question, and it is
+     wrong in a cell the first #477 fix did not cover: when the CRD serves the old AND the new
+     version and the instance has not migrated yet, inst.emitTag returns the new tag, a lookup
+     there MISSES the instance living at the old one, and the caller concludes it is gone. For
+     inst.dependentsGone that deletes a draining component WITH A DEPENDENT STILL PRESENT; for
+     inst.compositionExists it deregisters a CompositionDefinition under a live CR; for the gate's
+     own escape it prunes the instance it exists to protect.
+
+     krateo-blueprints' openstack umbrella uses a version-agnostic escape and said so; this is why.
+     An existence check must be permissive, because its job is to STOP a deletion. */}}
+{{- define "inst.compositionExistsAny" -}}
+{{- $top := index . 0 -}}{{- $kind := index . 1 -}}{{- $name := index . 2 -}}{{- $allCRDs := index . 3 -}}
+{{- $found := "" -}}
+{{- range $t := splitList " " (include "inst.servedTags" (list $kind $allCRDs)) -}}
+{{- if and (not $found) $t -}}
+{{- if lookup (printf "composition.krateo.io/%s" $t) $kind $top.Values.namespaces.krateo $name -}}{{- $found = "true" -}}{{- end -}}
 {{- end -}}
 {{- end -}}
+{{- $found -}}
+{{- end -}}
+
