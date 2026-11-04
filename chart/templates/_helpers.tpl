@@ -631,3 +631,35 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- end -}}
 {{ dict "components" (concat $components $extra) | toYaml }}
 {{- end -}}
+
+{{/* ---------------------------------------------------------------------------------------
+     inst.jwtSigningKeyPEM — resolve the authn RS256 JWT signing key.
+
+     TAKES THE LOOKED-UP SECRET AS A PARAMETER AND DOES NOT CALL `lookup` ITSELF. That is the
+     whole point of it existing: `helm template` DISABLES lookup, so while the reuse/generate
+     decision sat inline in secret.yaml next to its own `lookup` call, only ONE of its two arms
+     could ever be rendered — the generate arm, because lookup always came back empty. The arm
+     that matters could not be exercised without a cluster, and the arm that runs on a cluster
+     was the untested one.
+
+     WHY THE UNTESTED ARM IS THE DANGEROUS ONE. This key signs every JWT authn issues. If the
+     reuse arm ever fails to fire — a lookup that returns empty on a cluster where the Secret
+     exists, a renamed data key, a nil-map guard that stops matching — the else-arm generates a
+     NEW key, helm applies it, authn restarts with it, and EVERY OUTSTANDING TOKEN BECOMES
+     INVALID. There is no error anywhere: the render succeeds, the Secret applies cleanly, and
+     the only symptom is that every signed-in user is logged out at once and no log says why.
+     Rotation is indistinguishable from correct operation in every signal the chart produces.
+
+     So the decision is split out here where .github/scripts/check-signing-key.py can hand it
+     both a found Secret and nothing at all, assert the two differ, and assert the found case
+     returns THAT key rather than a fresh one. secret.yaml keeps the `lookup` and passes its
+     result in; the gate asserts that wiring textually, since it cannot execute it.
+     --------------------------------------------------------------------------------------- */}}
+{{- define "inst.jwtSigningKeyPEM" -}}
+{{- $found := index . 0 -}}
+{{- if and $found $found.data (hasKey $found.data "private.pem") -}}
+{{- index $found.data "private.pem" | b64dec -}}
+{{- else -}}
+{{- genPrivateKey "rsa" -}}
+{{- end -}}
+{{- end -}}
