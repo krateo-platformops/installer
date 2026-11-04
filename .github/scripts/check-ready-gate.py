@@ -70,6 +70,24 @@ CASES = [
     # and the contrast that makes the allowlist meaningful rather than permissive:
     ("Unknown/NotObserved must BLOCK",    [{"type": "Ready", "status": "Unknown", "reason": "NotObserved"}],       ""),
     ("Unknown/Forbidden must BLOCK",      [{"type": "Ready", "status": "Unknown", "reason": "Forbidden"}],         ""),
+    # core-provider#328's reason for "status.managed was never recorded". It is NOT allowlisted, and
+    # today it blocks for the weakest possible reason: there is no else-arm, so anything unmatched
+    # falls through. That is correct BY OMISSION. This case makes it correct BY INTENT.
+    #
+    # Why the distinction is worth a line of test: when #328 ships, the seven compositions on
+    # krateo-057 that currently report Unknown/ZeroEvidence will move to this reason and START
+    # BLOCKING their dependants, until each one's next Update writes its inventory and clears it.
+    # The obvious way to "fix" that noise is to allowlist this reason next to ZeroEvidence -- which
+    # would re-admit exactly the state the split was created to separate: a composition whose
+    # children were never recorded because of a defect, passing a readiness gate on a bug's output.
+    # With this case present, that change fails here and asks whoever makes it whether they meant it.
+    #
+    # The measurement behind it, 2026-11-04: 057 had 7 of 85 compositions with no status.managed key
+    # at all, every one reporting Unknown/ZeroEvidence with a deployed helm release and
+    # digest != managedDigest. demo had 0 of 43, with observability-page at the SAME chart version
+    # publishing 75 managed children there -- so it is not the chart and not the chart version.
+    ("Unknown/InventoryNotRecorded must BLOCK",
+                                          [{"type": "Ready", "status": "Unknown", "reason": "InventoryNotRecorded"}], ""),
 ]
 
 
