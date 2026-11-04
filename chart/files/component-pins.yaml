@@ -5155,7 +5155,12 @@ components:
 #   metadata.finalizers == [] on both CRDs
 #   the Incident COUNT at that moment, not from a note -- mine read 444, then 621, then 623, then 665
 #     on demo across one night, which is what a counted population does
-#   installer 0.3.489 live, and step 1's CD krateo-system/incident-controller already NotFound on 057
+#   incident-controller AND incident-controller-crd at 0.5.2 live on both clusters -- NOT 0.5.3,
+#     which is unreleasable and 404 (see above). The installer version is deliberately NOT gated on
+#     here: it moves with every unrelated pin (it was 0.3.489 when this was written and is 0.3.494
+#     today), so a version in a gate line goes stale and invites whoever reads it to skip the line.
+#     What matters is the COMPONENT version the old release is at.
+#   step 1's CD krateo-system/incident-controller already NotFound on 057
 # If any is false, STOP.
 #
 # POST-READ, and this is the one that decides whether anything was lost:
