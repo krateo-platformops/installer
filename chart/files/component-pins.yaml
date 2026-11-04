@@ -5158,8 +5158,23 @@ components:
   # `additionalProperties: false` NOR `x-kubernetes-preserve-unknown-fields` -- measured, both absent at
   # the root AND at spec -- so the apiserver PRUNES an undeclared field rather than rejecting it. An Alert
   # written with `ratio` or `thresholdMax` against the 0.2.57 CRD is ACCEPTED, returns no error, emits no
-  # event, and comes back without the field. `thresholdMax` is required for thresholdType
-  # between/not_between, so a range alert would be silently malformed rather than refused.
+  # event, and comes back without the field.
+  #
+  # CORRECTED 2026-11-04, from alert-provider's own code at main 8d83011 + HyperDX 2.35.0: the FIELD
+  # LOSS is silent but the CONSEQUENCE IS NOT. I first wrote "a range alert would be silently
+  # malformed rather than refused"; the second half is wrong. alert-provider sets AlertFields
+  # .ThresholdMax only when spec.thresholdMax is non-empty (alert.go:267) and then sends no
+  # thresholdMax key (hyperdx.go:504), and HyperDX's own schema refuses that at the API --
+  # validateAlertThresholdMax (common-utils types.ts:736, wired by superRefine at :822) raises when
+  # isRangeThresholdType and thresholdMax == null. So the push gets a 400, it fails, and the Alert
+  # carries the error and does NOT go Synced. No zero bound, no nil bound, no wrong evaluation.
+  # `spec.ratio` absent is simply unset in its exact meaning: Ratio == nil is a plain single-series
+  # Alert, the pre-0.2.58 behaviour (rules.go:109), and nothing else reads it.
+  #
+  # So this skew is a CORRECTNESS defect that fails visibly, not a silent-corruption one. Still worth
+  # the gate -- an Alert that cannot sync is a broken Alert -- but it is NOT core-provider's #293
+  # shape, where downstream logic branching on an absence produced 502 false drift reports in 20
+  # minutes. The difference is that nothing here treats the absence as a meaningful state.
   # That is the exact failure the 0.2.42 note warns about, arriving from the other direction: there the
   # risk was holding a load-bearing -crd bump, here it is the APP being bumped past a held -crd.
   version: 0.2.59
