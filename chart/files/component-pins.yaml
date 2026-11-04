@@ -3552,8 +3552,39 @@ components:
   feature: portal
 - name: compositions-page
   # Renders into krateo-compositions, which the chart creates. readerGroups admins + devs (chart values.yaml).
+  #
+  # 1.8.85 -> 1.8.89, and it is the ONLY portal-repo chart moving. The other four that 1.8.89
+  # touches (portal, blueprints-page, builders-page, reviews-page) deliberately stay at 1.8.85.
+  #
+  # WHY THIS ONE ALONE. 1.8.89's headline change, portal#356 "a value spliced into a path is one
+  # segment", is PROACTIVE: it prepares for escaping enforcement that exists in NO released
+  # snowplow. Confirmed from the snowplow side -- `segments(E)` is PR #1128, UNMERGED, held for the
+  # release after 1.12.65. So #356 fixes nothing today in any of the six charts it touches, and
+  # pinning the whole set for it would ship a fix that does not yet fix anything while reading, in
+  # this file, as though it had.
+  #
+  # compositions-page is different because it ALSO carries a live user-visible fix: getEvents no
+  # longer triggers a privileged unscoped `/events?limit=200` when the caller cannot read the
+  # composition -- the card keeps its empty state instead. A refused caller causing an unscoped
+  # cluster-wide event read is worth closing on its own.
+  #
+  # RIDING ALONG, named rather than discovered: portal#332, "resolve x-krateo-options sources as
+  # form refs; splice identity at the top level" -- a FORM BEHAVIOUR change, not a bug fix. The pin
+  # gate cannot see it: that gate diffs CRD constraints and #332 touches none. It also lands in
+  # blueprints-page, which is one reason that chart is NOT bumped here.
+  #
+  # ORDERING DEBT, recorded so it is not rediscovered under time pressure: when snowplow#1128 lands
+  # and that snowplow is pinned, all five #356 charts MUST move BEFORE it. snowplow holds the same
+  # note, so it does not rest on this file alone.
+  #
+  # 1.8.89 was initially a PARTIAL release -- release-oci failed after publishing 16 of 17 charts
+  # and compositions-page was the one that did not land (bare `push failed`, with the same
+  # credentials that pushed the other 16 seconds earlier). frontend re-ran it; 17 of 17 now
+  # published, verified by enumerating the repo's charts rather than spot-checking. The cause of the
+  # original push failure is still UNKNOWN -- it did not recur, which is evidence of a blip and not
+  # proof of one. Pinned only after confirming 1.8.89 pulls: version 1.8.89, appVersion 1.8.89.
   kind: CompositionsPage
-  version: 1.8.85
+  version: 1.8.89
   deps:
   - portal
   tier: platform
