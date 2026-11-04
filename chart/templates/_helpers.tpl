@@ -275,6 +275,37 @@ components:
      ZeroEvidence means "we do not know", and a dependant must not be blocked forever on
      ignorance that is a steady state rather than a transient.
 
+     ZeroEvidence DOES NOT MEAN "the composition has no children", and this comment used to
+     imply that it did. Corrected 2026-11-04 against core-provider's source (childhealth.go:155):
+     a composition that genuinely manages nothing takes the PRESENT-AND-EMPTY branch and reports
+     Ready=True / reason=Available. It never reaches ZeroEvidence. So the justification for this
+     arm is NOT "no children, nothing to converge to".
+
+     ZeroEvidence is emitted for TWO different situations, and only one of them justifies this arm:
+
+       1. status.managed was NEVER RECORDED (`!found`). A DEFECT -- core-provider#326: absent
+          inventory means no drift is reported, so Observe says up-to-date, so Update never runs,
+          and Update is the only writer of status.managed. Self-perpetuating.
+       2. The children ARE recorded and NONE of them publish readiness this controller can read
+          (unevaluated+unreadable == total, total > 0). Legitimate, permanent, #165's case: a
+          blueprint whose children are all custom resources with vocabularies only their own
+          authors know never becomes interpretable.
+
+     THIS ARM IS RIGHT FOR (2) AND WRONG FOR (1), and (1) is live. Measured on 2026-11-04:
+     krateo-057 has 7 of 85 compositions with no status.managed key at all, every one of them
+     reporting Unknown/ZeroEvidence with a deployed helm release and digest != managedDigest --
+     agentgateway-policies, observability-page, portal-agents, alerts-page, blueprints-page,
+     builders-page, config-refs-mcp-server. krateo-demo has 0 of 43, with observability-page at
+     the SAME chart version publishing 75 managed children there. So it is not the chart: those
+     seven are passing this gate on the strength of a bug's output, and their dependants are being
+     emitted on that basis.
+
+     DELIBERATELY NOT CHANGED. Refusing ZeroEvidence today would gate real dependants -- the 8
+     below -- on a condition no operator can clear, which is the same trap pointed the other way.
+     The fix is a SECOND reason word so a consumer can tell (1) from (2), by exactly the argument
+     that separated ChildrenForbidden from NotObserved. core-provider is taking that to Diego;
+     when the word exists, meaning (1) must NOT pass and this arm keeps meaning (2) only.
+
      KEYED ON `reason`, NEVER ON MESSAGE TEXT. The caveat message is prose and will be
      reworded; a gate reading prose breaks silently when it is.
 
