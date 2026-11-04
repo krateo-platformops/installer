@@ -2483,7 +2483,7 @@ components:
   # 0.15.0 adds status.templatingErrors to LocalResource+Repo — must move in lockstep with the
   # provider (was skewed 0.14.2 vs provider 0.14.1 for 10 days). 0.15.1 = security-only (no CRD
   # change); kept in lockstep with the provider to preserve the no-skew invariant.
-  version: 0.15.7
+  version: 0.16.0
   tier: platform
   feature: portal
   # 0.15.5 (#27, fixes #26): a Repo whose PUSH LANDED but whose status write afterwards hit a 409 stayed
@@ -2505,6 +2505,28 @@ components:
   # Repos and all 146 marker-carrying LocalResources carry -succeeded too and must NOT move; movement
   # there is a stop signal, not a success.
 - name: git-provider
+  #
+  # 0.15.7 -> 0.16.0, pinned ALONE. git-provider and git-provider-crd move together: one version
+  # line, and an app bumped past its -crd pin silently prunes fields.
+  #
+  # PRECONDITION, from the component owner: the parents of this provider's kinds must be served by a
+  # cdc on >= 2.13.56 -- for git-provider, the Repo and LocalResource children of portal's
+  # builder-publish. Measured on krateo-demo rather than assumed, and the answer has two halves that
+  # must be read together:
+  #
+  #   cdc controller versions, whole population:  {2.13.57: 42, 2.13.45: 2}
+  #     the two below 2.13.56 are installers-v0-3-479/480-controller -- LEAKED controllers with no
+  #     CompositionDefinition behind them (core-provider#327). They drive nothing, so no LIVE parent
+  #     is below the floor.
+  #   live instances of the kinds:  repoes 0, repositories 0, localresources 0
+  #
+  # So the precondition holds AND is currently UNEXERCISED. A zero population means this pin cannot
+  # break those kinds today -- and equally that nothing here demonstrates the precondition is
+  # satisfied in practice. Both halves are recorded because the first alone reads as verification.
+  #
+  # NOT COVERED BY THE PIN GATE: the owner verified by rendering both charts that nothing in this
+  # bump changes a CRD schema in a way needing special ordering. That gate diffs CRD constraints; it
+  # would not see a change to annotations, RBAC or templates. This rests on their render.
   kind: GitProvider
   chart: git-provider
   # 0.15.0: #6 bearer auth no longer requires usernameRef (the real fix for the wedged publish
@@ -2515,7 +2537,7 @@ components:
   # advisories: agent-constraint drop, key-constraint enforcement, VerifiedPublicKeyCallback skew,
   # @revoked auth bypass), go-git 5.19.2, moby/spdystream 0.5.1 (HIGH CRI DoS). git-provider speaks
   # SSH/git to forges so these matter here; 0.15.0 (running on 057) has them unpatched.
-  version: 0.15.7
+  version: 0.16.0
   deps:
   - git-provider-crd
   tier: platform
