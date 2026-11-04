@@ -5155,18 +5155,11 @@ components:
 #   metadata.finalizers == [] on both CRDs
 #   the Incident COUNT at that moment, not from a note -- mine read 444, then 621, then 623, then 665
 #     on demo across one night, which is what a counted population does
-#   incident-controller-crd at 0.5.2 live on BOTH clusters -- NOT 0.5.3, which is unreleasable and
-#     404 (see above). Its feature is `portal`, enabled on both, so both must have it.
-#   incident-controller at 0.5.2 live on 057 ONLY, and ASSERTED ABSENT on krateo-demo. Its feature
-#     is `specialistAgents`, which is True on 057 and FALSE on demo, so it legitimately never ran
-#     there. An earlier version of this line said "both clusters" and was UNSATISFIABLE -- found by
-#     running the gate, not by reading it, which is the only way that kind of line gets found.
-#     Assert it ABSENT on demo rather than skipping demo: a skipped arm and a passing arm look the
-#     same, and if specialistAgents is ever enabled there the premise changes silently.
-#   The installer version is deliberately NOT gated on here: it moves with every unrelated pin (it
-#     was 0.3.489 when this was first written and is 0.3.497 today), so a version in a gate line
-#     goes stale on its own and invites whoever reads it to skip the line. What matters is the
-#     COMPONENT version the old release is at.
+#   incident-controller AND incident-controller-crd at 0.5.2 live on both clusters -- NOT 0.5.3,
+#     which is unreleasable and 404 (see above). The installer version is deliberately NOT gated on
+#     here: it moves with every unrelated pin (it was 0.3.489 when this was written and is 0.3.494
+#     today), so a version in a gate line goes stale and invites whoever reads it to skip the line.
+#     What matters is the COMPONENT version the old release is at.
 #   step 1's CD krateo-system/incident-controller already NotFound on 057
 # If any is false, STOP.
 #
@@ -5286,6 +5279,57 @@ components:
 #   #   # with alert-provider (same repo tag). Public krateo-platformops chart.
 #   #
 #
+# CUTOVER STEP 3 OF 3: the replacement controller. 057 ONLY -- krateo-demo does not serve
+# incidentcontrollers.composition.krateo.io and never ran the controller.
+# TAG AND ROLL ONLY AFTER step 1's CD krateo-system/incident-controller reads NotFound and step 2's
+# CRD swap has been verified (both CRDs present, counts intact, release-name re-stamped, keep intact).
+#
+# AND AFTER Namespace/krateo-incident-checks IS GONE. provider-runtime found this and I verified it on
+# both sides: incident-controller 0.5.2 AND incident-provider 0.6.1 each render
+# `kind: Namespace` krateo-incident-checks with NO helm.sh/resource-policy: keep (only the two CRDs
+# and the viewer/responder ClusterRoles carry keep), both labelled managed-by: Helm. On krateo-057 it
+# is live and Active, 31d, and the LIVE release manifest confirms keep=<NONE>.
+#   -> step 1's uninstall DELETES it
+#   -> Namespace deletion is ASYNCHRONOUS: it sits Terminating while its pods, ServiceAccount and
+#      Roles finalize
+#   -> if step 3 installs during that window the create is REFUSED --
+#      "namespace krateo-incident-checks is being terminated" -- and the composition errors
+# A CD being NotFound does NOT imply the Namespace is gone, which is exactly why this needs its own
+# line rather than riding on step 1's check:
+#   kubectl --context <057> get ns krateo-incident-checks   -> must be NotFound, not Terminating
+# Read the name from the LIVE release values rather than assuming the default, since
+# .Values.checks.namespace is overridable; on 057 today it resolves to krateo-incident-checks.
+# Note there is also a SEPARATE Namespace krateo-incidents (12d) on 057 which this does not touch.
+#
+# core-provider 2.13.54, which 0.3.492 ships, does not change this: provider-runtime checked that
+# #299 ("never take Namespace ownership from another manager") does not apply because both charts'
+# Namespace carries managed-by: Helm, and deletesInstances / drainFinalizerBoundChildren /
+# TakeOwnership / keep handling are unchanged from 2.13.46 through 2.13.54. #270's leaked-controller
+# code only reports.
+- name: incident-provider
+  # chart == name, so no `chart:` field; incident-provider 0.6.1 in
+  # ghcr.io/krateo-platformops/charts -- the same registry, only the name moved.
+  # incident-controller 0.5.3 and 0.6.0 are BOTH HTTP 404: 0.5.2 is the last release under the old
+  # name, so this is a rename of a live component and there is no version at which both are current.
+  #
+  # SERVICE NAME CHANGES, AND IT REACHED TWO OTHER COMPONENTS. provider-runtime read tag 0.6.0:
+  # main.go:34 sets serviceName = "incident-provider", main.go:63 passes it to the OTel handler, the
+  # rendered chart carries no OTEL_SERVICE_NAME override, and app.kubernetes.io/name is
+  # incident-provider. At 0.5.2 it was incident-controller. So each reconcile-error detector that
+  # excludes this component BY ServiceName had to learn the new name:
+  #   alert-provider 0.2.57         NOT IN list      SHIPPED, and live on 057 since installer 0.3.491
+  #   krateo-observability 0.1.24   five detectors   HELD by pin-ci, see its own pin
+  # Both lists name the OLD and the NEW service, so they are additive and a late roll costs alert
+  # noise in the window rather than breakage. krateo-observability 0.1.24 being held therefore does
+  # NOT block this cutover -- it means that until it lands, incident-provider's own reconcile errors
+  # can open Incidents ABOUT incident-provider. A known cost, not a surprise.
+  kind: IncidentProvider
+  version: 0.6.1
+  deps:
+  - incident-provider-crd
+  tier: observability
+  feature: specialistAgents
+
 - name: incident-provider-crd
   # Renamed from incident-controller-crd. The kind MUST follow the chart name -- it is not a free
   # choice. core-provider's crdgen derives it as
