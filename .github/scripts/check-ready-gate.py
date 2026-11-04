@@ -13,6 +13,12 @@ WHAT IT MUST DISCRIMINATE, and the middle two are the point:
 
     Ready=True                            -> ready
     Ready=Unknown reason=ZeroEvidence     -> ready      the cdc evaluated NONE of the children
+    Ready=Unknown reason=ChildrenForbidden -> ready     core-provider#318: a 403 reading a child.
+                                                        A STEADY state -- it persists until an
+                                                        operator changes a Role -- so blocking a
+                                                        dependant on it would block forever.
+    Ready=Unknown reason=NotObserved      -> NOT ready   the TRANSIENT kind: an Observe failed and
+                                                        the next may succeed. Refused on purpose.
     Ready=Unknown reason=Creating         -> NOT ready   a genuinely converging dep MUST block
     Ready=False  reason=Creating          -> NOT ready   core-provider#230's new emitter: a
                                                          composition whose render shrank
@@ -58,6 +64,12 @@ CASES = [
     ("no conditions",                     [],                                                                     ""),
     # A non-Ready condition carrying the magic reason must not satisfy the gate.
     ("Synced=Unknown/ZeroEvidence only",  [{"type": "Synced", "status": "Unknown", "reason": "ZeroEvidence"}],     ""),
+    # core-provider#318: a 403 reading a managed child. Accepted for the SAME reason as
+    # ZeroEvidence -- a 403 from the authorization layer is a steady state, not a stage.
+    ("Unknown/ChildrenForbidden",         [{"type": "Ready", "status": "Unknown", "reason": "ChildrenForbidden"}], "true"),
+    # and the contrast that makes the allowlist meaningful rather than permissive:
+    ("Unknown/NotObserved must BLOCK",    [{"type": "Ready", "status": "Unknown", "reason": "NotObserved"}],       ""),
+    ("Unknown/Forbidden must BLOCK",      [{"type": "Ready", "status": "Unknown", "reason": "Forbidden"}],         ""),
 ]
 
 

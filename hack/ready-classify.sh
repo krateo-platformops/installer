@@ -45,7 +45,11 @@ classify_ready() {
       # Unknown is ONLY acceptable for the one reason that means "zero children were evaluated".
       # Bare Unknown must NOT be accepted: a genuinely converging child also reports Unknown, and
       # that one has to be waited for rather than waved through.
-      if [ "$rsn" = "ZeroEvidence" ]; then printf 'zeroevidence'; else printf 'fail'; fi ;;
+      # ChildrenForbidden (core-provider#318) joins it: a 403 reading a child is a STEADY state,
+      # unlike NotObserved which is the transient kind and stays refused.
+      if [ "$rsn" = "ZeroEvidence" ]; then printf 'zeroevidence';
+      elif [ "$rsn" = "ChildrenForbidden" ]; then printf 'childrenforbidden';
+      else printf 'fail'; fi ;;
     *) printf 'fail' ;;
   esac
 }
