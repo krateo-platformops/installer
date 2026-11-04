@@ -2483,7 +2483,7 @@ components:
   # 0.15.0 adds status.templatingErrors to LocalResource+Repo — must move in lockstep with the
   # provider (was skewed 0.14.2 vs provider 0.14.1 for 10 days). 0.15.1 = security-only (no CRD
   # change); kept in lockstep with the provider to preserve the no-skew invariant.
-  version: 0.15.7
+  version: 0.16.0
   tier: platform
   feature: portal
   # 0.15.5 (#27, fixes #26): a Repo whose PUSH LANDED but whose status write afterwards hit a 409 stayed
@@ -2505,6 +2505,28 @@ components:
   # Repos and all 146 marker-carrying LocalResources carry -succeeded too and must NOT move; movement
   # there is a stop signal, not a success.
 - name: git-provider
+  #
+  # 0.15.7 -> 0.16.0, pinned ALONE. git-provider and git-provider-crd move together: one version
+  # line, and an app bumped past its -crd pin silently prunes fields.
+  #
+  # PRECONDITION, from the component owner: the parents of this provider's kinds must be served by a
+  # cdc on >= 2.13.56 -- for git-provider, the Repo and LocalResource children of portal's
+  # builder-publish. Measured on krateo-demo rather than assumed, and the answer has two halves that
+  # must be read together:
+  #
+  #   cdc controller versions, whole population:  {2.13.57: 42, 2.13.45: 2}
+  #     the two below 2.13.56 are installers-v0-3-479/480-controller -- LEAKED controllers with no
+  #     CompositionDefinition behind them (core-provider#327). They drive nothing, so no LIVE parent
+  #     is below the floor.
+  #   live instances of the kinds:  repoes 0, repositories 0, localresources 0
+  #
+  # So the precondition holds AND is currently UNEXERCISED. A zero population means this pin cannot
+  # break those kinds today -- and equally that nothing here demonstrates the precondition is
+  # satisfied in practice. Both halves are recorded because the first alone reads as verification.
+  #
+  # NOT COVERED BY THE PIN GATE: the owner verified by rendering both charts that nothing in this
+  # bump changes a CRD schema in a way needing special ordering. That gate diffs CRD constraints; it
+  # would not see a change to annotations, RBAC or templates. This rests on their render.
   kind: GitProvider
   chart: git-provider
   # 0.15.0: #6 bearer auth no longer requires usernameRef (the real fix for the wedged publish
@@ -2515,7 +2537,7 @@ components:
   # advisories: agent-constraint drop, key-constraint enforcement, VerifiedPublicKeyCallback skew,
   # @revoked auth bypass), go-git 5.19.2, moby/spdystream 0.5.1 (HIGH CRI DoS). git-provider speaks
   # SSH/git to forges so these matter here; 0.15.0 (running on 057) has them unpatched.
-  version: 0.15.7
+  version: 0.16.0
   deps:
   - git-provider-crd
   tier: platform
@@ -2741,6 +2763,61 @@ components:
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
 - name: portal
+  #
+  # 1.8.88 -> 1.8.90. Carries portal#362: the values.schema.json that service-desk-page needs for
+  # crdgen to derive its kind, which existed on main and in no release until 1.8.90.
+  #
+  # 17 of 17 charts published at 1.8.90, verified by frontend against the registry with 1.8.89 as
+  # the control -- their first probe reported 0 of 17 because it queried the wrong registry path,
+  # and the control returning "not found" too is what identified the probe rather than the release.
+  #
+  # ALSO VISIBLE AT 1.8.90, named rather than left to be found:
+  #   #360  a composition child's Ready=Unknown no longer renders as "pending" (which read as
+  #         progress). Ready=False is split: Pending/Updating were rendering red while genuinely in
+  #         progress, DriftNotConverging/AuthorizationDenied as transient when they are TERMINAL.
+  #   #363  a new Coverage column on the compositions table, blank except for
+  #         AvailablePartialCoverage. On 057 that is 30 of 85 compositions.
+  #
+  # MOVED TO 1.8.91 from 1.8.90 while this change was open, because 1.8.91 carries portal#365 --
+  # the retention fix -- so the schema and the data protection arrive in ONE pin instead of two.
+  # Verified in the PULLED charts with 1.8.90 beside them as the control, since a green release run
+  # is not a published chart:
+  #
+  #   portal 1.8.91             auditrecords.audit.krateo.io   resource-policy=keep  (1 of 39)
+  #   portal 1.8.90             auditrecords.audit.krateo.io   policy=None           (0 of 39)
+  #   service-desk-page 1.8.91  tickets.servicedesk.krateo.io  keep
+  #                             Namespace krateo-service-desk   keep                 (2 of 30)
+  #   service-desk-page 1.8.90  both policy=None                                     (0 of 30)
+  #
+  # The control is what makes "keep" mean anything: the same probe over 1.8.90 returns None for
+  # both, so a present reading is not the probe inventing a field.
+  #
+  # `krateo-service-desk-raise` deliberately gets NO keep: three widgets, no data, so keeping it
+  # would leave an empty namespace behind on every uninstall and protect nothing. Retention follows
+  # the DATA, not the chart.
+  #
+  # WHY THIS PIN WAS HELD FIRST, kept because the reasoning is what made it safe to take. Before
+  # 1.8.91, portal shipped `auditrecords.audit.krateo.io` with NO keep, measured live:
+  #   057   policy=None, owned by helm release `portal`, 2803 AuditRecord objects
+  #   demo  policy=None, 0 objects       CONTROL: incidents.observability.krateo.io -> keep
+  # The pin was held until the bump path was shown not to reach the delete, then taken:
+  #   isVersionMigrationHandover (cdc composition.go:1472, read at tag 2.13.57 -- the image BOTH
+  #   clusters run) compares compositionMeta.GetOriginVersion(mg), the write-once origin stamp,
+  #   falling back to the delivered apiVersion only for pre-stamp objects. That is core-provider
+  #   #168's fixed shape: a parent-rendered composition's bump reaches Delete and DECLINES to
+  #   uninstall. The earlier form compared the SERVED version and could lose the race -- portal
+  #   1.8.70 -> 1.8.71 lost it on 2026-10-13 and was saved only by an unrelated RBAC fault.
+  # So the bump cannot delete that CRD on these clusters. A genuine TEARDOWN still can, and there
+  # `keep` is the only protection -- which 1.8.91 now provides. Both halves are covered: the guard
+  # declines the uninstall on a bump, the annotation survives a real teardown.
+  #
+  # ONE PREDICTION NOT YET OBSERVED, flagged because this is the first bump after the keep lands. A
+  # kept object retains the PREVIOUS release's ownership metadata, and helm 3 re-adopts an existing
+  # object only when the new release's name and namespace match. frontend established that the
+  # umbrella renders the leaf CR WITH its release-name label already stamped, so a recreate brings
+  # `portal` back rather than minting a new name and there is nothing for the kept CRD to fail to
+  # adopt. That is REASONED, not observed. An ownership error on auditrecords is the signature if
+  # the reasoning is wrong, and the next bump is where it gets tested.
   # 1.8.86: COMMENT TEXT ONLY -- frontend#531 stage 3 of the composer->builder rename. PROVEN, not
   # inspected by eye. Seven files differ vs 1.8.85 (41 files, 168323 -> 168310 bytes):
   #   templates/_builder.tpl, restaction.blueprint-palette.yaml, restaction.blueprint-render-draft.yaml,
@@ -3396,7 +3473,7 @@ components:
   # the label, the concrete path and krateo.io/nav-link-only (it links and owns nothing). ONLY the
   # exact string "true" enables it, so a half-recognised truthy value fails visibly instead of
   # silently claiming the route back.
-  version: 1.8.88
+  version: 1.8.91
   deps:
   - frontend
   - git-provider
@@ -5536,6 +5613,30 @@ components:
 # TakeOwnership / keep handling are unchanged from 2.13.46 through 2.13.54. #270's leaked-controller
 # code only reports.
 - name: incident-provider
+  #
+  # 0.6.1 -> 0.7.0, pinned ALONE. incident-provider and incident-provider-crd move together: one
+  # version line, and an app bumped past its -crd pin silently prunes fields.
+  #
+  # THE KEEP ANNOTATIONS ARE THE RISK HERE, and they were checked rather than relayed. This -crds
+  # chart carries `helm.sh/resource-policy: keep` on four objects; losing one on a bump would let
+  # helm delete a CRD and cascade-delete every Incident/IncidentApply instance with it. Rendered
+  # both versions and compared the whole set:
+  #
+  #   0.6.1 and 0.7.0, each: 4 objects rendered, 4 carrying helm.sh/resource-policy=keep
+  #     CustomResourceDefinition        incidentapplies.observability.krateo.io   keep
+  #     CustomResourceDefinition        incidents.observability.krateo.io         keep
+  #     MutatingAdmissionPolicy         incidentapply-requested-by                keep
+  #     MutatingAdmissionPolicyBinding  incidentapply-requested-by                keep
+  #   the two sets are IDENTICAL.
+  #
+  # The component owner had already verified this by rendering both; it is re-verified here rather
+  # than taken on report, because a lost keep annotation destroys data and the pin gate cannot see
+  # it -- that gate diffs CRD CONSTRAINTS and an annotation is not one.
+  #
+  # PRECONDITION, from the owner: the parents of this provider's kinds served by a cdc on >= 2.13.56.
+  # On krateo-demo the whole cdc population is {2.13.57: 42, 2.13.45: 2}, and the two below the floor
+  # are installers-v0-3-479/480-controller -- leaked controllers with no CompositionDefinition behind
+  # them (core-provider#327), driving nothing. So no live parent is below the floor.
   # chart == name, so no `chart:` field; incident-provider 0.6.1 in
   # ghcr.io/krateo-platformops/charts -- the same registry, only the name moved.
   # incident-controller 0.5.3 and 0.6.0 are BOTH HTTP 404: 0.5.2 is the last release under the old
@@ -5553,7 +5654,7 @@ components:
   # NOT block this cutover -- it means that until it lands, incident-provider's own reconcile errors
   # can open Incidents ABOUT incident-provider. A known cost, not a surprise.
   kind: IncidentProvider
-  version: 0.6.1
+  version: 0.7.0
   deps:
   - incident-provider-crd
   tier: observability
@@ -5572,7 +5673,7 @@ components:
   # The OCI repo does not change: both charts resolve at ghcr.io/krateo-platformops/charts.
   kind: IncidentProviderCrds
   chart: incident-provider-crds
-  version: 0.6.1
+  version: 0.7.0
   tier: observability
   feature: portal
 - name: alert-provider-crd
@@ -6621,3 +6722,47 @@ components:
     - gcp-configconnector-crd
   tier: platform
   feature: configConnector
+- name: identity-lifecycle-crd
+  # NEW COMPONENT, wired 2026-11-04. The CRD half of identity-lifecycle, split out by acmp into its
+  # own chart so it follows the 11-of-12 `-crds` convention rather than shipping crds/ inside the
+  # app chart. Verified: the main chart ships 0 files under crds/.
+  #
+  # ITS CRD CARRIES `helm.sh/resource-policy: keep`, which is why this pin is safe to add at all:
+  # `userlifecycles.identity.krateo.io` holds user data, and without the keep an uninstall of this
+  # chart would cascade-delete every UserLifecycle. Verified by rendering the chart, not from the
+  # release note. (portal shipped `auditrecords.audit.krateo.io` without one on a cluster holding
+  # 2803 records; service-desk-page shipped its Ticket CRD the same way. acmp put keep on theirs
+  # before anyone asked.)
+  #
+  # No componentValues block: this chart exposes nothing overridable, same as alert-provider-crd.
+  # Only 5 of the 68 pins carry a -crd block and they are the ones with values worth setting.
+  kind: IdentityLifecycleCrds
+  chart: identity-lifecycle-crds
+  version: 0.1.4
+  tier: platform
+  feature: identityLifecycle
+- name: identity-lifecycle
+  # NEW COMPONENT, wired 2026-11-04. Reconciles downstream identity CRs for a user's lifecycle.
+  #
+  # LANDS DARK: feature `identityLifecycle` defaults FALSE, which is the convention for any new
+  # component. `features.*` is inert on an upgrade, so enabling it is a deliberate CR edit rather
+  # than something a version bump can switch on by accident.
+  #
+  # deps is the -crd half only. acmp confirmed there is no hard install order against anything
+  # else, and a cross-feature dep whose feature is OFF is safely suppressed rather than stalled.
+  #
+  # ARTIFACT VERIFIED BEFORE PINNING: identity-lifecycle and identity-lifecycle-crds both PULL at
+  # 0.1.4, same version from the same tag (f02fe9f). The -crds chart has NO appVersion, like
+  # alert-provider-crds, so check-pin-ci reports it CRD-only (n/a) rather than unverifiable.
+  #
+  # SCHEMA TRAP CHECKED, because its sibling failed it: a top-level `additionalProperties: false`
+  # schema MUST declare a `global` property, since chart-inspector injects helm's reserved `global`
+  # key at INSTALL time and neither `helm lint` nor `helm template` can see it (values.yaml has no
+  # `global`, so every offline check validates a document that never contains the field). This
+  # chart declares it. access-review 0.1.7 does NOT and is held unwired until 0.1.8 ships the fix.
+  kind: IdentityLifecycle
+  version: 0.1.4
+  deps:
+  - identity-lifecycle-crd
+  tier: platform
+  feature: identityLifecycle

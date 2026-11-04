@@ -265,6 +265,11 @@
           "default": false,
           "description": "Opt-in showback (usage/cost records). Default false because it is only useful once its ClickHouse target exists: the chart's migration creates the `showback` database and its tables on first start, against the clickstack ClickHouse that features.portal brings up via krateo-observability. Enabling it without that ClickHouse leaves the pod retrying its migration. NOTE: features.* is EXCLUDED from the self-bootstrap upgrade patch, so setting this in a values file on an UPGRADE is silently inert — enabling it on a live cluster is an Installer CR edit."
         },
+        "identityLifecycle": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in. Reconciles downstream identity CRs for a user's lifecycle (component identity-lifecycle, with identity-lifecycle-crd for its UserLifecycle CRD). Defaults false because it is a new component and `features.*` is inert on an upgrade, so enabling it is a deliberate CR edit rather than something a version bump can switch on. The CRD carries helm.sh/resource-policy: keep, so disabling the feature drains the component without deleting any UserLifecycle object."
+        },
         "accessReview": {
           "type": "boolean",
           "default": false,
@@ -17008,6 +17013,285 @@
                 },
                 "imageRegistry": {
                   "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "identity-lifecycle": {
+          "type": "object",
+          "additionalProperties": false,
+          "title": "Identity Lifecycle",
+          "description": "Full-coverage override surface for the identity-lifecycle chart (pinned 0.1.4). Every key of the chart's values.yaml is typed here and nothing is left open: componentValues is additionalProperties:false and CI (check-no-unknowns.py) fails any PR reintroducing additionalProperties:true or x-kubernetes-preserve-unknown-fields. `resources`, `podSecurityContext` and `securityContext` are type:object with NO additionalProperties in the chart's own schema -- neither false nor true, so permissive -- and acmp confirmed neither chart means to accept arbitrary fields, so they are closed here to exactly the keys their values.yaml sets. `extraEnv` items are bare type:object upstream and are closed here to the EnvVar shape.",
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string"
+                },
+                "pullPolicy": {
+                  "type": "string"
+                }
+              }
+            },
+            "serviceAccount": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            },
+            "controller": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "debug": {
+                  "type": "boolean"
+                },
+                "pollInterval": {
+                  "type": "string"
+                },
+                "syncPeriod": {
+                  "type": "string"
+                },
+                "maxReconcileRate": {
+                  "type": "integer"
+                },
+                "leaderElection": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "identityProvider": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "secretNamespaces": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "identityResources": {
+              "type": "array",
+              "description": "Downstream identity CRs the controller may list and delete. No wildcards: the chart's own schema forbids apiGroup '*' and forbids '*' or 'secrets' as a resource, and those constraints are mirrored here so a componentValues override cannot widen what the chart refuses.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "apiGroup",
+                  "resources"
+                ],
+                "properties": {
+                  "apiGroup": {
+                    "type": "string",
+                    "not": {
+                      "const": "*"
+                    }
+                  },
+                  "resources": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "not": {
+                        "enum": [
+                          "*",
+                          "secrets"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "extraEnv": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  },
+                  "valueFrom": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "secretKeyRef": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "key": {
+                            "type": "string"
+                          },
+                          "optional": {
+                            "type": "boolean"
+                          }
+                        }
+                      },
+                      "configMapKeyRef": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "key": {
+                            "type": "string"
+                          },
+                          "optional": {
+                            "type": "boolean"
+                          }
+                        }
+                      },
+                      "fieldRef": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "apiVersion": {
+                            "type": "string"
+                          },
+                          "fieldPath": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "podSecurityContext": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "runAsNonRoot": {
+                  "type": "boolean"
+                },
+                "runAsUser": {
+                  "type": "integer"
+                },
+                "runAsGroup": {
+                  "type": "integer"
+                }
+              }
+            },
+            "securityContext": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "allowPrivilegeEscalation": {
+                  "type": "boolean"
+                },
+                "readOnlyRootFilesystem": {
+                  "type": "boolean"
+                },
+                "capabilities": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "drop": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
                 }
               }
             }
