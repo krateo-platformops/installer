@@ -12,7 +12,17 @@ components:
   # Lockstep with authn 0.32.0. authn reports no CRD content change; not independently diffed.
   # Lockstep with authn 0.33.0, and NOT a no-op this time: the LDAPConfig schema gains optional
   # spec.groupSearch (6 -> 7 keys, required unchanged). Diffed, not assumed.
-  version: 0.33.0
+  # 0.34.0: LOCKSTEP WITH authn 0.34.0, and NOT a no-op. I diffed both charts myself rather than
+  # relay authn's summary: 5 -> 5 CRDs, none added or removed, and 4 of the 5 schemas byte-identical.
+  # oidcconfigs.oidc.authn.krateo.io gains exactly ONE optional spec property, allowedGroups;
+  # required stays [clientID, clientSecret, redirectURI]. ldapconfigs, oauthconfigs, serviceaccounts
+  # and users are IDENTICAL. This is the additive-optional shape, which is safe for stored CRs.
+  # NOTE the chart name is authn-crdS (plural) while this pin is named authn-crd -- that mismatch is
+  # why an earlier probe of mine read 0.34.0 as a 404. It was my path, not an absent chart.
+  # 0.33.1 WAS SKIPPED DELIBERATELY. It exists and was approved, but authn recommended going straight
+  # to 0.34.0 so both clusters roll once instead of twice, and Diego chose that. 0.33.1 was never
+  # pinned or rolled anywhere.
+  version: 0.34.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -542,7 +552,20 @@ components:
   # (403 -> 500 with a cause, JSON 401 for a missing basic header, 404 instead of 417 for an unknown
   # LDAPConfig). A SMOKE CHECK ASSERTING 403 FOR A BROKEN BASIC SETUP SEES 500 FROM 0.32.0 ONWARD,
   # which is already live on 057.
-  version: 0.33.0
+  # 0.34.0: lockstep pair with authn-crds 0.34.0 (see that pin for the measured CRD diff -- one
+  # optional property, allowedGroups, on oidcconfigs only). Supersedes 0.33.1, which was approved and
+  # then skipped so both clusters roll once; 0.33.1 was never pinned or rolled.
+  # EXPECTED LIVE DIFFERENCES, exactly two, from authn and to be checked against a PRE-roll baseline
+  # because the read is one-shot:
+  #   /health      gains "version":"0.34.0"   (was "")
+  #   /strategies  Content-Type text/plain -> application/json, BODY byte-identical
+  # The body is the one worth baselining: only the header should move, so a body change is a finding.
+  # allowedGroups changes nothing at runtime unless an OIDCConfig sets it, and neither 057 nor demo
+  # has any OIDCConfig -- so the blast radius of the schema change is zero instances, not "small".
+  # REQUIRED-BEFORE child Krateos: Diego decided children move ONCE, to the first installer version
+  # that pins authn 0.34.0, rather than stopping at 0.3.498 first. acmp sets that version as the
+  # blueprint's childKrateo.installer.version and upgrades acme and globex on his word.
+  version: 0.34.0
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
