@@ -108,7 +108,13 @@ def render(helpers_text):
         (chart / "Chart.yaml").write_text("apiVersion: v2\nname: probe\nversion: 0.0.0\n")
         (chart / "templates" / "_helpers.tpl").write_text(helpers_text)
         (chart / "templates" / "probe.yaml").write_text(PROBE)
-        (chart / "values.yaml").write_text("cases: []\n")
+        # namespaces.krateo is required because inst.withheldReason now asks
+        # inst.compositionExistsAny, which does a namespaced lookup. Without it the helper
+        # panics on a nil map and this gate reports "probe render failed" -- which is how it
+        # surfaced, rather than as a wrong reason. Under `helm template` lookup is DISABLED,
+        # so the existence answer here is always "" (no live instance); these cases exercise
+        # the reasons given when nothing can be kept alive, which is what they are about.
+        (chart / "values.yaml").write_text("cases: []\nnamespaces:\n  krateo: krateo-system\n")
         vals = work / "cases.yaml"
         vals.write_text(yaml.safe_dump({"cases": [
             {"target": BYNAME[t], "components": copy.deepcopy(COMPONENTS), "allCRDs": a}

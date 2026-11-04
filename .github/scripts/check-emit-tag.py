@@ -142,8 +142,18 @@ def main() -> int:
         failures.append("inst.emitDecision is not defined in _helpers.tpl. The emission decision "
                         "must live in exactly one place; without it each consumer derives its own.")
 
+    dec = helpers[helpers.index('{{- define "inst.emitDecision" -}}'):]
+    dec = dec[:dec.index('{{- define "', 10)] if '{{- define "' in dec[10:] else dec
+    if 'include "inst.compositionExistsAny"' in dec:
+        print("  PASS  the decision's own $exists escape is version-agnostic")
+    else:
+        failures.append("inst.emitDecision's $exists escape does not use inst.compositionExistsAny. "
+                        "An escape that exists to STOP a prune must be permissive; keyed on the "
+                        "emit tag it prunes the very instance it protects when the CRD serves both "
+                        "the old and the new version and the instance has not migrated yet.")
+
     OWNED = ["inst.emitTag", "inst.depsReady", "inst.requiresApiGroups",
-             "inst.compositionExistsAtTag", "inst.dependentsGone"]
+             "inst.compositionExistsAny", "inst.dependentsGone"]
     strays = {}
     for f in sorted(Path("chart/templates").glob("*.yaml")):
         body = f.read_text()
@@ -200,18 +210,27 @@ def main() -> int:
             failures.append("%s is not defined in _helpers.tpl; this gate asserts how it resolves "
                             "the version and cannot do that if it is gone." % name)
             continue
-        if 'include "inst.emitTag"' not in b:
-            failures.append("%s does not resolve its version through inst.emitTag. It asks about a "
-                            "LIVE composition, and inst.emitTag now deliberately keeps one at an "
-                            "OLDER served tag across a bump, so a pinned lookup misses an object "
-                            "that exists." % name)
-        elif 'include "inst.apiVersion"' in b:
-            failures.append("%s still builds an apiVersion from a pinned version (inst.apiVersion) "
-                            "as well as resolving one. Two derivations in one helper is the defect "
-                            "in miniature; the lookup must be keyed only on the resolved tag."
-                            % name)
+        if 'include "inst.compositionExistsAny"' not in b:
+            failures.append("%s does not ask inst.compositionExistsAny. It asks whether a LIVE "
+                            "composition still exists, and that question must be version-AGNOSTIC: "
+                            "keyed on any single tag -- the pin OR the tag we would emit at -- it "
+                            "misses an instance that has not migrated yet while the CRD serves both "
+                            "versions, and concludes a thing that exists is gone." % name)
+        elif name != "inst.withheldReason" and ('include "inst.apiVersion"' in b
+                                                or 'include "inst.emitTag"' in b):
+            # Exempting the reporter is deliberate, not a loosening to make the gate pass.
+            # inst.dependentsGone and inst.compositionExists answer ONLY "does it exist", so any
+            # single derived version in them is keying that answer on one tag -- the defect.
+            # inst.withheldReason answers two different questions and needs both helpers: emitTag
+            # to say "no CRD serves version X at all", compositionExistsAny to say whether a live
+            # instance could have kept it alive. Forbidding the pair there would force the reporter
+            # back onto one question and reintroduce the disagreement it exists to expose.
+            failures.append("%s derives a single version (inst.apiVersion or inst.emitTag) as well "
+                            "as asking inst.compositionExistsAny. inst.emitTag PREFERS THE TARGET, "
+                            "which is right for the emitted apiVersion and wrong for an existence "
+                            "check; mixing them is how this defect recurred once already." % name)
         else:
-            print("  PASS  %s keys its lookup on the resolved tag, not a pinned version" % name)
+            print("  PASS  %s asks existence version-agnostically (any served tag)" % name)
 
     if 'include "inst.crdExists" (list $c.kind $c.version' in helpers + src:
         failures.append("a gate helper derives emission from inst.crdExists at the PINNED version "
