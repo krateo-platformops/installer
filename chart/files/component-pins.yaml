@@ -320,7 +320,7 @@ components:
   # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
   # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
   # holds anyway because none is at the path that matters -- but check the path, not the presence.)
-  version: 1.8.16
+  version: 1.8.20
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -2314,7 +2314,41 @@ components:
   # ARTIFACT: the frontend chart is a PURE VERSION MOVE -- 14 files and 60758 BYTES ON BOTH SIDES vs
   # 1.8.4, only Chart.yaml. Every behaviour change rides in the IMAGE at tag 1.8.6, which is why the
   # CRD and the image must move TOGETHER: a CRD bump without the matching SPA blanks pages.
-  version: 1.8.16
+  # 1.8.20: FOUR RELEASES OF CHART CHANGE IN ONE PIN, because 1.8.17, 1.8.18 and 1.8.19 are
+  # IMAGE-ONLY -- their charts never published, so charts/frontend still resolved at 1.8.16 for
+  # all three. A pin to 1.8.19 would have given a 1.8.16 CHART against a 1.8.19 IMAGE. Never pin
+  # 1.8.17-1.8.19. `helm show chart <oci> --version <tag>` is the only thing that distinguishes
+  # "the tag went green" from "the chart exists"; release-tag and release-oci are separate
+  # workflows, so a green tag never implied a published chart.
+  # THE CAUSE, which is a hazard for every chart-publishing repo and not only this one:
+  # release-oci's chart-images gate rendered EVERY chart in the repo with DEFAULT values.
+  # helm/builder-gate fails deliberately when .Values.instances is empty -- every object it ships
+  # is inside `range .Values.instances`, so an install that forgot them would render nothing and
+  # report success, and the chart refuses that. The gate hit the deliberate failure, correctly
+  # declined to vouch for a chart it could not inspect, and package-and-push was then skipped FOR
+  # THE WHOLE REPO. One chart's correct behaviour took every other chart's publish with it, for
+  # three releases, while `lint` stayed green because that workflow already honoured the chart's
+  # ci/render-values.yaml. Fixed org-wide in krateo-platformops/.github#36.
+  # CRD DIFF, measured here across the full 1.8.16 -> 1.8.20 interval rather than relayed:
+  # 45 -> 45 CRDs, none added or removed. 44 of 45 schemas change in LENGTH, which looks alarming
+  # and is not: a deep walk of every nested property path finds 42 paths ADDED and ZERO REMOVED.
+  # The shrinkages are descriptive text, not lost fields -- cols is 138 chars shorter with 57
+  # property paths before and after, identical sets. The big mover is forms, +6225 chars = 42 new
+  # paths all under .spec.widgetData.autocomplete, a new additive feature.
+  # NOTE WHY THE DEEP WALK WAS NECESSARY: check-pin-crd-lockstep.py compares TOP-LEVEL spec
+  # properties, so it reports +[] -[] here and would have passed this pin either way. It cannot
+  # see a NESTED removal. With 44 live widget CRD kinds on both clusters, a removed nested
+  # property would prune data from live widget CRs -- the 0.3.495 class one level down. The gate's
+  # blind spot is real and this pin is safe despite it, not because of it.
+  # frontend's own "byte-identical across all 44 schemas" statement is about #604 ALONE
+  # (1.8.19 -> 1.8.20, retiring krateoctl in favour of an in-repo generator). It is correct for
+  # that interval; this pin spans four.
+  # builder-gate and frontend-crds move in the same pin: all three charts the repo ships are
+  # published at 1.8.20. builder-gate ships NO CRDs (verified, 0 at both versions).
+  # UNBLOCKS two acmp items: the X5 SLO alerts, which Diego's D4 gates on the frontend telemetry
+  # fix (#588/#589), and the per-tenant "Service desk" nav entry plus retiring /support (#601,
+  # which also needs portal 1.8.88 -- NOT pinned here, portal is still 1.8.87).
+  version: 1.8.20
   deps:
   - frontend-crd
   - authn
@@ -4418,7 +4452,7 @@ components:
   # No appVersion in this chart, so pin-ci reports n/a (no image, no component CI to resolve).
   kind: BuilderGate
   chart: builder-gate
-  version: 1.8.16
+  version: 1.8.20
   deps:
     - portal
     - kagent
