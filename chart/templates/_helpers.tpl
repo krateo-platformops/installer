@@ -786,3 +786,111 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
+{{/* ---------------------------------------------------------------------------------------
+     inst.servedTags — the apiVersion tags a Kind's generated CRD actually SERVES, space-joined.
+
+     inst.crdExists answers "is THIS version served" and cannot say what else is. This can, which
+     is what makes it possible to keep a live composition alive at a version the cluster still
+     answers on while a bump is in flight.
+     --------------------------------------------------------------------------------------- */}}
+{{- define "inst.servedTags" -}}
+{{- $kind := index . 0 -}}{{- $allCRDs := index . 1 -}}
+{{- $tags := list -}}
+{{- range $allCRDs -}}
+{{- if and (eq .spec.group "composition.krateo.io") (eq .spec.names.kind $kind) -}}
+{{- range .spec.versions -}}{{- if .served -}}{{- $tags = append $tags .name -}}{{- end -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $tags | join " " -}}
+{{- end -}}
+
+{{/* ---------------------------------------------------------------------------------------
+     inst.emitTag — THE single resolution of "which apiVersion is this component emitted at".
+
+     Returns an apiVersion tag (e.g. `v1-8-90`), or "" when nothing should be emitted. The gate,
+     the existence check and the emitted `apiVersion:` all call this, because deriving that fact at
+     more than one call site is exactly how they come to disagree -- the defect this fixes.
+
+     THE DEFECT (installer#477). The gate used to AND `inst.crdExists $c.version` OUTSIDE the
+     `$exists` escape. At the instant a component's pin bumps, the generated CRD does not yet serve
+     the new version -- the bumped CompositionDefinition is what causes crdgen to create it -- so
+     the conjunct failed, `$exists` was never consulted, the composition vanished from the manifest
+     and helm PRUNED the live CR. The escape added on 2026-07-08 to stop exactly that could not
+     help, because it sat inside the conjunct that failed.
+
+     Measured, not theorised: the identical construction in krateo-blueprints' openstack umbrella
+     pruned 34 live composition CRs on 2026-11-04, leaving 27 helm releases with nothing driving
+     them. Their escape was MORE permissive than ours -- version-agnostic -- and it made no
+     difference, because the outer conjunct fails first. And core-provider measured their half:
+     ApplyOrUpdateCRD waited on `crd.IsReady`, which checks only `Established` -- already true from
+     the PREVIOUS version and never false across an update -- so nothing had ever established that
+     the new version was servable. Their #343 bounds that window; it cannot order their return
+     against this template's next render.
+
+     THE RESOLUTION, in order:
+       1. the target version is served            -> the target. Steady state, and the normal case
+                                                     once crdgen has caught up.
+       2. the target is NOT served, but the live instance exists at a version that IS
+                                                  -> THAT version. The bump instant: keep rendering
+                                                     the object that already exists, at the GVK the
+                                                     cluster still answers on, so helm sees it
+                                                     unchanged instead of absent. It migrates on a
+                                                     later pass, once (1) becomes true.
+       3. neither                                 -> "". First creation before the CRD is servable,
+                                                     or a CRD crdgen rejected. Withholding is
+                                                     correct: there is nothing to preserve and no
+                                                     version to emit at.
+
+     Case 2 is the whole fix. It is deliberately conditioned on the instance EXISTING: without that
+     it would emit a brand-new object at a stale version, which is a different defect.
+     --------------------------------------------------------------------------------------- */}}
+{{/* inst.emitTagFrom — the DECISION, as a pure function of facts already gathered.
+
+     Split out from inst.emitTag for the same reason inst.jwtSigningKeyPEM was split from
+     secret.yaml: the resolution's interesting arm depends on a `lookup`, and `helm template`
+     DISABLES lookup -- so while the decision lived beside its own lookup, the only arm a test
+     could reach was the one that does not matter. Taking the lookup's RESULT as an argument makes
+     every arm reachable with no cluster and no fake-cluster plugin.
+
+     Arguments: the wanted tag, the space-joined served tags, and the tag at which the live
+     instance was found ("" if it was not found, or if lookup was unavailable). */}}
+{{- define "inst.emitTagFrom" -}}
+{{- $want := index . 0 -}}{{- $servedStr := index . 1 -}}{{- $existingTag := index . 2 -}}
+{{- $served := splitList " " ($servedStr | toString) -}}
+{{- if has $want $served -}}{{- $want -}}
+{{- else if and $existingTag (has $existingTag $served) -}}{{- $existingTag -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "inst.emitTag" -}}
+{{- $top := index . 0 -}}{{- $kind := index . 1 -}}{{- $name := index . 2 -}}{{- $ver := index . 3 -}}{{- $allCRDs := index . 4 -}}
+{{- $want := printf "v%s" ($ver | toString | replace "." "-") -}}
+{{- $servedStr := include "inst.servedTags" (list $kind $allCRDs) -}}
+{{/* Find the tag the live instance is actually served at, if any. Only consulted when the wanted
+     tag is not served -- that is the bump instant -- so the common path costs no extra lookup. */}}
+{{- $existing := "" -}}
+{{- if not (has $want (splitList " " $servedStr)) -}}
+{{- range $t := splitList " " $servedStr -}}
+{{- if and (not $existing) $t -}}
+{{- if lookup (printf "composition.krateo.io/%s" $t) $kind $top.Values.namespaces.krateo $name -}}
+{{- $existing = $t -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- include "inst.emitTagFrom" (list $want $servedStr $existing) -}}
+{{- end -}}
+
+{{/* inst.compositionExistsAtTag — does the live instance exist at THIS apiVersion tag?
+
+     inst.compositionExists takes a PIN version and derives the tag itself, which is right for a
+     caller that only knows the pin. The emission path already knows the tag it is going to emit at
+     (inst.emitTag), so it must ask about THAT tag rather than re-derive a possibly different one.
+     Deriving the same fact twice is how the gate and the emitter came to disagree (#477). */}}
+{{- define "inst.compositionExistsAtTag" -}}
+{{- $top := index . 0 -}}{{- $kind := index . 1 -}}{{- $name := index . 2 -}}{{- $tag := index . 3 -}}
+{{- if $tag -}}
+{{- if lookup (printf "composition.krateo.io/%s" $tag) $kind $top.Values.namespaces.krateo $name -}}true{{- end -}}
+{{- end -}}
+{{- end -}}
