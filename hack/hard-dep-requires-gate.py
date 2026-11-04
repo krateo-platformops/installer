@@ -30,6 +30,7 @@ that found nothing wrong. --self-test proves it flags a known-bad shape.
 import argparse, json, os, re, shutil, subprocess, sys, tempfile
 import yaml
 
+SCHEMA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "chart", "values.schema.json")
 PINS = "chart/files/component-pins.yaml"
 DEFAULT_ORG = "krateo-platformops"
 FALLBACK_ORGS = ["krateo-platformops", "krateo-agentiko"]
@@ -73,28 +74,185 @@ def pull(name, ver, chart, repo, dest):
     return None
 
 
-def scan(chart_dir):
-    """returns (groups_rendered, groups_shipped_as_crds)"""
-    rendered, shipped = set(), set()
+def chart_kube_version(chart_dir):
+    """A chart declaring a kubeVersion floor cannot be rendered at helm's compiled-in default
+    (v1.34.0 on helm 3.19.0) -- it refuses with "incompatible with Kubernetes vX". Render at the
+    chart's own floor, exactly as the lint workflow does."""
+    try:
+        text = open(os.path.join(chart_dir, "Chart.yaml"), encoding="utf-8",
+                    errors="replace").read()
+    except OSError:
+        return None
+    m = re.search(r"^kubeVersion:.*?([0-9]+\.[0-9]+\.[0-9]+)", text, re.M)
+    return m.group(1) if m else None
+
+
+def chart_root(untar_dir):
+    """`helm pull --untar --untardir X` puts the chart at X/<chartName>/, which is NOT the path the
+    caller asked for -- and the chart name need not equal the component name. The previous
+    text-scan walked the tree recursively so it never needed the real root; `helm template` does.
+    Returns the directory containing Chart.yaml, searching shallowest-first so a vendored subchart
+    under charts/ can never be mistaken for the parent."""
+    best = None
+    for root, _dirs, files in os.walk(untar_dir):
+        if "Chart.yaml" not in files:
+            continue
+        depth = root[len(untar_dir):].count(os.sep)
+        if best is None or depth < best[0]:
+            best = (depth, root)
+    return best[1] if best else None
+
+
+# Charts that REFUSE to render without decisions only an operator can make. Not a convenience
+# list and not a skip-list: a named exclusion, with the coverage it costs stated, and a check in
+# main() that each entry STILL cannot render -- so an entry cannot quietly outlive its reason.
+#
+# I tried placeholders first and it was the wrong instinct. external-dns `fail`s three times in
+# sequence -- txtOwnerId (two clusters sharing a DNS zone overwrite each other's TXT records),
+# env (the provider API token, which must come from a Secret placed out-of-band), and then
+# policy=sync with empty domainFilters (which lets the instance DELETE records in every zone the
+# credential can reach). Those guards are the chart being RIGHT. Every placeholder I supplied was
+# me asserting a safe configuration for a component whose entire premise is that there is no safe
+# default, and a table of such assertions is exactly the accumulating exception list that rendering
+# was supposed to make unnecessary.
+#
+# COVERAGE COST, stated rather than hidden: this guard does not check external-dns's
+# `requiresApiGroups`. Today it declares none, and the only foreign group its templates could
+# render is gateway.networking.k8s.io, which is in BUILTIN -- so nothing is currently missed. If
+# external-dns ever renders a CRD-backed group another component ships, this guard will not say so.
+UNRENDERABLE_BY_DESIGN = {
+    "external-dns": "three `fail` guards demand operator decisions with no safe default: "
+                    "txtOwnerId, the provider API token in env, and domainFilters under policy=sync",
+}
+
+
+def component_values(comp, schema):
+    """The values the UMBRELLA sends this component, from the installer's own schema defaults.
+
+    A `default:` on an installer schema property reaches the CR, so these are the values a real
+    install uses when nobody overrides them -- not a guess. Rendering a chart bare is a different
+    experiment from rendering it as the installer does: builder-gate `fail`s on an empty
+    `.Values.instances` and the schema defaults it to three builders, so a bare render says
+    "unrenderable" about a chart that renders fine in production."""
+    node = ((schema.get("properties") or {}).get("componentValues") or {}) \
+        .get("properties", {}).get(comp, {})
+    vals = {}
+    if isinstance(node.get("default"), dict):
+        vals.update(node["default"])
+    for k, v in (node.get("properties") or {}).items():
+        if isinstance(v, dict) and "default" in v and k not in vals:
+            vals[k] = v["default"]
+    return vals
+
+
+def render(name, chart_dir, values=None):
+    """Render the chart with its OWN default values. Returns (stdout, None) or (None, error).
+
+    THIS IS THE WHOLE CORRECTNESS OF THE GUARD, and the previous version did not do it. It read
+    TEMPLATE TEXT and called the result `groups_rendered` -- a name asserting something the code
+    never established: a template body sits under `{{- if ... }}`, and a gate that is false means
+    the object is never created. installer#614 is exactly that. clickhouse-operator and
+    mongodb-operator were required to have cert-manager.io because their charts CONTAIN
+    cert-manager Certificate templates, while the wrapper charts disable them:
+
+        clickhouse-operator  operator.certManager.enabled: false  (wrapper overrides the upstream
+                             operator.webhook.enabled:     false   subchart's `true`)
+        mongodb-operator     community.resource.tls.enabled: false (upstream default)
+
+    So neither renders a single cert-manager.io object -- confirmed against the manifests helm
+    holds for them on krateo-057, 0 each -- yet both were withheld on every portal install whose
+    cluster lacked cert-manager. Rendering evaluates every gate for free and needs no list of
+    exceptions, which a text scan can only ever accumulate.
+
+    Values: the chart's own defaults, because that is what the umbrella sends when a component has
+    no `componentValues` entry -- the case for both components above. NOT asserted by this guard:
+    a cluster that DOES set componentValues can re-enable a gated path (the schema permits
+    `componentValues.<name>.operator.*`), and this renders defaults, so it would not see that. A
+    requirement that exists only under a non-default value is not expressible in
+    `requiresApiGroups`, which is a static field."""
+    kv = chart_kube_version(chart_dir)
+    cmd = ["helm", "template", name, chart_dir]
+    if kv:
+        cmd += ["--kube-version", kv]
+    vf = None
+    if values:
+        vf = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False)
+        yaml.safe_dump(values, vf, default_flow_style=False)
+        vf.close()
+        cmd += ["-f", vf.name]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if vf:
+        os.unlink(vf.name)
+    if r.returncode != 0:
+        return None, (r.stderr or r.stdout).strip()[:300]
+    return r.stdout, None
+
+
+def shipped_crd_groups(chart_dir):
+    """CRD groups the chart ships from its `crds/` DIRECTORY, parsed as YAML.
+
+    Only crds/ is read here, because helm does NOT render that directory -- it applies those files
+    install-once, outside the template pipeline, so they never appear in `helm template` output.
+    CRDs a chart renders as TEMPLATES do appear there and are picked up by scan_rendered, so
+    scanning template text for them would be redundant as well as unsafe.
+
+    PARSED, not regex-matched, and that distinction caught a false positive in this guard's own
+    first honest run. An earlier version matched a `group:` line across any file that merely contained
+    the string "CustomResourceDefinition", and over the rendered output it matched the `group:`
+    FIELD inside a RESTAction -- a resource the chart QUERIES. builders-page was recorded as
+    shipping ogen.krateo.io on the strength of three RESTAction templates and zero CRDs, which made
+    github-provider-kog's real requirement look satisfied and silently disabled this guard's own
+    self-test. `spec.group` of a document whose `kind` is CustomResourceDefinition is the only thing
+    that means "this chart provides this group". It is the same discipline the column-0 apiVersion
+    rule already applied, which I failed to carry over to `group`."""
+    shipped, unparsed = set(), []
     for root, _dirs, files in os.walk(chart_dir):
-        for f in files:
-            if not f.endswith((".yaml", ".yml", ".tpl")):
+        if os.path.basename(root) != "crds":
+            continue
+        for f in sorted(files):
+            if not f.endswith((".yaml", ".yml")):
                 continue
+            path = os.path.join(root, f)
             try:
-                text = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
-            except OSError:
+                docs = list(yaml.safe_load_all(open(path, encoding="utf-8", errors="replace")))
+            except yaml.YAMLError as e:
+                unparsed.append(f"{path}: {str(e)[:90]}")
                 continue
-            is_crd_file = "CustomResourceDefinition" in text
-            for av in API_RE.findall(text):
-                g = group_of(av)
-                if g and g not in BUILTIN and "{{" not in g:
-                    rendered.add(g)
-            if is_crd_file:
-                for g in CRD_GROUP_RE.findall(text):
+            for d in docs:
+                if isinstance(d, dict) and d.get("kind") == "CustomResourceDefinition":
+                    g = ((d.get("spec") or {}).get("group") or "")
                     if g and g not in BUILTIN:
                         shipped.add(g)
-    # a chart never "renders" what it itself ships
-    return rendered - shipped, shipped
+    return shipped, unparsed
+
+
+def scan_rendered(output, chart_dir):
+    """returns (groups_rendered, groups_shipped_as_crds, parse_errors)
+
+    The rendered output is PARSED rather than regex-scanned. Each document's own `apiVersion` is
+    the group the chart creates an object in -- no column-0 heuristic needed, because that heuristic
+    existed only to tell an object's apiVersion from a field VALUE while reading template TEXT.
+    Parsed documents cannot confuse the two."""
+    rendered, shipped, errs = set(), set(), []
+    try:
+        docs = list(yaml.safe_load_all(output))
+    except yaml.YAMLError as e:
+        return set(), set(), [f"rendered output is not parseable YAML: {str(e)[:120]}"]
+    for d in docs:
+        if not isinstance(d, dict):
+            continue
+        av = str(d.get("apiVersion") or "")
+        g = group_of(av)
+        if g and g not in BUILTIN:
+            rendered.add(g)
+        if d.get("kind") == "CustomResourceDefinition":
+            sg = ((d.get("spec") or {}).get("group") or "")
+            if sg and sg not in BUILTIN:
+                shipped.add(sg)
+    disk, unparsed = shipped_crd_groups(chart_dir)
+    shipped |= disk
+    errs += unparsed
+    return rendered - shipped, shipped, errs
 
 
 def main():
@@ -104,30 +262,98 @@ def main():
     a = ap.parse_args()
 
     pins = yaml.safe_load(open(PINS))["components"]
+    schema = json.load(open(SCHEMA))
     by_name = {c["name"]: c for c in pins}
 
     tmp = tempfile.mkdtemp(prefix="hard-dep-gate-")
     try:
-        rendered, shipped, failed = {}, {}, []
+        rendered, shipped, failed, unrendered, stale_input, excluded = {}, {}, [], [], [], []
         for c in pins:
             if a.only and c["name"] != a.only:
                 continue
             d = pull(c["name"], c["version"], c.get("chart", c["name"]), c.get("repo"), tmp)
             if d is None:
-                failed.append(f"{c['name']}@{c['version']}")
+                failed.append(f"{c['name']}@{c['version']} (pull)")
                 continue
-            r, s = scan(d)
-            rendered[c["name"]], shipped[c["name"]] = r, s
+            root = chart_root(d)
+            if root is None:
+                unrendered.append(f"{c['name']}@{c['version']}: no Chart.yaml found under the "
+                                  f"untarred chart")
+                continue
+            vals = component_values(c["name"], schema)
+            out, err = render(c["name"], root, vals)
+            if c["name"] in UNRENDERABLE_BY_DESIGN:
+                # The exclusion must still be earned. If this chart NOW renders, the entry has
+                # outlived its reason and must go -- an exclusion that excludes nothing reads as
+                # diligence while quietly removing a component from the guard's subject.
+                if out is not None:
+                    stale_input.append(c["name"])
+                excluded.append(c["name"])
+                continue
+            if out is None:
+                # A render failure must NOT read as "renders nothing". That is the false negative
+                # this guard cannot afford: it would silently drop a real requirement.
+                unrendered.append(f"{c['name']}@{c['version']}: {err}")
+                continue
+            r, sh, perrs = scan_rendered(out, root)
+            if perrs:
+                # An unparseable document is not an absence of CRDs. Withhold rather than compute a
+                # comparison over a chart whose contents were only partly read.
+                unrendered.append(f"{c['name']}@{c['version']}: " + "; ".join(perrs[:2]))
+                continue
+            rendered[c["name"]], shipped[c["name"]] = r, sh
 
         if failed:
             print(f"::error::WITHHOLDING — could not pull {len(failed)} chart(s): "
                   + ", ".join(failed[:6]))
             print("  A guard that inspected nothing passes identically to one that found nothing.")
             return 2
+        if stale_input:
+            print(f"::error::{len(stale_input)} UNRENDERABLE_BY_DESIGN entr(ies) now RENDER, so the "
+                  f"exclusion has outlived its reason and is silently removing a component from "
+                  f"this guard's subject. Remove the entry: " + ", ".join(stale_input))
+            return 2
+        if unrendered:
+            print(f"::error::WITHHOLDING — {len(unrendered)} chart(s) could not be RENDERED. A "
+                  f"render failure is not an absence of requirements, and treating it as one is "
+                  f"how a real dependency goes undeclared:")
+            for u in unrendered[:8]:
+                print(f"  {u}")
+            return 2
         if not any(shipped.values()):
             print("::error::WITHHOLDING — no component was found to ship ANY CRD group. The scan "
                   "is not seeing CRDs, so every comparison below would be vacuously clean.")
             return 2
+
+        if excluded:
+            print(f"  EXCLUDED (unrenderable by design, requirements NOT checked): "
+                  + ", ".join(f"{n} — {UNRENDERABLE_BY_DESIGN[n]}" for n in excluded))
+
+        # A group is SATISFIED WITHIN THE FEATURE if any component that is on whenever this one is
+        # also ships it: same `feature`, or no feature at all (always rendered). Only then is there
+        # no cross-feature exposure.
+        #
+        # THE PREVIOUS RULE ASKED THE WRONG QUESTION and it produced nine false positives on the
+        # first honest run. It skipped the same-feature PAIRING (`continue`) and then kept looking,
+        # so finding ANY differently-featured shipper was reported as a missing requirement -- even
+        # when a same-feature component ships the group and the requirement cannot fail. All nine
+        # coreAgents components render kagent.dev; kagent-crds ships kagent.dev and is itself
+        # feature=coreAgents (verified: pulled 0.1.6 from krateo-agentiko, 13 CRD-bearing files,
+        # group kagent.dev present). With coreAgents ON, kagent-crds is ON. portal-agents also
+        # ships the group under feature=portal, and that coincidence is the whole false positive.
+        #
+        # Acting on those nine would have added `requiresApiGroups: [kagent.dev]` to every agent in
+        # the fleet and suppressed all of them on any install with coreAgents ON and portal OFF --
+        # which is the failure this guard exists to prevent, caused by the guard.
+        satisfied_in_feature = {}
+        for a_name in rendered:
+            af = by_name[a_name].get("feature")
+            ok = set()
+            for b_name, b_groups in shipped.items():
+                bf = by_name[b_name].get("feature")
+                if bf == af or bf is None:
+                    ok |= b_groups
+            satisfied_in_feature[a_name] = ok
 
         findings = []
         for a_name, a_groups in rendered.items():
@@ -135,7 +361,7 @@ def main():
             for b_name, b_groups in shipped.items():
                 if b_name == a_name:
                     continue
-                overlap = a_groups & b_groups
+                overlap = (a_groups & b_groups) - satisfied_in_feature[a_name]
                 if not overlap:
                     continue
                 bc = by_name[b_name]
@@ -162,12 +388,28 @@ def main():
             for b_name, b_groups in shipped.items():
                 if b_name == probe:
                     continue
-                if rendered[probe] & b_groups and by_name[b_name].get("feature") != by_name[probe].get("feature"):
+                if (rendered[probe] & b_groups) - satisfied_in_feature.get(probe, set()) \
+                        and by_name[b_name].get("feature") != by_name[probe].get("feature"):
                     refound.append(b_name)
             by_name[probe]["requiresApiGroups"] = saved
             if not refound:
                 print(f"::error::SELF-TEST FAILED — removing `requires` from {probe} produced no "
                       f"finding, so this guard would not have caught the 0.3.474 defect.")
+                # A self-test that only says "failed" sends the next reader to re-derive what it
+                # already knows. Print the evidence: what the probe renders, who ships each of
+                # those groups, under which feature, and whether satisfied_in_feature absorbed it.
+                pf = by_name[probe].get("feature")
+                print(f"  {probe} (feature={pf}) renders: {sorted(rendered[probe])}")
+                sat = satisfied_in_feature.get(probe, set())
+                for g in sorted(rendered[probe]):
+                    shippers = [(b, by_name[b].get("feature")) for b, gs in shipped.items()
+                                if g in gs]
+                    print(f"    {g}: absorbed_by_same_feature={g in sat}")
+                    for b, bf in shippers:
+                        same = "SAME feature" if bf == pf else f"feature={bf}"
+                        print(f"      shipped by {b} ({same})")
+                    if not shippers:
+                        print("      shipped by NOBODY — so no component provides it at all")
                 return 2
             print(f"  self-test OK — dropping `requires` from {probe} is detected "
                   f"(would demand: {', '.join(refound)})")
