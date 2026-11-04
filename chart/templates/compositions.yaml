@@ -103,7 +103,14 @@
      the operator/end-user instantiates them from the portal on demand. */}}
 {{- if $c.registerOnly }}{{- continue }}{{- end }}
 {{- $featOn := eq (include "inst.featureEnabled" (list $top $c.feature)) "true" }}
-{{- $crd  := include "inst.crdExists" (list $c.kind $c.version $allCRDs) }}
+{{/* THE SINGLE RESOLUTION of which apiVersion this component is emitted at (#477). The gate, the
+     existence check and the emitted `apiVersion:` all read $emit, because deriving that fact at
+     more than one call site is exactly how they came to disagree. See inst.emitTag: it returns the
+     target when the CRD serves it, the tag the LIVE INSTANCE is served at when the target is not
+     yet served (the bump instant -- this is the fix), and "" when there is nothing to preserve and
+     no version to emit at. */}}
+{{- $emit := include "inst.emitTag" (list $top $c.kind $c.name $c.version $allCRDs) }}
+{{- $crd  := ternary "true" "" (ne $emit "") }}
 {{- $render := "" }}
 {{- if $featOn }}
 {{/* install / steady-state: emit once the CRD is served and all deps are Ready (forward dep order).
@@ -115,7 +122,7 @@
      seconds later). depsReady still gates the FIRST creation, so forward dependency order on bring-up
      is preserved; real teardown is handled by the feature-OFF drain branch below, not by a lookup miss. */}}
 {{- $deps := include "inst.depsReady" (list $top $c.deps $components $allCRDs) }}
-{{- $exists := include "inst.compositionExists" (list $top $c.kind $c.name $c.version $allCRDs) }}
+{{- $exists := include "inst.compositionExistsAtTag" (list $top $c.kind $c.name $emit) }}
 {{/* HARD API-group requirements are ANDed OUTSIDE the `$exists` escape on purpose. That escape rides
      out a momentary depsReady flap without pruning a live workload; a missing API GROUP is not a
      flap — chart-inspector cannot render the chart at all, so emitting anyway buys an endless 500.
@@ -789,7 +796,7 @@
 {{- include "inst.forcePath" (dict "target" $spec "path" (list "rollGuard") "value" $mcpHash) }}
 {{- end }}
 ---
-apiVersion: {{ include "inst.apiVersion" (list $c.version) }}
+apiVersion: composition.krateo.io/{{ $emit }}
 kind: {{ $c.kind }}
 metadata:
   name: {{ $c.name }}

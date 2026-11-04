@@ -1,0 +1,54 @@
+name: check-emit-tag
+
+# Installer-specific guard: exercise inst.emitTagFrom, the single resolution of which apiVersion a
+# component is emitted at, and the fix for installer#477.
+#
+# THE DEFECT. The emission gate used to AND `inst.crdExists $c.version` OUTSIDE the `$exists`
+# escape. At the instant a component's pin bumps the generated CRD does not yet serve the new
+# version — the bumped CompositionDefinition is what causes crdgen to create it — so the conjunct
+# failed, `$exists` was never consulted, the composition vanished from the manifest and helm PRUNED
+# the live CR. The escape added on 2026-07-08 to prevent exactly that could not help, because it sat
+# inside the conjunct that failed.
+#
+# The identical construction pruned 34 live composition CRs in krateo-blueprints' openstack umbrella
+# on 2026-11-04, leaving 27 helm releases with nothing driving them. Their escape was MORE
+# permissive than ours and it made no difference, because the outer conjunct fails first.
+#
+# WHY IT TESTS A PURE FUNCTION. The resolution's interesting arm needs a `lookup`, and `helm
+# template` DISABLES lookup — so while the decision lived beside its own lookup, the only arm a test
+# could reach was the one that does not matter. The decision is split into inst.emitTagFrom, which
+# takes the lookup's RESULT as an argument, so every arm is reachable with no cluster. Same split as
+# inst.jwtSigningKeyPEM.
+#
+# THE SELF-CHECK IS THE POINT: the script deletes the preservation arm from the real helper and
+# fails unless the bump-instant case stops preserving the live version.
+#
+# WHAT A GREEN TICK DOES NOT MEAN: it does not exercise inst.emitTag's own lookup — that it finds
+# the instance at all, or looks in the right namespace. That is asserted structurally and
+# behaviourally not at all.
+
+on:
+  pull_request:
+      # NO `branches:` filter, deliberately — with one, the gate does not run on a STACKED pull
+      # request, which then shows CLEAN with "all checks passed" while every gate here was skipped.
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  emit-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Exercise the emission-version resolution
+        run: python3 .github/scripts/check-emit-tag.py
