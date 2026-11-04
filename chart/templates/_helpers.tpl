@@ -297,6 +297,18 @@ components:
 {{- $s := .status | toString -}}
 {{- if eq $s "True" -}}{{- $r = "true" -}}
 {{- else if and (eq $s "Unknown") (eq (.reason | toString) "ZeroEvidence") -}}{{- $r = "true" -}}
+{{/* ChildrenForbidden (core-provider#318): the cdc's SA got a 403 reading a managed child, so it
+     was PREVENTED from observing rather than having observed unhealth. Accepted for the same
+     reason as ZeroEvidence and NOT for the reason NotObserved is refused: a 403 from the
+     authorization layer is a STEADY STATE -- nothing becomes forbidden later the way something
+     becomes observed later. It persists until an operator changes a Role, so blocking a
+     dependant on it would block forever. NotObserved stays refused precisely because it is the
+     transient kind: an attempt failed and the next may succeed.
+     WITHOUT this arm the cost is NOT a fleet-wide outage -- compositions.yaml:124 renders on
+     `depsReady OR compositionExists`, so every existing install is unaffected. The cost falls
+     entirely on a FRESH install, where a dependant would never be emitted on any pass because
+     the condition never clears on its own. That is why this is allowlisted rather than tolerated. */}}
+{{- else if and (eq $s "Unknown") (eq (.reason | toString) "ChildrenForbidden") -}}{{- $r = "true" -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
