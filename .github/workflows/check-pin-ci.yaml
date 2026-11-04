@@ -112,6 +112,44 @@ jobs:
           app-id: ${{ secrets.PIN_CI_APP_ID }}
           private-key: ${{ secrets.PIN_CI_APP_KEY }}
           owner: krateo-blueprints
+      # Each minting step above is continue-on-error, so a missing installation degrades ONE org
+      # rather than failing the job. That is the right behaviour and it has a silence: on
+      # 2026-11-04 a run reported SUCCESS with two of the three tokens empty, because no pin had
+      # changed so nothing needed reading. "success" there meant "nothing was unreadable", not
+      # "all three minted" -- and the difference is invisible unless something says so.
+      #
+      # This step says so. It is deliberately NOT a failure: check-pin-ci.py treats a missing
+      # per-org token as a problem only when a read then fails, and an earlier version that warned
+      # on a missing token alone cried wolf the moment krateo-blueprints was made public. So the
+      # outcome is REPORTED unconditionally and the job's verdict is left to the reads.
+      #
+      # It prints only whether each token is NON-EMPTY, never any part of a token.
+      - name: Report which per-org tokens minted
+        env:
+          T_PLATFORMOPS: ${{ steps.app-token.outputs.token }}
+          T_AGENTIKO: ${{ steps.app-token-agentiko.outputs.token }}
+          T_BLUEPRINTS: ${{ steps.app-token-blueprints.outputs.token }}
+        run: |
+          minted=0
+          total=0
+          for org in PLATFORMOPS AGENTIKO BLUEPRINTS; do
+            total=$((total+1))
+            eval "v=\${T_$org}"
+            if [ -n "$v" ]; then
+              minted=$((minted+1))
+              printf 'per-org token krateo-%-14s MINTED\n' "$(echo "$org" | tr 'A-Z' 'a-z')"
+            else
+              printf 'per-org token krateo-%-14s NOT MINTED\n' "$(echo "$org" | tr 'A-Z' 'a-z')"
+            fi
+          done
+          echo "per-org App tokens minted: $minted of $total"
+          if [ "$minted" -lt "$total" ]; then
+            echo "::warning::only $minted of $total per-org App tokens minted. Pins owned by an org \
+          without a token fall back to the repo-scoped GITHUB_TOKEN, which CANNOT read another \
+          org's private repos -- so those pins are UNVERIFIABLE if any of them changed. This is a \
+          warning rather than a failure because nothing is broken until a read actually fails; \
+          check-pin-ci.py reports the per-owner outcome below."
+          fi
       - name: Assert every bumped pin's component CI was green at its tagged commit
         env:
           BASE_REF: origin/${{ github.base_ref }}
