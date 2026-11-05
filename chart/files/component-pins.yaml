@@ -4149,6 +4149,28 @@ components:
   # FRONTEND_URL is consequently NOT set by the installer — with no external origin there is no honest
   # value to compute, and the chart default stands (compositions.yaml gates on gatewayPort).
   svcMatch: krateo-clickstack
+# 0.3.14 (2026-11-05, tag 3.1.41, appVersion 1.0.6). SPLIT OUT of the observability trio because
+# this one -- and only this one -- resolves through check-pin-ci cleanly.
+#   appVersion 1.0.6 -> tag 1.0.6 -> commit 13d03e3, which carries PASSING
+#   `go test (clickhouseexporter)` (131 tests) and `go test (compositionresolver)` (10), both with
+#   -race, and the tag was cut only after they passed on that commit.
+# WHY THAT SENTENCE EXISTS. 0.3.13 declared appVersion 1.0.5, whose commit had 12 green check-runs
+# and NOTHING TESTING THE CODE, while three _test.go files sat in the tree. check-pin-ci refused
+# it. The component wired a test workflow within two hours and re-cut as 1.0.6 with NO SOURCE
+# CHANGE -- one workflow file and three log lines. So 0.3.13 and 0.3.14 ship IDENTICAL CODE and
+# differ only in whether anything tested it. The owner also asked me NOT to widen TEST_RUN_RE,
+# in their words "there's no job to recognise" -- the blocked party refusing the loosening.
+# 0.3.13's content note carries over: JWT redaction on the k8sobjects pipeline targeting
+#   `body.string`. NOT the 0.3.9 statement -- k8sobjects bodies are nested MAPS, which
+#   replace_pattern(body, ...) leaves untouched.
+# FLOOR: otel-collector >= 1.0.5 for `transform`; the chart sets 1.0.6 itself, so nothing extra
+#   belongs here. An image override OLDER than 1.0.5 crash-loops, as 0.3.9 did.
+# OWNER'S CAVEAT, carried unchanged: the end-to-end redaction test ran on 1.0.5 and was NOT
+#   repeated for 1.0.6, since the code is unchanged. It was tested on kind, NOT into ClickHouse.
+# NOT TESTED AT ALL, and the owner volunteered this: the patched k8sobjectsreceiver fork has NO
+#   test files and was deliberately LEFT OUT of the matrix rather than given a job that would pass
+#   having tested nothing. That fork produces the very stream this redaction targets.
+# EXPECT AFTER THE ROLL: the deployment collector restarts on the new image.
 - name: otel-collector-deployment
   kind: OtelCollectorDeployment
   # 0.3.8 (otel-collector#22/#24, image 1.0.4): compositionresolver invalidates the RESTMapper on a
@@ -4161,7 +4183,7 @@ components:
   #     v1-12-41 4/8 (50%)   v1-12-42 0/8 (0%)   v0-3-413 0/6 (0%)   <- both rolled that morning
   # The 48h AGGREGATE reads a flat ~100% and hides this entirely; only the per-apiVersion split
   # shows it. Read the split, never the rollup, when judging event correlation.
-  version: 0.3.11
+  version: 0.3.14
   deps:
   - krateo-observability
   tier: observability
