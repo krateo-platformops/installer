@@ -260,6 +260,12 @@
           "default": false,
           "description": "Opt-in Google Config Connector: the operator and its two CRDs (components gcp-configconnector-crd + gcp-configconnector, from oci://ghcr.io/krateo-blueprints/charts), letting Compositions provision real Google Cloud resources. Runs in CLUSTER mode by default, which means ONE Google service account for the entire cluster and a controller that watches every namespace -- namespaced mode exists but requires Workload Identity and cannot use a key Secret. Needs a Google service-account key in the Secret named by componentValues.gcp-configconnector.configConnector.credentialSecretName, created in cnrm-system after the operator first runs. Applying the ConfigConnector CR makes the operator install ~635 further CRDs, so this measurably grows the cluster's API surface."
         },
+        "serviceDesk": {
+          "type": "boolean",
+          "default": false,
+          "title": "Service desk",
+          "description": "Install the service-desk page: a ticket queue plus a separate raise-a-ticket screen. OFF by default and deliberately NOT folded into `portal` the way the other pages are, because this chart CREATES two namespaces and a Ticket CRD, and its authorization is a policy decision rather than a default: requesterGroups grants create-without-read on the queue, readerGroups grants the desk itself. Enabling it with neither set installs a queue nobody can open and a form nobody can post to."
+        },
         "showback": {
           "type": "boolean",
           "default": false,
@@ -640,6 +646,100 @@
       "description": "Per-component Composition spec overrides, STRICTLY TYPED against each pinned component's chart schema. This is a HAND-CURATED, deliberate override surface: every leaf is explicitly typed and unknown keys are REJECTED (additionalProperties is false on every object). No free-form escapes remain anywhere in this schema (neither an open additionalProperties nor the k8s preserve-unknown extension) — enforced in CI by .github/workflows/check-no-unknowns.yaml. Invariants: each component's `global` is the fixed engine-injected block (plumbing InjectGlobalValues) plus imageRegistry; `resources` is k8s ResourceRequirements (limits/requests each with cpu/memory); label, annotation and nodeSelector maps are typed string maps. To expose a NEW override knob for a component, add it here explicitly and typed — do not reintroduce a free-form object. Deep-merged into the rendered Composition spec; the installer-computed wiring (service.type/config/vertexAI/hitlApproval) stays authoritative and wins on any leaf conflict.",
       "additionalProperties": false,
       "properties": {
+        "service-desk-page": {
+          "type": "object",
+          "title": "service-desk-page values",
+          "description": "Overrides for the service-desk page (component service-desk-page, gated on features.serviceDesk). NOTHING here carries a `default:`, and that is the point rather than an omission: an installer schema default is copied by crdgen into the composition CRD and then MATERIALIZED by the apiserver into every CR, so it would silently beat a value set through componentValues on the very install that needed to change it. The chart withholds defaults on these keys for that stated reason and keeps them in its values.yaml; this block mirrors the choice, including for namespace and raiseNamespace, so the chart stays the single source of their defaults.",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            },
+            "namespace": {
+              "type": "string",
+              "title": "namespace",
+              "description": "The namespace the chart CREATES and installs the queue into: page roots, widgets and the Tickets themselves. It is the RBAC boundary the chart exists for -- a group with no RoleBinding here cannot `list` the page roots, so the sidebar never shows them and a deep link 403s. Changing it after install ORPHANS THE TICKETS, because helm will not prune what it no longer renders. Chart default: krateo-service-desk."
+            },
+            "raiseNamespace": {
+              "type": "string",
+              "title": "raiseNamespace",
+              "description": "The namespace the chart CREATES for the raise-a-ticket screen. A SECOND namespace because the namespace IS the RBAC boundary and a desk's two audiences are different people: `resourceNames` does not apply to `list`, so a group granted `list` in the queue's namespace sees EVERY page root in it. No tickets live here -- the form posts into `namespace`, because `create` does not require read, which is the whole point of the split. Chart default: krateo-service-desk-raise."
+            },
+            "readerGroups": {
+              "type": "array",
+              "title": "readerGroups",
+              "description": "Groups granted read of these pages and of EVERY ticket in `namespace` -- this is the DESK, not the requesters. Undefaulted deliberately; see this block's description.",
+              "items": {
+                "type": "string"
+              }
+            },
+            "requesterGroups": {
+              "type": "array",
+              "title": "requesterGroups",
+              "description": "Groups granted CREATE on tickets in `namespace` WITHOUT read of the queue -- the reason this chart differs from every other page here. Undefaulted deliberately: who may raise a ticket is a policy decision for whoever installs it.",
+              "items": {
+                "type": "string"
+              }
+            },
+            "deskActions": {
+              "type": "boolean",
+              "title": "deskActions",
+              "description": "Whether the ticket page offers the desk's own write actions, Assign to me and Resolve. Its purpose is to be FALSE wherever assignment and state are owned elsewhere -- a tenant clicking Assign to me then writes a field the other side owns and watches it be overwritten, with nothing erroring. Undefaulted BECAUSE a materialized `true` would be exactly the install that could not turn it off."
+            },
+            "servicePickerName": {
+              "type": "string",
+              "title": "servicePickerName",
+              "description": "Name of the RESTAction supplying the raise form's service choices. Renders only when set together with servicePickerNamespace, so a half-configured install gets free text rather than a broken closed picker."
+            },
+            "servicePickerNamespace": {
+              "type": "string",
+              "title": "servicePickerNamespace",
+              "description": "Namespace of that RESTAction, or unset for free text. The read happens AS THE CALLER, so a requester needs `get` on it."
+            }
+          }
+        },
         "krateo-audit-worm": {
           "type": "object",
           "title": "krateo-audit-worm values",

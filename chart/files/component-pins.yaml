@@ -3608,6 +3608,29 @@ components:
   - portal
   tier: platform
   feature: portal
+# service-desk-page is the one page chart that is NOT gated on `portal`, and the difference is
+# deliberate. Every other page renders widgets into an existing namespace; this one CREATES two
+# namespaces and a Ticket CRD, and its authorization is a policy decision rather than a default:
+# `requesterGroups` grants create-on-tickets WITHOUT read of the queue, `readerGroups` grants the
+# desk itself. Gated on `portal` it would install on both clusters at the next roll with no groups
+# set -- a queue nobody can open and a form nobody can post to -- so it lands DARK on its own
+# feature key, as access-review 0.1.8 and identity-lifecycle 0.1.4 did.
+#
+# TWO THINGS ABOUT ITS CRD, because they decide what a teardown costs. The Tickets CRD is
+# TEMPLATE-rendered (templates/crd.tickets.yaml), not shipped in crds/ -- so unlike a crds/ CRD it
+# IS part of the release and helm would delete it on uninstall. That is why 1.8.91 matters: it adds
+# `helm.sh/resource-policy: keep` to that CRD and to the queue namespace, and NOT to
+# krateo-service-desk-raise, which holds three widgets and no data. Retention follows the DATA.
+#
+# `deps: [portal]` is an ORDERING edge, not a gate: portal's feature is independent, and a
+# cross-feature dep whose feature is off is safely suppressed rather than stalled.
+- name: service-desk-page
+  kind: ServiceDeskPage
+  version: 1.8.91
+  deps:
+  - portal
+  tier: platform
+  feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
   version: 1.8.85
