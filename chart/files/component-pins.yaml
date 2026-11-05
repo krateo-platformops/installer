@@ -320,7 +320,7 @@ components:
   # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
   # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
   # holds anyway because none is at the path that matters -- but check the path, not the presence.)
-  version: 1.8.24
+  version: 1.8.26
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -2425,7 +2425,7 @@ components:
   # GOOD releases. frontend has since corrected that: it also WITHHELD this defect, authored in
   # that same window. Fixing the gate shipped it. A gate failing closed for the wrong reason is
   # indistinguishable from protection while it holds.
-  version: 1.8.24
+  version: 1.8.26
   deps:
   - frontend-crd
   - authn
@@ -4691,7 +4691,7 @@ components:
   # No appVersion in this chart, so pin-ci reports n/a (no image, no component CI to resolve).
   kind: BuilderGate
   chart: builder-gate
-  version: 1.8.24
+  version: 1.8.26
   deps:
     - portal
     - kagent
