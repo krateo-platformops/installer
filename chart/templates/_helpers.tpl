@@ -323,6 +323,26 @@ components:
 {{- define "inst.readyFromConditions" -}}
 {{- $conds := index . 0 -}}
 {{- $r := "" -}}
+{{/* SYNCED=TRUE IS REQUIRED TOO, and the reason is that the Ready REASON cannot carry it.
+     A PAUSED composition reports Ready=True with reason ReconcilePaused and Synced=False: it was
+     healthy when it was paused and nothing is maintaining that state now, so it must not satisfy a
+     dependency gate -- a dependant would be emitted against a component that is not converging and
+     will not.
+     A reason-based rule CANNOT express this. unstructured-runtime declares two constants,
+     ReasonReconcilePausedReady and ReasonReconcilePaused, whose string VALUE is the same
+     "ReconcilePaused", written on Ready and on Synced respectively. So the reason is ambiguous by
+     construction and distinguishing the two cases requires reading the condition TYPE anyway.
+     Synced is the typed condition that says it once.
+     BLAST RADIUS, measured across 166 live composition instances on three clusters before this
+     changed: exactly ONE object is newly withheld -- acme-feedback-controller on 057, which is the
+     paused one this exists to catch. The 9 Unknown/ZeroEvidence instances are unaffected because
+     their Synced is already True, and the one False/Creating instance was already withheld. */}}
+{{- $synced := "" -}}
+{{- range $conds -}}
+{{- if eq (.type | toString) "Synced" -}}
+{{- if eq (.status | toString) "True" -}}{{- $synced = "true" -}}{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- range $conds -}}
 {{- if eq (.type | toString) "Ready" -}}
 {{- $s := .status | toString -}}
@@ -343,22 +363,33 @@ components:
 {{- end -}}
 {{- end -}}
 {{- end -}}
+{{- if ne $synced "true" -}}{{- $r = "" -}}{{- end -}}
 {{- $r -}}
 {{- end -}}
 
 {{- define "inst.ready" -}}
 {{- $top := index . 0 -}}{{- $kind := index . 1 -}}{{- $name := index . 2 -}}{{- $ver := index . 3 -}}{{- $allCRDs := index . 4 -}}
 {{- $r := "" -}}
-{{- if eq (include "inst.crdExists" (list $kind $ver $allCRDs)) "true" -}}
-{{- $apiv := include "inst.apiVersion" (list $ver) -}}
-{{- $o := lookup $apiv $kind $top.Values.namespaces.krateo $name -}}
+{{/* Ask at ANY SERVED tag, not at $ver (#477, the last pinned-version site). A dep may
+     legitimately live at an older served tag across a bump -- inst.emitDecision keeps it there on
+     purpose -- so a lookup keyed on the PINNED version misses an object that exists and reports a
+     healthy dep as not-Ready. That is absorbed by the $exists escape for a dependant that already
+     exists, so the cost is a FRESH dependant held back for the length of the bump rather than
+     anything deleted. Still wrong, and the last place in the chart that derived a version instead
+     of reading what the cluster serves. */}}
+{{- $found := "" -}}
+{{- range $t := splitList " " (include "inst.servedTags" (list $kind $allCRDs)) -}}
+{{- if and (not $found) $t -}}
+{{- $o := lookup (printf "composition.krateo.io/%s" $t) $kind $top.Values.namespaces.krateo $name -}}
 {{- if $o -}}
+{{- $found = "true" -}}
 {{/* nil-guard: a freshly-created dep CR can exist with .status still nil (controller hasn't
      written it yet). $o.status.conditions would then panic ("nil pointer evaluating
      interface {}.conditions") and chart-inspector returns 500, wedging the umbrella mid-chain.
      Coalesce .status to an empty dict so a status-less dep cleanly reads as not-ready. */}}
 {{- $st := $o.status | default dict -}}
 {{- $r = include "inst.readyFromConditions" (list ($st.conditions | default list)) -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- $r -}}

@@ -1,0 +1,43 @@
+name: check-ready-synced
+
+# Installer-specific guard: a PAUSED composition must not satisfy a dependency gate, and
+# inst.ready must look the live composition up at ANY SERVED tag rather than at the pinned
+# version. Both arms matter because inst.ready feeds inst.depsReady for every component.
+#
+# THIS JOB INSTALLS helm-unittest ON PURPOSE. inst.ready's whole job is a `lookup`, and
+# `helm template` DISABLES lookup — so the one arm that matters cannot be reached without a fake
+# cluster. The gate FAILS rather than skips when the plugin is absent (verified by running it with
+# HELM_PLUGINS pointed at an empty directory: exit 1, and it does not print OK), because a skipped
+# test that reports success is how a gate comes to vouch for an arm it never ran.
+
+on:
+  pull_request:
+      # NO `branches:` filter, deliberately. A `branches: [main]` here means the gate does not run
+      # on a STACKED pull request, which then reports CLEAN while every gate in this directory is
+      # skipped — measured 2026-11-03 on the #623->#624->#625 stack: 25 checks vs 2.
+    # NO `paths:` filter, deliberately. A path-filtered workflow never STARTS on a PR that misses
+    # its paths, so if this context is ever made required the PR would wait forever for a status
+    # that is never reported.
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  ready-synced:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Set up helm
+        uses: azure/setup-helm@v5.0.0
+        with:
+          version: v3.19.0
+      - name: Install helm-unittest
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version 1.2.1
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Assert a paused composition cannot satisfy a dependency, and inst.ready reads served tags
+        run: python3 -I .github/scripts/check-ready-synced.py
