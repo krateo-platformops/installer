@@ -31,3 +31,15 @@ retired:
 # between their helm releases; docs/configuration.md#upgrading-from-alert-troubleshooter has the steps.
 - alert-troubleshooter
 - alert-troubleshooter-crd
+# Retired by the incident-controller -> incident-provider cutover (installer #619 removed the
+# component, the 3-PR cutover swapped incident-controller-crd -> incident-provider-crd 0.6.1).
+# THE PINS WERE DELETED AND THESE NAMES WERE NEVER APPENDED HERE, which is exactly what the
+# instructions above forbid -- and the landmine detonated: krateo-demo's installer composition
+# recorded `ChartRenderable=False` at 2026-11-04T07:00:49Z with
+#   components[incident-controller-crd]: unknown name not in files/component-pins.yaml
+# from ordered-teardown.yaml:58, which aborts the ENTIRE umbrella render. demo's CR has since
+# been patched clear of the name so it renders again, but any cluster still carrying either name
+# in spec.components would be wedged the same way on its next reconcile. 057 never carried them
+# (68 components, checked 2026-11-05) so it was never exposed.
+- incident-controller
+- incident-controller-crd
