@@ -22,7 +22,7 @@ components:
   # 0.33.1 WAS SKIPPED DELIBERATELY. It exists and was approved, but authn recommended going straight
   # to 0.34.0 so both clusters roll once instead of twice, and Diego chose that. 0.33.1 was never
   # pinned or rolled anywhere.
-  version: 0.34.0
+  version: 0.35.4
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -483,6 +483,29 @@ components:
   version: 1.12.56
   tier: platform
   feature: portal
+# 0.35.4 (2026-11-05, authn main 75aedb1): owner re-diffed both charts against 0.34.0 and
+# Chart.yaml is the ONLY difference -- no values key, default, RBAC rule or CRD field changed, and
+# no env or flag reads changed in the code. So stored objects have nothing new to fail at the next
+# write. The changes are ON THE WIRE, and they are not visible in a render:
+#   * /oidc/login and /oauth/login: 417 is GONE, replaced by 404 / 403 / 500 with a cause.
+#     A non-2xx Status now carries "status":"Failure".
+#   * ALL OUTBOUND CALLS NOW REFUSE REDIRECTS. An IdP, discovery, UserInfo or snowplow endpoint
+#     that answers 3xx now FAILS with its existing cause (TokenExchangeFailed, UserInfoFailed,
+#     OIDCDiscoveryFailed, RESTActionFailed) instead of being followed.
+#   * RESTAction calls move from GET /call to POST /call/read, token in the BODY.
+#     Needs no installer change: all /call references in this chart are comments, not config.
+# FLOOR: snowplow >= 1.12.28 (pinned 1.12.56 satisfies it). No core-provider,
+# agentgateway-policies or RS256/JWKS counterpart, and no installer-side key, knob or gate.
+# PKCE SIDE EFFECT, which is a ROLL-ORDER constraint, not a pin one: frontend sends code_challenge
+# on OAuth flows only when authn >= 0.35.1 (OAUTH_VERIFIER_FROM in SocialLogin.tsx) AND the portal
+# runs frontend >= 1.8.23. So PKCE on GitHub turns itself ON the moment 0.35.4 is live on a cluster
+# whose frontend is new enough. Measured 2026-11-05: krateo-demo runs frontend 1.8.21, which
+# predates PKCE entirely and never reaches that gate -- so a demo sign-in proves POST /call/read
+# and NOT PKCE until demo's frontend is >= 1.8.23. A sign-in only counts as PKCE proof if the
+# authorization redirect actually carries code_challenge. Failures would read 403
+# AuthorizationCodeRejected.
+# 057 CANNOT PROVE THE WIRE CHANGES: it has 0 OAuthConfigs and 0 OIDCConfigs, so it exercises
+# neither RESTActions nor PKCE. A 057 smoke test establishes that 0.35.4 starts and answers.
 - name: authn
   # KRATEO-DEMO CONSTRAINT -- DO NOT BUMP TO >= 0.28.0 AS A ROUTINE UPDATE (acmp, 2026-10-29).
   # authn 0.28.0 (authn#42) stamps an `authn.krateo.io/groups` annotation, and AT STARTUP it
@@ -565,7 +588,7 @@ components:
   # REQUIRED-BEFORE child Krateos: Diego decided children move ONCE, to the first installer version
   # that pins authn 0.34.0, rather than stopping at 0.3.498 first. acmp sets that version as the
   # blueprint's childKrateo.installer.version and upgrades acme and globex on his word.
-  version: 0.34.0
+  version: 0.35.4
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
