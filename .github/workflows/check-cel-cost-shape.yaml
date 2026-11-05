@@ -1,0 +1,43 @@
+name: check-cel-cost-shape
+
+# Installer-specific guard: chart/values.schema.json must not place a keyword that crdgen compiles
+# into CEL under an unbounded array or string. The apiserver's cost estimator multiplies by every
+# unbounded collection above the rule and refuses the WHOLE generated CRD, so one such node breaks
+# every fresh install.
+#
+# MEASURED, not imagined. 0.3.507 and 0.3.508 cannot install on a fresh cluster. snowplow measured
+# 0.3.508 on 2 of 2 fresh GKE 1.36 clusters, 2026-11-05 11:41Z: `helm install` ends with `job
+# installer-self-await-crd failed: DeadlineExceeded` because the Installer CRD is refused --
+# "estimated rule cost exceeds budget by factor of 1.468006x" at
+# componentValues.identity-lifecycle.identityResources.items.resources.items. The schema had ZERO
+# hand-written CEL; it had a JSON Schema `not: {enum: ["*","secrets"]}` under two arrays with no
+# maxItems. Two clusters were spent discovering a property of the schema that is checkable here.
+#
+# `not` is an ERROR because it is proven to compile to a cost-estimated rule, by two independent
+# reproductions of factor 1.468006x. anyOf/uniqueItems/patternProperties and friends are WARNINGS,
+# not errors: when 0.3.508 failed the apiserver reported ONE structural error while four of them
+# were also present and unbounded, which is evidence they are not currently costly. A gate that
+# fires on code that demonstrably installs is a gate someone switches off.
+
+on:
+  pull_request:
+      # NO `branches:` filter, deliberately. A `branches: [main]` here means the gate does not run
+      # on a STACKED pull request, which then shows "all checks passed" with every gate skipped.
+      # Measured on the #623->#624->#625 stack: 25 checks vs 2.
+    # NO `paths:` filter, deliberately. A path-filtered workflow never STARTS on a PR that misses
+    # its paths, so a required context would wait forever on "Expected — waiting for status".
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  cel-cost-shape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Assert no CEL-compiled keyword sits under an unbounded collection
+        run: python3 .github/scripts/check-cel-cost-shape.py
