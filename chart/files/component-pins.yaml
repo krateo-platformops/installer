@@ -2795,6 +2795,14 @@ components:
   # 1.8.49 (#253): LEG 2 OF 3. The blueprint-render RESTAction forwards lookupStubs — only when the array
   # is non-empty, so every existing request body stays byte-identical — and returns the lookups report.
   # One RESTAction changed.
+# 1.8.92 (2026-11-05, cut at 6dbb40b): forms field lists, the new-ticket form fix, alert panel
+# text, and two CI gates. Owner-published and registry-verified here (appVersion 1.8.92).
+# NOTE on the owner's earlier message: 1.8.92 was ANNOUNCED before it existed -- the tag push had
+# been denied by a permission check and the announcement went out in the same step. The owner
+# retracted it unprompted and re-cut it. So this pin rests on `helm show chart` returning 1.8.92
+# from the registry, not on being told it was published. A tag is not a publish; an announcement
+# is not a tag.
+# No portal-crd pin exists, so there is no lockstep partner to move.
 - name: portal
   #
   # 1.8.88 -> 1.8.90. Carries portal#362: the values.schema.json that service-desk-page needs for
@@ -3506,7 +3514,7 @@ components:
   # the label, the concrete path and krateo.io/nav-link-only (it links and owns nothing). ONLY the
   # exact string "true" enables it, so a half-recognised truthy value fails visibly instead of
   # silently claiming the route back.
-  version: 1.8.91
+  version: 1.8.92
   deps:
   - frontend
   - git-provider
