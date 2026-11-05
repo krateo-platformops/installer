@@ -4332,6 +4332,28 @@ components:
   # until krateo_audit exists and the next schedule retries, so enabling it before the audit
   # stream has produced anything is safe: the race self-resolves without wedging the umbrella.
   feature: auditWorm
+# 0.1.21 (2026-11-05, tag 3.1.40, appVersion 1.4.0). A FOUR-CHART JUMP from 0.1.17, so the
+# image moves 1.2.0 -> 1.4.0, not a dependency bump:
+#   0.1.18 metadata only · 0.1.19 image 1.3.0 + auditScoping · 0.1.20 image 1.3.1 (Go 1.26 +
+#   dependency updates) · 0.1.21 image 1.4.0
+# BREAKING: a client sending its token in the QUERY STRING now gets 401 even with valid
+# credentials. The query-param fallback is GONE.
+#   CONSUMER-LAST was satisfied before this pin, and ENUMERATED rather than assumed. The installer
+#   wires exactly ONE consumer: `frontend` is the only component with consumer:true, and BOTH of
+#   this component's configKeys (EVENTS_API_BASE_URL, EVENTS_PUSH_API_BASE_URL) are BROWSER URLs
+#   written into it -- EVENTS_PUSH is the browser's push target, NOT an in-cluster pusher, which is
+#   what the name suggests and what I checked first. Query-param token construction in this chart:
+#   ZERO (token=, ?token, &token, authorization=, jwt= all absent; the 2 access_token hits are
+#   comments). Floor: frontend >= 1.8.13 -- met everywhere (057 1.8.26, a0-openstack-d3 1.8.16,
+#   demo 1.8.21).
+#   RESIDUAL, stated because it is not enumerable from the chart: a hand-made client, a curl in a
+#   runbook, a kagent tool with a saved URL. The route is gatewayAuth:optional so the gateway
+#   injects no token, meaning such a caller would have to be deliberate.
+# ALSO FIXES a0-openstack-d3's bell, which cannot connect today because the proxy answers the
+#   browser's CORS preflight with 401. 057 is unaffected ONLY because its gateway answers the
+#   preflight -- so 057 passing says nothing about a0.
+# OWNER'S CAVEAT, carried unchanged: the published image was exercised with real HTTP requests but
+#   with NO authn behind it. A valid login in a browser is UNTESTED.
 - name: krateo-sse-proxy
   kind: KrateoSseProxy
   # 0.1.13 (sse-proxy#20/#21): prunes the GET /events?composition_id=… scan with a tokenbf
@@ -4406,7 +4428,7 @@ components:
   # sse-proxy#15/#16/#17 (1.45 breaks trace export, snowplow#596/#695).
   # The 0.1.15 note above about image.tag still applies verbatim: do NOT set
   # componentValues.krateo-sse-proxy.image.tag here.
-  version: 0.1.17
+  version: 0.1.21
   deps:
   - krateo-observability
   tier: observability
