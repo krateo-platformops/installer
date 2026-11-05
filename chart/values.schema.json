@@ -1733,15 +1733,6 @@
                     }
                   }
                 },
-                "certManager": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "enable": {
-                      "type": "boolean"
-                    }
-                  }
-                },
                 "manager": {
                   "type": "object",
                   "additionalProperties": false,

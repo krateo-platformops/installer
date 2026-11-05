@@ -3999,8 +3999,6 @@ components:
   # krateo-demo through builder-gate. The unit is an API GROUP, not a component, because the
   # group can be served by a hand-install: krateo-demo runs ingress:false yet serves six
   # cert-manager.io CRDs, and clickhouse-operator/mongodb-operator are Ready there.
-  requiresApiGroups:
-  - cert-manager.io
   tier: observability
   feature: portal
 - name: mongodb-operator
@@ -4015,8 +4013,6 @@ components:
   # krateo-demo through builder-gate. The unit is an API GROUP, not a component, because the
   # group can be served by a hand-install: krateo-demo runs ingress:false yet serves six
   # cert-manager.io CRDs, and clickhouse-operator/mongodb-operator are Ready there.
-  requiresApiGroups:
-  - cert-manager.io
   tier: observability
   feature: portal
 - name: krateo-observability
