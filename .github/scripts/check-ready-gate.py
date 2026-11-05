@@ -36,16 +36,101 @@ a test that restates the rule in Python would agree with itself.
 import json
 import shutil
 import subprocess
+import pathlib
 import sys
 import tempfile
 from pathlib import Path
 
 HELPERS = Path("chart/templates/_helpers.tpl")
 
+# Synced=True, attached to every case that is SUPPOSED to be accepted. Those cases exist to test
+# REASON discrimination on Ready; without a Synced condition they would now all block and the gate
+# would be testing the Synced rule over and over instead of the thing it is named for.
+#
+# WHY SYNCED AND NOT A READY REASON: unstructured-runtime declares two constants,
+# ReasonReconcilePausedReady and ReasonReconcilePaused, whose string VALUE is the same
+# "ReconcilePaused" -- written on Ready and on Synced respectively. The reason is ambiguous by
+# construction, so telling "Ready, paused" from "Synced, paused" means reading the condition TYPE
+# anyway. Synced is the typed condition that says it once.
+READY_PROBE = """{{- $allCRDs := list (dict "spec" (dict "group" "composition.krateo.io" \
+"names" (dict "kind" "Portal") "versions" (list (dict "name" "v1-8-88" "served" true) \
+(dict "name" "v1-8-91" "served" true)))) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ready
+data:
+  servedTags: {{ (include "inst.servedTags" (list "Portal" $allCRDs)) | quote }}
+  ready: {{ (include "inst.ready" (list $ "Portal" "portal" "1.8.91" $allCRDs)) | quote }}
+"""
+
+
+READY_SUITE = """suite: inst.ready finds a composition at an OLDER served tag
+templates:
+  - ready.yaml
+tests:
+  - it: with NO composition anywhere, inst.ready is empty
+    asserts:
+      - equal: {path: data.servedTags, value: "v1-8-88 v1-8-91"}
+      - equal: {path: data.ready, value: ""}
+
+  - it: THE FIX -- the live object sits at the OLDER served tag and must be found and read
+    kubernetesProvider:
+      scheme:
+        "composition.krateo.io/v1-8-88/Portal":
+          gvr: {group: composition.krateo.io, version: v1-8-88, resource: portals}
+          namespaced: true
+      objects:
+        - apiVersion: composition.krateo.io/v1-8-88
+          kind: Portal
+          metadata: {name: portal, namespace: krateo-system}
+          status:
+            conditions:
+              - {type: Ready, status: "True", reason: Available}
+              - {type: Synced, status: "True", reason: ReconcileSuccess}
+    asserts:
+      - equal: {path: data.ready, value: "true"}
+
+  - it: and a PAUSED object at that older tag must NOT satisfy readiness
+    kubernetesProvider:
+      scheme:
+        "composition.krateo.io/v1-8-88/Portal":
+          gvr: {group: composition.krateo.io, version: v1-8-88, resource: portals}
+          namespaced: true
+      objects:
+        - apiVersion: composition.krateo.io/v1-8-88
+          kind: Portal
+          metadata: {name: portal, namespace: krateo-system}
+          status:
+            conditions:
+              - {type: Ready, status: "True", reason: ReconcilePaused}
+              - {type: Synced, status: "False", reason: ReconcilePaused}
+    asserts:
+      - equal: {path: data.ready, value: ""}
+"""
+
+SYNCED_OK = {"type": "Synced", "status": "True", "reason": "ReconcileSuccess"}
+
 CASES = [
-    ("Ready=True",                        [{"type": "Ready", "status": "True"}],                                  "true"),
-    ("Ready=True + noise",                [{"type": "Synced", "status": "False"}, {"type": "Ready", "status": "True"}], "true"),
-    ("Unknown/ZeroEvidence",              [{"type": "Ready", "status": "Unknown", "reason": "ZeroEvidence"}],      "true"),
+    ("Ready=True + Synced=True",          [{"type": "Ready", "status": "True"}, SYNCED_OK],                       "true"),
+    # THIS CASE REVERSED, and deliberately: it used to assert that a Synced=False condition is
+    # NOISE which must not affect the Ready reading, and expected "true". That is exactly the
+    # PAUSED composition -- Ready=True/ReconcilePaused with Synced=False -- which was healthy when
+    # it was paused and which nothing is maintaining now. A dependant emitted against it is
+    # emitted against a component that is not converging and will not. Synced=True is now
+    # REQUIRED as well as an accepted Ready reason.
+    # Measured before changing it: across 166 live composition instances on three clusters,
+    # exactly ONE object is newly withheld -- acme-feedback-controller on 057, the paused one this
+    # exists to catch. The 9 Unknown/ZeroEvidence instances were unaffected (their Synced is
+    # already True) and the one False/Creating instance was already withheld.
+    ("PAUSED: Ready=True + Synced=False must BLOCK",
+                                          [{"type": "Synced", "status": "False", "reason": "ReconcilePaused"},
+                                           {"type": "Ready", "status": "True", "reason": "ReconcilePaused"}], ""),
+    ("Ready=True + Synced ABSENT must BLOCK",
+                                          [{"type": "Ready", "status": "True"}],                              ""),
+    ("Ready=True + Synced=Unknown must BLOCK",
+                                          [{"type": "Ready", "status": "True"}, {"type": "Synced", "status": "Unknown"}], ""),
+    ("Unknown/ZeroEvidence + Synced=True",[{"type": "Ready", "status": "Unknown", "reason": "ZeroEvidence"}, SYNCED_OK], "true"),
     ("Unknown/Creating must BLOCK",       [{"type": "Ready", "status": "Unknown", "reason": "Creating"}],          ""),
     ("Unknown with NO reason must BLOCK", [{"type": "Ready", "status": "Unknown"}],                                ""),
     ("Ready=False",                       [{"type": "Ready", "status": "False"}],                                 ""),
@@ -66,7 +151,7 @@ CASES = [
     ("Synced=Unknown/ZeroEvidence only",  [{"type": "Synced", "status": "Unknown", "reason": "ZeroEvidence"}],     ""),
     # core-provider#318: a 403 reading a managed child. Accepted for the SAME reason as
     # ZeroEvidence -- a 403 from the authorization layer is a steady state, not a stage.
-    ("Unknown/ChildrenForbidden",         [{"type": "Ready", "status": "Unknown", "reason": "ChildrenForbidden"}], "true"),
+    ("Unknown/ChildrenForbidden + Synced=True",[{"type": "Ready", "status": "Unknown", "reason": "ChildrenForbidden"}, SYNCED_OK], "true"),
     # and the contrast that makes the allowlist meaningful rather than permissive:
     ("Unknown/NotObserved must BLOCK",    [{"type": "Ready", "status": "Unknown", "reason": "NotObserved"}],       ""),
     ("Unknown/Forbidden must BLOCK",      [{"type": "Ready", "status": "Unknown", "reason": "Forbidden"}],         ""),
@@ -145,6 +230,64 @@ def main() -> int:
             for f in failures:
                 print(f"  {f}")
             return 1
+        # ---- inst.ready: the version-agnostic lookup, and the structural half ----
+        # inst.readyFromConditions decides from conditions it is HANDED; inst.ready is what fetches
+        # the object. They are one decision in two functions, so they are gated together rather
+        # than in two places -- a second gate over the same helper is how a reporter came to
+        # contradict the gate it reported on earlier today.
+        src_h = HELPERS.read_text()
+        i = src_h.index('{{- define "inst.ready" -}}')
+        body = src_h[i:src_h.index('{{- define "', i + 10)]
+        if 'include "inst.servedTags"' in body:
+            print("  PASS  inst.ready iterates the SERVED tags rather than one derived version")
+        else:
+            failures.append("inst.ready no longer iterates inst.servedTags. A dep may legitimately "
+                            "live at an older served tag across a bump (inst.emitDecision keeps it "
+                            "there on purpose), so a lookup keyed on the pinned version misses an "
+                            "object that exists and reports a healthy dep as not-Ready.")
+        if 'include "inst.apiVersion" (list $ver)' in body:
+            failures.append("inst.ready builds an apiVersion from the pinned $ver again, which is "
+                            "the #477 defect in its last remaining site.")
+        else:
+            print("  PASS  inst.ready does not build an apiVersion from the pinned version")
+
+        # THE LOOKUP ITSELF, which `helm template` cannot reach because it DISABLES lookup. A
+        # missing plugin FAILS rather than skips: a skipped test that reports success is how a gate
+        # comes to vouch for an arm it never ran. Verified by running with HELM_PLUGINS pointed at
+        # an empty directory -- exit 1, and no OK line.
+        have = subprocess.run(["helm", "plugin", "list"], capture_output=True, text=True)
+        if "unittest" not in (have.stdout or ""):
+            print("::error::helm-unittest is not installed, so inst.ready's LOOKUP cannot be "
+                  "exercised. Install it: helm plugin install "
+                  "https://github.com/helm-unittest/helm-unittest")
+            return 1
+        ut = pathlib.Path(tempfile.mkdtemp(prefix="ready-lookup-"))
+        try:
+            uc = ut / "probe"
+            (uc / "templates").mkdir(parents=True)
+            (uc / "tests").mkdir(parents=True)
+            (uc / "Chart.yaml").write_text("apiVersion: v2\nname: probe\nversion: 0.0.1\n")
+            (uc / "values.yaml").write_text("namespaces:\n  krateo: krateo-system\n")
+            (uc / "templates" / "_helpers.tpl").write_text(src_h)
+            (uc / "templates" / "ready.yaml").write_text(READY_PROBE)
+            (uc / "tests" / "ready_test.yaml").write_text(READY_SUITE)
+            r = subprocess.run(["helm", "unittest", "probe"], cwd=str(ut),
+                               capture_output=True, text=True)
+            if r.returncode != 0:
+                failures.append("the faked-cluster suite FAILED:\n" + (r.stdout or r.stderr)[:1200])
+            else:
+                nline = [l.strip() for l in (r.stdout or "").split("\n") if "Tests:" in l]
+                print("  PASS  faked cluster: inst.ready finds the object at an OLDER served tag "
+                      "and refuses a paused one   (%s)" % (nline[0] if nline else "ok"))
+        finally:
+            shutil.rmtree(ut, ignore_errors=True)
+
+        if failures:
+            print("::error::ready-gate: %d check(s) failed:" % len(failures))
+            for f in failures:
+                print("  " + f)
+            return 1
+
         print(f"ready-gate: OK — all {len(CASES)} cases discriminate, "
               f"incl. Unknown/ZeroEvidence READY and Unknown/Creating BLOCKED")
         return 0
