@@ -1,0 +1,37 @@
+name: check-type-unions
+
+# Installer-specific guard: chart/values.schema.json must not declare a multi-member JSON Schema
+# `type` union. plumbing/crdgen's primaryType keeps the FIRST non-null member and drops the rest
+# with no diagnostic (plumbing#77), and this schema is crdgen-compiled into the Installer CRD — so
+# a union here produces a CRD NARROWER than the schema and the apiserver rejects values the chart
+# itself accepts. Measured on krateo-057 at 0.3.506: OASGEN_PROVIDER_MAX_RECONCILE_RATE declared
+# ["integer","string"] and landed as type: integer, so a string value was refused. `["T","null"]`
+# is handled correctly by crdgen and is NOT flagged — the gate self-checks both directions.
+
+on:
+  pull_request:
+      # NO `branches:` filter, deliberately. A `branches: [main]` here means the gate does not run
+      # on a STACKED pull request — one whose base is another PR's branch rather than main. Such a
+      # PR then reports only the workflows without the filter and shows CLEAN with "all checks
+      # passed", which reads as verified while every gate in this directory was skipped. Measured
+      # 2026-11-03 on the #623->#624->#625 stack: #623 (base main) ran 25 checks, #624 and #625
+      # ran 2. A gate that silently does not run is worse than no gate.
+    # NO `paths:` filter, deliberately. A path-filtered workflow never STARTS on a PR that misses
+    # its paths, so if this context is ever made required the PR would sit on "Expected — waiting
+    # for status to be reported" forever. The guard is a cheap python script with no dependencies,
+    # so it runs on every PR rather than being filtered.
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  type-unions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Assert no multi-member type union reaches crdgen
+        run: python3 .github/scripts/check-type-unions.py
