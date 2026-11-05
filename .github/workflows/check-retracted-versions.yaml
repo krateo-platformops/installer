@@ -1,0 +1,49 @@
+name: check-retracted-versions
+
+# Installer-specific guard: a pin must not point at a version its OWN repo has retracted.
+#
+# MEASURED, not hypothetical. installer#675 pinned frontend/frontend-crd/builder-gate
+# 1.8.22 -> 1.8.24 at 2026-11-05T12:58:05Z. The frontend session had asked IN WRITING that
+# 1.8.24 not be pinned -- cut before their #624 merged, so its allowedResources enum carries 47
+# values where main carries 54. That request reached one session and not the other, and NOTHING
+# IN EITHER REPO RECORDED IT: 1.8.24's GitHub release is prerelease=false with ordinary notes,
+# and a grep of frontend main found no marker. It was caught only because someone read main's
+# pins before cutting a tag and noticed a commit they had not made. That is luck, not a control.
+#
+# Contract agreed with frontend: a retracted-versions.yaml at a known raw URL, matched on the
+# `chart:` field of component-pins.yaml (NOT the component name -- `frontend-crd` is the
+# component, `frontend-crds` is the chart, and matching the wrong one passes silently), listing
+# only the charts that actually carry the defect, failing closed when unreadable, and resolving
+# main to a commit so the output names the ref it read.
+#
+# Runs on the PULL REQUEST that changes a pin, deliberately. A gate that only ran at tag time
+# would have let #675 merge and caught it hours later, after the pin was already on main.
+
+on:
+  pull_request:
+      # NO `branches:` filter, deliberately. A `branches: [main]` here means the gate does not
+      # run on a STACKED pull request, which then shows "all checks passed" with every gate
+      # skipped. Measured on the #623->#624->#625 stack: 25 checks vs 2.
+    # NO `paths:` filter, deliberately: a path-filtered workflow never STARTS on a PR that
+    # misses its paths, so a required context would wait forever on "Expected".
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  retracted-versions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # the gate diffs the pin file against the PR's merge base, so it needs more than
+          # the default depth-1 checkout
+          fetch-depth: 0
+      - name: Assert no pin points at a retracted version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/check-retracted-versions.py
