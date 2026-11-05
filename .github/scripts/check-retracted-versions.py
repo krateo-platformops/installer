@@ -64,12 +64,16 @@ OWNER_REPO = "krateo-platformops/frontend"
 RAW = "https://raw.githubusercontent.com/%s/%s/retracted-versions.yaml"
 API_REF = "https://api.github.com/repos/%s/commits/main" % OWNER_REPO
 
-# DELIBERATE PRE-ENABLE STATE. frontend#628 publishes the file; until it merges the URL 404s.
+# ENABLED 2026-11-05, in the same change that confirmed the file is live. frontend#628 merged and
+# https://raw.githubusercontent.com/krateo-platformops/frontend/<sha>/retracted-versions.yaml
+# returns 200 with one entry (frontend-crds 1.8.24 -> use 1.8.26). A 404 now FAILS, which is the
+# point: the list disappearing is indistinguishable from every pin being clean, and the second is
+# what a tolerated 404 would silently report. Historical note on the pre-enable state:
 # A gate that fails closed on a file that does not exist yet would block every PR in this repo
 # for a reason unrelated to the PR. So while ENFORCE is false a 404 is reported and tolerated;
 # every OTHER failure (bad YAML, a reachable-but-broken file, a retracted pin) still fails.
 # Flip this to True in the same commit that frontend#628 merges, and the 404 tolerance is gone.
-ENFORCE = False
+ENFORCE = True
 
 
 def _get(url, token=None, accept=None):
