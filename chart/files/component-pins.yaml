@@ -4071,6 +4071,21 @@ components:
   # cert-manager.io CRDs, and clickhouse-operator/mongodb-operator are Ready there.
   tier: observability
   feature: portal
+# 0.1.28 (2026-11-05, observability tag 3.1.38, appVersion 3.2.0). Owner-supplied, owner-measured.
+# #99: HyperDX's OWN traces and metrics now go to the node-local agent -- the telemetry half of
+#   G13. Logs stay OFF OTLP because filelog already has them. Traces sampled at 5%.
+#   NEVER UNSET HyperDX's OTEL_EXPORTER_OTLP_ENDPOINT. With no endpoint its SDK defaults to
+#   https://in-otel.hyperdx.io and HYPERDX_API_KEY IS SET -- i.e. blanking that value in
+#   componentValues would ship platform telemetry to a third party. Do not add a componentValues
+#   entry that empties it.
+# #95, #97: sre-jwt-in-telemetry now reads k8s-events and has NO ServiceName exclusion, because
+#   both hid the likeliest leaks -- kagent's --token among them. Measured with no exclusions:
+#   0 rows over 7d on 057, so it does not fire on rollout. Six other alerts now exclude the
+#   orchestrator as `autopilot`; `krateo-autopilot` matched 0 of 26.74M rows. No default alert's
+#   count changes.
+# EXPECT AFTER THE ROLL: HyperDX appears in otel_traces under krateo-observability at an estimated
+#   69k spans/day -- MORE THAN THE REST OF THE PLATFORM COMBINED (~9k). Does not touch the SLOs,
+#   because that filter is an allowlist.
 - name: krateo-observability
   kind: KrateoObservability
   # 0.1.19 (observability#62): the log-scoped default alerts also exclude ServiceName
@@ -4105,7 +4120,7 @@ components:
   # (that repo already has a krateo-observability-0.1.10 tag as precedent), or adopt snowplow's
   # proposal to stamp the source commit SHA onto the chart artifact so pin-ci stops inferring
   # provenance from appVersion at all. Do NOT unblock this by deleting `sources` or the appVersion.
-  version: 0.1.23
+  version: 0.1.28
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -4141,6 +4156,13 @@ components:
   # FRONTEND_URL is consequently NOT set by the installer — with no external origin there is no honest
   # value to compute, and the chart default stands (compositions.yaml gates on gatewayPort).
   svcMatch: krateo-clickstack
+# 0.3.13 (2026-11-05, #96, image otel-collector 1.0.5): JWT redaction on the k8sobjects pipeline,
+# targeting `body.string`. NOT the 0.3.9 statement: k8sobjects bodies are nested MAPS, which
+# replace_pattern(body, ...) leaves untouched. Owner-tested end to end on kind with the published
+# image, NOT yet into ClickHouse -- carried as the owner stated it.
+# FLOOR: otel-collector 1.0.5, which THIS CHART SETS ITSELF, so nothing extra belongs in the pin.
+# An image override OLDER than 1.0.5 crash-loops, as 0.3.9 did.
+# EXPECT AFTER THE ROLL: the deployment collector restarts on the new image.
 - name: otel-collector-deployment
   kind: OtelCollectorDeployment
   # 0.3.8 (otel-collector#22/#24, image 1.0.4): compositionresolver invalidates the RESTMapper on a
@@ -4153,7 +4175,7 @@ components:
   #     v1-12-41 4/8 (50%)   v1-12-42 0/8 (0%)   v0-3-413 0/6 (0%)   <- both rolled that morning
   # The 48h AGGREGATE reads a flat ~100% and hides this entirely; only the per-apiVersion split
   # shows it. Read the split, never the rollup, when judging event correlation.
-  version: 0.3.11
+  version: 0.3.13
   deps:
   - krateo-observability
   tier: observability
@@ -4200,6 +4222,15 @@ components:
   - otel-collector-daemonset
   tier: observability
   feature: sloRollup
+# 0.1.18 (2026-11-05, #96): body redaction targets `body.string` on the OTLP arms too --
+# precautionary, since every OTLP body on 057 is a string.
+# 0.1.17 (#94, #54) is included in this jump: filelog promotes `level` or `severity_text`, and a
+# W3C trace_id with span_id, from JSON lines. Body stays RAW and LogAttributes are unchanged.
+# TraceId stays EMPTY for snowplow until snowplow#1184.
+# EXPECT AFTER THE ROLL: severity filters start matching -- about 2,700 JSON error rows/day on 057.
+#   None of the 26 Alert CRs uses severity, but ANY SAVED HYPERDX RULE on severity can start
+#   firing, and the owner could not enumerate those. So a new alert firing after this roll is a
+#   candidate consequence of it, not automatically an incident.
 - name: otel-collector-daemonset
   # 0.1.13 (observability#75, repo tag 3.1.22): PARTITION the OTLP log stream. krateo_audit had
   # acquired a SECOND producer -- the exact condition 0.1.11's own chart comment said to guard
@@ -4284,7 +4315,7 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.16
+  version: 0.1.18
   deps:
   - otel-collector-deployment
   tier: observability
