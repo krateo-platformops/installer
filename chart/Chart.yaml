@@ -86,11 +86,11 @@ dependencies:
 - condition: bootstrap.coreProvider.enabled
   name: core-provider
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.66
+  version: 2.13.67
 - condition: bootstrap.coreProvider.enabled
   name: core-provider-crds
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.66
+  version: 2.13.67
 description: Umbrella orchestrator blueprint that sequences the per-component Krateo
   PlatformOps blueprints into one ordered, readiness-gated install.
 home: https://krateo.io
