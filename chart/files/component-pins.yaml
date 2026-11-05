@@ -4125,6 +4125,43 @@ components:
   - krateo-observability
   tier: observability
   feature: portal
+- name: krateo-slo-rollup
+  # NEW COMPONENT, wired 2026-11-05, LANDS DARK (features.sloRollup default false).
+  # A CronJob that applies a ClickHouse daily rollup table (krateo_slo_daily) + a refreshable
+  # view, so a rolling 28-day SLO survives the otel_* tables' 7-day retention. Published by acmp
+  # from krateo-platformops/observability tag 3.1.35.
+  #
+  # VERIFIED INDEPENDENTLY, not taken from the release note:
+  #   pullable      0.1.0 found; negative control 9.9.9 -> not found at the SAME org, so the
+  #                 control discriminates a missing version from a wrong org
+  #   ships no CRDs crds/ is empty and no manifest declares a CustomResourceDefinition, so there
+  #                 is NO -crd half and check-pin-crd-lockstep has nothing to pair
+  #   schema        46 declared paths, root additionalProperties:false, ZERO defaults, and the
+  #                 only open object is `global`. No root-level `required` -- which matters,
+  #                 because a root `required` in a component chart wedges the installer.
+  #
+  # DEP IS THE COLLECTOR, not krateo-observability directly. It needs the collector's SOURCE
+  # tables, and otel-collector-daemonset already chains otel-collector-deployment ->
+  # krateo-observability -> clickhouse-operator, so one dep pulls the whole tier in the right
+  # order. Installed before them the Job fails with a clear message rather than silently; with
+  # the tables present but empty it succeeds with zero rows.
+  #
+  # TWO OPERATIONAL FACTS a reader needs and the chart cannot enforce:
+  #   - it reads the `otel-clickhouse-credentials` Secret and needs ClickHouse >= 24.10
+  #     (the platform runs 26.8, so this is satisfied today and is a floor, not a target).
+  #   - changing `rollup.ttlDays` on a LIVE cluster later needs an ALTER TTL grant that
+  #     otelcollector's shipped grants do NOT include. The Job fails and logs the exact
+  #     statement until a human runs it. So the first ttlDays change is a manual step, by design.
+  #
+  # PROVEN ON KIND ONLY: acmp reports 45/45 there and explicitly NOT on a real cluster. Landing
+  # dark is what makes that acceptable -- nothing installs until someone enables the feature,
+  # which is a CR edit rather than a values change.
+  kind: KrateoSloRollup
+  version: 0.1.0
+  deps:
+  - otel-collector-daemonset
+  tier: observability
+  feature: sloRollup
 - name: otel-collector-daemonset
   # 0.1.13 (observability#75, repo tag 3.1.22): PARTITION the OTLP log stream. krateo_audit had
   # acquired a SECOND producer -- the exact condition 0.1.11's own chart comment said to guard

@@ -260,6 +260,13 @@
           "default": false,
           "description": "Opt-in Google Config Connector: the operator and its two CRDs (components gcp-configconnector-crd + gcp-configconnector, from oci://ghcr.io/krateo-blueprints/charts), letting Compositions provision real Google Cloud resources. Runs in CLUSTER mode by default, which means ONE Google service account for the entire cluster and a controller that watches every namespace -- namespaced mode exists but requires Workload Identity and cannot use a key Secret. Needs a Google service-account key in the Secret named by componentValues.gcp-configconnector.configConnector.credentialSecretName, created in cnrm-system after the operator first runs. Applying the ConfigConnector CR makes the operator install ~635 further CRDs, so this measurably grows the cluster's API surface."
         },
+        "sloRollup": {
+          "type": "boolean",
+          "default": false,
+          "title": "SLO rollup",
+          "description": "Install krateo-slo-rollup: a CronJob that applies a ClickHouse daily rollup table (krateo_slo_daily) and a refreshable view, so a rolling 28-day SLO can be computed although every otel_* table keeps only 7 days. OFF by default. It adds no ingest path and nothing to the insert path of the otel_metrics tables. Requires the observability stack and the collector's source tables: installed before them the Job fails with a clear message, and with the tables present but empty it succeeds with zero rows. Changing rollup.ttlDays on a LIVE cluster later needs an ALTER TTL grant the shipped otelcollector grants do not include -- the Job then fails and logs the exact statement to run.",
+          "x-krateo-owner": "acmp"
+        },
         "serviceDesk": {
           "type": "boolean",
           "default": false,
@@ -6354,6 +6361,284 @@
               }
             }
           }
+        },
+        "krateo-slo-rollup": {
+          "additionalProperties": false,
+          "properties": {
+            "activeDeadlineSeconds": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "apply": {
+              "additionalProperties": false,
+              "properties": {
+                "schedule": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "staleAfterSeconds": {
+                  "maximum": 86399,
+                  "minimum": 60,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "schedule",
+                "staleAfterSeconds"
+              ],
+              "type": "object"
+            },
+            "clickhouse": {
+              "additionalProperties": false,
+              "properties": {
+                "credentialsSecret": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "passwordKey": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "usernameKey": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "usernameKey",
+                    "passwordKey"
+                  ],
+                  "type": "object"
+                },
+                "database": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "host": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "port": {
+                  "maximum": 65535,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "host",
+                "port",
+                "database",
+                "credentialsSecret"
+              ],
+              "type": "object"
+            },
+            "concurrencyPolicy": {
+              "enum": [
+                "Allow",
+                "Forbid",
+                "Replace"
+              ],
+              "type": "string"
+            },
+            "containerSecurityContext": {
+              "additionalProperties": false,
+              "properties": {
+                "allowPrivilegeEscalation": {
+                  "type": "boolean"
+                },
+                "capabilities": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "drop": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                },
+                "readOnlyRootFilesystem": {
+                  "type": "boolean"
+                },
+                "runAsNonRoot": {
+                  "type": "boolean"
+                },
+                "runAsUser": {
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "failedJobsHistoryLimit": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "fullnameOverride": {
+              "type": "string"
+            },
+            "global": {
+              "additionalProperties": false,
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "properties": {
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "enum": [
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                }
+              },
+              "title": "Global values (injected by the Krateo composition engine)",
+              "type": "object"
+            },
+            "histogramTable": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            },
+            "image": {
+              "additionalProperties": false,
+              "properties": {
+                "pullPolicy": {
+                  "enum": [
+                    "Always",
+                    "IfNotPresent",
+                    "Never"
+                  ],
+                  "type": "string"
+                },
+                "repository": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "tag": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "repository",
+                "tag"
+              ],
+              "type": "object"
+            },
+            "nameOverride": {
+              "type": "string"
+            },
+            "podSecurityContext": {
+              "additionalProperties": false,
+              "properties": {
+                "runAsNonRoot": {
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            },
+            "resources": {
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "requests": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "rollup": {
+              "additionalProperties": false,
+              "properties": {
+                "recomputeDays": {
+                  "description": "Must stay below the sources' 7-day retention.",
+                  "maximum": 6,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "refreshEvery": {
+                  "description": "ClickHouse REFRESH EVERY interval.",
+                  "pattern": "^[1-9][0-9]* (MINUTE|HOUR|DAY)$",
+                  "type": "string"
+                },
+                "ttlDays": {
+                  "description": "Must exceed the 28-day SLO window.",
+                  "minimum": 29,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "ttlDays",
+                "refreshEvery",
+                "recomputeDays"
+              ],
+              "type": "object"
+            },
+            "rollupTable": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            },
+            "successfulJobsHistoryLimit": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "sumTable": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            }
+          },
+          "type": "object"
         },
         "otel-collector-daemonset": {
           "title": "otel-collector-daemonset values",
