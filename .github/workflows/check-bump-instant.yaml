@@ -1,0 +1,55 @@
+name: check-bump-instant
+
+# Installer-specific guard: pin what the emission decision does AT A VERSION TRANSITION — the one
+# cluster state none of this repo's other gates exercises.
+#
+# THIS IS A CHARACTERIZATION OF AN OPEN DEFECT (installer#477), not a guarantee. It asserts the
+# behaviour that exists today. When #477 is fixed this job MUST fail, and its message says so.
+# The mechanism is currently recorded only in an issue, and CI does not read issues.
+#
+# WHY IT WAS MISSING, measured: of 18 gate scripts here, exactly one mentions a version transition
+# and none drives the emission decision with a mid-bump cluster state. Every other gate reasons
+# about a single version — a steady state. The defect lives in the instant between a
+# CompositionDefinition advancing and crdgen creating the CRD version it implies.
+#
+# THE MECHANISM. compositions.yaml ANDs `$crd` OUTSIDE the ($deps or $exists) escape, and
+# inst.crdExists demands a CRD serving the component's NEW version. At the bump instant no such
+# version is served, so the `and` short-circuits and `$exists` — the clause added on 2026-07-08
+# precisely to stop a live composition being pruned when a gate goes transiently false — is never
+# consulted.
+#
+# THE SAME CONSTRUCTION DESTROYED 34 LIVE COMPOSITION CRs IN A SIBLING CHART on 2026-11-04: the
+# openstack umbrella's 0.3.32 -> 0.3.33 bump pruned every component CR on its first render, leaving
+# 27 helm releases with nothing driving them. Their escape is MORE permissive than ours and it made
+# no difference, because the outer conjunct fails first.
+#
+# WHAT A GREEN TICK DOES NOT MEAN: it never calls `lookup`, so it says nothing about the CRD list
+# the chart receives at runtime, nothing about ordering between the CD write and crdgen, and
+# nothing about whether a real roll reaches this path — many pin bumps on demo and 057 produced
+# zero prunes and this gate cannot say why.
+
+on:
+  pull_request:
+      # NO `branches:` filter, deliberately — with one, the gate does not run on a STACKED pull
+      # request, which then shows CLEAN with "all checks passed" while every gate here was skipped.
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  bump-instant:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Pin the emission decision at a version transition
+        run: python3 .github/scripts/check-bump-instant.py
