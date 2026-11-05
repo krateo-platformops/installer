@@ -890,10 +890,28 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
                                                      once crdgen has caught up.
        2. the target is NOT served, but the live instance exists at a version that IS
                                                   -> THAT version. The bump instant: keep rendering
-                                                     the object that already exists, at the GVK the
-                                                     cluster still answers on, so helm sees it
-                                                     unchanged instead of absent. It migrates on a
-                                                     later pass, once (1) becomes true.
+                                                     the object that already exists, at a version the
+                                                     cluster still serves. Two separate reasons, and
+                                                     they are worth keeping apart because they fail
+                                                     differently:
+                                                       PRESENT rather than absent -- this is what
+                                                         stops the prune. Helm prunes what leaves the
+                                                         manifest; the defect above is an ABSENCE,
+                                                         not a version mismatch.
+                                                       at a SERVED version -- this is what stops the
+                                                         apply being REJECTED. Emitting an unserved
+                                                         apiVersion is a different failure from being
+                                                         pruned, and reads nothing like it.
+                                                     Deliberately NOT claimed here: that helm would
+                                                     treat the same object at a new apiVersion as a
+                                                     delete-and-create. openstack-as-a-service
+                                                     measured the opposite on k3s (helm does not match
+                                                     on version) and core-provider confirmed it in
+                                                     plumbing's Reconcile; this session has not
+                                                     reproduced either, so the reasoning above is
+                                                     written to hold whichever way that falls.
+                                                     It migrates on a later pass, once (1) becomes
+                                                     true.
        3. neither                                 -> "". First creation before the CRD is servable,
                                                      or a CRD crdgen rejected. Withholding is
                                                      correct: there is nothing to preserve and no
