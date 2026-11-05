@@ -150,6 +150,51 @@ def chart_metadata(oci_repo, chart, version):
         return None
 
 
+# STAMPED PROVENANCE beats inference, and it was there all along.
+#
+# This gate resolved a pin by GUESSING: appVersion -> a tag of the same name in a `sources` repo ->
+# that commit. For a WRAPPER chart that link does not exist by construction, because the appVersion
+# names somebody else's app:
+#     krateo-observability     0.1.28  appVersion 3.2.0    = its clickstack DEPENDENCY
+#     otel-collector-daemonset 0.1.18  appVersion 0.158.0  = upstream opentelemetry-collector
+# Neither can ever match a tag in a Krateo repo, so both reported UNRESOLVED and failed -- a true
+# statement about the inference, read as a finding about the pin. Measured on installer#687.
+#
+# Every chart in this estate already publishes its own provenance as standard OCI annotations,
+# and this gate never looked:
+#     org.opencontainers.image.revision  the exact source commit
+#     org.opencontainers.image.source    the source repository URL
+# Verified present on all six charts checked (krateo-observability 7d444aad, the two collectors
+# 61347d84 / 6eda6111, github-provider-kog cdae2bc6, core-provider 35a1f230, authn 75aedb15).
+#
+# WHY THIS IS NOT THE `sources`-AIMED-UPSTREAM ROUTE, which was proposed and rejected: resolving
+# appVersion against ClickStack's or upstream collector's OWN tags would make this gate assert
+# SOMEBODY ELSE'S CI. That is not a weaker version of the same claim -- it is a different claim
+# wearing the same green tick, which is the exact failure this gate exists to catch. The stamp
+# points at the commit THIS CHART WAS BUILT FROM, in the repo that built it, so the sentence
+# "the code this pin deploys was tested by the people who wrote it" survives intact.
+#
+# THE STAMP IS THE FALLBACK, NOT THE PRIMARY -- see the ordering comment in main(). Inference
+# runs first because when it resolves it points at the APP's own repo, which is the stronger claim.
+# The detail line names the route used, so a reader can tell which claim was actually checked.
+STAMP_REVISION = "org.opencontainers.image.revision"
+STAMP_SOURCE = "org.opencontainers.image.source"
+
+
+def stamped_provenance(meta):
+    """(slug, sha) from the chart's own OCI annotations, or (None, None) when unstamped.
+
+    A 40-hex revision only: a short or absent value is NOT trusted into a silent pass, it simply
+    declines and lets the inference fallback report whatever it reports."""
+    ann = (meta or {}).get("annotations") or {}
+    sha = str(ann.get(STAMP_REVISION) or "").strip()
+    src = str(ann.get(STAMP_SOURCE) or "").strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        return None, None
+    slug = repo_slug(src)
+    return (slug, sha) if slug else (None, None)
+
+
 def repo_slug(url):
     m = re.search(r"github\.com[:/]+([^/]+/[^/.]+)", url or "")
     return m.group(1) if m else None
@@ -206,7 +251,7 @@ def tag_sha(slug, tag):
 TEST_RUN_RE = re.compile(r"(^|[^a-z])(go )?test(s|ing)?([^a-z]|$)|^(vet|kind|drift|gate)$", re.I)
 
 
-def ci_at(slug, sha):
+def ci_at(slug, sha, chart=None):
     """(verdict, detail). verdict in {green, red, norun, notested, running}.
 
     Uses the commit's CHECK-RUNS, not a guessed workflow filename. Guessing was the first
@@ -264,7 +309,7 @@ def ci_at(slug, sha):
                          f"{len(invoked)} green job(s) invoke one: " +
                          ", ".join(f"{j} -> {s}" for j, s in sorted(invoked)[:3]))
     # Distinguish "unrecognised" from "absent" by looking at the tree, not at names.
-    has_tests, examined, sample = _repo_has_test_paths(slug, sha)
+    has_tests, examined, sample = _repo_has_test_paths(slug, sha, chart)
     if has_tests is False:
         return "notests", (f"all {len(runs)} check-runs passed at {sha[:8]}; repo has NO test suite "
                            f"— {examined} paths examined at that commit, none test-shaped. Nothing "
@@ -360,8 +405,23 @@ def _tested_on_identical_tree(slug, sha):
 TEST_PATH_RE = re.compile(r"(_test\.(go|py|ts|js)$|(^|/)tests?/|\.spec\.(ts|js)$|(^|/)test_[^/]+\.py$)")
 
 
-def _repo_has_test_paths(slug, sha):
-    """(has_tests, examined, sample). Reads the tree at `sha`; (None, 0, []) if unreadable."""
+def _repo_has_test_paths(slug, sha, chart=None):
+    """(has_tests, examined, sample). Reads the tree at `sha`; (None, 0, []) if unreadable.
+
+    SCOPED TO THE CHART'S OWN SUBTREE IN A MONOREPO. The proven-absence exemption asks "is there
+    anything here to test?" and a per-REPO answer is the wrong granularity for a repo that ships
+    many charts: one sibling's tests deny the exemption to a chart that has nothing testable.
+    Measured on krateo-platformops/observability at 7d444aad -- 8 charts, 153 paths:
+        krateo-audit-worm          test-shaped 1
+        krateo-slo-rollup          test-shaped 5
+        krateo-observability       test-shaped 0
+        otel-collector-daemonset   test-shaped 0
+        otel-collector-deployment  test-shaped 0
+        krateo-sse-proxy           test-shaped 0   (+2 more at 0)
+    Whole-repo total 7, so the exemption was DENIED TO ALL EIGHT -- including the six with nothing
+    of their own -- because two siblings have tests. Scoping to `charts/<chart>/` when that prefix
+    exists in the tree fixes it; absent the prefix it falls back to the whole repo, which is the
+    pre-existing behaviour for a single-chart repo and is correct there."""
     out, rc, _err = sh("gh", "api", f"repos/{slug}/git/trees/{sha}?recursive=1",
                  "--jq", "[.tree[].path]")
     if rc != 0:
@@ -370,6 +430,13 @@ def _repo_has_test_paths(slug, sha):
         paths = json.loads(out or "[]")
     except json.JSONDecodeError:
         return None, 0, []
+    scope = None
+    if chart:
+        prefix = f"charts/{chart}/"
+        if any(p.startswith(prefix) for p in paths):
+            scope = prefix
+    if scope:
+        paths = [p for p in paths if p.startswith(scope)]
     hits = [p for p in paths if TEST_PATH_RE.search(p)]
     return (len(hits) > 0), len(paths), hits[:3]
 
@@ -592,6 +659,21 @@ def main():
             continue
 
         checked = []
+        # ORDER MATTERS, AND GETTING IT WRONG IS A SILENT FALSE PASS. I implemented the stamp
+        # FIRST and it introduced exactly that, caught by the regression test below:
+        #   otel-collector-deployment 0.3.13 declares appVersion 1.0.5, whose commit in
+        #   krateo-platformops/otel-collector has 12 green check-runs and NOTHING testing the code
+        #   while three _test.go files sit in the tree. That refusal was correct and valuable.
+        #   With the stamp first, the gate resolved to the CHART's repo instead
+        #   (observability@61347d84, 4 paths, no tests -> honest-green exemption) and PASSED it.
+        # The stamp answers "was the chart's repo verified". Inference answers "was the APP's own
+        # repo verified". For a chart wrapping Krateo's OWN image the second is the claim that
+        # matters, and substituting the first is the same error as aiming the gate at an upstream
+        # project's CI: a different claim wearing the same green tick.
+        #
+        # So: INFERENCE FIRST, because when it resolves it is pointing at the app's own repo.
+        # The stamp is the FALLBACK, used only when appVersion names somebody else's app and no
+        # Krateo tag can match -- which is precisely the wrapper-chart case it exists for.
         for src in sources:
             slug = repo_slug(src)
             if not slug:
@@ -599,8 +681,16 @@ def main():
             sha = tag_sha(slug, app)
             if not sha:
                 continue
-            verdict, detail = ci_at(slug, sha)
-            checked.append((slug, verdict, detail))
+            verdict, detail = ci_at(slug, sha, chart)
+            checked.append((slug, verdict, f"[appVersion->tag {app}] {detail}"))
+
+        if not checked:
+            st_slug, st_sha = stamped_provenance(meta)
+            if st_slug and st_sha:
+                verdict, detail = ci_at(st_slug, st_sha, chart)
+                checked.append((st_slug, verdict,
+                                f"[stamped {st_sha[:8]} -- appVersion {app} matched no Krateo tag, "
+                                f"so this is the CHART's own commit, not the app's] {detail}"))
 
         if not checked:
             # WHY it did not resolve matters: "no such tag" is the pin's problem, "cannot read
