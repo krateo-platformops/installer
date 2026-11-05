@@ -2542,6 +2542,16 @@ components:
   - git-provider-crd
   tier: platform
   feature: portal
+# 0.7.3 (2026-11-05): appVersion 0.1.9, revision cdae2bc. Owner-measured against 0.7.2: 32 CRD
+# specs and Configuration CRD specs match, no immutable field moved, only Environment's
+# RestDefinition changed. Four assets changed so four CRDs regenerate, with no schema change
+# EXPECTED -- a RENDER claim, not a stored-object one, so the owner snapshots the stored
+# Collaborator/Environment/RepoContent/UserRepository CRDs before the roll. 0.3.495 proved a
+# clean render plus 25 green checks can still prune two fields silently.
+# oasgen does NOT move with this pin: oasgen-provider-crd stays 0.48.0 (RDC 0.48.0).
+# Tag note: 0.7.3 was first pushed as a LIGHTWEIGHT tag and fired NO workflow; replaced with an
+# annotated tag at the same commit. check-pin-ci dereferences annotated tags, so both resolve to
+# cdae2bc -- but a tag that builds nothing is the silent failure worth remembering.
 - name: github-provider-kog
   # HISTORICAL (resolved by oasgen-provider 0.27.0 — see the 0.3.2 note below). REVERTED TO 0.3.1 at
   # the time because: 0.3.2 COULD NOT BE INSTALLED IN PLACE and this was not a transient — it was
@@ -2687,7 +2697,7 @@ components:
   # diffs, reporulesets/orgrulesets CRDs Established carrying a 23-value rules[].type enum, 057's
   # PR/Repo counts identical to baseline, and Synced on every CR. THE ENUM IS THE PROOF THE CHECK
   # BITES: it reads 15 today, so a vacuous pass is not available to it.
-  version: 0.7.2
+  version: 0.7.3
   # 0.7.0 adds two kinds and removes none -- measured on the published chart, not read from the
   # release notes: rendered at --kube-version 1.33.0, rc=0 on both sides, 8104 -> 8882 lines (floor
   # asserted), RestDefinition docs 30 -> 32, ADDED {RepoContent, UserRepository}, REMOVED {} . 0.7.1
@@ -4125,6 +4135,11 @@ components:
   - krateo-observability
   tier: observability
   feature: portal
+# 0.1.1 (2026-11-05): pins the ClickHouse CLIENT IMAGE BY DIGEST. 0.1.0 referenced
+# `clickhouse/clickhouse-server:26.8-alpine` -- a MUTABLE upstream tag -- with IfNotPresent, so
+# two nodes could run different builds of the "same" tag and a Job failure had two possible
+# explanations instead of one. Flagged when 0.1.0 was wired; closed by its owner, not worked
+# around here. Pulls anonymously.
 - name: krateo-slo-rollup
   # NEW COMPONENT, wired 2026-11-05, LANDS DARK (features.sloRollup default false).
   # A CronJob that applies a ClickHouse daily rollup table (krateo_slo_daily) + a refreshable
@@ -4157,7 +4172,7 @@ components:
   # dark is what makes that acceptable -- nothing installs until someone enables the feature,
   # which is a CR edit rather than a values change.
   kind: KrateoSloRollup
-  version: 0.1.0
+  version: 0.1.1
   deps:
   - otel-collector-daemonset
   tier: observability
