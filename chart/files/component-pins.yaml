@@ -6633,7 +6633,7 @@ components:
   # values worth setting.
   kind: AccessReviewCrds
   chart: access-review-crds
-  version: 0.1.8
+  version: 0.1.9
   tier: platform
   feature: accessReview
 - name: access-review
@@ -6660,7 +6660,7 @@ components:
   # The same class cost alert-troubleshooter a release in August (0.2.20 -> 0.2.21) and was found
   # only by a live deploy. Four of five validation layers pass it.
   kind: AccessReview
-  version: 0.1.8
+  version: 0.1.9
   deps:
   - access-review-crd
   tier: platform
@@ -6738,7 +6738,7 @@ components:
   # Only 5 of the 68 pins carry a -crd block and they are the ones with values worth setting.
   kind: IdentityLifecycleCrds
   chart: identity-lifecycle-crds
-  version: 0.1.4
+  version: 0.1.5
   tier: platform
   feature: identityLifecycle
 - name: identity-lifecycle
@@ -6761,7 +6761,7 @@ components:
   # `global`, so every offline check validates a document that never contains the field). This
   # chart declares it. access-review 0.1.7 does NOT and is held unwired until 0.1.8 ships the fix.
   kind: IdentityLifecycle
-  version: 0.1.4
+  version: 0.1.5
   deps:
   - identity-lifecycle-crd
   tier: platform
