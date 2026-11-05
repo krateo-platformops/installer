@@ -44,6 +44,15 @@ jobs:
         uses: azure/setup-helm@v4
         with:
           version: v3.16.3
+      - name: Set up helm
+        uses: azure/setup-helm@v5.0.0
+        with:
+          version: v3.19.0
+      - name: Install helm-unittest
+        # REQUIRED, not optional. inst.ready's whole job is a `lookup` and `helm template` DISABLES
+        # lookup, so without this plugin the one arm that matters cannot be reached. The gate FAILS
+        # rather than skips when it is absent (verified with HELM_PLUGINS pointed at an empty dir).
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version 1.2.1
       - name: Install PyYAML
         run: pip install --quiet pyyaml
       - name: Exercise the dependency-ready decision

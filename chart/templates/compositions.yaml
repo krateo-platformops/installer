@@ -102,34 +102,15 @@
 {{/* registerOnly (catalog) blueprints are registered (definitions.yaml) but never auto-emitted —
      the operator/end-user instantiates them from the portal on demand. */}}
 {{- if $c.registerOnly }}{{- continue }}{{- end }}
-{{- $featOn := eq (include "inst.featureEnabled" (list $top $c.feature)) "true" }}
-{{- $crd  := include "inst.crdExists" (list $c.kind $c.version $allCRDs) }}
-{{- $render := "" }}
-{{- if $featOn }}
-{{/* install / steady-state: emit once the CRD is served and all deps are Ready (forward dep order).
-     THEN keep emitting it as long as the instance still EXISTS -- even if a dep goes transiently
-     not-Ready during churn (e.g. an engine restart flips dep instances not-Ready for a moment).
-     Without the `$exists` clause a momentary depsReady=false drops the instance from the manifest and
-     the cdc/helm PRUNES the live workload on that blip (observed 2026-07-08: frontend + kagent
-     instances, Deployments and Services deleted during an engine restart though their deps were Ready
-     seconds later). depsReady still gates the FIRST creation, so forward dependency order on bring-up
-     is preserved; real teardown is handled by the feature-OFF drain branch below, not by a lookup miss. */}}
-{{- $deps := include "inst.depsReady" (list $top $c.deps $components $allCRDs) }}
-{{- $exists := include "inst.compositionExists" (list $top $c.kind $c.name $c.version $allCRDs) }}
-{{/* HARD API-group requirements are ANDed OUTSIDE the `$exists` escape on purpose. That escape rides
-     out a momentary depsReady flap without pruning a live workload; a missing API GROUP is not a
-     flap — chart-inspector cannot render the chart at all, so emitting anyway buys an endless 500.
-     See inst.requiresApiGroups for the 0.3.474 defect this prevents and why the unit is a group. */}}
-{{- $req := include "inst.requiresApiGroups" (list $c.requiresApiGroups $allCRDs) }}
-{{- if and (eq $crd "true") (eq $req "true") (or (eq $deps "true") (eq $exists "true")) }}{{- $render = "true" }}{{- end }}
-{{- else }}
-{{/* feature OFF -> reverse-dependency DRAIN: keep rendering (alive) until every component that
-     deps on this one is gone, so teardown is leaves-first and never deletes this component (or the
-     CRDs its release ships) out from under a still-present dependent. Dropped from the render — and
-     thus deleted by the cdc — only once inst.dependentsGone reports clear. */}}
-{{- if and (eq $crd "true") (ne (include "inst.dependentsGone" (list $top $c.name $components $allCRDs)) "true") }}{{- $render = "true" }}{{- end }}
-{{- end }}
-{{- if eq $render "true" }}
+{{/* THE EMISSION DECISION. One helper, read here and by withheld-components.yaml, returning the
+     apiVersion tag to emit at or "" to withhold -- see inst.emitDecision for why the gate, the
+     reporter and the explanation must not each derive this. It resolves to the target version when
+     the CRD serves it, to the tag the LIVE INSTANCE is served at when the target is not yet served
+     (the bump instant -- installer#477), and to "" when there is nothing to preserve and no version
+     to emit at. Feature-OFF reverse-dependency drain is inside it too, so a draining component is
+     likewise emitted at a tag the cluster actually serves. */}}
+{{- $emit := include "inst.emitDecision" (list $top $c $components $allCRDs) }}
+{{- if ne $emit "" }}
 {{- $spec := dict }}
 {{/* agentgateway-policies: the Service exists but no VALUES key of this chart creates it (the
      agentgateway controller provisions it from the Gateway), so there is nothing to flip — writing
@@ -789,7 +770,7 @@
 {{- include "inst.forcePath" (dict "target" $spec "path" (list "rollGuard") "value" $mcpHash) }}
 {{- end }}
 ---
-apiVersion: {{ include "inst.apiVersion" (list $c.version) }}
+apiVersion: composition.krateo.io/{{ $emit }}
 kind: {{ $c.kind }}
 metadata:
   name: {{ $c.name }}
