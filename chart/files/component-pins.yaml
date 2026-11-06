@@ -2597,6 +2597,20 @@ components:
 # Tag note: 0.7.3 was first pushed as a LIGHTWEIGHT tag and fired NO workflow; replaced with an
 # annotated tag at the same commit. check-pin-ci dereferences annotated tags, so both resolve to
 # cdae2bc -- but a tag that builds nothing is the silent failure worth remembering.
+# 0.7.4 (2026-11-06, commit 2aa8cb0, digest sha256:ac59dedc..., appVersion still 0.1.9).
+# Default render is BYTE-IDENTICAL to 0.7.3 -- no RestDefinition or asset change. What is new is a
+# `kinds` property in the chart's values.schema.json, so the composition CRD gains that field and
+# the composition moves to v0-7-4. Owner-verified; the new composition version has not run on a
+# cluster.
+# DELIBERATELY NOT 0.7.5. That tag exists and carries ONLY a version change for this chart -- it
+# was cut to publish the new github-provider-kog-config chart alongside it. Taking 0.7.5 here
+# would move the composition to v0-7-5, re-render 32 CRDs and leave a served-version pair, in
+# exchange for nothing. Its owner proposed this split and I agree with it.
+# `kinds` SELECTS WHICH RestDefinitions RENDER. Empty (the default) renders all 32, byte-identical
+# to 0.7.3. A child sets e.g. [Repository, PullRequest] to avoid ~32 rest-dynamic-controller pods
+# against a 100-pod tenant quota -- measured by the acmp session: a real child sits at 100/100
+# with at least 20 more refused, and blocked pods are not on the host, so a host-side check reads
+# as settled. Do NOT seed a default list: empty must keep meaning all 32.
 - name: github-provider-kog
   # HISTORICAL (resolved by oasgen-provider 0.27.0 — see the 0.3.2 note below). REVERTED TO 0.3.1 at
   # the time because: 0.3.2 COULD NOT BE INSTALLED IN PLACE and this was not a transient — it was
@@ -2742,7 +2756,7 @@ components:
   # diffs, reporulesets/orgrulesets CRDs Established carrying a 23-value rules[].type enum, 057's
   # PR/Repo counts identical to baseline, and Synced on every CR. THE ENUM IS THE PROOF THE CHECK
   # BITES: it reads 15 today, so a vacuous pass is not available to it.
-  version: 0.7.3
+  version: 0.7.4
   # 0.7.0 adds two kinds and removes none -- measured on the published chart, not read from the
   # release notes: rendered at --kube-version 1.33.0, rc=0 on both sides, 8104 -> 8882 lines (floor
   # asserted), RestDefinition docs 30 -> 32, ADDED {RepoContent, UserRepository}, REMOVED {} . 0.7.1
