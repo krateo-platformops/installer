@@ -102,6 +102,25 @@ spec:
     repo: {{ $c.chartRepo | quote }}
     {{- end }}
     {{- include "inst.chartExtras" (list $ (default $.Values.ociRepo $c.repo)) | nindent 4 }}
+  {{- with $c.apiRef }}
+  {{/* S12 status projection, pass-through (acmp gate 4). Only a registerOnly catalog blueprint can
+       use this, because for those the INSTALLER owns the CompositionDefinition -- a blueprint that
+       ships its own CD (portal 1.6.68 / #383 does) sets these in its own chart and needs nothing
+       here. Absent -> the CD renders byte-identically to before, which is why this is safe for all
+       74 components.
+       FLOOR, and it is a hard one: snowplow >= 1.12.38. #504 means no CompositionDefinition
+       carrying spec.apiRef could reconcile on ANY snowplow 1.12.3x below that -- the field is
+       BROKEN, not merely inert, so a cluster on an older snowplow will fail in a layer that looks
+       unrelated. 057 and krateo-demo both run 1.12.56. */}}
+  apiRef:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $c.statusDataTemplate }}
+  {{/* Paired with apiRef: projects status fields (status.url, status.expiresAt, status.plan) onto
+       the blueprint. Same registerOnly scope and the same snowplow floor. */}}
+  statusDataTemplate:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- with $c.resources }}
   {{/* Per-Kind CDC controller resources. The core-provider chart's shared cdc.resources default
        (small, ~256Mi) suits most components; a component that renders many children (e.g. portal)
