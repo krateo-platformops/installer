@@ -2865,6 +2865,20 @@ components:
 # as discriminating negative controls. Three versions were announced to this session ahead of the
 # registry in the preceding day -- one retracted by its author, one in a different org than stated,
 # one a lightweight tag that fired no workflow -- so the pull IS the evidence, not the report.
+# THE PORTAL SET MOVES AS ONE. All 15 (portal + 14 page charts) to 1.8.94, 2026-11-06.
+# Diego chose this over splitting it. The reason is a false reading we already produced: the
+# gate for snowplow #1128 was described as "portal >= 1.8.93", portal WAS at 1.8.93, and it was
+# confirmed as met -- but the 8 refused stages live in compositions-page, resources-page,
+# reviews-page and service-desk-page, which were at 1.8.89/1.8.85/1.8.85/1.8.91. Live
+# composition-resources on 057 still had the old ${ ._getpath }. Pinning only the four snowplow
+# names would recreate exactly that mixed state, so the set moves together or not at all.
+# All 15 verified published at 1.8.94 by pulling each one; a 9.9.9 control fails to pull.
+# RISK, raised by the chart owner and not measured: most of these move 9 versions at once and
+# each is a composition bump that redeploys. No census exists for the 1.8.85 -> 1.8.94 diff. The
+# widget CRDs live on 057 are 1.8.28, so charts from 1.8.86 on should validate against them --
+# their words: reasoning, not a test. This is why the set rolls ALONE, after 0.3.515.
+# Carries the `paused` constraint, the alert detail panel fix and the fetchable target fix, none
+# of which reached 057 under the portal-only pins.
 - name: portal
   #
   # 1.8.88 -> 1.8.90. Carries portal#362: the values.schema.json that service-desk-page needs for
@@ -3576,7 +3590,7 @@ components:
   # the label, the concrete path and krateo.io/nav-link-only (it links and owns nothing). ONLY the
   # exact string "true" enables it, so a half-recognised truthy value fails visibly instead of
   # silently claiming the route back.
-  version: 1.8.93
+  version: 1.8.94
   deps:
   - frontend
   - git-provider
@@ -3706,7 +3720,7 @@ components:
   # templates/_builder.tpl, inside `{{/* */}}` blocks. 26 files, 124539 -> 124537 bytes; Chart.yaml
   # and that one template differ, and the template's change cannot reach the render.
   kind: MarketplacePage
-  version: 1.8.86
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3729,21 +3743,21 @@ components:
 # cross-feature dep whose feature is off is safely suppressed rather than stalled.
 - name: service-desk-page
   kind: ServiceDeskPage
-  version: 1.8.91
+  version: 1.8.94
   deps:
   - portal
   tier: platform
   feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
   feature: portal
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3784,7 +3798,7 @@ components:
 - name: dashboard-page
   # Renders into krateo-dashboard, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: DashboardPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3823,7 +3837,7 @@ components:
   # original push failure is still UNKNOWN -- it did not recur, which is evidence of a blip and not
   # proof of one. Pinned only after confirming 1.8.89 pulls: version 1.8.89, appVersion 1.8.89.
   kind: CompositionsPage
-  version: 1.8.89
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3831,7 +3845,7 @@ components:
 - name: blueprints-page
   # Renders into krateo-blueprints, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: BlueprintsPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3839,7 +3853,7 @@ components:
 - name: resources-page
   # Renders into krateo-resources, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: ResourcesPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3847,7 +3861,7 @@ components:
 - name: search-page
   # Renders into krateo-search, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: SearchPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3855,7 +3869,7 @@ components:
 - name: builders-page
   # Renders into krateo-builders, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: BuildersPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3863,7 +3877,7 @@ components:
 - name: clusters-page
   # Renders into krateo-clusters, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ClustersPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3871,7 +3885,7 @@ components:
 - name: reviews-page
   # Renders into krateo-reviews, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ReviewsPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3879,7 +3893,7 @@ components:
 - name: settings-page
   # Renders into krateo-settings, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: SettingsPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3887,7 +3901,7 @@ components:
 - name: observability-page
   # Renders into krateo-observability, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ObservabilityPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
