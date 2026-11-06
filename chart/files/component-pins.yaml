@@ -22,7 +22,7 @@ components:
   # 0.33.1 WAS SKIPPED DELIBERATELY. It exists and was approved, but authn recommended going straight
   # to 0.34.0 so both clusters roll once instead of twice, and Diego chose that. 0.33.1 was never
   # pinned or rolled anywhere.
-  version: 0.35.4
+  version: 0.35.5
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -506,6 +506,19 @@ components:
 # AuthorizationCodeRejected.
 # 057 CANNOT PROVE THE WIRE CHANGES: it has 0 OAuthConfigs and 0 OIDCConfigs, so it exercises
 # neither RESTActions nor PKCE. A 057 smoke test establishes that 0.35.4 starts and answers.
+# authn + authn-crd 0.35.5 (2026-11-06). Diego's direct go in session.
+# LOCKSTEP, both to 0.35.5. Verified published for BOTH -- but note the chart names differ from
+# the component names: `authn` -> chart authn, `authn-crd` -> chart authn-crds (PLURAL). My first
+# probe asked the registry for `authn-crd` 0.35.5, got not-found, and I nearly reported the CRD
+# chart as unpublished. The component entry's `chart:` key is the authority on the artifact name,
+# not the component name. A 9.9.9 control fails on both.
+# WHY IT MOVES IN THIS TAG specifically: snowplow's bench run 22 installs from whichever
+# installer tag is cut, so authn #97's login speedup is only measurable by run 22 if THIS tag
+# carries 0.35.5. That timing is why Diego was asked now rather than at the next convenient tag.
+# Its owner verified the chart themselves and declined to let any relay stand as the go.
+# BEFORE ROLLING: the owner takes a fresh smoke baseline, read while the 0.35.4 pod is still
+# serving. smoke-0.3.514.txt still holds because 0.3.515 moved no authn pin, but a baseline is
+# one-shot -- it has to be taken before the pod rolls, not after.
 - name: authn
   # KRATEO-DEMO CONSTRAINT -- DO NOT BUMP TO >= 0.28.0 AS A ROUTINE UPDATE (acmp, 2026-10-29).
   # authn 0.28.0 (authn#42) stamps an `authn.krateo.io/groups` annotation, and AT STARTUP it
@@ -588,7 +601,7 @@ components:
   # REQUIRED-BEFORE child Krateos: Diego decided children move ONCE, to the first installer version
   # that pins authn 0.34.0, rather than stopping at 0.3.498 first. acmp sets that version as the
   # blueprint's childKrateo.installer.version and upgrades acme and globex on his word.
-  version: 0.35.4
+  version: 0.35.5
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
