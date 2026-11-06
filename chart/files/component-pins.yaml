@@ -320,7 +320,7 @@ components:
   # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
   # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
   # holds anyway because none is at the path that matters -- but check the path, not the presence.)
-  version: 1.8.26
+  version: 1.8.28
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -2448,7 +2448,7 @@ components:
   # GOOD releases. frontend has since corrected that: it also WITHHELD this defect, authored in
   # that same window. Fixing the gate shipped it. A gate failing closed for the wrong reason is
   # indistinguishable from protection while it holds.
-  version: 1.8.26
+  version: 1.8.28
   deps:
   - frontend-crd
   - authn
@@ -2803,6 +2803,25 @@ components:
 # from the registry, not on being told it was published. A tag is not a publish; an announcement
 # is not a tag.
 # No portal-crd pin exists, so there is no lockstep partner to move.
+# 1.8.93 + frontend/frontend-crd 1.8.28 (2026-11-06): PINNED AS A SET, DELIBERATELY. Both halves
+# carry the autopilot -> agentiko rename's user-visible text. Portal alone would leave labels saying
+# "Ask Agentiko" while the rail still says Autopilot -- cosmetic, not a break, but a half-landed
+# rename generates a bug report, so the owner asked for one roll and that is the right call.
+# portal 1.8.93 (cut at 9c9ad29): the 8 reshaped stages, the forms and new-ticket fixes from 1.8.92,
+#   and the rename text. GATES snowplow's release AFTER 1.12.65 -- without portal >= 1.8.93 pinned,
+#   8 stages degrade. The reverse order is safe: this portal works on 1.12.56 and 1.12.65 both.
+# frontend + frontend-crd 1.8.28 (cut at 36ca023, all three release-* workflows green): CRD
+#   templates are BYTE-IDENTICAL to 1.8.27 -- only Chart.yaml's version annotations differ -- so
+#   1.8.27 is skipped entirely rather than pinned and immediately superseded. 1.8.27's stored-object
+#   census was CLEAN (057: 683 objects, 326 declared values, 0 refused, 0 setting the removed field;
+#   alpitour: 719 / 5 / 0 / 0) and applies to 1.8.28 for that reason.
+#   STILL OWED and recorded as a limit: demo was measured against the PROPOSED enums, not the
+#   published chart. That re-run is pending and demo is frozen, so this pin ships with 057 and
+#   alpitour covered and demo NOT.
+# Registry-verified before pinning, with portal 9.9.9 and frontend 9.9.9 not-found at the same org
+# as discriminating negative controls. Three versions were announced to this session ahead of the
+# registry in the preceding day -- one retracted by its author, one in a different org than stated,
+# one a lightweight tag that fired no workflow -- so the pull IS the evidence, not the report.
 - name: portal
   #
   # 1.8.88 -> 1.8.90. Carries portal#362: the values.schema.json that service-desk-page needs for
@@ -3514,7 +3533,7 @@ components:
   # the label, the concrete path and krateo.io/nav-link-only (it links and owns nothing). ONLY the
   # exact string "true" enables it, so a half-recognised truthy value fails visibly instead of
   # silently claiming the route back.
-  version: 1.8.92
+  version: 1.8.93
   deps:
   - frontend
   - git-provider
