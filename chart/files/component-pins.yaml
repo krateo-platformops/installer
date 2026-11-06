@@ -480,7 +480,7 @@ components:
   # no CRD in it to move. MIND THE NAME: this chart publishes as `snowplow-crds` (PLURAL, see
   # chart:) -- probing `snowplow-crd` reports a vacuous NOT PUBLISHED at EVERY version, including
   # ones that are live and Ready on the cluster.
-  version: 1.12.56
+  version: 1.12.65
   tier: platform
   feature: portal
 # 0.35.4 (2026-11-05, authn main 75aedb1): owner re-diffed both charts against 0.34.0 and
@@ -666,6 +666,28 @@ components:
   # sar_viewCompositions 401s, and the review recorded 13,707 "api call response failure ...
   # subjectaccessreviews ... Unauthorized" from snowplow in a single 24h window. Worth re-reading that
   # count after the roll — it is a free check on whether the fix landed.
+# 1.12.65 (2026-11-06), lockstep with snowplow-crd. OWNER-BENCHED, and the verdict is carried as
+# the owner worded it rather than summarised: their own tool says INVALID, on ONE reason --
+# baseline A's own browser-timeout check -- and Diego accepted that as A NAMED EXCEPTION, NOT A
+# PASS. Full report: snowplow#606. Cite the issue, not a file path: run 21's raw files were lost
+# in the 2026-11-06 06:15Z reboot that wiped /private/tmp.
+#   MEASURED: 2 fresh clusters, 50K x 1000, 40/40 ready on both. 9 of 9 judged latency cells PASS,
+#   1.12.65 faster than 1.12.56 in EVERY cell, 0 restarts, slowest page 5.6s against 30.9s,
+#   0 browser timeouts against 9.
+#   WHAT THE BENCH DID NOT COVER, stated because a reader would otherwise assume it did: the
+#   evidence is on installer 0.3.510 with coreAgents OFF, so kagent and kagent-crds were never
+#   installed on either cluster. 057 runs coreAgents ON and is now several releases past 0.3.510.
+# EXPECTED BEHAVIOUR CHANGES -- an operator seeing these cold would read them as a regression:
+#   * traces go from 5% sampled to PARENT-BASED, so span volume and X5 counts JUMP. krateo-
+#     observability 0.1.28 adds HyperDX's own traces at ~69k spans/day in the same window, so TWO
+#     components inflate otel_traces at once and neither should be blamed for the other.
+#   * /call write stages gain audit records.
+#   * a page's network exchanges share a 10s budget.
+# GATE ON THE NEXT RELEASE, not this one: the snowplow release AFTER 1.12.65 needs portal >= 1.8.93
+#   pinned on the cluster first, or 8 stages degrade. The reverse order is safe.
+# VERIFY AFTER THE ROLL by the LIVE IMAGE DIGEST, not the tag: expect
+#   sha256:c8011bf5480e09261beec473a3514b8e73062780715863bc40647c4061761947 (tag commit 5659877d).
+#   Pre-roll live digest was sha256:91c6e6e80a2df4716205a86f44bb3046fa49790b600a8ccd56036fcde3b429e7.
 - name: snowplow
   # 1.12.56: paired-bench verdict from the snowplow session (run 16, 1.12.54 vs 1.12.56,
   # 50K x 1,000 users). Every judged cell passed, and the two that matter are large:
@@ -1448,7 +1470,7 @@ components:
   # ROLLBACK: re-upgrade the installer to 0.3.429, which pins 1.12.49. Do NOT roll back via
   # componentValues.snowplow.image.tag -- an image-tag override on THIS component takes effect and
   # then PERMANENTLY MASKS every future chart bump (the krateo-sse-proxy 0.1.15 trap).
-  version: 1.12.56
+  version: 1.12.65
   deps:
   - snowplow-crd
   - authn
