@@ -354,16 +354,51 @@
           },
           "apiRef": {
             "type": "object",
-            "additionalProperties": true,
-            "description": "Pass-through to the generated CompositionDefinition's spec.apiRef. Only meaningful on a registerOnly catalog blueprint, whose CompositionDefinition this chart owns; a blueprint shipping its own CD sets this in its own chart. NO DEFAULT, deliberately — a default on any installer schema property propagates into the live CR, so every pinned component would acquire an empty apiRef. FLOOR: snowplow >= 1.12.38. Per #504 no CompositionDefinition carrying spec.apiRef can reconcile on ANY snowplow 1.12.3x below that, so on an older snowplow the field is BROKEN rather than merely inert, and it fails in a layer that looks unrelated."
+            "additionalProperties": false,
+            "required": ["name", "namespace"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Name of the referenced RESTAction."
+              },
+              "namespace": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Namespace of the referenced RESTAction."
+              }
+            },
+            "description": "Pass-through to the generated CompositionDefinition's spec.apiRef — a RESTAction whose calls are resolved each reconcile, keyed under .api in the projection root. TYPED TO MATCH core.krateo.io/v1alpha1 CompositionDefinition EXACTLY (name+namespace, both required, both minLength 1), read from the live CRD rather than guessed: an open object here would let a typo through the installer and be rejected by the apiserver at apply time. spec.apiRef.extras is deliberately NOT exposed — it is free-form, nobody has asked for it, and adding it would reintroduce an untyped escape. Only meaningful on a registerOnly catalog blueprint, whose CompositionDefinition this chart owns. NO DEFAULT: a default on any installer schema property propagates into the live CR. FLOOR: snowplow >= 1.12.38 — per #504 a CompositionDefinition carrying spec.apiRef cannot reconcile on ANY snowplow 1.12.3x below that, so the field is BROKEN rather than inert and fails in a layer that looks unrelated."
           },
           "statusDataTemplate": {
             "type": "array",
             "items": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": false,
+              "required": ["expression", "forPath"],
+              "properties": {
+                "expression": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "A ${ jq } program over the projection root; a bare path is the trivial copy, and a plain literal with no ${ } wrapper is written verbatim."
+                },
+                "forPath": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Dotted path under .status to write, e.g. \"url\" or \"network.host\"."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["string", "integer", "number", "boolean", "object", "array"],
+                  "description": "Pins the generated status property's scalar JSON-schema type."
+                },
+                "preserveUnknownFields": {
+                  "type": "boolean",
+                  "description": "Generate the status node with x-kubernetes-preserve-unknown-fields. Mutually exclusive with type."
+                }
+              }
             },
-            "description": "Pass-through to the generated CompositionDefinition's spec.statusDataTemplate. Paired with apiRef to project status fields (e.g. status.url, status.expiresAt, status.plan) onto a registerOnly catalog blueprint. NO DEFAULT and the same snowplow >= 1.12.38 floor, for the same reasons as apiRef."
+            "description": "Pass-through to the generated CompositionDefinition's spec.statusDataTemplate — extra fields projected onto the composition's status each reconcile. THE FIELD NAMES ARE forPath AND expression, not path/value: typed from the live core.krateo.io/v1alpha1 CRD, where both are required with minLength 1. The CRD's free-form `schema` field is deliberately NOT exposed, for the same reason as apiRef.extras. Same registerOnly scope, no default, and the same snowplow >= 1.12.38 floor as apiRef."
           },
           "gatewayPath": {
             "type": "string",
