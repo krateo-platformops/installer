@@ -129,6 +129,61 @@ CASES = [
 ]
 
 
+# PROVENANCE CASES. Added with the stamped-provenance change, in BOTH directions, because that
+# change introduced a SILENT FALSE PASS before it was caught: with the stamp resolved FIRST,
+# otel-collector-deployment 0.3.13 passed. Its appVersion 1.0.5 points at a commit in
+# krateo-platformops/otel-collector with 12 green check-runs and nothing testing the code while
+# three _test.go files sit in the tree -- a refusal that was correct and valuable. The stamp
+# pointed at the CHART's repo (observability, 4 paths, no tests -> honest-green exemption) and the
+# app's repo was never consulted. Nothing in the output said so; it just printed OK.
+#
+# So the ordering is asserted STRUCTURALLY, not trusted: the stamp must sit behind
+# `if not checked:` so inference -- which targets the APP's own repo -- runs first.
+PROV_CASES = [
+    ("stamped, full 40-hex sha",
+     {"annotations": {pc.STAMP_REVISION: "7d444aad9d1231d5b8766aa7b3e19261dfa0e375",
+                      pc.STAMP_SOURCE: "https://github.com/krateo-platformops/observability"}},
+     ("krateo-platformops/observability", "7d444aad9d1231d5b8766aa7b3e19261dfa0e375")),
+    ("unstamped chart", {"annotations": {}}, (None, None)),
+    ("no annotations key at all", {}, (None, None)),
+    # The declines matter more than the accept: a half-known provenance must fall back to
+    # inference, never become a pass on a commit nobody resolved.
+    ("SHORT sha declines",
+     {"annotations": {pc.STAMP_REVISION: "7d444aad",
+                      pc.STAMP_SOURCE: "https://github.com/x/y"}}, (None, None)),
+    ("sha without a source declines",
+     {"annotations": {pc.STAMP_REVISION: "7d444aad9d1231d5b8766aa7b3e19261dfa0e375"}}, (None, None)),
+    ("non-hex sha declines",
+     {"annotations": {pc.STAMP_REVISION: "Z" * 40,
+                      pc.STAMP_SOURCE: "https://github.com/x/y"}}, (None, None)),
+    ("non-github source declines",
+     {"annotations": {pc.STAMP_REVISION: "7d444aad9d1231d5b8766aa7b3e19261dfa0e375",
+                      pc.STAMP_SOURCE: "https://gitlab.example.com/x/y"}}, (None, None)),
+]
+
+
+def _provenance_fixtures():
+    """(failures, count). Unit behaviour plus the structural ordering invariant."""
+    failures = []
+    for label, meta, want in PROV_CASES:
+        got = pc.stamped_provenance(meta)
+        ok = got == want
+        if not ok:
+            failures.append(label)
+        print(f"  {'ok  ' if ok else 'FAIL'} {label:<48} -> {got!r}")
+
+    src = (ROOT / ".github" / "scripts" / "check-pin-ci.py").read_text()
+    i_inf = src.find('checked.append((slug, verdict, f"[appVersion->tag')
+    i_guard = src.find("if not checked:\n            st_slug, st_sha = stamped_provenance(meta)")
+    ordering_ok = i_inf >= 0 and i_guard >= 0 and i_inf < i_guard
+    if not ordering_ok:
+        failures.append("stamp-is-fallback ordering")
+    print(f"  {'ok  ' if ordering_ok else 'FAIL'} "
+          f"{'stamp runs ONLY behind `if not checked:`':<48} -> "
+          f"{'inference first' if ordering_ok else 'STAMP WOULD RUN FIRST — silent false pass'}")
+    return failures, len(PROV_CASES) + 1
+
+
 def main():
     failures = []
     for label, text, targets, want in CASES:
@@ -156,10 +211,13 @@ def main():
     assert inc is not None, "an included makefile must not read as 'no tests'"
 
     print()
+    prov_failures, prov_n = _provenance_fixtures()
+    failures.extend(prov_failures)
     if failures:
         print(f"::error::{len(failures)} fixture(s) failed: {', '.join(failures)}")
         return 1
-    print(f"check-pin-ci-fixtures: OK — {len(CASES)} cases, both directions, no network")
+    print(f"check-pin-ci-fixtures: OK — {len(CASES)} Makefile cases + {prov_n} provenance "
+          f"cases, both directions, no network")
     return 0
 
 

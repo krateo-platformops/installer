@@ -4113,7 +4113,7 @@ components:
   # (that repo already has a krateo-observability-0.1.10 tag as precedent), or adopt snowplow's
   # proposal to stamp the source commit SHA onto the chart artifact so pin-ci stops inferring
   # provenance from appVersion at all. Do NOT unblock this by deleting `sources` or the appVersion.
-  version: 0.1.23
+  version: 0.1.28
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -4314,7 +4314,7 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.16
+  version: 0.1.18
   deps:
   - otel-collector-deployment
   tier: observability
