@@ -3632,6 +3632,21 @@ components:
   # 1.8.47: co-versioned with portal, as always.
   # 1.8.48: co-versioned with portal, as always.
   # 1.8.49: co-versioned with portal, as always.
+# portal-agents joins the portal set at 1.8.94 (was 1.8.86), 2026-11-06.
+# I MISSED THIS ON THE FIRST PASS and the chart owner caught it. I built the set by NAME PATTERN
+# -- `portal` plus everything ending `-page` -- and portal-agents matches neither. The set is
+# defined by what the release comprises, not by how the components are named.
+# I then enumerated ALL 19 components on the 1.8.x line rather than fixing only the one named.
+# Four sat outside the set; only this one belongs in it:
+#   portal-agents  1.8.86  ->  1.8.94 IS published          -> joins the set
+#   frontend       1.8.28      1.8.94 NOT published         -> stays
+#   builder-gate   1.8.26      1.8.94 NOT published         -> stays (1.8.28 exists; separate)
+#   frontend-crd   1.8.28      1.8.94 NOT published         -> stays
+# frontend/frontend-crd 1.8.28 ARE the widget CRDs live on 057, and the owner's census assumes
+# they STAY at 1.8.28 -- moving them would invalidate the baseline that census was measured
+# against, so they must not ride along.
+# builder-publish is NOT a pinned component at all: it is rendered by the portal chart, so it
+# moves 1.8.93 -> 1.8.94 on its own as one more redeploy. Nothing to pin.
 - name: portal-agents
   # 1.8.86: co-versioned with portal, as always -- one tag, every chart under helm/. PURE VERSION
   # MOVE: 109 files and 472981 BYTES ON BOTH SIDES vs 1.8.85, `diff -rq` reports Chart.yaml alone.
@@ -3684,7 +3699,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.86
+  version: 1.8.94
   deps: ['portal']
   tier: platform
   feature: portal
