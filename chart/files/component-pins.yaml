@@ -4364,6 +4364,17 @@ components:
 # because kind could not start on their machine.
 # No -crd pin and no componentValues change. The certificate-alert fix is NOT in this chart; it
 # comes with the later krateo-observability chart.
+# TEMPORARILY BACK AT 0.1.18 FOR A TAG SPLIT, 2026-11-06. This is NOT a retraction of 0.1.19.
+# Diego's tag split: 0.3.516 = the portal set + github-provider-kog-config; 0.3.517 = this
+# daemonset. 0.1.19 restarts the daemonset with a known readiness blip that can trip
+# sre-probe-failing, and that blip would contaminate the verdict for 16 page charts redeploying.
+# WHY A REVERT RATHER THAN TAGGING AROUND IT: I merged all three PRs BEFORE asking about the tag
+# split, so this pin sits on main BETWEEN the other two. release-oci asserts the tag is on main,
+# so there is no commit carrying the other two without this one. The clean fix is to back it out,
+# tag 0.3.516, then re-land it for 0.3.517 -- not to tag off a side branch that fails that gate.
+# RE-LAND IMMEDIATELY AFTER 0.3.516 IS TAGGED. Its owner is waiting on it: 0.1.19 is the first
+# half of the headroom alert (#393) and must be RUNNING before the krateo-observability chart
+# that carries the Alert, which they will only publish once these points are in ClickHouse.
 - name: otel-collector-daemonset
   # 0.1.13 (observability#75, repo tag 3.1.22): PARTITION the OTLP log stream. krateo_audit had
   # acquired a SECOND producer -- the exact condition 0.1.11's own chart comment said to guard
@@ -4448,7 +4459,7 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.19
+  version: 0.1.18
   deps:
   - otel-collector-deployment
   tier: observability
