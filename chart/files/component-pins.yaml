@@ -2618,6 +2618,33 @@ components:
 # against a 100-pod tenant quota -- measured by the acmp session: a real child sits at 100/100
 # with at least 20 more refused, and blocked pods are not on the host, so a host-side check reads
 # as settled. Do NOT seed a default list: empty must keep meaning all 32.
+# github-provider-kog-config 0.7.5 -- NEW COMPONENT, feature-gated OFF by default (2026-11-06).
+# commit 6e2ecf0, digest sha256:294bfb8f0dc00a39a6887c64daf7d782f138d0b20f5157859d261d76a3d77744,
+# appVersion 0.1.9, package PUBLIC. Verified published; a 9.9.9 control fails to pull.
+# Renders exactly TWO objects: RepositoryConfiguration and PullRequestConfiguration, both named
+# `github-blueprints-config`, into the RELEASE namespace -- no hardcoded namespace. Rendered with
+# -n krateo-system it matches 057's live objects on kind, name AND namespace.
+# These are the two install-level Configurations BUILDER PUBLISHING needs. Their absence is the gap
+# behind the docs/configuration.md:487 fix still owed.
+# WHY OFF BY DEFAULT, and why it must stay off on 057 specifically: 057's two Configurations were
+# HAND-APPLIED -- both carry kubectl's last-applied-configuration annotation. Enabling this there
+# would TAKE THEM OVER, and a takeover of hand-made objects is a different risk from a fresh
+# install and is untested. A fresh cluster is this chart's first real test.
+# deps, NOT requiresApiGroups alone. requiresApiGroups is GROUP-level: `github.krateo.io` passes if
+# ANY served CRD in the group exists, so it cannot see that Repository or PullRequest specifically
+# is missing. That is the trap the chart's owner identified, and it is why definitions.yaml now
+# carries a render guard. Note the known limit of deps: inst.depsReady SKIPS a dep whose own
+# feature is disabled, so `deps` is an ORDERING constraint and nothing more.
+- name: github-provider-kog-config
+  deps:
+  - github-provider-kog
+  feature: githubProviderKogConfig
+  kind: GithubProviderKogConfig
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  requiresApiGroups:
+  - github.krateo.io
+  tier: platform
+  version: 0.7.5
 - name: github-provider-kog
   # HISTORICAL (resolved by oasgen-provider 0.27.0 — see the 0.3.2 note below). REVERTED TO 0.3.1 at
   # the time because: 0.3.2 COULD NOT BE INSTALLED IN PLACE and this was not a transient — it was
