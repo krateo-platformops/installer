@@ -4319,6 +4319,22 @@ components:
   - otel-collector-daemonset
   tier: observability
   feature: sloRollup
+# 0.1.19 (2026-11-06, repo tag 3.1.42, observability#104, appVersion 0.158.0). Verified published;
+# a 9.9.9 control fails to pull.
+# WHAT CHANGES: kubeletstats now emits k8s.volume.available and k8s.volume.capacity, for
+# PersistentVolumeClaims ONLY -- about 14 new series on krateo-057. The other 40 metric names are
+# unchanged. This is the FIRST HALF of the headroom alert (#393).
+# ORDER MATTERS, stated by the owner: this must be RUNNING before the krateo-observability chart
+# that carries the headroom Alert. They will only publish that once these points are in
+# ClickHouse, so this pin must roll first and be confirmed.
+# EXPECT ON ROLL: the daemonset restarts, with the same brief readiness failures seen on 0.3.514,
+# which can trip sre-probe-failing again. That is known and not a regression.
+# TESTED BY THE OWNER, and the limits are theirs: contrib 0.158.0 against ONE real krateo-057
+# kubelet payload -- 8 series with the chart config, 236 without its filter, 0 without
+# extra_metadata_labels. NOT tested on a full cluster and NOT with k8sattributes alongside it,
+# because kind could not start on their machine.
+# No -crd pin and no componentValues change. The certificate-alert fix is NOT in this chart; it
+# comes with the later krateo-observability chart.
 - name: otel-collector-daemonset
   # 0.1.13 (observability#75, repo tag 3.1.22): PARTITION the OTLP log stream. krateo_audit had
   # acquired a SECOND producer -- the exact condition 0.1.11's own chart comment said to guard
@@ -4403,7 +4419,7 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.18
+  version: 0.1.19
   deps:
   - otel-collector-deployment
   tier: observability
