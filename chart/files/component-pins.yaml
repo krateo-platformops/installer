@@ -4674,6 +4674,16 @@ components:
   tier: observability
   feature: coreAgents
   agent: true
+# 0.1.6 (2026-11-06): the autopilot -> agentiko rename, step 2. Adds the `agentiko` corpus key
+# ALONGSIDE `krateo-autopilot` -- it resolves BOTH, so this pin has no cluster-visible effect by
+# itself and is safe ahead of anything else in the rename. The agent chart carrying the new
+# prompts must NOT release before this is rolled, because those prompts name the new repo.
+# Published in krateo-agentiko, NOT krateo-platformops: verified by pulling
+# oci://ghcr.io/krateo-agentiko/charts/repo-mcp-server 0.1.6, with 0.1.5 as a positive control,
+# 9.9.9 not-found as a negative, and krateo-platformops/repo-mcp-server 0.1.6 ALSO not-found --
+# the owner first gave me the path without the org and my probe of platformops came back empty,
+# which looks identical to an unpublished chart. The `repo:` field below already names the right
+# org, so only the version moves.
 - name: repo-mcp-server
   kind: RepoMcpServer
   # 0.1.4: THE CORPUS EVERY AGENT GROUNDS ON HAS BEEN STALE, and nothing said so. Verified on 057
@@ -4743,7 +4753,7 @@ components:
   # DECISIVE POST-CHECK, one line:
   #   kubectl logs -n krateo-system deploy/repo-mcp-server | grep "runtime pin"
   # must read frontend@1.6.52, NOT 1.6.48.
-  version: 0.1.5
+  version: 0.1.6
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
