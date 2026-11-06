@@ -5905,6 +5905,23 @@ components:
 # Namespace carries managed-by: Helm, and deletesInstances / drainFinalizerBoundChildren /
 # TakeOwnership / keep handling are unchanged from 2.13.46 through 2.13.54. #270's leaked-controller
 # code only reports.
+# requiresApiGroups ADDED 2026-11-06 -- this was a pre-existing FAIL-OPEN, found by sweeping every
+# dep edge after the krateo-audit-worm 0.1.4 wiring review, and it is the ONLY one of its shape.
+# THE DEFECT: incident-provider's feature is specialistAgents; its dep incident-provider-crd is
+# gated on `portal`. inst.depsReady SKIPS a dep whose own feature is disabled -- so with
+# specialistAgents ON and portal OFF the dep vanishes, incident-provider installs, and the CRDs
+# it needs are absent. incident-provider-crd owns incidents.observability.krateo.io and
+# incidentapplies.observability.krateo.io, both verified on 057.
+# THAT COMBINATION IS NOT HYPOTHETICAL: it is the agent-only profile -- agents on, portal off --
+# which is a supported, validated install shape. So this is reachable by a documented profile.
+# WHY THIS ONE AND NOT THE OTHERS: of the 15 `<x>` -> `<x>-crd`-style dep edges in this file, 14
+# have the dep sharing the dependent's own feature, which makes the skip path unreachable (if the
+# dep's feature is off, so is the dependent's, so nothing renders). This was the only edge where
+# the two features are independent. The sweep found 28 of 92 dep edges with independent features,
+# but the rest are ordering-only and do not render a kind the dep provides.
+# requiresApiGroups is the fix because it is a RENDER-TIME cluster-state gate, hard-ANDed outside
+# the $exists escape -- it blocks the render until the group is served, regardless of which
+# features are on. `deps` only orders, and ordering is skippable.
 - name: incident-provider
   #
   # 0.6.1 -> 0.7.0, pinned ALONE. incident-provider and incident-provider-crd move together: one
@@ -5952,6 +5969,8 @@ components:
   - incident-provider-crd
   tier: observability
   feature: specialistAgents
+  requiresApiGroups:
+  - observability.krateo.io
 
 - name: incident-provider-crd
   # Renamed from incident-controller-crd. The kind MUST follow the chart name -- it is not a free
