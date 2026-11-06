@@ -2604,8 +2604,15 @@ components:
 # cluster.
 # DELIBERATELY NOT 0.7.5. That tag exists and carries ONLY a version change for this chart -- it
 # was cut to publish the new github-provider-kog-config chart alongside it. Taking 0.7.5 here
-# would move the composition to v0-7-5, re-render 32 CRDs and leave a served-version pair, in
-# exchange for nothing. Its owner proposed this split and I agree with it.
+# would move the composition to v0-7-5 and leave a served-version pair, in exchange for nothing.
+# Its owner proposed this split and I agree with it.
+# CORRECTION, caught by that owner before merge: an earlier draft of this note said 0.7.5 would
+# also "re-render 32 CRDs". It would not, and nor does 0.7.4. VERIFIED by rendering both 0.7.3
+# and 0.7.4 with default values: 64 objects each (32 ConfigMap + 32 RestDefinition), 0 changed,
+# 0 added, 0 removed, both 438154 bytes. The 32 rd-*.yaml TEMPLATES did change -- they now
+# consult `kinds` through a new _helpers.tpl -- but the OUTPUT is byte-identical, so the
+# github.krateo.io CRDs oasgen generates from them do not move. Only the ONE composition CRD
+# does. The wrong version would have had a reader expect 32 CRD changes during the roll.
 # `kinds` SELECTS WHICH RestDefinitions RENDER. Empty (the default) renders all 32, byte-identical
 # to 0.7.3. A child sets e.g. [Repository, PullRequest] to avoid ~32 rest-dynamic-controller pods
 # against a 100-pod tenant quota -- measured by the acmp session: a real child sits at 100/100
