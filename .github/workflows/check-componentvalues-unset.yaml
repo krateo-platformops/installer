@@ -1,0 +1,32 @@
+name: check-componentvalues-unset
+# Asserts that componentValuesUnset puts an EXPLICIT NULL into the CR merge patch.
+#
+# components-patch.json is an RFC-7386 merge patch: an OMITTED key is PRESERVED and only an explicit
+# null deletes. That protects operator-set values from a chart upgrade -- and it meant a
+# componentValues key could be SET and CHANGED but never REMOVED. Removing it from the values file
+# was silently inert, so a temporary override became permanent and the live CR stopped being
+# reconstructible from this repo.
+#
+# The gate carries its own CONTROL: it first asserts the baseline patch CONTAINS the key under test,
+# because "it is null now" proves nothing if it was never there.
+on:
+  pull_request:
+    paths:
+      - 'chart/templates/self-bootstrap.yaml'
+      - 'chart/templates/_helpers.tpl'
+      - 'chart/values.schema.json'
+      - '.github/scripts/check-componentvalues-unset.py'
+      - '.github/workflows/check-componentvalues-unset.yaml'
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Assert componentValuesUnset emits explicit nulls
+        run: python3 .github/scripts/check-componentvalues-unset.py
