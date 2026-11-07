@@ -278,6 +278,11 @@
           "default": false,
           "description": "Opt-in showback (usage/cost records). Default false because it is only useful once its ClickHouse target exists: the chart's migration creates the `showback` database and its tables on first start, against the clickstack ClickHouse that features.portal brings up via krateo-observability. Enabling it without that ClickHouse leaves the pod retrying its migration. NOTE: features.* is EXCLUDED from the self-bootstrap upgrade patch, so setting this in a values file on an UPGRADE is silently inert — enabling it on a live cluster is an Installer CR edit."
         },
+        "githubProviderKogConfig": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in. Installs the two install-level Configurations that BUILDER PUBLISHING needs (RepositoryConfiguration and PullRequestConfiguration, both named github-blueprints-config) into the release namespace. OFF BY DEFAULT and it must stay off on any cluster where those Configurations were applied by hand -- enabling it there TAKES THEM OVER, which is untested; krateo-057 is exactly that case. Needs github-provider-kog, and that component's `kinds` must include Repository and PullRequest: neither deps nor requiresApiGroups can see that, so a render guard in definitions.yaml refuses the combination."
+        },
         "identityLifecycle": {
           "type": "boolean",
           "default": false,
@@ -3499,6 +3504,30 @@
                   }
                 }
               }
+            }
+          }
+        },
+        "github-provider-kog-config": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "configurationName": { "type": "string", "description": "Name for both Configuration objects. The chart defaults it to github-blueprints-config, which is what krateo-057 runs; NOT defaulted here, because a default on an installer schema property propagates into the live CR." },
+            "resourceGroup": { "type": "string", "description": "API group the Configurations target. Chart default github.krateo.io." },
+            "secretName": { "type": "string", "description": "Secret holding the git credential. Chart default git-provider-credentials." },
+            "secretKey": { "type": "string", "description": "Key within that Secret. Chart default token. NOTE: the portal chart defaults authMethod to basic with usernameRef, so a Secret carrying only token fails builder-publish at render -- that mismatch is the docs:487 fix still owed." }
+          }
+        },
+        "github-provider-kog": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kinds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["ActionsVariableOrg", "ActionsVariableRepo", "Autolink", "AutomatedSecurityFixes", "BranchProtection", "CodeSecurityConfig", "Collaborator", "CustomProperty", "DeployKey", "DeploymentBranchPolicy", "Environment", "EnvironmentVariable", "GitRef", "Issue", "Label", "Milestone", "OrgMembership", "OrgRuleset", "OrgWebhook", "PullRequest", "Release", "RepoContent", "RepoDeployment", "RepoRuleset", "RepoWebhook", "Repository", "RunnerGroup", "Team", "TeamMembership", "TeamRepo", "UserRepository", "Workflow"]
+              },
+              "description": "Which of the 32 GitHub RestDefinitions this component renders. EMPTY OR ABSENT RENDERS ALL 32 and is byte-identical to 0.7.3, so this carries NO DEFAULT -- a seeded list would silently narrow every install, and a default on any installer schema property propagates into the live CR. A child sets a subset to avoid roughly 32 rest-dynamic-controller pods against a 100-pod tenant quota. Needs the pin at 0.7.4 or later: the field does not exist in 0.7.3's schema. WARNING: omitting Repository or PullRequest while the github-provider-kog-config component is enabled leaves that chart unrenderable -- `deps` and `requiresApiGroups` both pass, because the component is Ready and the API group exists, so nothing catches it except the render guard in definitions.yaml."
             }
           }
         },

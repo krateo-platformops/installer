@@ -33,6 +33,25 @@
 {{- if and $c.readerGroups (eq $cdNamespace $.Values.namespaces.krateo) }}
 {{- fail (printf "components[%s]: `readerGroups` needs `namespace` set to a blueprint namespace — a reader Role in %s would expose every platform CompositionDefinition" (toString $c.name) $.Values.namespaces.krateo) }}
 {{- end }}
+{{/* github-provider-kog-config needs Repository AND PullRequest to exist as RestDefinitions, and
+     NOTHING ELSE CATCHES THEIR ABSENCE. `deps` only orders this after github-provider-kog, and
+     `requiresApiGroups: github.krateo.io` is GROUP-level — it passes while ANY served CRD in the
+     group exists. So if componentValues.github-provider-kog.kinds names a subset that omits either
+     one, both gates pass and this chart gets an endless chart-inspector 500. The contradiction is
+     in the operator's own values, so the render is the earliest place it can be refused and the
+     only place the message can name the fix. Identified by the chart's owner.
+     EMPTY OR ABSENT `kinds` MUST PASS: empty means "render all 32", so the guard is gated on the
+     list being non-empty, never on its contents alone. */}}
+{{- if eq $c.name "github-provider-kog-config" }}
+{{- $kinds := dig "github-provider-kog" "kinds" (list) (default dict $.Values.componentValues) }}
+{{- if $kinds }}
+{{- $missing := list }}
+{{- range $need := (list "Repository" "PullRequest") }}
+{{- if not (has $need $kinds) }}{{- $missing = append $missing $need }}{{- end }}
+{{- end }}
+{{- if $missing }}
+{{- fail (printf "components[github-provider-kog-config]: componentValues.github-provider-kog.kinds omits %s, which this component requires. It renders a RepositoryConfiguration and a PullRequestConfiguration, so both RestDefinitions must exist. Neither `deps` nor `requiresApiGroups: github.krateo.io` can detect this — the component is Ready and the API group exists — so without this guard the chart would fail with an endless chart-inspector 500. Fix: add %s to componentValues.github-provider-kog.kinds, or leave `kinds` empty to render all 32, or set features.githubProviderKogConfig=false." (join ", " $missing) (join " and " $missing)) }}
+{{- end }}{{- end }}{{- end }}
 {{- if ne $cdNamespace $.Values.namespaces.krateo }}
 {{/* Emit the namespace unless it already exists and is not this release's (helm cannot adopt it,
      and an existing namespace needs nothing). keep: uninstalling the installer must not delete a

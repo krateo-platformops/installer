@@ -22,7 +22,7 @@ components:
   # 0.33.1 WAS SKIPPED DELIBERATELY. It exists and was approved, but authn recommended going straight
   # to 0.34.0 so both clusters roll once instead of twice, and Diego chose that. 0.33.1 was never
   # pinned or rolled anywhere.
-  version: 0.35.4
+  version: 0.35.5
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -506,6 +506,19 @@ components:
 # AuthorizationCodeRejected.
 # 057 CANNOT PROVE THE WIRE CHANGES: it has 0 OAuthConfigs and 0 OIDCConfigs, so it exercises
 # neither RESTActions nor PKCE. A 057 smoke test establishes that 0.35.4 starts and answers.
+# authn + authn-crd 0.35.5 (2026-11-06). Diego's direct go in session.
+# LOCKSTEP, both to 0.35.5. Verified published for BOTH -- but note the chart names differ from
+# the component names: `authn` -> chart authn, `authn-crd` -> chart authn-crds (PLURAL). My first
+# probe asked the registry for `authn-crd` 0.35.5, got not-found, and I nearly reported the CRD
+# chart as unpublished. The component entry's `chart:` key is the authority on the artifact name,
+# not the component name. A 9.9.9 control fails on both.
+# WHY IT MOVES IN THIS TAG specifically: snowplow's bench run 22 installs from whichever
+# installer tag is cut, so authn #97's login speedup is only measurable by run 22 if THIS tag
+# carries 0.35.5. That timing is why Diego was asked now rather than at the next convenient tag.
+# Its owner verified the chart themselves and declined to let any relay stand as the go.
+# BEFORE ROLLING: the owner takes a fresh smoke baseline, read while the 0.35.4 pod is still
+# serving. smoke-0.3.514.txt still holds because 0.3.515 moved no authn pin, but a baseline is
+# one-shot -- it has to be taken before the pod rolls, not after.
 - name: authn
   # KRATEO-DEMO CONSTRAINT -- DO NOT BUMP TO >= 0.28.0 AS A ROUTINE UPDATE (acmp, 2026-10-29).
   # authn 0.28.0 (authn#42) stamps an `authn.krateo.io/groups` annotation, and AT STARTUP it
@@ -588,7 +601,7 @@ components:
   # REQUIRED-BEFORE child Krateos: Diego decided children move ONCE, to the first installer version
   # that pins authn 0.34.0, rather than stopping at 0.3.498 first. acmp sets that version as the
   # blueprint's childKrateo.installer.version and upgrades acme and globex on his word.
-  version: 0.35.4
+  version: 0.35.5
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
@@ -2597,6 +2610,54 @@ components:
 # Tag note: 0.7.3 was first pushed as a LIGHTWEIGHT tag and fired NO workflow; replaced with an
 # annotated tag at the same commit. check-pin-ci dereferences annotated tags, so both resolve to
 # cdae2bc -- but a tag that builds nothing is the silent failure worth remembering.
+# 0.7.4 (2026-11-06, commit 2aa8cb0, digest sha256:ac59dedc..., appVersion still 0.1.9).
+# Default render is BYTE-IDENTICAL to 0.7.3 -- no RestDefinition or asset change. What is new is a
+# `kinds` property in the chart's values.schema.json, so the composition CRD gains that field and
+# the composition moves to v0-7-4. Owner-verified; the new composition version has not run on a
+# cluster.
+# DELIBERATELY NOT 0.7.5. That tag exists and carries ONLY a version change for this chart -- it
+# was cut to publish the new github-provider-kog-config chart alongside it. Taking 0.7.5 here
+# would move the composition to v0-7-5 and leave a served-version pair, in exchange for nothing.
+# Its owner proposed this split and I agree with it.
+# CORRECTION, caught by that owner before merge: an earlier draft of this note said 0.7.5 would
+# also "re-render 32 CRDs". It would not, and nor does 0.7.4. VERIFIED by rendering both 0.7.3
+# and 0.7.4 with default values: 64 objects each (32 ConfigMap + 32 RestDefinition), 0 changed,
+# 0 added, 0 removed, both 438154 bytes. The 32 rd-*.yaml TEMPLATES did change -- they now
+# consult `kinds` through a new _helpers.tpl -- but the OUTPUT is byte-identical, so the
+# github.krateo.io CRDs oasgen generates from them do not move. Only the ONE composition CRD
+# does. The wrong version would have had a reader expect 32 CRD changes during the roll.
+# `kinds` SELECTS WHICH RestDefinitions RENDER. Empty (the default) renders all 32, byte-identical
+# to 0.7.3. A child sets e.g. [Repository, PullRequest] to avoid ~32 rest-dynamic-controller pods
+# against a 100-pod tenant quota -- measured by the acmp session: a real child sits at 100/100
+# with at least 20 more refused, and blocked pods are not on the host, so a host-side check reads
+# as settled. Do NOT seed a default list: empty must keep meaning all 32.
+# github-provider-kog-config 0.7.5 -- NEW COMPONENT, feature-gated OFF by default (2026-11-06).
+# commit 6e2ecf0, digest sha256:294bfb8f0dc00a39a6887c64daf7d782f138d0b20f5157859d261d76a3d77744,
+# appVersion 0.1.9, package PUBLIC. Verified published; a 9.9.9 control fails to pull.
+# Renders exactly TWO objects: RepositoryConfiguration and PullRequestConfiguration, both named
+# `github-blueprints-config`, into the RELEASE namespace -- no hardcoded namespace. Rendered with
+# -n krateo-system it matches 057's live objects on kind, name AND namespace.
+# These are the two install-level Configurations BUILDER PUBLISHING needs. Their absence is the gap
+# behind the docs/configuration.md:487 fix still owed.
+# WHY OFF BY DEFAULT, and why it must stay off on 057 specifically: 057's two Configurations were
+# HAND-APPLIED -- both carry kubectl's last-applied-configuration annotation. Enabling this there
+# would TAKE THEM OVER, and a takeover of hand-made objects is a different risk from a fresh
+# install and is untested. A fresh cluster is this chart's first real test.
+# deps, NOT requiresApiGroups alone. requiresApiGroups is GROUP-level: `github.krateo.io` passes if
+# ANY served CRD in the group exists, so it cannot see that Repository or PullRequest specifically
+# is missing. That is the trap the chart's owner identified, and it is why definitions.yaml now
+# carries a render guard. Note the known limit of deps: inst.depsReady SKIPS a dep whose own
+# feature is disabled, so `deps` is an ORDERING constraint and nothing more.
+- name: github-provider-kog-config
+  deps:
+  - github-provider-kog
+  feature: githubProviderKogConfig
+  kind: GithubProviderKogConfig
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  requiresApiGroups:
+  - github.krateo.io
+  tier: platform
+  version: 0.7.5
 - name: github-provider-kog
   # HISTORICAL (resolved by oasgen-provider 0.27.0 — see the 0.3.2 note below). REVERTED TO 0.3.1 at
   # the time because: 0.3.2 COULD NOT BE INSTALLED IN PLACE and this was not a transient — it was
@@ -2742,7 +2803,7 @@ components:
   # diffs, reporulesets/orgrulesets CRDs Established carrying a 23-value rules[].type enum, 057's
   # PR/Repo counts identical to baseline, and Synced on every CR. THE ENUM IS THE PROOF THE CHECK
   # BITES: it reads 15 today, so a vacuous pass is not available to it.
-  version: 0.7.3
+  version: 0.7.4
   # 0.7.0 adds two kinds and removes none -- measured on the published chart, not read from the
   # release notes: rendered at --kube-version 1.33.0, rc=0 on both sides, 8104 -> 8882 lines (floor
   # asserted), RestDefinition docs 30 -> 32, ADDED {RepoContent, UserRepository}, REMOVED {} . 0.7.1
@@ -2844,6 +2905,20 @@ components:
 # as discriminating negative controls. Three versions were announced to this session ahead of the
 # registry in the preceding day -- one retracted by its author, one in a different org than stated,
 # one a lightweight tag that fired no workflow -- so the pull IS the evidence, not the report.
+# THE PORTAL SET MOVES AS ONE. All 15 (portal + 14 page charts) to 1.8.94, 2026-11-06.
+# Diego chose this over splitting it. The reason is a false reading we already produced: the
+# gate for snowplow #1128 was described as "portal >= 1.8.93", portal WAS at 1.8.93, and it was
+# confirmed as met -- but the 8 refused stages live in compositions-page, resources-page,
+# reviews-page and service-desk-page, which were at 1.8.89/1.8.85/1.8.85/1.8.91. Live
+# composition-resources on 057 still had the old ${ ._getpath }. Pinning only the four snowplow
+# names would recreate exactly that mixed state, so the set moves together or not at all.
+# All 15 verified published at 1.8.94 by pulling each one; a 9.9.9 control fails to pull.
+# RISK, raised by the chart owner and not measured: most of these move 9 versions at once and
+# each is a composition bump that redeploys. No census exists for the 1.8.85 -> 1.8.94 diff. The
+# widget CRDs live on 057 are 1.8.28, so charts from 1.8.86 on should validate against them --
+# their words: reasoning, not a test. This is why the set rolls ALONE, after 0.3.515.
+# Carries the `paused` constraint, the alert detail panel fix and the fetchable target fix, none
+# of which reached 057 under the portal-only pins.
 - name: portal
   #
   # 1.8.88 -> 1.8.90. Carries portal#362: the values.schema.json that service-desk-page needs for
@@ -3555,7 +3630,7 @@ components:
   # the label, the concrete path and krateo.io/nav-link-only (it links and owns nothing). ONLY the
   # exact string "true" enables it, so a half-recognised truthy value fails visibly instead of
   # silently claiming the route back.
-  version: 1.8.93
+  version: 1.8.94
   deps:
   - frontend
   - git-provider
@@ -3597,6 +3672,21 @@ components:
   # 1.8.47: co-versioned with portal, as always.
   # 1.8.48: co-versioned with portal, as always.
   # 1.8.49: co-versioned with portal, as always.
+# portal-agents joins the portal set at 1.8.94 (was 1.8.86), 2026-11-06.
+# I MISSED THIS ON THE FIRST PASS and the chart owner caught it. I built the set by NAME PATTERN
+# -- `portal` plus everything ending `-page` -- and portal-agents matches neither. The set is
+# defined by what the release comprises, not by how the components are named.
+# I then enumerated ALL 19 components on the 1.8.x line rather than fixing only the one named.
+# Four sat outside the set; only this one belongs in it:
+#   portal-agents  1.8.86  ->  1.8.94 IS published          -> joins the set
+#   frontend       1.8.28      1.8.94 NOT published         -> stays
+#   builder-gate   1.8.26      1.8.94 NOT published         -> stays (1.8.28 exists; separate)
+#   frontend-crd   1.8.28      1.8.94 NOT published         -> stays
+# frontend/frontend-crd 1.8.28 ARE the widget CRDs live on 057, and the owner's census assumes
+# they STAY at 1.8.28 -- moving them would invalidate the baseline that census was measured
+# against, so they must not ride along.
+# builder-publish is NOT a pinned component at all: it is rendered by the portal chart, so it
+# moves 1.8.93 -> 1.8.94 on its own as one more redeploy. Nothing to pin.
 - name: portal-agents
   # 1.8.86: co-versioned with portal, as always -- one tag, every chart under helm/. PURE VERSION
   # MOVE: 109 files and 472981 BYTES ON BOTH SIDES vs 1.8.85, `diff -rq` reports Chart.yaml alone.
@@ -3649,7 +3739,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.86
+  version: 1.8.94
   deps: ['portal']
   tier: platform
   feature: portal
@@ -3685,7 +3775,7 @@ components:
   # templates/_builder.tpl, inside `{{/* */}}` blocks. 26 files, 124539 -> 124537 bytes; Chart.yaml
   # and that one template differ, and the template's change cannot reach the render.
   kind: MarketplacePage
-  version: 1.8.86
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3708,21 +3798,21 @@ components:
 # cross-feature dep whose feature is off is safely suppressed rather than stalled.
 - name: service-desk-page
   kind: ServiceDeskPage
-  version: 1.8.91
+  version: 1.8.94
   deps:
   - portal
   tier: platform
   feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
   feature: portal
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3763,7 +3853,7 @@ components:
 - name: dashboard-page
   # Renders into krateo-dashboard, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: DashboardPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3802,7 +3892,7 @@ components:
   # original push failure is still UNKNOWN -- it did not recur, which is evidence of a blip and not
   # proof of one. Pinned only after confirming 1.8.89 pulls: version 1.8.89, appVersion 1.8.89.
   kind: CompositionsPage
-  version: 1.8.89
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3810,7 +3900,7 @@ components:
 - name: blueprints-page
   # Renders into krateo-blueprints, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: BlueprintsPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3818,7 +3908,7 @@ components:
 - name: resources-page
   # Renders into krateo-resources, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: ResourcesPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3826,7 +3916,7 @@ components:
 - name: search-page
   # Renders into krateo-search, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: SearchPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3834,7 +3924,7 @@ components:
 - name: builders-page
   # Renders into krateo-builders, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: BuildersPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3842,7 +3932,7 @@ components:
 - name: clusters-page
   # Renders into krateo-clusters, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ClustersPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3850,7 +3940,7 @@ components:
 - name: reviews-page
   # Renders into krateo-reviews, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ReviewsPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3858,7 +3948,7 @@ components:
 - name: settings-page
   # Renders into krateo-settings, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: SettingsPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -3866,7 +3956,7 @@ components:
 - name: observability-page
   # Renders into krateo-observability, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ObservabilityPage
-  version: 1.8.85
+  version: 1.8.94
   deps:
   - portal
   tier: platform
@@ -4120,6 +4210,12 @@ components:
   # cert-manager.io CRDs, and clickhouse-operator/mongodb-operator are Ready there.
   tier: observability
   feature: portal
+# DELIBERATELY NOT 0.1.29. 0.1.29 is a COMMENT-ONLY bump and is deliberately NOT taken. Nothing rendered changes.
+# It exists because its repo's #106 changed files without a version bump, which broke
+# release 3.1.44 (it published nothing); the owner initially said no version needed to move
+# and has since corrected that. So 0.1.29 and its sibling are real published versions that are simply not
+# worth a composition move -- recorded here so a later reader does not read the gap as an
+# oversight, and so a provenance check flagging them has an explanation.
 - name: krateo-observability
   kind: KrateoObservability
   # 0.1.19 (observability#62): the log-scoped default alerts also exclude ServiceName
@@ -4271,6 +4367,22 @@ components:
   - otel-collector-daemonset
   tier: observability
   feature: sloRollup
+# 0.1.19 (2026-11-06, repo tag 3.1.42, observability#104, appVersion 0.158.0). Verified published;
+# a 9.9.9 control fails to pull.
+# WHAT CHANGES: kubeletstats now emits k8s.volume.available and k8s.volume.capacity, for
+# PersistentVolumeClaims ONLY -- about 14 new series on krateo-057. The other 40 metric names are
+# unchanged. This is the FIRST HALF of the headroom alert (#393).
+# ORDER MATTERS, stated by the owner: this must be RUNNING before the krateo-observability chart
+# that carries the headroom Alert. They will only publish that once these points are in
+# ClickHouse, so this pin must roll first and be confirmed.
+# EXPECT ON ROLL: the daemonset restarts, with the same brief readiness failures seen on 0.3.514,
+# which can trip sre-probe-failing again. That is known and not a regression.
+# TESTED BY THE OWNER, and the limits are theirs: contrib 0.158.0 against ONE real krateo-057
+# kubelet payload -- 8 series with the chart config, 236 without its filter, 0 without
+# extra_metadata_labels. NOT tested on a full cluster and NOT with k8sattributes alongside it,
+# because kind could not start on their machine.
+# No -crd pin and no componentValues change. The certificate-alert fix is NOT in this chart; it
+# comes with the later krateo-observability chart.
 - name: otel-collector-daemonset
   # 0.1.13 (observability#75, repo tag 3.1.22): PARTITION the OTLP log stream. krateo_audit had
   # acquired a SECOND producer -- the exact condition 0.1.11's own chart comment said to guard
@@ -4355,11 +4467,44 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.18
+  version: 0.1.19
   deps:
   - otel-collector-deployment
   tier: observability
   feature: portal
+# 0.1.4 (2026-11-06, repo tag 3.1.43, observability#105). Verified published; 9.9.9 control fails.
+# WHY URGENT, from its owner: the audit verifier has given NO VERDICT on krateo-057 since
+# 2026-11-01 17:02 UTC -- every run hits its 120s activeDeadlineSeconds. 0.1.4 fixes that; CI ran
+# 5000 seals in seconds on both UTC and non-UTC servers.
+# IT NOW RENDERS Alert RESOURCES, which is a new dependency. ITS OWNER AND THE CHART BOTH NAME
+# THE WRONG PROVIDER: values.yaml and templates/alerts.yaml each say "needs the Alert CRD from
+# clickstack-agent". MEASURED ON 057 -- the chart renders observability.krateo.io/v1alpha1 Alert,
+# and that CRD (alerts.observability.krateo.io) is owned by alert-provider-crd. clickstack-agent
+# ships no CRD. There is a SECOND Alert kind, alerts.widgets.templates.krateo.io from
+# frontend-crd, which is NOT the one used here.
+# THE MISTAKE WOULD HAVE FAILED OPEN, which is why it is worth the correction and not just a
+# comment fix: clickstack-agent's feature is specialistAgents, and inst.depsReady SKIPS a dep
+# whose own feature is disabled. On a cluster with auditWorm ON and specialistAgents OFF, a dep
+# on clickstack-agent is skipped entirely, audit-worm installs, and its Alerts fail to render.
+# alert-provider-crd's feature is `portal`, so the dep is real wherever the portal exists.
+# requiresApiGroups: observability.krateo.io is the actual protection. It is a RENDER-TIME
+# cluster-state gate, hard-ANDed outside the $exists escape, so it blocks the render until the
+# CRD exists rather than merely ordering the install. `deps` only orders.
+# NOTE the chart's alerts.enabled DEFAULTS TO TRUE -- its owner described this as a default-off
+# feature, which is true of the INSTALLER feature auditWorm but not of the chart's own switch.
+# Where auditWorm is on, the Alerts render unless componentValues sets alerts.enabled=false.
+# No table schema change and no -crd pin; seal history untouched.
+# EXPECT AFTER THE ROLL, stated by its owner: krateo-audit-worm-verifier-silent can fire until
+# the first run completes inside a full hour -- expected once, then clears. IF THE FIRST RUN
+# REPORTS ANYTHING OTHER THAN ok, it is NOT a chart problem: tell the owner immediately and do
+# NOT re-run, repair or re-roll. verify.sh is stricter (continuous windows); all 720 seals on 057
+# pass that read-only. Not tested: tests/e2e-kind.sh, because kind would not start for them.
+# DELIBERATELY NOT 0.1.5. 0.1.5 is a COMMENT-ONLY bump and is deliberately NOT taken. Nothing rendered changes.
+# It exists because its repo's #106 changed files without a version bump, which broke
+# release 3.1.44 (it published nothing); the owner initially said no version needed to move
+# and has since corrected that. So 0.1.5 and its sibling are real published versions that are simply not
+# worth a composition move -- recorded here so a later reader does not read the gap as an
+# oversight, and so a provenance check flagging them has an explanation.
 - name: krateo-audit-worm
   # 0.1.0 (observability#82): a tamper-EVIDENT mirror of krateo_audit. The audit table itself is
   # ordinary ClickHouse -- anyone who can write it can rewrite it -- so this chart maintains a
@@ -4377,7 +4522,7 @@ components:
   # The near-miss worth recording: an earlier draft of this dep list named clickhouse-operator.
   # The OPERATOR being Ready does not mean a ClickHouse INSTANCE exists -- krateo-observability is
   # what deploys the instance, which is why every other consumer deps on that and not the operator.
-  version: 0.1.3
+  version: 0.1.4
   # 0.1.1 (observability#83, repo tag 3.1.27) drops `appVersion`, which 0.1.0 set to 0.1.0. The
   # chart builds NO image -- both CronJobs run upstream clickhouse/clickhouse-server:24.8-alpine --
   # so there is no component repo whose CI check-pin-ci could resolve, and appVersion 0.1.0 matched
@@ -4397,12 +4542,15 @@ components:
   # chart renders exactly one ConfigMap and two CronJobs and the render-diff sees all of it.
   deps:
   - otel-collector-daemonset
+  - alert-provider-crd
   tier: observability
   # DEFAULT OFF. A new feature that defaults on grows a component on every fresh install, so new
   # features here default off and an operator opts in. The seal Job fails with a clear message
   # until krateo_audit exists and the next schedule retries, so enabling it before the audit
   # stream has produced anything is safe: the race self-resolves without wedging the umbrella.
   feature: auditWorm
+  requiresApiGroups:
+  - observability.krateo.io
 # 0.1.21 (2026-11-05, tag 3.1.40, appVersion 1.4.0). A FOUR-CHART JUMP from 0.1.17, so the
 # image moves 1.2.0 -> 1.4.0, not a dependency bump:
 #   0.1.18 metadata only · 0.1.19 image 1.3.0 + auditScoping · 0.1.20 image 1.3.1 (Go 1.26 +
@@ -4425,6 +4573,16 @@ components:
 #   preflight -- so 057 passing says nothing about a0.
 # OWNER'S CAVEAT, carried unchanged: the published image was exercised with real HTTP requests but
 #   with NO authn behind it. A valid login in a browser is UNTESTED.
+# 0.1.22 (2026-11-07, image 1.4.1, repo tag 3.1.45). Verified published; appVersion 1.4.1 and a
+# 9.9.9 control fails to pull.
+# FIXES sse-proxy#30: the stream stays live, so the first client after a boot or an idle period is
+# no longer flooded with backlog, and a client with no topic gets each row ONCE. History stays on
+# GET /events. No value and no schema changes.
+# EXPECT ON ROLL, from its owner: the proxy restarts with a few seconds of 503s on open bell
+# streams; clients reconnect by themselves.
+# TESTED BY ITS OWNER, limits as they stated them: go test, plus a live restart of the OLD
+# version. THIS version has not run on a cluster -- they will test it after the roll with a
+# connected client.
 - name: krateo-sse-proxy
   kind: KrateoSseProxy
   # 0.1.13 (sse-proxy#20/#21): prunes the GET /events?composition_id=… scan with a tokenbf
@@ -4499,7 +4657,7 @@ components:
   # sse-proxy#15/#16/#17 (1.45 breaks trace export, snowplow#596/#695).
   # The 0.1.15 note above about image.tag still applies verbatim: do NOT set
   # componentValues.krateo-sse-proxy.image.tag here.
-  version: 0.1.21
+  version: 0.1.22
   deps:
   - krateo-observability
   tier: observability
@@ -5809,6 +5967,23 @@ components:
 # Namespace carries managed-by: Helm, and deletesInstances / drainFinalizerBoundChildren /
 # TakeOwnership / keep handling are unchanged from 2.13.46 through 2.13.54. #270's leaked-controller
 # code only reports.
+# requiresApiGroups ADDED 2026-11-06 -- this was a pre-existing FAIL-OPEN, found by sweeping every
+# dep edge after the krateo-audit-worm 0.1.4 wiring review, and it is the ONLY one of its shape.
+# THE DEFECT: incident-provider's feature is specialistAgents; its dep incident-provider-crd is
+# gated on `portal`. inst.depsReady SKIPS a dep whose own feature is disabled -- so with
+# specialistAgents ON and portal OFF the dep vanishes, incident-provider installs, and the CRDs
+# it needs are absent. incident-provider-crd owns incidents.observability.krateo.io and
+# incidentapplies.observability.krateo.io, both verified on 057.
+# THAT COMBINATION IS NOT HYPOTHETICAL: it is the agent-only profile -- agents on, portal off --
+# which is a supported, validated install shape. So this is reachable by a documented profile.
+# WHY THIS ONE AND NOT THE OTHERS: of the 15 `<x>` -> `<x>-crd`-style dep edges in this file, 14
+# have the dep sharing the dependent's own feature, which makes the skip path unreachable (if the
+# dep's feature is off, so is the dependent's, so nothing renders). This was the only edge where
+# the two features are independent. The sweep found 28 of 92 dep edges with independent features,
+# but the rest are ordering-only and do not render a kind the dep provides.
+# requiresApiGroups is the fix because it is a RENDER-TIME cluster-state gate, hard-ANDed outside
+# the $exists escape -- it blocks the render until the group is served, regardless of which
+# features are on. `deps` only orders, and ordering is skippable.
 - name: incident-provider
   #
   # 0.6.1 -> 0.7.0, pinned ALONE. incident-provider and incident-provider-crd move together: one
@@ -5856,6 +6031,8 @@ components:
   - incident-provider-crd
   tier: observability
   feature: specialistAgents
+  requiresApiGroups:
+  - observability.krateo.io
 
 - name: incident-provider-crd
   # Renamed from incident-controller-crd. The kind MUST follow the chart name -- it is not a free

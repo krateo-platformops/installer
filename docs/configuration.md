@@ -484,15 +484,59 @@ Builder ──▶ BuilderPublish claim ──▶ builder-publish composition ─
 `charts/builder-publish:<portal version>`, registered by the `portal` chart) — *not* a separate
 installer pin — so bumping `portal` moves it too.
 
-**Publishing to github.com needs no installer wiring.** `builder-publish`'s chart defaults already
-set `git.host=github.com`, `authMethod=bearer`, and `secretRef=git-provider-credentials`
-(`key: token`). The one thing you provide is that Secret — an out-of-band PAT, never in a
-blueprint:
+**Publishing to github.com needs two things from you: a Secret with BOTH keys, and the two
+install-level Configurations.**
+
+`builder-publish`'s chart defaults, read from `builder-publish` 1.8.94 `values.yaml`:
+
+```yaml
+git:
+  host: github.com
+  scheme: https
+  scm: github
+credentials:
+  authMethod: basic                                      # NOT bearer
+  secretRef:   { name: git-provider-credentials, key: token }
+  usernameRef: { name: git-provider-credentials, key: username }
+```
+
+**`authMethod` is `basic`, so the Secret needs a `username` key as well as `token`.** An earlier
+version of this page said `authMethod=bearer` and showed a Secret with only `token`; following it
+exactly makes the publish render **fail**. `templates/localresources.yaml` looks the Secret up and
+refuses:
+
+> builder-publish: Secret krateo-system/git-provider-credentials has no "username" key — every
+> publish would push an empty username and be rejected by the git server.
+
+That guard exists because `git-provider`'s `GetSecret` returns `""` for a missing key **with no
+error**, so without it the push would go out with an empty username and fail hours later on a stuck
+`LocalResource` instead of at render. Note the check uses `lookup`, so it is skipped by
+`helm template` and only fires against a real cluster.
 
 ```bash
 kubectl -n krateo-system create secret generic git-provider-credentials \
+  --from-literal=username='<the GitHub account the PAT belongs to>' \
   --from-literal=token='<a GitHub PAT with repo push scope>'
 ```
+
+To use a bearer token instead, set `componentValues.portal` so that `builder-publish` receives
+`credentials.authMethod: bearer`; then only `token` is read and `username` is unnecessary.
+
+**The two install-level Configurations.** Builder publishing also needs a `RepositoryConfiguration`
+and a `PullRequestConfiguration` in the release namespace — without them the publish has no
+`github.krateo.io` configuration to resolve against. These are **not** created by the base install.
+Since installer 0.3.516 they ship as the `github-provider-kog-config` component, gated on
+`features.githubProviderKogConfig`, **off by default**:
+
+```yaml
+features:
+  githubProviderKogConfig: true
+```
+
+It renders both objects named `github-blueprints-config` into the release namespace. **Leave it off
+on a cluster where you have already applied those Configurations by hand** — enabling it there takes
+them over, which is untested. On such clusters the hand-applied objects keep working; this component
+is for fresh installs.
 
 Publish **destinations** are frontend config prefills that the publish form overrides per-artifact:
 PAGE is one repo (the portal chart); Controller/KOG and Blueprint are per-artifact (each new
