@@ -65,6 +65,63 @@ jobs:
           version: v3.16.3
       - name: Install PyYAML
         run: pip install --quiet pyyaml
+
+      # REGISTRY LOGIN. This gate's FIRST act on every pin is `helm show chart`, and an
+      # unauthenticated runner gets 401 from any PRIVATE package -- which is the whole
+      # krateo-agentiko org. Measured on installer#696: repo-mcp-server 0.1.6 pulls fine from a
+      # developer shell and CI reported
+      #     "chart oci://ghcr.io/krateo-agentiko/charts/repo-mcp-server is NOT PULLABLE
+      #      -- cannot verify anything about it"
+      # An anonymous pull of the CURRENTLY PINNED 0.1.5 fails identically, so this was never about
+      # the new version: EVERY agentiko pin was unverifiable here, and the first one to be bumped
+      # since the gate was written is the one that found it. The gate failing closed was correct;
+      # it simply could not read what it was asked to judge.
+      #
+      # WHY `PAT` AND NOT A NEW SECRET. The first version of this step used CHART_READ_TOKEN,
+      # mirroring nightly-chart-root-schema-all -- and that secret DOES NOT EXIST. Measured:
+      # orgs/krateo-platformops/actions/secrets/CHART_READ_TOKEN -> 404, five org secrets present
+      # and all visibility=all, repo-level secrets 0. Which also explains why
+      # nightly-chart-root-schema-all has failed at its "Log in to GHCR" step every night since at
+      # least 2026-11-01: it references a secret that has never existed, and fails loudly each time
+      # with nobody reading the result. `PAT` exists, is visibility=all and already reaches this
+      # repo, so Diego chose it over creating a new one.
+      #
+      # WHETHER `PAT` REACHES THE OTHER ORG IS UNKNOWN AND THIS STEP IS THE TEST. Nobody can read
+      # its scopes. A 401/403 on krateo-agentiko means it lacks read:packages there, and that is a
+      # finding to take back rather than something to work around here. A LOCAL pull is NOT the
+      # proof: the claim is specifically "a CI run from THIS repo can read that chart".
+      #
+      # FAILS, NEVER SKIPS, when the secret is absent: a gate that quietly stops verifying reports
+      # green without having checked anything, which is worse than no gate.
+      - name: Registry login
+        run: |
+          if [ -z "${{ secrets.PAT }}" ]; then
+            echo "::error::PAT is not set or not visible to this repository. This gate pulls every"
+            echo "::error::bumped chart to read its appVersion and provenance annotations, and private"
+            echo "::error::packages answer 401 to an unauthenticated runner. Failing rather than skipping."
+            exit 1
+          fi
+          echo "${{ secrets.PAT }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # POSITIVE CONTROL, and it is the point of the step above rather than an extra. A login that
+      # SUCCEEDS proves a handshake, not read access -- and this gate's whole failure mode today was
+      # an instrument reporting a true answer to the wrong question. So prove the credential can
+      # actually read the private org, with a chart that is pinned RIGHT NOW and must therefore be
+      # readable, and fail if it cannot. Without this, a PAT lacking read:packages on
+      # krateo-agentiko would log in cleanly and then report every agentiko pin UNRESOLVED -- which
+      # reads as a pin problem and is not one.
+      - name: Prove the credential can read the private org
+        run: |
+          if ! helm show chart oci://ghcr.io/krateo-agentiko/charts/repo-mcp-server --version 0.1.5 >/dev/null 2>&1; then
+            echo "::error::Registry login succeeded but the credential CANNOT READ krateo-agentiko."
+            echo "::error::repo-mcp-server 0.1.5 is PINNED on main, so it must be readable; a failure"
+            echo "::error::here means PAT lacks read:packages on that org. Every agentiko pin will"
+            echo "::error::report UNRESOLVED, which looks like a pin defect and is not one."
+            echo "::error::FIX: grant read:packages on krateo-agentiko to the token behind PAT."
+            exit 1
+          fi
+          echo "positive control OK: a currently-pinned private krateo-agentiko chart is readable"
+
       # Mint a short-lived installation token from the krateo-pin-ci GitHub App.
       #
       # WHY AN APP AND NOT A PAT. This gate reads CHECK-RUNS. GitHub offers no `Checks`
