@@ -1,4 +1,30 @@
 components:
+# authn 0.36.0 + authn-crds, 2026-11-07. Diego's go, in the 0.3.525 group with portal 1.8.95 and
+# identity-lifecycle 0.2.0 -- three independent components, one verdict.
+#
+# WHAT IT ADDS: PUBLIC OIDC CLIENTS (#104). In authn-crds, OIDCConfig's `clientSecret` is NO
+# LONGER REQUIRED. Omitting it makes the client PUBLIC: authn sends no client_secret, and a login
+# WITHOUT a PKCE verifier gets 400 MissingCodeVerifier. A named Secret with an empty or missing
+# key now fails 500 ClientSecretLookupFailed -- BEFORE, authn sent an empty secret, so that is a
+# loud failure replacing a silent one.
+#
+# NO new env keys, NO new chart values, NO RBAC change. The authn chart's only diff against
+# 0.35.7 is a comment in values.yaml (#102); authn-crds' only diff is the OIDCConfig CRD.
+#
+# THIS PIN IS SAFE AND UNEXERCISED, and the distinction matters. NEITHER 057 NOR demo HAS AN
+# OIDCConfig, so rolling it proves only that nothing broke -- it cannot demonstrate the feature.
+# THE FIRST REAL TEST IS A GATE 1 CHILD with a public client (no clientSecret, PKCE required),
+# where the load-bearing assertion is a NEGATIVE: a login with no X-Code-Verifier must return 400
+# MissingCodeVerifier and reach Keycloak with no token request. Its owner has a unit test for that
+# (TestPublicClientRequiresCodeVerifier, no IdP call) and has asked acmp for it as a third gate 1
+# arm. Do not read a clean 057 roll as evidence the feature works.
+#
+# DIGESTS, verified against the registry rather than taken from the request:
+#   chart authn       0.36.0  sha256:0de667a1667240a67191e422745bca1f729255a4446969530032154157058402
+#   chart authn-crds  0.36.0  sha256:4f89cc82d50f209f6fb064036639e753bf09135d4c22f83b121dee937b1c5928
+#   image authn       0.36.0  sha256:7a15c0e7859f98e333cfd547cd383d21374128f8ec61dd87a12dfa86bfa49403 (amd64+arm64)
+#   tag 305237f00c039fdf91a85df80e37d8b1e8e4fe3d -- 16 check-runs, all success/skipped
+#   controls: 9.9.9 not found; 0.35.7 (the outgoing pin) reachable
 - name: authn-crd
   # 0.27.3: lockstep with authn, NO CRD change — verified byte-identical to 0.27.2 by unpacking both
   # charts: 8 files and 19846 bytes on BOTH sides, differing only in Chart.yaml's version line.
@@ -22,7 +48,7 @@ components:
   # 0.33.1 WAS SKIPPED DELIBERATELY. It exists and was approved, but authn recommended going straight
   # to 0.34.0 so both clusters roll once instead of twice, and Diego chose that. 0.33.1 was never
   # pinned or rolled anywhere.
-  version: 0.35.7
+  version: 0.36.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -628,7 +654,7 @@ components:
   # REQUIRED-BEFORE child Krateos: Diego decided children move ONCE, to the first installer version
   # that pins authn 0.34.0, rather than stopping at 0.3.498 first. acmp sets that version as the
   # blueprint's childKrateo.installer.version and upgrades acme and globex on his word.
-  version: 0.35.7
+  version: 0.36.0
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
