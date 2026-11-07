@@ -28,6 +28,50 @@ apiVersion: v2
 # and reconciles nothing points at the controller instead of the cluster.
 kubeVersion: '>=1.36.0-0'
 appVersion: CHART_VERSION
+# 2.13.72 (2026-11-07). Diego's direct go in session, confirmed AGAINST a newer tag.
+# BOTH charts in LOCKSTEP. 2.13.68 -> 2.13.72 is four releases.
+# *** 2.13.73 EXISTS AND IS DELIBERATELY NOT TAKEN. *** It is published and pullable, and the
+# ENTIRE diff 2.13.72 -> 2.13.73 is one commit, 13092b34:
+#     fix(cdc): take unstructured-runtime v1.12.0, so saturation keeps the queue's order (#380)
+#     go/composition-dynamic-controller/go.mod +1 -1, internal/saturation/governor.go +2 -2,
+#     governor_test.go +14 -5
+# So 2.13.73 looks like the safer choice and is NOT, for a reason worth keeping: 2.13.72 is the
+# build with a PASSED REPRODUCTION of the freeze defect -- 0 of 64 stale, drained in 387s, 19
+# status conflicts all recovered, 0 restarts. 2.13.73's artifacts are pipeline-verified only and
+# NO reproduction has been run on it. A measured pass beats a newer tag with no measurement.
+# And #380 acts on the SATURATION path, which is off by default on krateo-057, so it buys 057
+# nothing today. 2.13.73 follows as its own step once core-provider has exercised it.
+# *** THE CONDITION, VERIFIED ON 057 RATHER THAN ASSUMED. *** Its author stated the rule
+# precisely: 2.13.72 is correct and complete for a cluster that does NOT set
+# COMPOSITION_CONTROLLER_SATURATION_ENABLED=true, because #72 cannot occur with the opt-in off
+# -- the CPU gate is not built at all. Checked on all three surfaces where it could be set:
+#     057's values file        0 occurrences
+#     every ConfigMap          0 keys mentioning SATURATION
+#     every cdc Deployment env 0 variables
+# So the condition holds on 057 as a measurement, not as a default.
+# THEY ARE TWO DEFECTS, NOT ONE, and conflating them is what made 2.13.73 look necessary:
+#   #70 THE FREEZE   queue kept an expired ReadyAt, so items sorted behind fresh work forever
+#                    under sustained load. NO governor involved. Fixed in the queue itself
+#                    (promoteDueItems), runtime v1.11.2, IN 2.13.72, and measured fixed on a
+#                    real cdc with the opt-in OFF.
+#   #72              a worker popped an item, the CPU gate deferred it ~30s, the slot went to a
+#                    resync. SLOW, not frozen, and ONLY with the opt-in ON. v1.12.0, in 2.13.73.
+# NOT measured by its author: the freeze with the opt-in ON, on any version. By code the
+# governor's re-queued items go through the same fixed queue -- their words: a reading, not a
+# measurement. So IF 057 EVER ENABLES SATURATION, this pin must be revisited against 2.13.73.
+# WHAT THE JUMP CARRIES, per its author: runtime v1.9.0 -> v1.11.2, plumbing v1.26.2-era ->
+# v1.28.1 (crdgen keeps the unknown-fields marker alongside `properties`, so a generation run MAY
+# show changed CRDs for charts with that shape -- none found in 2748 local schemas, but that scan
+# was local only), ApiRefRBACComplete on apiRef definitions, and the CPU opt-in, off.
+# NOT EXERCISED AS A JUMP: 2.13.68 -> 2.13.72 together. Only clean installs and in-place upgrades
+# on GKE have been run. The verdict plus the stall detector is the check.
+# *** READ THE ROLL ON END STATE ONLY (core-provider#382). *** Leader election is off by default
+# and the Deployment rolls with a surge, so for ~10-20s the OLD and NEW core-provider pods BOTH
+# reconcile. Expect each composition controller to restart 5-9 times in a few seconds, plus
+# `cannot update managed resource status: Operation cannot be fulfilled ... the object has been
+# modified` in the log. NEITHER IS A FAILURE. Verify: each cdc Deployment on its new image, one
+# pod Ready, CompositionDefinitions Ready=True. Measured by its author across 820 helm operations
+# with 0 "another operation in progress" errors, and the new pod's write last in both windows.
 dependencies:
 # 2.13.46 IS A FLOOR, not merely the current version. Do not pin below it.
 #
@@ -86,11 +130,11 @@ dependencies:
 - condition: bootstrap.coreProvider.enabled
   name: core-provider
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.68
+  version: 2.13.72
 - condition: bootstrap.coreProvider.enabled
   name: core-provider-crds
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.68
+  version: 2.13.72
 description: Umbrella orchestrator blueprint that sequences the per-component Krateo
   PlatformOps blueprints into one ordered, readiness-gated install.
 home: https://krateo.io
