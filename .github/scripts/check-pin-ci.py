@@ -674,15 +674,49 @@ def main():
         # So: INFERENCE FIRST, because when it resolves it is pointing at the app's own repo.
         # The stamp is the FALLBACK, used only when appVersion names somebody else's app and no
         # Krateo tag can match -- which is precisely the wrapper-chart case it exists for.
+        # CHART VERSION BEATS appVersion WHEN BOTH NAME A TAG IN THE SAME REPO.
+        #
+        # Found live 2026-11-07, on this gate's FIRST successful run against a private
+        # krateo-agentiko chart -- the credential had never worked before, so this path had never
+        # actually executed against one:
+        #
+        #   repo-mcp-server   chart 0.1.6, appVersion 0.1.0
+        #   krateo-agentiko/repo-mcp-server tags:  0.1.6 -> 499565be ...  0.1.0 -> 832ace4f
+        #
+        # appVersion->tag resolved to 832ace4f: "Extract repo-mcp-server from
+        # krateo-agentiko/autopilot", 2026-08-31. A REAL commit, and the wrong one. The gate then
+        # called the pin red on ['index', 'lint', 'security / filesystem'] -- while at the commit
+        # that actually cut chart 0.1.6 only ['index'] fails and the other two PASS.
+        #
+        # That is worse than failing to resolve. It is a confident verdict from invalid evidence:
+        # anyone fixing `lint` and `security / filesystem` would have fixed nothing, and anyone
+        # dismissing the gate as over-strict would ALSO have been wrong, because the pin is red on
+        # a check the gate never named.
+        #
+        # THE RULE: a repo that tags 0.1.6 and publishes chart 0.1.6 has a direct correspondence --
+        # that tag IS the release which cut the chart. appVersion is a weaker link: it may lag (as
+        # here) or name a different artifact entirely (the wrapper case documented above).
+        #
+        # This does NOT re-introduce the stamp-first regression. The stamp aims at the CHART's repo
+        # instead of the APP's, which substitutes a different claim; this still resolves inside the
+        # `sources` repos and still asserts the app repo's own CI. It only picks the better tag
+        # within them, and the detail line names which route was used either way.
         for src in sources:
             slug = repo_slug(src)
             if not slug:
                 continue
-            sha = tag_sha(slug, app)
+            route, sha = None, None
+            cv_sha = tag_sha(slug, version)
+            if cv_sha:
+                route, sha = f"chartVersion->tag {version}", cv_sha
+            else:
+                av_sha = tag_sha(slug, app)
+                if av_sha:
+                    route, sha = f"appVersion->tag {app}", av_sha
             if not sha:
                 continue
             verdict, detail = ci_at(slug, sha, chart)
-            checked.append((slug, verdict, f"[appVersion->tag {app}] {detail}"))
+            checked.append((slug, verdict, f"[{route}] {detail}"))
 
         if not checked:
             st_slug, st_sha = stamped_provenance(meta)

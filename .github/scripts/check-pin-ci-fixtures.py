@@ -173,7 +173,7 @@ def _provenance_fixtures():
         print(f"  {'ok  ' if ok else 'FAIL'} {label:<48} -> {got!r}")
 
     src = (ROOT / ".github" / "scripts" / "check-pin-ci.py").read_text()
-    i_inf = src.find('checked.append((slug, verdict, f"[appVersion->tag')
+    i_inf = src.find('checked.append((slug, verdict, f"[{route}] {detail}")')
     i_guard = src.find("if not checked:\n            st_slug, st_sha = stamped_provenance(meta)")
     ordering_ok = i_inf >= 0 and i_guard >= 0 and i_inf < i_guard
     if not ordering_ok:
@@ -181,7 +181,23 @@ def _provenance_fixtures():
     print(f"  {'ok  ' if ordering_ok else 'FAIL'} "
           f"{'stamp runs ONLY behind `if not checked:`':<48} -> "
           f"{'inference first' if ordering_ok else 'STAMP WOULD RUN FIRST — silent false pass'}")
-    return failures, len(PROV_CASES) + 1
+
+    # CHART VERSION MUST BE TRIED BEFORE appVersion, within the same source repo.
+    #
+    # Without this, repo-mcp-server chart 0.1.6 (appVersion 0.1.0) resolved via appVersion to tag
+    # 0.1.0 = commit 832ace4f, an August extraction commit, and the gate reported the pin red on
+    # three checks of which two PASS at the commit that actually cut 0.1.6. A confident verdict
+    # from the wrong evidence is worse than no verdict, which is why this is asserted structurally
+    # rather than left to review.
+    i_cv = src.find("cv_sha = tag_sha(slug, version)")
+    i_av = src.find("av_sha = tag_sha(slug, app)")
+    cv_first = i_cv >= 0 and i_av >= 0 and i_cv < i_av
+    if not cv_first:
+        failures.append("chartVersion-before-appVersion ordering")
+    print(f"  {'ok  ' if cv_first else 'FAIL'} "
+          f"{'chart version tried BEFORE appVersion':<48} -> "
+          f"{'chart version first' if cv_first else 'appVersion WOULD WIN — resolves a real but WRONG commit'}")
+    return failures, len(PROV_CASES) + 2
 
 
 def main():
