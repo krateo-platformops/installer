@@ -267,6 +267,12 @@
           "description": "Install krateo-slo-rollup: a CronJob that applies a ClickHouse daily rollup table (krateo_slo_daily) and a refreshable view, so a rolling 28-day SLO can be computed although every otel_* table keeps only 7 days. OFF by default. It adds no ingest path and nothing to the insert path of the otel_metrics tables. Requires the observability stack and the collector's source tables: installed before them the Job fails with a clear message, and with the tables present but empty it succeeds with zero rows. Changing rollup.ttlDays on a LIVE cluster later needs an ALTER TTL grant the shipped otelcollector grants do not include -- the Job then fails and logs the exact statement to run.",
           "x-krateo-owner": "acmp"
         },
+        "selfservice": {
+          "type": "boolean",
+          "default": false,
+          "title": "Selfservice status projection",
+          "description": "Install selfservice-status: the RESTAction that gives a SelfserviceKrateo composition its portal URL, plan and trial deadline, read from the one HTTPRoute the blueprint labels krateo.io/portal-route. OFF by default because the base installer ships no selfservice blueprint, so without this flag no customer gets its CompositionDefinition or RESTAction. Turning it on is a deliberate CR edit: features.* in a values file is SILENTLY INERT on an upgrade. The RESTAction lands in namespaces.krateo (every component Composition does), so a consuming CompositionDefinition sets apiRef.namespace to that namespace, NOT to the blueprint's own. Requires snowplow and authn, and a snowplow at or above 1.12.38 for the consumer's spec.apiRef to work at all."
+        },
         "serviceDesk": {
           "type": "boolean",
           "default": false,
@@ -706,7 +712,59 @@
       "description": "Per-component Composition spec overrides, STRICTLY TYPED against each pinned component's chart schema. This is a HAND-CURATED, deliberate override surface: every leaf is explicitly typed and unknown keys are REJECTED (additionalProperties is false on every object). No free-form escapes remain anywhere in this schema (neither an open additionalProperties nor the k8s preserve-unknown extension) — enforced in CI by .github/workflows/check-no-unknowns.yaml. Invariants: each component's `global` is the fixed engine-injected block (plumbing InjectGlobalValues) plus imageRegistry; `resources` is k8s ResourceRequirements (limits/requests each with cpu/memory); label, annotation and nodeSelector maps are typed string maps. To expose a NEW override knob for a component, add it here explicitly and typed — do not reintroduce a free-form object. Deep-merged into the rendered Composition spec; the installer-computed wiring (service.type/config/vertexAI/hitlApproval) stays authoritative and wins on any leaf conflict.",
       "additionalProperties": false,
       "properties": {
-        "service-desk-page": {
+        "selfservice-status": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "selfservice-status: the RESTAction giving a SelfserviceKrateo composition its portal URL, plan and trial deadline. Its chart's own values.schema.json declares exactly one property, `global`, so this override surface is the engine block and nothing else.",
+        "properties": {
+          "global": {
+            "type": "object",
+            "title": "Global values (injected by the Krateo composition engine)",
+            "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+            "additionalProperties": false,
+            "properties": {
+              "compositionName": {
+                "type": "string"
+              },
+              "compositionNamespace": {
+                "type": "string"
+              },
+              "compositionId": {
+                "type": "string"
+              },
+              "compositionApiVersion": {
+                "type": "string"
+              },
+              "compositionGroup": {
+                "type": "string"
+              },
+              "compositionKind": {
+                "type": "string"
+              },
+              "compositionResource": {
+                "type": "string"
+              },
+              "compositionInstalledVersion": {
+                "type": "string"
+              },
+              "gracefullyPaused": {
+                "type": "string",
+                "enum": [
+                  "true",
+                  "false"
+                ]
+              },
+              "krateoNamespace": {
+                "type": "string"
+              },
+              "imageRegistry": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "service-desk-page": {
           "type": "object",
           "title": "service-desk-page values",
           "description": "Overrides for the service-desk page (component service-desk-page, gated on features.serviceDesk). NOTHING here carries a `default:`, and that is the point rather than an omission: an installer schema default is copied by crdgen into the composition CRD and then MATERIALIZED by the apiserver into every CR, so it would silently beat a value set through componentValues on the very install that needed to change it. The chart withholds defaults on these keys for that stated reason and keeps them in its values.yaml; this block mirrors the choice, including for namespace and raiseNamespace, so the chart stays the single source of their defaults.",

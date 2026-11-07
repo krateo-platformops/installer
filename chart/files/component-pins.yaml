@@ -3823,6 +3823,50 @@ components:
 #
 # `deps: [portal]` is an ORDERING edge, not a gate: portal's feature is independent, and a
 # cross-feature dep whose feature is off is safely suppressed rather than stalled.
+# selfservice-status 0.2.56, 2026-11-07. Diego's decision (gate 4): the RESTAction that gives a
+# SelfserviceKrateo composition its portal URL, plan and trial deadline, pinned as a NORMAL
+# INSTALLED component behind a feature that DEFAULTS OFF.
+#
+# WHY A PIN AND NOT .Values.components: the append path REFUSES anything that is not
+# registerOnly (inst.componentsYaml fails loudly), and registerOnly SUPPRESSES the Composition --
+# so an appended selfservice-status would register a CD and never create the RESTAction. There is
+# no supported way to add an INSTALLED non-pinned component. Proven the hard way: adding it to
+# krateo-demo's CR aborted the ENTIRE umbrella render (ChartRenderable=False) in one patch.
+#
+# WHY NOT IN THE BLUEPRINT CHART: selfservice-krateo is the PER-TENANT composition chart. A
+# templated RESTAction would be copied into every tenant namespace, appear only once a tenant
+# exists, and vanish with it -- while apiRef needs ONE fixed name/namespace up front.
+#
+# THE apiRef NAMESPACE IS krateo-system, NOT krateo-bp-selfservice-krateo. Verified in the chart,
+# against the request: compositions.yaml has exactly ONE `namespace:` (line 777,
+# $top.Values.namespaces.krateo) and ZERO uses of $c.namespace, so EVERY component Composition --
+# and therefore its helm release -- lands in namespaces.krateo. The chart's restaction.yaml uses
+# `namespace: {{ .Release.Namespace }}`, so the RESTAction lands there too. All 89 component
+# releases on 057 are in krateo-system, which is the same statement measured. A pin's `namespace`
+# key moves only the CompositionDefinition ($cdNamespace, definitions.yaml:31) -- not the release.
+#
+# DEPENDENCY EDGE, from its owner: snowplow and authn up -> apiRefRBAC on -> the RESTAction -> the
+# selfservice-krateo entry's apiRef. A missing RESTAction gives the consuming CD Synced=False and
+# halts it, which is why this component must be Ready before that apiRef is set.
+#
+# SNOWPLOW FLOOR >= 1.12.38 applies to the apiRef consumer (see the apiRef pass-through comment in
+# definitions.yaml): below that, spec.apiRef is BROKEN not inert. 057 and demo both run 1.12.56.
+#
+# Chart gates checked before pinning, per my own new-component recipe: it ships a
+# values.schema.json whose only property is `global` ({type: object, additionalProperties: true}) --
+# REQUIRED, because chart-inspector injects helm's reserved `global` at INSTALL time and a schema
+# without it fails with a 500 that `helm lint`/`helm template` cannot catch. Chart.yaml carries
+# `sources:` for check-pin-ci. One template: restaction.yaml, api entry named `portal`, so status
+# expressions read `.api.portal` (core-provider keys results by call name under `.api`).
+- name: selfservice-status
+  kind: SelfserviceStatus
+  version: 0.2.56
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  deps:
+    - snowplow
+    - authn
+  tier: platform
+  feature: selfservice
 - name: service-desk-page
   kind: ServiceDeskPage
   version: 1.8.94
