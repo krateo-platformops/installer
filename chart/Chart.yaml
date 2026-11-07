@@ -170,14 +170,49 @@ dependencies:
 # a true result about the wrong quantity. Assert Synced=True per composition as well; on its first
 # run that arm found three non-Synced compositions on krateo-057 that the managed-set arm reported
 # nothing about.
+#
+# 2.13.75 (2026-11-07). THE CLEAN LEADER-ELECTION TEST, and this roll must carry NOTHING ELSE.
+# 2.13.74 + #389 + #390, tagged by its owner at 20:59:46Z on 3ec74bb. Diego chose this order.
+#
+# WHY IT IS ALONE. 2.13.74 could not test election: the pod that was REPLACED did not elect, so its
+# ReplicaSet burst (measured 1-4 per cdc, median 2) is indistinguishable from 2.13.72's and was
+# recorded as a BASELINE, not a result. 2.13.75 is the first roll where the outgoing pod holds the
+# Lease.
+#
+# THE PREDICTION, which is falsifiable: EXACTLY 1 new ReplicaSet per cdc, counted by
+# creationTimestamp inside [helm upgrade start, +10 min]. Any cdc with 2 or more is the finding.
+#
+# WHY NO PIN MAY MOVE IN THIS ROLL -- measured on 057 today, not assumed. Each re-rendered
+# CompositionDefinition takes exactly ONE propagation Update and ONE cdc restart:
+#     0.3.527's window   20 definitions · 20 updates · 0 repeats · 19 prunes
+#     0.3.526's window   68 definitions · 74 updates ·  4 repeats
+# The 4 repeats were precisely the components whose pins moved nearby, so REPEATS TRACK PIN
+# MOVEMENT. Three frontend pins moving here (#723) would add their own Updates inside the window and
+# make the "exactly 1" prediction unreadable. Hence frontend 1.8.32 goes AFTER, as 0.3.529.
+#
+# A CANDIDATE I REFUTED while establishing that, so nobody re-opens it: core-provider suspected the
+# served-version prune re-triggered an Update, giving a second restart. The ORDER kills it --
+#     20:49:08.797  installer  UPDATE
+#     20:49:47.737  installer  prune evaluation   prunable=['v0-3-526']
+#     20:49:48.626  installer  PRUNED             pruned=['v0-3-526']
+# the prune FOLLOWS the Update by ~39s, so it cannot cause it. Its owner accepted the refutation.
+#
+# MEASUREMENT METHOD, agreed with core-provider and marketing so every session reports ONE number:
+# read ONCE after the window closes; count by creationTimestamp; list anything created later
+# separately with its restartedAt as its own finding. ALSO record the PRE-ROLL retained-RS maximum:
+# on 057 it reads 11, which is the revisionHistoryLimit CEILING, so a post-roll TOTAL would measure
+# the retention cap rather than the burst.
+#
+# My controls: 2.13.75 and -crds both resolve; 2.13.74 (outgoing) resolves; 9.9.9 not found -- so a
+# not-found would have meant absent rather than an unreachable registry.
 - condition: bootstrap.coreProvider.enabled
   name: core-provider
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.74
+  version: 2.13.75
 - condition: bootstrap.coreProvider.enabled
   name: core-provider-crds
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.74
+  version: 2.13.75
 description: Umbrella orchestrator blueprint that sequences the per-component Krateo
   PlatformOps blueprints into one ordered, readiness-gated install.
 home: https://krateo.io
