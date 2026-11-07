@@ -22,7 +22,7 @@ components:
   # 0.33.1 WAS SKIPPED DELIBERATELY. It exists and was approved, but authn recommended going straight
   # to 0.34.0 so both clusters roll once instead of twice, and Diego chose that. 0.33.1 was never
   # pinned or rolled anywhere.
-  version: 0.35.5
+  version: 0.35.7
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -519,6 +519,33 @@ components:
 # BEFORE ROLLING: the owner takes a fresh smoke baseline, read while the 0.35.4 pod is still
 # serving. smoke-0.3.514.txt still holds because 0.3.515 moved no authn pin, but a baseline is
 # one-shot -- it has to be taken before the pod rolls, not after.
+# authn + authn-crd 0.35.7 (2026-11-07). Diego's direct go. LOCKSTEP, both to 0.35.7.
+# Verified published for BOTH (chart names differ from component names: authn -> authn,
+# authn-crd -> chart authn-crds, PLURAL); a 9.9.9 control fails on both.
+# WHY 0.35.7 AND NOT 0.35.6: 0.35.6 is published and is deliberately NOT taken. Its chart still
+# shipped AUTHN_DEBUG="true" and AUTHN_DUMP_ENV="true", so authn logged its whole environment
+# and sign-ins' personal data. 0.35.7's PR #101 turns debug off in the chart AND DELETES the dump
+# flag and its code -- verified in the published 0.35.7 package: values.yaml now has
+# AUTHN_DEBUG: "false" and NO AUTHN_DUMP_ENV key at all, in values.yaml or values.schema.json.
+# *** ROLL REQUIREMENT: DROP componentValues.authn.env FROM THE VALUES IN THE SAME ROLL. ***
+# On 2026-11-06 I added AUTHN_DEBUG/AUTHN_DUMP_ENV = "false" to 057's values to stop the logging
+# while 0.35.7 did not exist. 0.35.7 makes AUTHN_DEBUG="false" the chart default and removes
+# AUTHN_DUMP_ENV entirely -- but the chart's ConfigMap RANGES OVER .Values.env, so an override
+# left in place KEEPS RENDERING AUTHN_DUMP_ENV after the code stops reading it. Its owner caught
+# that: my planned post-roll check was 'the key has disappeared', which would have FAILED on a
+# harmless leftover of my own making. Remove both keys; then the absence check means something.
+# ALSO NEW: a Secret. templates/basic-decoy-secret.yaml renders <fullname>-basic-decoy holding a
+# FIXED, PUBLIC, non-credential string, identical on every install, compared against only for a
+# user who does not exist; the login is refused whatever it holds. NOT per-install material --
+# stated here so nobody later protects or rotates it. The ConfigMap gains
+# AUTHN_BASIC_DECOY_SECRET naming it.
+# THE AUTHN COMPOSITION HAS NEVER APPLIED A SECRET FROM ITS OWN CHART. The mechanism is proven on
+# 8 other composition kinds on 057 and the permission exists (clusterrole authns-v0-35-x grants
+# secrets get/list/create/delete/update), but this exact combination is unexercised. Read
+# RBACComplete after the roll; if the Secret does not appear, that condition says why.
+# THE READING THE PIN WAITED ON: Diego signed in on portal.krateo.dev with a test User --
+# GET /auth/basic/login returned 200 in 393 ms on 0.35.5. One sample, not a benchmark; run 22
+# remains the source for any curve.
 - name: authn
   # KRATEO-DEMO CONSTRAINT -- DO NOT BUMP TO >= 0.28.0 AS A ROUTINE UPDATE (acmp, 2026-10-29).
   # authn 0.28.0 (authn#42) stamps an `authn.krateo.io/groups` annotation, and AT STARTUP it
@@ -601,7 +628,7 @@ components:
   # REQUIRED-BEFORE child Krateos: Diego decided children move ONCE, to the first installer version
   # that pins authn 0.34.0, rather than stopping at 0.3.498 first. acmp sets that version as the
   # blueprint's childKrateo.installer.version and upgrades acme and globex on his word.
-  version: 0.35.5
+  version: 0.35.7
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
