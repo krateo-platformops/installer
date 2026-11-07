@@ -4277,7 +4277,7 @@ components:
   # (that repo already has a krateo-observability-0.1.10 tag as precedent), or adopt snowplow's
   # proposal to stamp the source commit SHA onto the chart artifact so pin-ci stops inferring
   # provenance from appVersion at all. Do NOT unblock this by deleting `sources` or the appVersion.
-  version: 0.1.30
+  version: 0.1.31
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -6134,7 +6134,7 @@ components:
   # error, no event. A field the CRD DECLARES AS REQUIRED can never be pruned, because pruning only
   # removes fields absent from properties; the real hazard is a field the BACKEND requires that the
   # CRD does not declare.
-  version: 0.2.61
+  version: 0.2.62
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -6153,28 +6153,27 @@ components:
   # what default-alerts.yaml is for -- "a FRESH install lands on a populated /alerts page instead of an
   # empty one" -- but it should be a choice rather than a surprise.
   feature: portal
-# alert-provider 0.2.61 + krateo-observability 0.1.30, 2026-11-07. ORDER IS HARD AND THEY SHIP
-# TOGETHER: with an older alert-provider the headroom alert's claim filter matches NO POINTS,
-# because kubeletstats puts the claim name on the RESOURCE, and its `below` threshold then FIRES
-# FOREVER. The human-analysis label is inert on an older alert-provider too. So one tag, with
-# alert-provider ahead of it in the same roll.
-# alert-provider 0.2.61 carries three Diego-approved changes: #84 JWT redaction in the comparison
-# prompt (which protects 057's live sre-jwt-in-telemetry), #85 `labels` match a point OR its
-# resource, #86 the label observability.krateo.io/analysis: human makes an incident with no model.
-# Its CRD description changed and the SCHEMA DID NOT. An Alert with `labels` takes one pushed
-# filter update on its first pass; Alerts without the new label are unaffected.
-# krateo-observability 0.1.30 adds sre-clickhouse-disk-headroom (min of k8s.volume.available on
-# the ClickHouse claim, below 3 GiB = 20% of 15Gi, 15m) plus its Metric k8s-volume-available --
-# THE FIRST metric alert and THE FIRST Metric on this cluster. It also labels
-# sre-jwt-in-telemetry analysis:human and makes sre-certificate-expiry-warning skip composition
-# drift lines.
-# 0.1.29 IS SKIPPED: comments only, so 0.1.30 replaces 0.1.28 directly.
-# EXPECT AFTER THE ROLL, from its owner: 23 default Alerts plus 1 Metric, and the headroom alert
-# reading OK with ~9.78 GiB free. IF IT READS ALERT IMMEDIATELY the filter is not matching, which
-# means alert-provider is NOT 0.2.61 -- REPORT IT, DO NOT FIX IT.
-# TESTED BY ITS OWNER, limits theirs: helm lint and a server-side dry run on 057 that accepted
-# the new Alert and Metric and created nothing. NOT tested: the alert actually evaluating on a
-# cluster.
+# alert-provider 0.2.62 + krateo-observability 0.1.31, 2026-11-07. SECOND hard-ordered pair in
+# one day, same mechanism as 0.2.61/0.1.30 and the SAME RULE: alert-provider and its CRD must be
+# running BEFORE the observability chart that uses the new field, or the release fails outright.
+# 0.1.31 renders an Alert with `source: traces`; an older alert-provider CRD does not know that
+# field, so the render is REJECTED -- a louder failure than 0.1.30's, which merely never matched.
+#
+# DO NOT ADD A DEFAULT FOR spec.source ANYWHERE IN THE INSTALLER SCHEMA. Its owner checked the
+# published CRD: enum + two CEL rules, NO `default:`. Omitted means logs, resolved in the
+# controller, so nothing is written into existing Alerts. One of those CEL rules REFUSES `source`
+# together with metricRef -- so a schema default would put the field on every metric Alert and
+# the rule would then reject all of them, including the disk-headroom alert shipped hours ago.
+# A `default:` on any installer schema property propagates into the live CR; that is the hazard.
+#
+# 0.1.31 adds ONE Alert, sre-jwt-in-traces: reads otel_traces for the JWT shape in span and
+# resource attributes, status messages and span events, above 1 in 15m, labelled analysis: human.
+# EXPECT AFTER THE ROLL, from its owner: default Alerts 22 -> 23 and the new one reading OK. IF IT
+# LANDS IN phase Error the cluster has no traces source in HyperDX -- REPORT IT, DO NOT FIX IT.
+# TESTED BY ITS OWNER, limits theirs: helm lint; the where clause matches 0 of 057's spans and
+# runs cleanly; each branch catches a sample token in a constant expression, with nothing written
+# to telemetry. NOT tested: evaluation through HyperDX's traces source. That is what the roll
+# exercises, and it is exactly where the Error phase would show up.
 - name: alert-provider
   # RE-GATED specialistAgents -> portal, and DEPS TRIMMED of incident-agent + model-configs.
   # Established on alert-provider#65 by its maintainer (EdmondDantes21) and the session working
@@ -6250,7 +6249,7 @@ components:
   # `unevaluated` in the rollup's precedence. And oasgen 0.52.0 adds six new ways for a
   # RestDefinition child to be legitimately Creating, so mixed parents get MORE likely during
   # exactly the sampling window. Found before the run, not after.
-  version: 0.2.61
+  version: 0.2.62
   # 0.2.57 carries alert-provider#76 (provider-runtime v1.7.2) and #77, which adds 'incident-provider' to
   # DEFAULT_ALERTS_JSON's reconcile-error `NOT IN` list. Measured on the published chart here, not taken
   # from the release notes: rendered at --kube-version 1.33.0, rc=0, 294 -> 331 lines (floor asserted, so
