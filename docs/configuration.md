@@ -234,7 +234,7 @@ Values worth knowing:
 
 | Key | Notes |
 |---|---|
-| `componentValues.alert-provider.config.autopilotA2aUrl` | The agent that writes the root-cause analysis, `incident-agent`. With `features.agentGateway` the installer fills it with the gateway's `/api/a2a/<namespace>/incident-agent` route. |
+| `componentValues.alert-provider.config.autopilotA2aUrl` | The agent the root-cause analysis is asked of: `autopilot`, which hands it to `incident-agent`. With `features.agentGateway` the installer fills it with the gateway's `/api/a2a/<namespace>/autopilot` route. |
 | `componentValues.alert-provider.config.compareModelConfig` | The ModelConfig slot whose model compares a firing with the alert's open Incidents, in one chat completion per firing: `gemini-flash` by default. Behind the agent gateway it runs on the gateway's `/llm/v1` route, like the agents. |
 | `componentValues.alert-provider.config.authnUrl` | Where the service exchanges its token for the Krateo JWT that authenticates its A2A calls through the agent gateway. With `features.agentGateway` the installer fills it. |
 | `componentValues.incident-controller.checks.readerRefresh` | How often incident-controller rewrites the check pods' read role from discovery (`5m`). Check scripts read every resource the cluster serves except Secrets and subresources; nothing to list. |
