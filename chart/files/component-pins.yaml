@@ -1,4 +1,30 @@
 components:
+# authn 0.36.0 + authn-crds, 2026-11-07. Diego's go, in the 0.3.525 group with portal 1.8.95 and
+# identity-lifecycle 0.2.0 -- three independent components, one verdict.
+#
+# WHAT IT ADDS: PUBLIC OIDC CLIENTS (#104). In authn-crds, OIDCConfig's `clientSecret` is NO
+# LONGER REQUIRED. Omitting it makes the client PUBLIC: authn sends no client_secret, and a login
+# WITHOUT a PKCE verifier gets 400 MissingCodeVerifier. A named Secret with an empty or missing
+# key now fails 500 ClientSecretLookupFailed -- BEFORE, authn sent an empty secret, so that is a
+# loud failure replacing a silent one.
+#
+# NO new env keys, NO new chart values, NO RBAC change. The authn chart's only diff against
+# 0.35.7 is a comment in values.yaml (#102); authn-crds' only diff is the OIDCConfig CRD.
+#
+# THIS PIN IS SAFE AND UNEXERCISED, and the distinction matters. NEITHER 057 NOR demo HAS AN
+# OIDCConfig, so rolling it proves only that nothing broke -- it cannot demonstrate the feature.
+# THE FIRST REAL TEST IS A GATE 1 CHILD with a public client (no clientSecret, PKCE required),
+# where the load-bearing assertion is a NEGATIVE: a login with no X-Code-Verifier must return 400
+# MissingCodeVerifier and reach Keycloak with no token request. Its owner has a unit test for that
+# (TestPublicClientRequiresCodeVerifier, no IdP call) and has asked acmp for it as a third gate 1
+# arm. Do not read a clean 057 roll as evidence the feature works.
+#
+# DIGESTS, verified against the registry rather than taken from the request:
+#   chart authn       0.36.0  sha256:0de667a1667240a67191e422745bca1f729255a4446969530032154157058402
+#   chart authn-crds  0.36.0  sha256:4f89cc82d50f209f6fb064036639e753bf09135d4c22f83b121dee937b1c5928
+#   image authn       0.36.0  sha256:7a15c0e7859f98e333cfd547cd383d21374128f8ec61dd87a12dfa86bfa49403 (amd64+arm64)
+#   tag 305237f00c039fdf91a85df80e37d8b1e8e4fe3d -- 16 check-runs, all success/skipped
+#   controls: 9.9.9 not found; 0.35.7 (the outgoing pin) reachable
 - name: authn-crd
   # 0.27.3: lockstep with authn, NO CRD change — verified byte-identical to 0.27.2 by unpacking both
   # charts: 8 files and 19846 bytes on BOTH sides, differing only in Chart.yaml's version line.
@@ -22,7 +48,7 @@ components:
   # 0.33.1 WAS SKIPPED DELIBERATELY. It exists and was approved, but authn recommended going straight
   # to 0.34.0 so both clusters roll once instead of twice, and Diego chose that. 0.33.1 was never
   # pinned or rolled anywhere.
-  version: 0.35.7
+  version: 0.36.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -628,7 +654,7 @@ components:
   # REQUIRED-BEFORE child Krateos: Diego decided children move ONCE, to the first installer version
   # that pins authn 0.34.0, rather than stopping at 0.3.498 first. acmp sets that version as the
   # blueprint's childKrateo.installer.version and upgrades acme and globex on his word.
-  version: 0.35.7
+  version: 0.36.0
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
@@ -2969,6 +2995,51 @@ components:
 # their words: reasoning, not a test. This is why the set rolls ALONE, after 0.3.515.
 # Carries the `paused` constraint, the alert detail panel fix and the fetchable target fix, none
 # of which reached 057 under the portal-only pins.
+# Portal set -> 1.8.95, 2026-11-07. SIXTEEN components, as one set (the #699 shape). frontend
+# publishes SEVENTEEN charts at this version; `builder-publish` is the seventeenth and is NOT
+# pinned here because the `portal` composition renders it.
+#
+# Both changes are ADDITIVE AND DATA-GATED, which is why its owner asked for no census and I did
+# not run one: neither deletes an object, and neither changes what a user sees until data appears.
+#   #383 the Marketplace leads with the LIVE blueprints index, catalog as fallback, so the install
+#        form installs the version the grid shows (marketplace-page
+#        restaction.blueprint-install-formdef.yaml:121, `withLive | indexEntry`). Its own comment:
+#        "Reading the bare catalog first would show the live version and install the catalog's."
+#        INERT UNTIL a chart with the new `sources` reaches the live index -- none has yet.
+#   #381 the composition Access card (compositions-page, 8 files). Renders ONLY for a composition
+#        publishing status.url or status.plan -- NONE does yet.
+#
+# WATCH THE #383 / #716 INTERACTION. The live index leads "for a chart a krateo-blueprints
+# repository published", decided by its newest `sources`. openstack-as-a-service is adding the
+# building repo to `sources:` on ingress-blueprint's 5 wrapper charts and on
+# krateo-marketplace-catalog (charts#7 rule 3, ingress-blueprint#22, marketplace#2). SIX OF THE 11
+# krateo-blueprints CHARTS THIS INSTALLER PINS currently have no usable `sources` route, so when
+# those PRs release, #383's live-index branch starts applying to charts it did not apply to
+# before. That is the moment the Marketplace's displayed version can change -- not this pin.
+#
+# WHAT I VERIFIED, AND HOW MANY TIMES THE INSTRUMENT LIED FIRST. Verified individually, each by
+# its own single call, all at 1.8.95 with a digest:
+#   portal (74a5f095, revision 2f254077) · marketplace-page · settings-page (9c42dee2) ·
+#   dashboard-page (c4ee1770) · portal-agents (a2401fb2) · builder-publish
+#   controls: portal 1.8.94 present · portal 9.9.9 not-found · settings-page 9.9.9 not-found ·
+#   dashboard-page 9.9.9 not-found · portal-agents 9.9.9 not-found
+#   ghcr tag list for settings-page: 1.8.90 .. 1.8.95 present
+# So SIX of the sixteen are verified first-hand, plus their owner's read of all 17 and green
+# release-oci + release-notes at 18:10:10Z.
+#
+# THREE BATCH ATTEMPTS AT ALL 16 EACH RETURNED A FALSE ZERO, and the three failed differently:
+#   1. a helm loop immediately after the release -- a genuine mid-publish race; release-oci
+#      finished at 18:10:10Z and I probed before propagation. Both controls fired correctly,
+#      so a well-controlled probe of a MOVING population is still wrong.
+#   2. a curl loop -- HTTP 000 for all 16, then 200 for the 17th call made right after. ghcr
+#      throttles rapid sequential token+manifest requests: the RATE of calls was the instrument.
+#   3. a slower loop with 4s between calls, inside a nested `bash -c` -- the quoting collapsed
+#      and every match came back empty, while its own 9.9.9 control fired on 3 of 3. So the
+#      probe could produce a correct negative and still not produce a correct positive.
+# I had written "16 of 16" into this comment after case 1 on the strength of three single
+# calls, and removed it. A global zero across both arms is a broken probe, never a measurement;
+# a zero on ONE arm while the other arm's control fires is a HALF-broken probe, which is worse,
+# because the working control certifies the instrument that is failing.
 - name: portal
   #
   # 1.8.88 -> 1.8.90. Carries portal#362: the values.schema.json that service-desk-page needs for
@@ -3680,7 +3751,7 @@ components:
   # the label, the concrete path and krateo.io/nav-link-only (it links and owns nothing). ONLY the
   # exact string "true" enables it, so a half-recognised truthy value fails visibly instead of
   # silently claiming the route back.
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - frontend
   - git-provider
@@ -3789,7 +3860,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.94
+  version: 1.8.95
   deps: ['portal']
   tier: platform
   feature: portal
@@ -3825,7 +3896,7 @@ components:
   # templates/_builder.tpl, inside `{{/* */}}` blocks. 26 files, 124539 -> 124537 bytes; Chart.yaml
   # and that one template differ, and the template's change cannot reach the render.
   kind: MarketplacePage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -3892,21 +3963,21 @@ components:
   feature: selfservice
 - name: service-desk-page
   kind: ServiceDeskPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
   feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
   feature: portal
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -3947,7 +4018,7 @@ components:
 - name: dashboard-page
   # Renders into krateo-dashboard, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: DashboardPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -3986,7 +4057,7 @@ components:
   # original push failure is still UNKNOWN -- it did not recur, which is evidence of a blip and not
   # proof of one. Pinned only after confirming 1.8.89 pulls: version 1.8.89, appVersion 1.8.89.
   kind: CompositionsPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -3994,7 +4065,7 @@ components:
 - name: blueprints-page
   # Renders into krateo-blueprints, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: BlueprintsPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -4002,7 +4073,7 @@ components:
 - name: resources-page
   # Renders into krateo-resources, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: ResourcesPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -4010,7 +4081,7 @@ components:
 - name: search-page
   # Renders into krateo-search, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: SearchPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -4018,7 +4089,7 @@ components:
 - name: builders-page
   # Renders into krateo-builders, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: BuildersPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -4026,7 +4097,7 @@ components:
 - name: clusters-page
   # Renders into krateo-clusters, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ClustersPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -4034,7 +4105,7 @@ components:
 - name: reviews-page
   # Renders into krateo-reviews, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ReviewsPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -4042,7 +4113,7 @@ components:
 - name: settings-page
   # Renders into krateo-settings, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: SettingsPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -4050,7 +4121,7 @@ components:
 - name: observability-page
   # Renders into krateo-observability, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ObservabilityPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -4310,6 +4381,31 @@ components:
 # and has since corrected that. So 0.1.29 and its sibling are real published versions that are simply not
 # worth a composition move -- recorded here so a later reader does not read the gap as an
 # oversight, and so a provenance check flagging them has an explanation.
+# krateo-observability 0.1.32, 2026-11-07. ONE CLAUSE, and it stops this installer's own rolls
+# creating false incidents.
+#
+# THE ONLY FUNCTIONAL CHANGE, read from the chart rather than taken from the request --
+# sre-probe-failing's where gains:
+#     AND JSONExtractInt(Body, 'object', 'count') >= 3
+# Everything else is a comment plus the Chart.yaml version/revision. diff -rq across the two
+# charts touches values.yaml and Chart.yaml ONLY; the rendered Alert count is unchanged.
+#
+# WHY IT MATTERS HERE: every pod logs ONE readiness failure on start, so EVERY installer roll
+# tripped this alert and opened an RCA. Its owner measured 17 of 26 active 15-minute windows on
+# krateo-057 over 7 days -- ALL OF THEM ROLLS, including 0.3.525 today, which is the firing alert
+# marketing spotted and could not attribute. With the filter: ONE window that week, a real
+# 2-minute snowplow outage with 25 repeats.
+#
+# So this is not noise reduction for its own sake -- it is an alert that fired on the act of
+# deploying, which makes it useless precisely when a roll needs watching.
+#
+# EXPECT AFTER THE ROLL: 27 Alerts, sre-probe-failing still PRESENT with the new where. A roll
+# should no longer flip it to ALERT. A pod that keeps failing still will -- the filter drops the
+# single startup event, not a repeated one.
+#
+# ITS OWNER ASKED FOR THIS BEFORE 0.3.526. That was not possible: 0.3.526 was already tagged and
+# released when the request arrived, and re-cutting a released tag is worse than one more false
+# positive. Diego sequenced it instead. The cost of being second is exactly one spurious RCA.
 - name: krateo-observability
   kind: KrateoObservability
   # 0.1.19 (observability#62): the log-scoped default alerts also exclude ServiceName
@@ -4344,7 +4440,7 @@ components:
   # (that repo already has a krateo-observability-0.1.10 tag as precedent), or adopt snowplow's
   # proposal to stamp the source commit SHA onto the chart artifact so pin-ci stops inferring
   # provenance from appVersion at all. Do NOT unblock this by deleting `sources` or the appVersion.
-  version: 0.1.31
+  version: 0.1.32
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -7250,6 +7346,33 @@ components:
     - gcp-configconnector-crd
   tier: platform
   feature: configConnector
+# identity-lifecycle 0.2.0 + -crds, 2026-11-07. Gate 1 needs it: the blueprint renders one
+# GroupMembership per child for its owner. The new CRD + controller adds a Keycloak user to a
+# group, WAITS while the user does not exist yet, and removes the membership on delete.
+#
+# THE FEATURE STAYS OFF BY DEFAULT (identityLifecycle). For the gate 1 cluster it goes on in the
+# PARENT INSTALL'S VALUES, not as a CR edit -- `features.*` in a values file is silently inert on
+# an UPGRADE but takes on a FRESH INSTALL, and gate 1 is a fresh install. The opposite of the
+# demo trap: there, the same key in a values file would have done nothing.
+#
+# DIEGO'S GO WAS CONDITIONAL ON THE IMAGE, AND THE CONDITION IS WHY THIS COMMENT EXISTS.
+# When its owner first asked, both charts were published and the IMAGE WAS NOT:
+#   ghcr.io/krateo-platformops/identity-lifecycle:0.2.0  HTTP 404
+#                                                 :0.1.5  HTTP 200   <- control fired
+#                                                 :9.9.9  HTTP 404   <- control fired
+# The chart's values.yaml declares tag: "0.2.0", so pinning then would have installed cleanly,
+# reported the CompositionDefinition Ready, and left the pods in ImagePullBackOff -- the quiet
+# kind of broken. Re-probed after its CI finished, by me rather than from the relay:
+#   :0.2.0 HTTP 200   :0.1.5 HTTP 200   :9.9.9 HTTP 404
+# A three-arm probe matters here because earlier the same day I concluded a chart version was
+# unpublished from a probe where EVERY arm returned not-found.
+#
+# TWO KEYCLOAK CLIENTS, Diego's decision, NOT one: keycloak-config-kog keeps its realm-admin
+# client (keycloak-kog-client); identity-lifecycle gets its OWN client_credentials client scoped
+# to manage-users / view-users / query-groups only. So a leak is bounded by the scope rather than
+# by the realm, and the two rotate independently. He creates both Secrets; the installer checks
+# key names only and never reads values. GroupMembership.spec.identityProvider.clientSecretRef
+# points at the narrow one, in krateo-system.
 - name: identity-lifecycle-crd
   # NEW COMPONENT, wired 2026-11-04. The CRD half of identity-lifecycle, split out by acmp into its
   # own chart so it follows the 11-of-12 `-crds` convention rather than shipping crds/ inside the
@@ -7266,7 +7389,7 @@ components:
   # Only 5 of the 68 pins carry a -crd block and they are the ones with values worth setting.
   kind: IdentityLifecycleCrds
   chart: identity-lifecycle-crds
-  version: 0.1.5
+  version: 0.2.0
   tier: platform
   feature: identityLifecycle
 - name: identity-lifecycle
@@ -7289,7 +7412,7 @@ components:
   # `global`, so every offline check validates a document that never contains the field). This
   # chart declares it. access-review 0.1.7 does NOT and is held unwired until 0.1.8 ships the fix.
   kind: IdentityLifecycle
-  version: 0.1.5
+  version: 0.2.0
   deps:
   - identity-lifecycle-crd
   tier: platform

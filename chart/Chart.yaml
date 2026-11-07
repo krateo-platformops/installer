@@ -28,6 +28,49 @@ apiVersion: v2
 # and reconciles nothing points at the controller instead of the cluster.
 kubeVersion: '>=1.36.0-0'
 appVersion: CHART_VERSION
+# 2.13.74 (2026-11-07). Diego's go in session, as 0.3.526 ALONE -- he chose to keep it out of the
+# 0.3.525 pin group so its expected restart burst and a controller retirement cannot be confused
+# with an unrelated change. BOTH charts in LOCKSTEP.
+#
+# TWO BEHAVIOUR CHANGES, both of which look like faults if you do not expect them:
+#
+# 1. LEADER ELECTION IS ON BY DEFAULT (#383). The chart now renders
+#    CORE_PROVIDER_LEADER_ELECTION: "true" plus a Lease rule in core-provider's ClusterRole.
+#    THIS FIRST ROLL STILL BURSTS ONCE, because the OUTGOING 2.13.72 pod does not elect -- so
+#    expect 1-5 ReplicaSets per cdc, exactly as on the 2.13.72 roll. Verify: a Lease
+#    `leader-election-core-provider` in core-provider's namespace with holderIdentity naming
+#    the NEW pod. THE ROLL AFTER THIS ONE should show 1 ReplicaSet per cdc whose template
+#    changed -- its author measured 5/5 runs with election against 3 of 5 fights without.
+#
+# 2. THE LEAKED installers-v0-3-480-controller IS RETIRED (#385) -- but NOT by the roll itself.
+#    Only on the next Update of the `installer` CompositionDefinition, and the installer chart
+#    bump in this release IS such an update. Verify GONE: the Deployment, ServiceAccount
+#    `installers-v0-3-480` and ConfigMap `installers-v0-3-480-configmap`; core-provider logging
+#    `retired leaked per-version controllers nothing claims (#327)` naming it; and the CURRENT
+#    installers controller untouched. The old line `safe to remove by hand (#270)` NO LONGER
+#    EXISTS in 2.13.74 -- if it still appears after that update, look instead for
+#    `could not retire a leaked per-version controller; will retry on the next update (#327)`
+#    and send core-provider its error.
+#
+#    That controller is the one I found on the 2.13.72 roll by counting cdc IMAGES and seeing
+#    2.13.45 where I expected one number. It churned ~1 revision/minute for 19h and stopped at
+#    2026-10-31T08:03:06Z. I first attributed the silence to its CRD version being pruned --
+#    WRONG: 2.13.46, carrying the #270 fix, was tagged at 07:23Z, so the fix rolling silenced
+#    it. Two timestamps and a plausible story is not a mechanism.
+#
+# THE CDC CODE IS IDENTICAL TO 2.13.73 (new digest from the rebuild), and 2.13.73 differs from
+# 2.13.72 only in the CPU saturation opt-in, which 057 does not set -- verified on all three
+# surfaces when 2.13.72 was pinned: values file, every ConfigMap, every cdc Deployment env.
+#
+# THE FREEZE CHECK ON 2.13.73 IS NOW DONE, BOTH ARMS, by its author: opt-in OFF, 0/64 stuck;
+# opt-in ON, no freeze -- 14 were late at 420s and all 64 converged by ~15 min on the same pod.
+# So if 057 ever enables the opt-in, EXPECT A LONG TAIL, NOT A FREEZE.
+#
+# Digests from its author: core-provider sha256:b1a8afd6..., cdc sha256:7ef287c6...,
+# chart-inspector sha256:7148693a... (2.13.73's were 0c11792a / 8a598a04 / fc6f3588).
+# My controls: 2.13.74 and -crds both resolve; 2.13.72 (outgoing) resolves; 9.9.9 not found.
+#
+# --- the 2.13.72 note it replaces, kept because its reasoning still applies ---
 # 2.13.72 (2026-11-07). Diego's direct go in session, confirmed AGAINST a newer tag.
 # BOTH charts in LOCKSTEP. 2.13.68 -> 2.13.72 is four releases.
 # *** 2.13.73 EXISTS AND IS DELIBERATELY NOT TAKEN. *** It is published and pullable, and the
@@ -130,11 +173,11 @@ dependencies:
 - condition: bootstrap.coreProvider.enabled
   name: core-provider
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.72
+  version: 2.13.74
 - condition: bootstrap.coreProvider.enabled
   name: core-provider-crds
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.72
+  version: 2.13.74
 description: Umbrella orchestrator blueprint that sequences the per-component Krateo
   PlatformOps blueprints into one ordered, readiness-gated install.
 home: https://krateo.io

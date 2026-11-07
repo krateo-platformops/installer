@@ -1047,23 +1047,54 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
      taken effect must stay safe, or the values file becomes un-rerunnable.
 */}}
 {{- define "inst.componentValuesPatch" -}}
+{{- /* Builds components-patch.json's componentValues, turning every componentValuesUnset path into
+       an EXPLICIT NULL so the RFC-7386 merge patch DELETES it. An omitted key is PRESERVED by that
+       patch, and the schema types these fields so a literal null cannot be written in values — so
+       without this, a componentValues key can be set and changed and never removed.
+
+       IT CREATES THE INTERMEDIATE MAPS RATHER THAN REQUIRING THEM. The first version walked the
+       path and emitted a null only if every parent was ALREADY PRESENT in .Values.componentValues.
+       That made the feature useless in the ONLY sequence that occurs: an operator removes the key
+       from the values file, discovers on the next roll that the live CR still carries it (because
+       omission preserves), and THEN adds the unset — by which point the parent is gone from values,
+       the walk fails, and no null is emitted. MEASURED on krateo-057 at 0.3.524:
+       componentValuesUnset: [authn.env] with componentValues.authn absent from the values produced
+       NO null, and the CR kept {"env":{"AUTHN_DEBUG":"false","AUTHN_DUMP_ENV":"false"}}.
+
+       Deleting an already-absent key is a no-op under RFC-7386, so emitting the null
+       unconditionally stays idempotent — re-running a values file after the unset has taken effect
+       remains safe, which was the property the existence guard was protecting.
+
+       THE FIRST SEGMENT IS TYPO-GUARDED, and it has to be. Creating intermediates means a typo
+       would mint a componentValues entry for a component that does not exist — and
+       componentValues is `additionalProperties: false` and typed per component in the Installer
+       CRD, so the API server would REJECT THE WHOLE PATCH. One mistyped unset would therefore
+       break every componentValues update rather than just its own. So an unknown component name
+       fails the render loudly, exactly as an unknown name does in inst.componentsYaml. */}}
 {{- $top := . -}}
 {{- $cv := deepCopy (default dict $top.Values.componentValues) -}}
+{{- $known := dict -}}
+{{- range $c := (include "inst.componentsYaml" $top | fromYaml).components -}}
+{{- $_ := set $known (toString $c.name) true -}}
+{{- end -}}
 {{- range $path := (default list $top.Values.componentValuesUnset) -}}
 {{- $segs := splitList "." $path -}}
+{{- if lt (len $segs) 2 -}}
+{{- fail (printf "componentValuesUnset[%s]: a path needs at least <component>.<key>; unsetting a whole component is not supported, because componentValues is required per component" $path) -}}
+{{- end -}}
+{{- $comp := first $segs -}}
+{{- if not (hasKey $known $comp) -}}
+{{- fail (printf "componentValuesUnset[%s]: '%s' is not a known component. Creating its entry would mint a componentValues key the Installer CRD rejects (additionalProperties: false), breaking EVERY componentValues update, not just this one. Check the spelling against files/component-pins.yaml." $path $comp) -}}
+{{- end -}}
 {{- $leaf := last $segs -}}
 {{- $cur := $cv -}}
-{{- $ok := true -}}
 {{- range $seg := (initial $segs) -}}
-{{- if and $ok (kindIs "map" $cur) (hasKey $cur $seg) -}}
+{{- if not (and (kindIs "map" $cur) (hasKey $cur $seg) (kindIs "map" (index $cur $seg))) -}}
+{{- $_ := set $cur $seg dict -}}
+{{- end -}}
 {{- $cur = index $cur $seg -}}
-{{- else -}}
-{{- $ok = false -}}
 {{- end -}}
-{{- end -}}
-{{- if and $ok (kindIs "map" $cur) -}}
 {{- $_ := set $cur $leaf nil -}}
-{{- end -}}
 {{- end -}}
 {{- $cv | toJson -}}
 {{- end -}}
