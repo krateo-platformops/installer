@@ -7198,6 +7198,33 @@ components:
     - gcp-configconnector-crd
   tier: platform
   feature: configConnector
+# identity-lifecycle 0.2.0 + -crds, 2026-11-07. Gate 1 needs it: the blueprint renders one
+# GroupMembership per child for its owner. The new CRD + controller adds a Keycloak user to a
+# group, WAITS while the user does not exist yet, and removes the membership on delete.
+#
+# THE FEATURE STAYS OFF BY DEFAULT (identityLifecycle). For the gate 1 cluster it goes on in the
+# PARENT INSTALL'S VALUES, not as a CR edit -- `features.*` in a values file is silently inert on
+# an UPGRADE but takes on a FRESH INSTALL, and gate 1 is a fresh install. The opposite of the
+# demo trap: there, the same key in a values file would have done nothing.
+#
+# DIEGO'S GO WAS CONDITIONAL ON THE IMAGE, AND THE CONDITION IS WHY THIS COMMENT EXISTS.
+# When its owner first asked, both charts were published and the IMAGE WAS NOT:
+#   ghcr.io/krateo-platformops/identity-lifecycle:0.2.0  HTTP 404
+#                                                 :0.1.5  HTTP 200   <- control fired
+#                                                 :9.9.9  HTTP 404   <- control fired
+# The chart's values.yaml declares tag: "0.2.0", so pinning then would have installed cleanly,
+# reported the CompositionDefinition Ready, and left the pods in ImagePullBackOff -- the quiet
+# kind of broken. Re-probed after its CI finished, by me rather than from the relay:
+#   :0.2.0 HTTP 200   :0.1.5 HTTP 200   :9.9.9 HTTP 404
+# A three-arm probe matters here because earlier the same day I concluded a chart version was
+# unpublished from a probe where EVERY arm returned not-found.
+#
+# TWO KEYCLOAK CLIENTS, Diego's decision, NOT one: keycloak-config-kog keeps its realm-admin
+# client (keycloak-kog-client); identity-lifecycle gets its OWN client_credentials client scoped
+# to manage-users / view-users / query-groups only. So a leak is bounded by the scope rather than
+# by the realm, and the two rotate independently. He creates both Secrets; the installer checks
+# key names only and never reads values. GroupMembership.spec.identityProvider.clientSecretRef
+# points at the narrow one, in krateo-system.
 - name: identity-lifecycle-crd
   # NEW COMPONENT, wired 2026-11-04. The CRD half of identity-lifecycle, split out by acmp into its
   # own chart so it follows the 11-of-12 `-crds` convention rather than shipping crds/ inside the
@@ -7214,7 +7241,7 @@ components:
   # Only 5 of the 68 pins carry a -crd block and they are the ones with values worth setting.
   kind: IdentityLifecycleCrds
   chart: identity-lifecycle-crds
-  version: 0.1.5
+  version: 0.2.0
   tier: platform
   feature: identityLifecycle
 - name: identity-lifecycle
@@ -7237,7 +7264,7 @@ components:
   # `global`, so every offline check validates a document that never contains the field). This
   # chart declares it. access-review 0.1.7 does NOT and is held unwired until 0.1.8 ships the fix.
   kind: IdentityLifecycle
-  version: 0.1.5
+  version: 0.2.0
   deps:
   - identity-lifecycle-crd
   tier: platform
