@@ -700,6 +700,11 @@
       "title": "HITL approval",
       "description": "Human-in-the-loop approval gate applied to every vertexAI agent (autopilot orchestrator + subagents): true pauses each mutating tool call for chat approval; false runs autonomously."
     },
+    "componentValuesUnset": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Dotted paths under componentValues to REMOVE from the live Installer CR, e.g. authn.env.AUTHN_DUMP_ENV. Needed because components-patch.json is applied as an RFC-7386 merge patch: an OMITTED key is PRESERVED — which is what protects operator-set values from a chart upgrade — and only an explicit null deletes. A null cannot be written in the values because the schema types these fields, so without this key a componentValues entry could be set and changed but NEVER removed, and a temporary override became permanent. Measured on krateo-057 2026-11-07: nine components held live componentValues explained by neither the values file nor a schema default. A path whose parent is absent is a no-op, so re-running is safe. NO DEFAULT: a default on any installer schema property propagates into the live CR."
+    },
     "componentValues": {
       "type": "object",
       "title": "Per-component spec overrides",

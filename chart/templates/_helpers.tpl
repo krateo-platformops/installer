@@ -1017,3 +1017,53 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- $found -}}
 {{- end -}}
 
+
+{{/* ---------------------------------------------------------------------------------------
+     inst.componentValuesPatch — componentValues for the CR merge patch, with explicit nulls
+     for every path named in .Values.componentValuesUnset.
+
+     WHY THIS EXISTS. components-patch.json is applied as an RFC-7386 merge patch, where an
+     OMITTED key is PRESERVED and only an explicit null deletes. That is deliberate — it is what
+     stops a chart upgrade clobbering operator-set values (see self-bootstrap.yaml) — but it also
+     means a componentValues key could be SET and CHANGED and never REMOVED. Deleting it from the
+     values file was silently inert: helm reported the new values while the CR kept the old ones.
+
+     Measured on krateo-057, 2026-11-07: after removing componentValues.authn.env entirely and
+     rolling 0.3.519, the live CR still held {"env":{"AUTHN_DEBUG":"false","AUTHN_DUMP_ENV":"false"}}
+     and the rendered ConfigMap still carried AUTHN_DUMP_ENV. A sweep then found NINE components
+     whose live componentValues were explained by neither the values file nor a schema default —
+     so the CR was no longer reconstructible from the repo.
+
+     An explicit null in the VALUES cannot express this: the schema types these fields (string,
+     object), so helm refuses a null before the patch is ever built. Hence a separate, additive
+     key whose only job is removal — it loosens no existing type, and it makes a removal a
+     DECLARED act that a gate can check rather than an impossible one.
+
+     Paths are dotted and relative to componentValues:
+         componentValuesUnset:
+           - authn.env.AUTHN_DUMP_ENV      removes that one key
+           - authn.env                     removes the whole object
+     A path whose parent is absent is a no-op, not an error: re-running an unset after it has
+     taken effect must stay safe, or the values file becomes un-rerunnable.
+*/}}
+{{- define "inst.componentValuesPatch" -}}
+{{- $top := . -}}
+{{- $cv := deepCopy (default dict $top.Values.componentValues) -}}
+{{- range $path := (default list $top.Values.componentValuesUnset) -}}
+{{- $segs := splitList "." $path -}}
+{{- $leaf := last $segs -}}
+{{- $cur := $cv -}}
+{{- $ok := true -}}
+{{- range $seg := (initial $segs) -}}
+{{- if and $ok (kindIs "map" $cur) (hasKey $cur $seg) -}}
+{{- $cur = index $cur $seg -}}
+{{- else -}}
+{{- $ok = false -}}
+{{- end -}}
+{{- end -}}
+{{- if and $ok (kindIs "map" $cur) -}}
+{{- $_ := set $cur $leaf nil -}}
+{{- end -}}
+{{- end -}}
+{{- $cv | toJson -}}
+{{- end -}}

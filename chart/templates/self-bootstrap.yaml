@@ -251,7 +251,7 @@ data:
   # merge patch on `helm upgrade` (see the post-upgrade branch below): the `components` list is
   # replaced wholesale; the object fields deep-merge, so chart/values-set keys win and any user-only
   # keys are preserved.
-  components-patch.json: {{ dict "spec" (dict "components" (include "inst.componentsYaml" $ | fromYaml).components "componentValues" .Values.componentValues "exposure" .Values.exposure "vertexAI" .Values.vertexAI "registryAuth" .Values.registryAuth "hitlApproval" .Values.hitlApproval) | toJson | quote }}
+  components-patch.json: {{ dict "spec" (dict "components" (include "inst.componentsYaml" $ | fromYaml).components "componentValues" ((include "inst.componentValuesPatch" $) | fromJson) "exposure" .Values.exposure "vertexAI" .Values.vertexAI "registryAuth" .Values.registryAuth "hitlApproval" .Values.hitlApproval) | toJson | quote }}
 ---
 {{- /*
   The bootstrap is FOUR ordered, bounded, idempotent hook WAVES (helm hook-weights) instead of one
