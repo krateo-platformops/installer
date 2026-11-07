@@ -4358,6 +4358,31 @@ components:
 # and has since corrected that. So 0.1.29 and its sibling are real published versions that are simply not
 # worth a composition move -- recorded here so a later reader does not read the gap as an
 # oversight, and so a provenance check flagging them has an explanation.
+# krateo-observability 0.1.32, 2026-11-07. ONE CLAUSE, and it stops this installer's own rolls
+# creating false incidents.
+#
+# THE ONLY FUNCTIONAL CHANGE, read from the chart rather than taken from the request --
+# sre-probe-failing's where gains:
+#     AND JSONExtractInt(Body, 'object', 'count') >= 3
+# Everything else is a comment plus the Chart.yaml version/revision. diff -rq across the two
+# charts touches values.yaml and Chart.yaml ONLY; the rendered Alert count is unchanged.
+#
+# WHY IT MATTERS HERE: every pod logs ONE readiness failure on start, so EVERY installer roll
+# tripped this alert and opened an RCA. Its owner measured 17 of 26 active 15-minute windows on
+# krateo-057 over 7 days -- ALL OF THEM ROLLS, including 0.3.525 today, which is the firing alert
+# marketing spotted and could not attribute. With the filter: ONE window that week, a real
+# 2-minute snowplow outage with 25 repeats.
+#
+# So this is not noise reduction for its own sake -- it is an alert that fired on the act of
+# deploying, which makes it useless precisely when a roll needs watching.
+#
+# EXPECT AFTER THE ROLL: 27 Alerts, sre-probe-failing still PRESENT with the new where. A roll
+# should no longer flip it to ALERT. A pod that keeps failing still will -- the filter drops the
+# single startup event, not a repeated one.
+#
+# ITS OWNER ASKED FOR THIS BEFORE 0.3.526. That was not possible: 0.3.526 was already tagged and
+# released when the request arrived, and re-cutting a released tag is worse than one more false
+# positive. Diego sequenced it instead. The cost of being second is exactly one spurious RCA.
 - name: krateo-observability
   kind: KrateoObservability
   # 0.1.19 (observability#62): the log-scoped default alerts also exclude ServiceName
@@ -4392,7 +4417,7 @@ components:
   # (that repo already has a krateo-observability-0.1.10 tag as precedent), or adopt snowplow's
   # proposal to stamp the source commit SHA onto the chart artifact so pin-ci stops inferring
   # provenance from appVersion at all. Do NOT unblock this by deleting `sources` or the appVersion.
-  version: 0.1.31
+  version: 0.1.32
   deps:
   - clickhouse-operator
   - mongodb-operator
