@@ -4610,6 +4610,19 @@ components:
 # TESTED BY ITS OWNER, limits as they stated them: go test, plus a live restart of the OLD
 # version. THIS version has not run on a cluster -- they will test it after the roll with a
 # connected client.
+# krateo-sse-proxy 0.1.23, 2026-11-07. SUPERSEDES 0.1.22, which did NOT close the drop: after
+# 0.1.22 went live on 057 its owner still measured 38 of 638 polls dropping events on bursts
+# over 64 rows. 0.1.23 is the fix for the remaining window. ITS OWNER'S MEASUREMENT, not mine.
+# EXPECT AFTER THE ROLL: the 38/638 drop rate goes to 0 on the same probe. If it does not, the
+# fix is incomplete -- REPORT IT to sse-proxy, do not pin forward again on my own judgement.
+# krateo-autopilot 0.7.2 is PROSE ONLY: it renames the agent to Agentiko in its own text. No
+# behaviour, no schema, no new wire values. Carried here because it is free, NOT because the
+# Agentiko rename is done -- that still needs the line-746 subAgents widening and
+# componentValues.agentiko, neither of which is in this tag.
+# VERIFY THIS ONE AT ghcr.io/krateo-agentiko/charts, NOT krateo-platformops. Its pin entry's
+# `repo:` key is the authority and 17 components here use that org. Probing the default registry
+# makes EVERY version read 'not found', including the one already pinned and live -- a global
+# zero that looks exactly like 'the version was never published'.
 - name: krateo-sse-proxy
   kind: KrateoSseProxy
   # 0.1.13 (sse-proxy#20/#21): prunes the GET /events?composition_id=… scan with a tokenbf
@@ -4684,7 +4697,7 @@ components:
   # sse-proxy#15/#16/#17 (1.45 breaks trace export, snowplow#596/#695).
   # The 0.1.15 note above about image.tag still applies verbatim: do NOT set
   # componentValues.krateo-sse-proxy.image.tag here.
-  version: 0.1.22
+  version: 0.1.23
   deps:
   - krateo-observability
   tier: observability
@@ -5399,7 +5412,7 @@ components:
   #   — so a dry run against the wrong order measures nothing and looks like a prompt failure.
   #   MARKER, grepped from both packaged charts by the author and confirmed here:
   #     'A PAGE IS DONE WHEN ITS PREVIEW SHOWS DATA'   (0.6.7=0, 0.6.8=1)
-  version: 0.7.1
+  version: 0.7.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
