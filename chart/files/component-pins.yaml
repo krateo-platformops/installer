@@ -2946,6 +2946,51 @@ components:
 # their words: reasoning, not a test. This is why the set rolls ALONE, after 0.3.515.
 # Carries the `paused` constraint, the alert detail panel fix and the fetchable target fix, none
 # of which reached 057 under the portal-only pins.
+# Portal set -> 1.8.95, 2026-11-07. SIXTEEN components, as one set (the #699 shape). frontend
+# publishes SEVENTEEN charts at this version; `builder-publish` is the seventeenth and is NOT
+# pinned here because the `portal` composition renders it.
+#
+# Both changes are ADDITIVE AND DATA-GATED, which is why its owner asked for no census and I did
+# not run one: neither deletes an object, and neither changes what a user sees until data appears.
+#   #383 the Marketplace leads with the LIVE blueprints index, catalog as fallback, so the install
+#        form installs the version the grid shows (marketplace-page
+#        restaction.blueprint-install-formdef.yaml:121, `withLive | indexEntry`). Its own comment:
+#        "Reading the bare catalog first would show the live version and install the catalog's."
+#        INERT UNTIL a chart with the new `sources` reaches the live index -- none has yet.
+#   #381 the composition Access card (compositions-page, 8 files). Renders ONLY for a composition
+#        publishing status.url or status.plan -- NONE does yet.
+#
+# WATCH THE #383 / #716 INTERACTION. The live index leads "for a chart a krateo-blueprints
+# repository published", decided by its newest `sources`. openstack-as-a-service is adding the
+# building repo to `sources:` on ingress-blueprint's 5 wrapper charts and on
+# krateo-marketplace-catalog (charts#7 rule 3, ingress-blueprint#22, marketplace#2). SIX OF THE 11
+# krateo-blueprints CHARTS THIS INSTALLER PINS currently have no usable `sources` route, so when
+# those PRs release, #383's live-index branch starts applying to charts it did not apply to
+# before. That is the moment the Marketplace's displayed version can change -- not this pin.
+#
+# WHAT I VERIFIED, AND HOW MANY TIMES THE INSTRUMENT LIED FIRST. Verified individually, each by
+# its own single call, all at 1.8.95 with a digest:
+#   portal (74a5f095, revision 2f254077) · marketplace-page · settings-page (9c42dee2) ·
+#   dashboard-page (c4ee1770) · portal-agents (a2401fb2) · builder-publish
+#   controls: portal 1.8.94 present · portal 9.9.9 not-found · settings-page 9.9.9 not-found ·
+#   dashboard-page 9.9.9 not-found · portal-agents 9.9.9 not-found
+#   ghcr tag list for settings-page: 1.8.90 .. 1.8.95 present
+# So SIX of the sixteen are verified first-hand, plus their owner's read of all 17 and green
+# release-oci + release-notes at 18:10:10Z.
+#
+# THREE BATCH ATTEMPTS AT ALL 16 EACH RETURNED A FALSE ZERO, and the three failed differently:
+#   1. a helm loop immediately after the release -- a genuine mid-publish race; release-oci
+#      finished at 18:10:10Z and I probed before propagation. Both controls fired correctly,
+#      so a well-controlled probe of a MOVING population is still wrong.
+#   2. a curl loop -- HTTP 000 for all 16, then 200 for the 17th call made right after. ghcr
+#      throttles rapid sequential token+manifest requests: the RATE of calls was the instrument.
+#   3. a slower loop with 4s between calls, inside a nested `bash -c` -- the quoting collapsed
+#      and every match came back empty, while its own 9.9.9 control fired on 3 of 3. So the
+#      probe could produce a correct negative and still not produce a correct positive.
+# I had written "16 of 16" into this comment after case 1 on the strength of three single
+# calls, and removed it. A global zero across both arms is a broken probe, never a measurement;
+# a zero on ONE arm while the other arm's control fires is a HALF-broken probe, which is worse,
+# because the working control certifies the instrument that is failing.
 - name: portal
   #
   # 1.8.88 -> 1.8.90. Carries portal#362: the values.schema.json that service-desk-page needs for
@@ -3657,7 +3702,7 @@ components:
   # the label, the concrete path and krateo.io/nav-link-only (it links and owns nothing). ONLY the
   # exact string "true" enables it, so a half-recognised truthy value fails visibly instead of
   # silently claiming the route back.
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - frontend
   - git-provider
@@ -3766,7 +3811,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.94
+  version: 1.8.95
   deps: ['portal']
   tier: platform
   feature: portal
@@ -3802,7 +3847,7 @@ components:
   # templates/_builder.tpl, inside `{{/* */}}` blocks. 26 files, 124539 -> 124537 bytes; Chart.yaml
   # and that one template differ, and the template's change cannot reach the render.
   kind: MarketplacePage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -3869,21 +3914,21 @@ components:
   feature: selfservice
 - name: service-desk-page
   kind: ServiceDeskPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
   feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
   feature: portal
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -3924,7 +3969,7 @@ components:
 - name: dashboard-page
   # Renders into krateo-dashboard, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: DashboardPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -3963,7 +4008,7 @@ components:
   # original push failure is still UNKNOWN -- it did not recur, which is evidence of a blip and not
   # proof of one. Pinned only after confirming 1.8.89 pulls: version 1.8.89, appVersion 1.8.89.
   kind: CompositionsPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -3971,7 +4016,7 @@ components:
 - name: blueprints-page
   # Renders into krateo-blueprints, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: BlueprintsPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -3979,7 +4024,7 @@ components:
 - name: resources-page
   # Renders into krateo-resources, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: ResourcesPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -3987,7 +4032,7 @@ components:
 - name: search-page
   # Renders into krateo-search, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: SearchPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -3995,7 +4040,7 @@ components:
 - name: builders-page
   # Renders into krateo-builders, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: BuildersPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -4003,7 +4048,7 @@ components:
 - name: clusters-page
   # Renders into krateo-clusters, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ClustersPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -4011,7 +4056,7 @@ components:
 - name: reviews-page
   # Renders into krateo-reviews, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ReviewsPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -4019,7 +4064,7 @@ components:
 - name: settings-page
   # Renders into krateo-settings, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: SettingsPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
@@ -4027,7 +4072,7 @@ components:
 - name: observability-page
   # Renders into krateo-observability, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ObservabilityPage
-  version: 1.8.94
+  version: 1.8.95
   deps:
   - portal
   tier: platform
