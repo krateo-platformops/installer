@@ -4210,6 +4210,12 @@ components:
   # cert-manager.io CRDs, and clickhouse-operator/mongodb-operator are Ready there.
   tier: observability
   feature: portal
+# DELIBERATELY NOT 0.1.29. 0.1.29 is a COMMENT-ONLY bump and is deliberately NOT taken. Nothing rendered changes.
+# It exists because its repo's #106 changed files without a version bump, which broke
+# release 3.1.44 (it published nothing); the owner initially said no version needed to move
+# and has since corrected that. So 0.1.29 and its sibling are real published versions that are simply not
+# worth a composition move -- recorded here so a later reader does not read the gap as an
+# oversight, and so a provenance check flagging them has an explanation.
 - name: krateo-observability
   kind: KrateoObservability
   # 0.1.19 (observability#62): the log-scoped default alerts also exclude ServiceName
@@ -4493,6 +4499,12 @@ components:
 # REPORTS ANYTHING OTHER THAN ok, it is NOT a chart problem: tell the owner immediately and do
 # NOT re-run, repair or re-roll. verify.sh is stricter (continuous windows); all 720 seals on 057
 # pass that read-only. Not tested: tests/e2e-kind.sh, because kind would not start for them.
+# DELIBERATELY NOT 0.1.5. 0.1.5 is a COMMENT-ONLY bump and is deliberately NOT taken. Nothing rendered changes.
+# It exists because its repo's #106 changed files without a version bump, which broke
+# release 3.1.44 (it published nothing); the owner initially said no version needed to move
+# and has since corrected that. So 0.1.5 and its sibling are real published versions that are simply not
+# worth a composition move -- recorded here so a later reader does not read the gap as an
+# oversight, and so a provenance check flagging them has an explanation.
 - name: krateo-audit-worm
   # 0.1.0 (observability#82): a tamper-EVIDENT mirror of krateo_audit. The audit table itself is
   # ordinary ClickHouse -- anyone who can write it can rewrite it -- so this chart maintains a
@@ -4561,6 +4573,16 @@ components:
 #   preflight -- so 057 passing says nothing about a0.
 # OWNER'S CAVEAT, carried unchanged: the published image was exercised with real HTTP requests but
 #   with NO authn behind it. A valid login in a browser is UNTESTED.
+# 0.1.22 (2026-11-07, image 1.4.1, repo tag 3.1.45). Verified published; appVersion 1.4.1 and a
+# 9.9.9 control fails to pull.
+# FIXES sse-proxy#30: the stream stays live, so the first client after a boot or an idle period is
+# no longer flooded with backlog, and a client with no topic gets each row ONCE. History stays on
+# GET /events. No value and no schema changes.
+# EXPECT ON ROLL, from its owner: the proxy restarts with a few seconds of 503s on open bell
+# streams; clients reconnect by themselves.
+# TESTED BY ITS OWNER, limits as they stated them: go test, plus a live restart of the OLD
+# version. THIS version has not run on a cluster -- they will test it after the roll with a
+# connected client.
 - name: krateo-sse-proxy
   kind: KrateoSseProxy
   # 0.1.13 (sse-proxy#20/#21): prunes the GET /events?composition_id=… scan with a tokenbf
@@ -4635,7 +4657,7 @@ components:
   # sse-proxy#15/#16/#17 (1.45 breaks trace export, snowplow#596/#695).
   # The 0.1.15 note above about image.tag still applies verbatim: do NOT set
   # componentValues.krateo-sse-proxy.image.tag here.
-  version: 0.1.21
+  version: 0.1.22
   deps:
   - krateo-observability
   tier: observability
