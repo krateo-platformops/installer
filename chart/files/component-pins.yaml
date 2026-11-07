@@ -6134,7 +6134,7 @@ components:
   # error, no event. A field the CRD DECLARES AS REQUIRED can never be pruned, because pruning only
   # removes fields absent from properties; the real hazard is a field the BACKEND requires that the
   # CRD does not declare.
-  version: 0.2.62
+  version: 0.2.63
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -6153,27 +6153,24 @@ components:
   # what default-alerts.yaml is for -- "a FRESH install lands on a populated /alerts page instead of an
   # empty one" -- but it should be a choice rather than a surprise.
   feature: portal
-# alert-provider 0.2.62 + krateo-observability 0.1.31, 2026-11-07. SECOND hard-ordered pair in
-# one day, same mechanism as 0.2.61/0.1.30 and the SAME RULE: alert-provider and its CRD must be
-# running BEFORE the observability chart that uses the new field, or the release fails outright.
-# 0.1.31 renders an Alert with `source: traces`; an older alert-provider CRD does not know that
-# field, so the render is REJECTED -- a louder failure than 0.1.30's, which merely never matched.
+# alert-provider 0.2.63, 2026-11-07. ALONE this time: the two preceding pairs were hard-ordered
+# with krateo-observability, this one is not -- it REMOVES behaviour rather than adding a field.
+# THE ONLY CHANGE since 0.2.62: config.defaultAlerts now defaults to [], so the chart SEEDS NO
+# ALERTS. The CRD is unchanged. Diego decided the default Alert set lives in krateo-observability
+# only, so alert-provider stops being a second source of the same objects.
 #
-# DO NOT ADD A DEFAULT FOR spec.source ANYWHERE IN THE INSTALLER SCHEMA. Its owner checked the
-# published CRD: enum + two CEL rules, NO `default:`. Omitted means logs, resolved in the
-# controller, so nothing is written into existing Alerts. One of those CEL rules REFUSES `source`
-# together with metricRef -- so a schema default would put the field on every metric Alert and
-# the rule would then reject all of them, including the disk-headroom alert shipped hours ago.
-# A `default:` on any installer schema property propagates into the live CR; that is the hazard.
+# WHY THIS MATTERS, measured on 057 rather than argued. alert-provider's seeder renders
+# config.defaultAlerts into DEFAULT_ALERTS_JSON and RECREATES ANY MISSING ALERT AT EVERY POD
+# START. observability deleted three hand-made Alerts earlier today (29 -> 26, which my own
+# pre-roll baseline independently confirmed) and the 0.2.62 pod start at 13:52:20Z -- two minutes
+# into the 0.3.523 roll -- brought all three back:
+#   krateo-composition-reconcile-error, krateo-platform-crashloop, krateo-platform-image-pull-failure
+# They carry NO labels, NO helm annotations and NO managed-by, which is exactly why they read as
+# unmanaged. Absence of an ownership marker is not absence of an owner.
 #
-# 0.1.31 adds ONE Alert, sre-jwt-in-traces: reads otel_traces for the JWT shape in span and
-# resource attributes, status messages and span events, above 1 in 15m, labelled analysis: human.
-# EXPECT AFTER THE ROLL, from its owner: default Alerts 22 -> 23 and the new one reading OK. IF IT
-# LANDS IN phase Error the cluster has no traces source in HyperDX -- REPORT IT, DO NOT FIX IT.
-# TESTED BY ITS OWNER, limits theirs: helm lint; the where clause matches 0 of 057's spans and
-# runs cleanly; each branch catches a sample token in a constant expression, with nothing written
-# to telemetry. NOT tested: evaluation through HyperDX's traces source. That is what the roll
-# exercises, and it is exactly where the Error phase would show up.
+# EXPECT AFTER THE ROLL: Alerts stay at 30 until observability deletes the three copies, then 27.
+# A count of 30 immediately after this roll is CORRECT, not a failure -- deleting the seeder's
+# default does not delete what it already seeded.
 - name: alert-provider
   # RE-GATED specialistAgents -> portal, and DEPS TRIMMED of incident-agent + model-configs.
   # Established on alert-provider#65 by its maintainer (EdmondDantes21) and the session working
@@ -6249,7 +6246,7 @@ components:
   # `unevaluated` in the rollup's precedence. And oasgen 0.52.0 adds six new ways for a
   # RestDefinition child to be legitimately Creating, so mixed parents get MORE likely during
   # exactly the sampling window. Found before the run, not after.
-  version: 0.2.62
+  version: 0.2.63
   # 0.2.57 carries alert-provider#76 (provider-runtime v1.7.2) and #77, which adds 'incident-provider' to
   # DEFAULT_ALERTS_JSON's reconcile-error `NOT IN` list. Measured on the published chart here, not taken
   # from the release notes: rendered at --kube-version 1.33.0, rc=0, 294 -> 331 lines (floor asserted, so
