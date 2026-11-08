@@ -737,21 +737,27 @@
        (agent-less install) => nothing set, byte-identical. Each entry {name, port 8080,
        subjects.anyAuthenticated} — the exact shape of every curated entry.
 
-       *** EACH `name` MUST BE AN EXISTING SERVICE. IT IS NOT A LABEL. ***
+       *** EACH `name` IS THE AGENT'S SERVICE NAME AND ITS kagent HOSTNAME. IT IS NOT A LABEL. ***
        agentgateway-policies renders, PER ENTRY: an HTTPRoute whose backendRefs point at a Service
        called <name>; that same Service appended to the SHARED passthrough policy's targetRefs; that
        route appended to the SHARED resiliency-a2a policy's targetRefs; an allow-expression keyed on
        x-kagent-host of <name>; and, under Strict JWT, a per-subagent AgentgatewayPolicy. kagent
-       creates one Service per Agent, so a name with no Agent behind it yields a BackendNotFound route
-       AND puts a nonexistent target into two SHARED policies — breaking objects that have nothing to
-       do with the new name.
+       creates one Service per Agent.
 
-       SO DO NOT ADD A NAME AHEAD OF ITS AGENT. During the autopilot->agentiko rename it was proposed
-       to list BOTH names here as a PREREQUISITE, so a delegation to either would resolve while the
-       Agent was renamed across repos. That cannot work, and it would have broken the very two shared
-       policies the test was meant to read. Verified on krateo-057: all 10 live subAgents[].name have
-       a backing Service, and there is no Service `agentiko` and no Agent `agentiko`. The second entry
-       belongs in the SAME change that brings the renamed Agent up, never before it.
+       The asymmetry, quoted from agentgateway-policies 0.2.18's own values.yaml, which records a live
+       test on 057 in September: an entry for an ABSENT agent "leaves an HTTPRoute with
+       BackendNotFound (noisy, harmless)", while "a MISSING entry for a deployed agent breaks
+       delegation to it, which is the failure that matters". The effect of a premature entry on the two
+       SHARED policies' .status.ancestors[].conditions is UNTESTED in either direction — do not assume
+       it is harmless there, and do not assume it is not.
+
+       SO THERE IS NO REASON TO ADD A NAME AHEAD OF ITS AGENT. During the autopilot->agentiko rename
+       it was proposed to list BOTH names here as a PREREQUISITE, so a delegation to either would
+       resolve while the Agent was renamed across repos. It would achieve nothing: kagent only sends
+       x-kagent-host for an Agent that exists, so the early entry routes no traffic while adding a
+       dead route. Verified on krateo-057: all 10 live subAgents[].name have a backing Service, and
+       there is no Service `agentiko` and no Agent `agentiko`. The second entry belongs in the SAME
+       change that brings the renamed Agent up.
 
        The count is NOT asserted anywhere — the only check is len > 0 — and the live count is 10, not
        the 11 this comment claimed. Read an expected count from the RENDERED chart, never from a note.
