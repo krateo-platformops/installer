@@ -1536,7 +1536,7 @@ components:
   # ROLLBACK: re-upgrade the installer to 0.3.429, which pins 1.12.49. Do NOT roll back via
   # componentValues.snowplow.image.tag -- an image-tag override on THIS component takes effect and
   # then PERMANENTLY MASKS every future chart bump (the krateo-sse-proxy 0.1.15 trap).
-  version: 1.12.65
+  version: 1.12.66
   deps:
   - snowplow-crd
   - authn
@@ -3781,7 +3781,7 @@ components:
   # the label, the concrete path and krateo.io/nav-link-only (it links and owns nothing). ONLY the
   # exact string "true" enables it, so a half-recognised truthy value fails visibly instead of
   # silently claiming the route back.
-  version: 1.8.96
+  version: 1.8.97
   deps:
   - frontend
   - git-provider
@@ -3890,7 +3890,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.96
+  version: 1.8.97
   deps: ['portal']
   tier: platform
   feature: portal
@@ -3926,7 +3926,7 @@ components:
   # templates/_builder.tpl, inside `{{/* */}}` blocks. 26 files, 124539 -> 124537 bytes; Chart.yaml
   # and that one template differ, and the template's change cannot reach the render.
   kind: MarketplacePage
-  version: 1.8.96
+  version: 1.8.97
   deps:
   - portal
   tier: platform
@@ -3993,14 +3993,14 @@ components:
   feature: selfservice
 - name: service-desk-page
   kind: ServiceDeskPage
-  version: 1.8.96
+  version: 1.8.97
   deps:
   - portal
   tier: platform
   feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.96
+  version: 1.8.97
   deps:
   - portal
   tier: platform
@@ -4034,9 +4034,46 @@ components:
 # PROOF AFTER THE ROLL (the owner checks it too): helm list shows marketplace-page-1.8.96; on
 # 057 /marketplace/openstack/install shows "stable · v0.3.37" in the header and the form's
 # chart.version still reads 0.3.37.
+# portal 1.8.97 + snowplow 1.12.66, 2026-11-08. TWO UNRELATED SURFACES, one release.
+#
+# PORTAL 1.8.97 (portal#385) — the Dashboard's "not assessable" state. A composition whose Ready is
+# Unknown with reason EXACTLY `ZeroEvidence` has no readiness signal; it is NOT pending. On 057 that
+# is event-health and model-configs. RA `compositions-list` gains FIELDS ONLY (it lives in the
+# `portal` chart, helm/portal); the widgets change in DASHBOARD-PAGE.
+#   ROLL ORDER IS WHY ALL 16 MOVE TOGETHER: the portal chart must land with or before dashboard-page.
+#   dashboard-page alone reads EMPTY figures until portal catches up; one release makes it moot.
+#   Existing RA fields are identical to main, so other pages keep counting those two as pending.
+#
+# SNOWPLOW 1.12.66 — paired bench run 22 PASS against live 1.12.65: normal browsing p95 102 -> 78 ms,
+# login storm 66 -> 55, background changes 86 -> 73, throughput equal. 28 commits, Go code and tests
+# only, NO chart or CRD manifest change.
+#   *** snowplow-crd (chart snowplow-crds) STAYS AT 1.12.65 ON PURPOSE. *** Do not "fix" it into
+#   lockstep: the crds chart did not move, and nothing in it changed.
+#   NOTE THE COMPONENT NAME: it is `snowplow-crd`, SINGULAR, shipping chart `snowplow-crds`. The
+#   convention is NOT derivable — most are `-crd` but `kagent-crds` and `gateway-api-crds` are
+#   plural. Read the name from this file, never infer it.
+#   Its GitHub release is Latest and no longer a pre-release (the no-rc rule is satisfied).
+#   VERIFIED AT THE ARTIFACT, not taken on trust: snowplow-crds 1.12.66 IS published, so staying at
+#   1.12.65 is a CHOICE. The CRD is BYTE-IDENTICAL between the two (19302 bytes / 329 lines,
+#   templates.krateo.io_restactions.yaml, the only CRD in that chart), and the two APP charts'
+#   templates/ are identical too. So nothing is pruned. This is the shape that silently lost fields
+#   in 0.3.495 with all CI green, which is why it was checked rather than assumed.
+#   ROLLBACK is a BACKWARD INSTALLER TAG to 1.12.65, never an image override.
+#
+# CONTROLS: all 16 portal charts resolve at 1.8.97; outgoing portal 1.8.96 resolves; portal 9.9.9
+# does not. snowplow 1.12.66 and the outgoing 1.12.65 resolve; snowplow 9.9.9 does not;
+# snowplow-crds 1.12.65 resolves (it is staying).
+#
+# PROOF AFTER THE ROLL, from the two owners plus me:
+#   portal: helm list shows portal-1.8.97 AND dashboard-page-1.8.97, portal == portal-agents, and
+#     057's Dashboard reads Compositions 82 with "2 not assessable", Healthy 80 at "100% of 80
+#     assessable", Pending 0, coverage "Ready 80/80".
+#   snowplow: the RUNNING IMAGE BY DIGEST from the pod's imageID (not from notes), Ready time,
+#     0 restarts after 10 minutes, and expvar gated on BOTH paths — in-cluster /debug/vars 401 and
+#     gateway /content/debug/vars 401. A 200 WITH index.html IS A FALSE PASS (SPA fallback).
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.96
+  version: 1.8.97
   deps:
   - portal
   tier: platform
@@ -4077,7 +4114,7 @@ components:
 - name: dashboard-page
   # Renders into krateo-dashboard, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: DashboardPage
-  version: 1.8.96
+  version: 1.8.97
   deps:
   - portal
   tier: platform
@@ -4116,7 +4153,7 @@ components:
   # original push failure is still UNKNOWN -- it did not recur, which is evidence of a blip and not
   # proof of one. Pinned only after confirming 1.8.89 pulls: version 1.8.89, appVersion 1.8.89.
   kind: CompositionsPage
-  version: 1.8.96
+  version: 1.8.97
   deps:
   - portal
   tier: platform
@@ -4124,7 +4161,7 @@ components:
 - name: blueprints-page
   # Renders into krateo-blueprints, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: BlueprintsPage
-  version: 1.8.96
+  version: 1.8.97
   deps:
   - portal
   tier: platform
@@ -4132,7 +4169,7 @@ components:
 - name: resources-page
   # Renders into krateo-resources, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: ResourcesPage
-  version: 1.8.96
+  version: 1.8.97
   deps:
   - portal
   tier: platform
@@ -4140,7 +4177,7 @@ components:
 - name: search-page
   # Renders into krateo-search, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: SearchPage
-  version: 1.8.96
+  version: 1.8.97
   deps:
   - portal
   tier: platform
@@ -4148,7 +4185,7 @@ components:
 - name: builders-page
   # Renders into krateo-builders, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: BuildersPage
-  version: 1.8.96
+  version: 1.8.97
   deps:
   - portal
   tier: platform
@@ -4156,7 +4193,7 @@ components:
 - name: clusters-page
   # Renders into krateo-clusters, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ClustersPage
-  version: 1.8.96
+  version: 1.8.97
   deps:
   - portal
   tier: platform
@@ -4164,7 +4201,7 @@ components:
 - name: reviews-page
   # Renders into krateo-reviews, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ReviewsPage
-  version: 1.8.96
+  version: 1.8.97
   deps:
   - portal
   tier: platform
@@ -4172,7 +4209,7 @@ components:
 - name: settings-page
   # Renders into krateo-settings, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: SettingsPage
-  version: 1.8.96
+  version: 1.8.97
   deps:
   - portal
   tier: platform
@@ -4180,7 +4217,7 @@ components:
 - name: observability-page
   # Renders into krateo-observability, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ObservabilityPage
-  version: 1.8.96
+  version: 1.8.97
   deps:
   - portal
   tier: platform
@@ -5482,6 +5519,11 @@ components:
   # repo named for the kind, and the retired krateo-oas target is dropped from the prompt. No image
   # or chart-structure change, so nothing to verify beyond the prompt text reaching the Agent CR.
   kind: KrateoAutopilot
+  # agentName — the gateway route name for THIS orchestrator. Stated explicitly rather than left to
+  # the template's `default "autopilot"`, so that during the agentiko rename both orchestrators'
+  # route names are visible side by side in this file. FROZEN at 0.7.3: the agentiko repo publishes
+  # only `agentiko` from 0.8.0 on, so this pin never moves again.
+  agentName: autopilot
   # 0.4.8 adds ONE thing to the chart: generic Kubernetes knowledge (files/knowledge/*.md) appended
   # to the K8S-AGENT's system prompt, gated on knowledge.kubernetes.playbook / .architecture — both
   # defaulted TRUE by the chart, and this chart sets agents.k8s.enabled=true, so an as-is bump would
