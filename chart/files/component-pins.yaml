@@ -4383,6 +4383,31 @@ components:
 # ITS OWNER ASKED FOR THIS BEFORE 0.3.526. That was not possible: 0.3.526 was already tagged and
 # released when the request arrived, and re-cutting a released tag is worse than one more false
 # positive. Diego sequenced it instead. The cost of being second is exactly one spurious RCA.
+# krateo-observability 0.1.33, 2026-11-08. IT CLOSES THE ALERT I COULD NOT ATTRIBUTE.
+#
+# TWO CLAUSES, verified by reading both charts rather than taking the request. diff -rq across
+# 0.1.32 and 0.1.33 touches values.yaml and Chart.yaml ONLY. sre-krateo-composition-reconcile-error's
+# `where` gains:
+#     AND positionCaseInsensitive(concat(JSONExtractString(Body,'err'), JSONExtractString(Body,'error')), 'context canceled') = 0
+#     AND positionCaseInsensitive(concat(...), 'the object has been modified') = 0
+#
+# WHY THIS MATTERS TO THIS REPO SPECIFICALLY. That alert fired on 0.3.526 AND 0.3.528 -- both
+# core-provider rolls -- and I reported it twice as UNATTRIBUTED rather than guess, because the
+# Alert carries no metricRef and no source and my kubectl grep could not see the rows it matched.
+# Its owner read the table: EVERY match in the 2 days to 2026-11-07 was core-provider logging
+# "context canceled" (a reconcile cut short by shutdown) or "the object has been modified" (an
+# optimistic-lock conflict). CONTROLLER-RUNTIME RETRIES BOTH. They are not faults.
+#
+# So this is the second alert in two days that fired on the ACT OF DEPLOYING -- the first was
+# sre-probe-failing, fixed in 0.1.32 (0.3.527). Both were reading a rollout as an incident.
+#
+# EXPECT AFTER THE ROLL: 27 Alerts, sre-krateo-composition-reconcile-error still PRESENT with the
+# two new clauses. A core-provider roll should no longer flip it. What still fires is REAL: a
+# CompositionDefinition stuck waiting for its compositions to delete -- 10 windows in 4 days,
+# against 99 before. Config Connector's 516 matches in those 4 days were re-queued conflicts too.
+#
+# CONTROLS: 0.1.33 resolves; the outgoing 0.1.32 resolves; 9.9.9 does not -- so a not-found would
+# have meant absent rather than an unreachable registry.
 - name: krateo-observability
   kind: KrateoObservability
   # 0.1.19 (observability#62): the log-scoped default alerts also exclude ServiceName
@@ -4417,7 +4442,7 @@ components:
   # (that repo already has a krateo-observability-0.1.10 tag as precedent), or adopt snowplow's
   # proposal to stamp the source commit SHA onto the chart artifact so pin-ci stops inferring
   # provenance from appVersion at all. Do NOT unblock this by deleting `sources` or the appVersion.
-  version: 0.1.32
+  version: 0.1.33
   deps:
   - clickhouse-operator
   - mongodb-operator
