@@ -166,6 +166,98 @@ def names(values):
         return None, "no probe ConfigMap in the render"
 
 
+# ---------------------------------------------------------------------------------------------
+# extraAgents: an orchestrator routes the fleet and is NOT a member of it. Asserted here because
+# the same fixtures drive it, and because listing the other orchestrator made kagent fail to
+# compile BOTH agents on 057 at 0.3.540 — a live outage of config propagation that `Ready=True`
+# hid, since the pod kept serving its last good compile.
+# ---------------------------------------------------------------------------------------------
+# The SAME derivation with the OLD self-only condition (`ne $comp.name $c.name`). It exists purely
+# as a falsifier: it MUST list the other orchestrator, proving that `not $comp.orchestrator` is what
+# removes it rather than something incidental to the fixture.
+EXTRA_PROBE_OLD = """apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: extraold
+data:
+{{- range $c := .Values.components }}
+{{- if $c.orchestrator }}
+{{- $enabled := dict }}
+{{- range $comp := $.Values.components }}
+{{- if eq (include "inst.featureEnabled" (list $ $comp.feature)) "true" }}
+{{- $_ := set $enabled $comp.name true }}
+{{- end }}
+{{- end }}
+{{- $fleet := list }}
+{{- range $comp := $.Values.components }}
+{{- if and $comp.agent (ne $comp.name $c.name) (hasKey $enabled $comp.name) }}
+{{- $fleet = append $fleet (default $comp.name $comp.chart) }}
+{{- end }}
+{{- end }}
+  {{ $c.name }}: {{ $fleet | join "," | quote }}
+{{- end }}
+{{- end }}
+"""
+
+EXTRA_PROBE = """apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: extra
+data:
+{{- range $c := .Values.components }}
+{{- if $c.orchestrator }}
+{{- $enabled := dict }}
+{{- range $comp := $.Values.components }}
+{{- if eq (include "inst.featureEnabled" (list $ $comp.feature)) "true" }}
+{{- $_ := set $enabled $comp.name true }}
+{{- end }}
+{{- end }}
+{{- $fleet := list }}
+{{- range $comp := $.Values.components }}
+{{- if and $comp.agent (not $comp.orchestrator) (hasKey $enabled $comp.name) }}
+{{- $fleet = append $fleet (default $comp.name $comp.chart) }}
+{{- end }}
+{{- end }}
+  {{ $c.name }}: {{ $fleet | join "," | quote }}
+{{- end }}
+{{- end }}
+"""
+
+
+def _extra(values, probe_src, name):
+    d = probe_dir()
+    fn = os.path.join(d, "templates", name + ".yaml")
+    with open(fn, "w") as f:
+        f.write(probe_src)
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            vf = os.path.join(td, "v.yaml")
+            with open(vf, "w") as f:
+                yaml.safe_dump(values, f)
+            r = subprocess.run(["helm", "template", "probe", d, "-f", vf],
+                               capture_output=True, text=True)
+            if r.returncode != 0:
+                return None, (r.stderr or r.stdout).strip().replace("\n", " ")[:300]
+            for doc in yaml.safe_load_all(r.stdout):
+                if isinstance(doc, dict) and doc.get("kind") == "ConfigMap" \
+                        and doc["metadata"]["name"] == name:
+                    return {k: ([x for x in v.split(",") if x] if v else [])
+                            for k, v in (doc.get("data") or {}).items()}, None
+            return None, "no %s ConfigMap" % name
+    finally:
+        os.remove(fn)
+
+
+def extra_agents_old(values):
+    """The OLD self-only condition, for the falsifier."""
+    return _extra(values, EXTRA_PROBE_OLD, "extraold")
+
+
+def extra_agents(values):
+    """Return {orchestrator: [extraAgents names]} from the same derivation the chart uses."""
+    return _extra(values, EXTRA_PROBE, "extra")
+
+
 def main() -> int:
     if shutil.which("helm") is None:
         print("check-subagents: SKIPPED (no helm)")
@@ -243,10 +335,55 @@ def main() -> int:
             fails.append("neither-owns")
             print("  FAIL neither-owns expected exactly ['autopilot','agentiko'], got %s" % got)
 
+    # ---- extraAgents: no orchestrator may appear in another orchestrator's fleet -------------
+    ea, err = extra_agents(TWO_ORCH)
+    if ea is None:
+        fails.append("extraAgents two-orchestrator probe")
+        print("  FAIL extraAgents probe failed: %s" % err)
+    else:
+        banned = {"autopilot", "krateo-autopilot", "agentiko"}
+        bad = {k: sorted(set(v) & banned) for k, v in ea.items() if set(v) & banned}
+        if bad:
+            fails.append("extraAgents excludes orchestrators")
+            print("  FAIL %-62s %s" % ("an orchestrator appears in a fleet", bad))
+        else:
+            print("  ok   %-62s %s" % ("TWO orchestrators: neither is in the other's extraAgents",
+                                       {k: len(v) for k, v in ea.items()}))
+        if not ea or any(len(v) == 0 for v in ea.values()):
+            fails.append("extraAgents non-empty control")
+            print("  FAIL CONTROL -- a fleet came back EMPTY, so 'no orchestrator in it' is vacuous")
+
+    eao, err = extra_agents_old(TWO_ORCH)
+    if eao is None:
+        fails.append("extraAgents falsifier probe")
+        print("  FAIL extraAgents falsifier probe failed: %s" % err)
+    else:
+        banned = {"autopilot", "krateo-autopilot", "agentiko"}
+        leaked = {k: sorted(set(v) & banned) for k, v in eao.items() if set(v) & banned}
+        if leaked:
+            print("  ok   %-62s %s" % ("FALSIFIER: the OLD self-only condition DOES leak the other", leaked))
+        else:
+            fails.append("extraAgents falsifier")
+            print("  FAIL FALSIFIER -- the old self-only condition did NOT leak the other "
+                  "orchestrator, so `not $comp.orchestrator` is not what removes it and this "
+                  "assertion cannot fail")
+
+    ea1, err = extra_agents(ONE_ORCH_NO_NAME)
+    if ea1 is None:
+        fails.append("extraAgents single-orchestrator probe")
+        print("  FAIL single-orchestrator extraAgents probe failed: %s" % err)
+    else:
+        want = {"krateo-autopilot": ["incident-agent"]}
+        ok = ea1 == want
+        if not ok:
+            fails.append("extraAgents single orchestrator unchanged")
+        print("  %s %-62s %s" % ("ok  " if ok else "FAIL",
+                                 "ONE orchestrator: its fleet is the non-orchestrator agents", ea1))
+
     if fails:
         print("::error::check-subagents: %d case(s) failed: %s" % (len(fails), fails))
         return 1
-    print("check-subagents: OK — 1 control + %d cases + 1 falsifier + 1 must-never-ship" % len(cases))
+    print("check-subagents: OK — 1 control + %d cases + 1 falsifier + 1 must-never-ship + 2 extraAgents + 1 falsifier" % len(cases))
     return 0
 
 
