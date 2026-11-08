@@ -1,0 +1,42 @@
+name: check-no-silent-downgrade
+# Refuses a PR that LOWERS any pin it does not mention.
+#
+# component-pins.yaml and Chart.yaml are each ONE file listing EVERY pin, so a branch cut before
+# some other pin moves carries the OLD value for it and reverts it on merge. This happened three
+# times in one day (2026-11-08) with all 30 other checks passing: #723 would have downgraded
+# portal, authn and krateo-observability; then, after that was fixed, core-provider 2.13.75->2.13.74;
+# and #727 would have downgraded the three frontend charts.
+#
+# It compares against the MERGE TARGET, not a diff: `git diff origin/main...HEAD` shows only what
+# the branch ADDED since the merge base and says nothing about what the base moved on to.
+#
+# It does not forbid a rollback — only an UNDECLARED one. Name the component in the PR title/body
+# or a commit message and the gate accepts it.
+on:
+  pull_request:
+    paths:
+      - 'chart/files/component-pins.yaml'
+      - 'chart/Chart.yaml'
+      - '.github/scripts/check-no-silent-downgrade.py'
+      - '.github/workflows/check-no-silent-downgrade.yaml'
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Fetch the base branch
+        run: git fetch --no-tags origin "${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+      - name: Refuse undeclared pin downgrades
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python3 .github/scripts/check-no-silent-downgrade.py
