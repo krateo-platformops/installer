@@ -7371,6 +7371,33 @@ components:
   tier: platform
   feature: agentGateway
 - name: agentgateway-policies
+  # 0.2.21 -- OTEL-10's tracing-policy half, ALONE so its owner can read jwt.sub cleanly.
+  # 0.2.18 -> 0.2.21 spans three releases. 0.2.21 IS 0.2.20 plus one bound, verified by pulling
+  # both charts and parsing their values.schema.json rather than reading the release notes:
+  #   0.2.20  schema 143877 bytes  4 `not` keywords  0 of them maxLength-bounded
+  #   0.2.21  schema 144001 bytes  4 `not` keywords  4 of them maxLength: 1024
+  #   the four: tracing.{randomSampling,clientSampling} and tracing.platform.{same two}
+  # WHY THAT BOUND EXISTS, and why it turned out to be belt-and-braces. I refused an unbounded
+  # `not` in my own schema on cel-cost-shape's say-so and suggested the same bound here. Its owner
+  # cut 0.2.21 for it, then core-provider answered from crdgen's emitNot (plumbing v1.32.0, feffae6):
+  # `not` is NEVER compiled to CEL -- {enum}/{const} go native, anything else is DROPPED. So the
+  # cost hazard was imaginary and 0.2.20 was already safe. 0.2.21 ships anyway because it is
+  # strictly narrower, costs nothing, and holds if a future crdgen does compile `not`. See #750,
+  # which rewrote my gate to flag a DROPPED `not` instead of an unbounded one.
+  # EXPECT ON THIS ROLL: this component's CompositionDefinition reporting a SchemaEnforced drop for
+  # those four `not` patterns. That is crdgen behaving as documented, NOT a fault -- the constraint
+  # is still enforced when cdc's helm install validates values, so a bad value fails the RECONCILE
+  # rather than being refused by kubectl.
+  # NO SCHEMA WIDENING NEEDED, checked before writing the pin: my componentValues schema matches
+  # 0.2.21's tracing surface EXACTLY -- 12 keys at the top (attributes backendRef clientSampling
+  # enabled filter includeToolCalls includeUser platform protocol randomSampling removeAttributes
+  # resources) and 5 under .platform, with nothing in the chart I cannot set and nothing in mine
+  # the chart would refuse.
+  # repo is krateo-agentiko, NOT krateo-platformops. Probing the wrong org made EVERY version look
+  # unresolvable -- including 0.2.18, which is live. The live-version control is what caught it.
+  # CONTROLS: 0.2.21, 0.2.20 and 0.2.18 all resolve from krateo-agentiko; 9.9.9 does not.
+  # tracing.platform.filter STAYS as it is: setting it to "" is step 3, which needs its own
+  # 30-minute window and its owner's go. This tag must not touch it.
   kind: AgentgatewayPolicies
   # 0.1.23 added gateway.internalDataPlane (default false, off => byte-identical). 0.1.24 moves it to a
   # TWO-GATEWAY design (#114): when gateway.internalDataPlane is set the chart flips the PRIMARY
@@ -7546,7 +7573,7 @@ components:
   # alert-troubleshooter LLM 403s of 2026-09-29 stop recurring — same guardrail, plausibly same cause.
   # 0.2.17 (#71): drops the connection-string response rule, which rejected any database URL as a
   # live credential and cut off RCAs whose fix sets one (e.g. DATABASE_URL=postgres://...).
-  version: 0.2.18
+  version: 0.2.21
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
