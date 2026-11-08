@@ -97,6 +97,36 @@ CHART_NAME_WINS = {
                     "feature": "coreAgents"}],
 }
 
+def _two_orch(ap_owned, ag_owned):
+    """Two orchestrators, with `owned` set explicitly on each one's k8s and helm sub-agents."""
+    return {
+        "features": {"coreAgents": True},
+        "componentValues": {
+            "krateo-autopilot": {"agents": {"k8s": {"enabled": True, "owned": ap_owned},
+                                            "helm": {"enabled": True, "owned": ap_owned}}},
+            "agentiko": {"agents": {"k8s": {"enabled": True, "owned": ag_owned},
+                                    "helm": {"enabled": True, "owned": ag_owned}}},
+        },
+        "components": [
+            {"name": "krateo-autopilot", "agent": True, "orchestrator": True,
+             "feature": "coreAgents", "agentName": "autopilot"},
+            {"name": "agentiko", "agent": True, "orchestrator": True,
+             "feature": "coreAgents", "agentName": "agentiko"},
+        ],
+    }
+
+
+# THE HANDOVER, which the plan performs as ONE release: autopilot gives the sub-agents up in the
+# same render in which agentiko takes them. Exactly one route each, none missing.
+HANDOVER = _two_orch(False, True)
+
+# ITS MIRROR, THE STATE THAT MUST NEVER SHIP: neither orchestrator owns them, so NO route is
+# emitted for either sub-agent. agentgateway-policies' own values.yaml says a deployed agent with no
+# subAgents entry FAILS HARD — delegation to it dies at the first hop. This is what splitting the
+# handover across two releases would produce for the length of the gap, which is why the two flips
+# are one release.
+NEITHER_OWNS = _two_orch(False, False)
+
 _PROBE_DIR = {"d": None}
 
 
@@ -165,6 +195,8 @@ def main() -> int:
         (FEATURE_OFF, [], "the feature off -> nothing derived"),
         (NON_AGENT_ONLY, [], "a non-agent component contributes nothing"),
         (CHART_NAME_WINS, ["frontend-agent-chart"], "a non-orchestrator agent routes by CHART name"),
+        (HANDOVER, ["autopilot", "agentiko", "k8s-agent", "helm-agent"],
+         "THE HANDOVER in ONE release: autopilot owned:false + agentiko owned:true"),
     ]
     for values, want, label in cases:
         got, err = names(values)
@@ -195,10 +227,26 @@ def main() -> int:
             print("  FAIL FALSIFIER -- two orchestrators both owning produced NO duplicates, so "
                   "the `owned` gate is not what removes them and this suite cannot fail")
 
+    # ---- THE STATE THAT MUST NEVER SHIP: neither orchestrator owns the sub-agents, so NEITHER
+    # ---- emits their routes and delegation to them dies at the first hop. Asserted explicitly so
+    # ---- that the suite DOCUMENTS the outage rather than leaving it to be rediscovered, and so
+    # ---- that splitting the handover across two releases is visibly wrong.
+    got, err = names(NEITHER_OWNS)
+    if got is None:
+        fails.append("the neither-owns probe")
+        print("  FAIL neither-owns render failed: %s" % err)
+    else:
+        missing = [n for n in ("k8s-agent", "helm-agent") if n in got]
+        if got == ["autopilot", "agentiko"] and not missing:
+            print("  ok   %-62s %s" % ("MUST NEVER SHIP: neither owns -> NO k8s/helm route at all", got))
+        else:
+            fails.append("neither-owns")
+            print("  FAIL neither-owns expected exactly ['autopilot','agentiko'], got %s" % got)
+
     if fails:
         print("::error::check-subagents: %d case(s) failed: %s" % (len(fails), fails))
         return 1
-    print("check-subagents: OK — 1 control + %d cases + 1 falsifier" % len(cases))
+    print("check-subagents: OK — 1 control + %d cases + 1 falsifier + 1 must-never-ship" % len(cases))
     return 0
 
 
