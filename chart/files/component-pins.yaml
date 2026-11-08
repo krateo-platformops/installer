@@ -48,7 +48,7 @@ components:
   # 0.33.1 WAS SKIPPED DELIBERATELY. It exists and was approved, but authn recommended going straight
   # to 0.34.0 so both clusters roll once instead of twice, and Diego chose that. 0.33.1 was never
   # pinned or rolled anywhere.
-  version: 0.36.0
+  version: 0.37.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -572,6 +572,37 @@ components:
 # THE READING THE PIN WAITED ON: Diego signed in on portal.krateo.dev with a test User --
 # GET /auth/basic/login returned 200 in 393 ms on 0.35.5. One sample, not a benchmark; run 22
 # remains the source for any curve.
+# authn 0.37.0, 2026-11-08. A SECURITY PIN, ALONE IN ITS OWN TAG (Diego's call), so a rollback of
+# anything else cannot drag the CVE fixes back out.
+#
+# TWO HIGH ADVISORIES in golang.org/x/net: CVE-2026-78661 and CVE-2026-78669, plus five MEDIUM.
+# Moves to Go 1.26 (go1.26.10, x/net v0.62.0, plumbing v1.31.0).
+#
+# ALSO IN IT, and inert: POST /delegate for AUDIT-6 agent delegation. Nothing happens until a
+# ServiceAccount mapping sets spec.delegation.allowed, and nothing on 057 does. Its owner's
+# post-roll check asserts POST /delegate with no credentials answers 401 MissingBearer — present
+# AND closed, which is the right pair to assert for a new endpoint.
+#
+# THE CHART DIFF, VERIFIED AT THE ARTIFACT rather than read from the release notes:
+#   authn chart       only Chart.yaml. Same values, same templates, NO new env keys.
+#   authn-crds chart  only the ServiceAccount CRD, which GAINS optional spec.delegation:
+#     0.36.0 spec props: displayName, groups, serviceAccountRef          -> delegation ABSENT
+#     0.37.0 spec props: delegation, displayName, groups, serviceAccountRef
+#     spec.delegation: {allowed, maxDepth}
+#
+# *** SO authn-crd MOVES WITH authn HERE, and that is a measurement, not a convention. ***
+# In 0.3.536 snowplow-crd deliberately STAYED while snowplow moved, because its CRD was
+# byte-identical (19302 bytes / 329 lines, both versions). The question is always whether the CRD
+# CONTENT changed. Pinning them in lockstep by habit would have been right here and wrong there.
+#
+# DIGESTS its owner published, for the post-roll check:
+#   image ghcr.io/krateo-platformops/authn:0.37.0
+#     sha256:afee025bab96d5542fc65cabf21a894e17ac3a17e34945be0c916eccf61fee07 (amd64+arm64)
+#   chart authn 0.37.0      sha256:3d5ec900d27feb24212ee5ecf1313f30be56a7773347b87856bd4a3b4c6d1c3b
+#   chart authn-crds 0.37.0 sha256:8a401b5322434a1a31b091fcccc53bd4aa570d70e0069bb02c48d1357d822212
+#   source tag cdd14d157287edf8bdca4bcc79e3c412136a9cc3, `checks / test` green
+#
+# CONTROLS: authn and authn-crds 0.37.0 resolve; the outgoing 0.36.0 resolves; authn 9.9.9 does not.
 - name: authn
   # KRATEO-DEMO CONSTRAINT -- DO NOT BUMP TO >= 0.28.0 AS A ROUTINE UPDATE (acmp, 2026-10-29).
   # authn 0.28.0 (authn#42) stamps an `authn.krateo.io/groups` annotation, and AT STARTUP it
@@ -654,7 +685,7 @@ components:
   # REQUIRED-BEFORE child Krateos: Diego decided children move ONCE, to the first installer version
   # that pins authn 0.34.0, rather than stopping at 0.3.498 first. acmp sets that version as the
   # blueprint's childKrateo.installer.version and upgrades acme and globex on his word.
-  version: 0.36.0
+  version: 0.37.0
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
