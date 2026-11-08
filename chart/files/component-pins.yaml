@@ -346,7 +346,7 @@ components:
   # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
   # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
   # holds anyway because none is at the path that matters -- but check the path, not the presence.)
-  version: 1.8.28
+  version: 1.8.32
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1588,6 +1588,29 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+#
+# SWAPPED 1.8.31 -> 1.8.32 at frontend's request, 2026-11-07. 1.8.32 is 1.8.31 plus the
+# Agentiko brand (#636): violet primary, Syne font, black sidebar, the Agentiko mark, and
+# licence gating -- with AGENTIKO_AVAILABLE/AUTOPILOT_AVAILABLE "false" the UI shows a lock
+# and an "Activate licence" link instead of a greyed-out toggle.
+#
+# THE CRDs DO CHANGE THIS TIME, and I verified it rather than taking the claim. diff -rq across
+# frontend-crds 1.8.28 and 1.8.32 touches Chart.yaml and templates/Button.crd.yaml ONLY, and
+# Button's `intent` enum goes:   ['dismiss']  ->  ['dismiss', 'agentiko']
+# A PURE WIDENING: nothing removed, nothing made required, so every stored Button stays valid.
+# Registry controls: all three charts resolve at 1.8.32, the outgoing 1.8.28 resolves, 9.9.9
+# does NOT -- so a not-found would have meant absent rather than unreachable.
+#
+# DIEGO MUST BE AT A BROWSER, and his check now covers TWO things:
+#   1. the widget-history migration, the original reason for 1.8.31;
+#   2. THE LOOK -- the first time the Syne font is rendered ANYWHERE, because the visual tests
+#      use bundled Inter. No automated test has ever seen it.
+#
+# SEQUENCING: rolls AFTER core-provider 2.13.75 (0.3.528). 2.13.75 is the clean leader-election
+# test and needs a window with NO pin movement -- measured on 057 today, each re-rendered
+# definition takes exactly ONE propagation Update and ONE cdc restart, so three pins moving
+# here would add Updates inside core-provider's window and make its "exactly 1 new ReplicaSet
+# per cdc" prediction unreadable. Diego chose this order.
   #
   # 1.8.21 -> 1.8.22 pinned ALONE, for portal#612: `template.id` is now REQUIRED on every
   # resourcesRefsTemplate item. frontend, frontend-crd and builder-gate move together because they
@@ -2536,7 +2559,7 @@ components:
   # GOOD releases. frontend has since corrected that: it also WITHHELD this defect, authored in
   # that same window. Fixing the gate shipped it. A gate failing closed for the wrong reason is
   # indistinguishable from protection while it holds.
-  version: 1.8.28
+  version: 1.8.32
   deps:
   - frontend-crd
   - authn
@@ -5183,6 +5206,35 @@ components:
   # before the agent compiles its tool list (kagent compiles once, no requeue).
   tier: observability
   feature: coreAgents
+# frontend + frontend-crds + builder-gate -> 1.8.31, 2026-11-07. ITS OWN CHANGE, at its owner's
+# request and Diego's: it is the ONLY pin in this repo that needs a HUMAN AT A BROWSER
+# IMMEDIATELY AFTER THE ROLL, because the frontend performs an IRREVERSIBLE localStorage
+# migration on first load. AND IT GOES TO NO OTHER CLUSTER UNTIL DIEGO CONFIRMS -- 057 only.
+# Do not fold it into a pin group; do not roll it when he is not available.
+#
+# IT REPLACES 1.8.29 AND 1.8.30, neither of which was ever pinned. 1.8.31 = 1.8.30 + #635, which
+# makes all 17 config keys readable as AGENTIKO_* with AUTOPILOT_* as a FALLBACK. On its own that
+# changes NOTHING here: a deployment setting only the old names renders identical config. It is
+# the enabling step for moving this installer's values to the new names.
+#
+# builder-gate jumps 1.8.26 -> 1.8.31, FIVE releases, because it was left behind when the rest of
+# the set moved. That gap was flagged earlier today and this closes it; it is not a new risk, it
+# is an old one being paid off.
+#
+# THE FOLLOW-UP IS ONE CHANGE, NOT TWO, and it needs componentValuesUnset to be clean:
+# switching componentValues.frontend.config from AUTOPILOT_* to AGENTIKO_* leaves the OLD keys in
+# the live CR, because componentValues is an RFC-7386 merge patch and an omitted key is PRESERVED.
+# The new name wins when both are set, so the result is correct but the CR carries both sets --
+# which is exactly the stranded-config problem #712 exists to fix. So that change pairs the rename
+# WITH componentValuesUnset on the old names, in one commit.
+#
+# VERIFIED MYSELF, single calls, with controls firing in both directions:
+#   charts frontend / frontend-crds / builder-gate all resolve at 1.8.31; frontend 9.9.9 not found
+#   reachability: frontend 1.8.28 and builder-gate 1.8.26 (the OUTGOING pins) both resolve
+#   image ghcr.io/krateo-platformops/frontend  :1.8.31 HTTP 200 · :1.8.28 HTTP 200 · :9.9.9 HTTP 404
+# Its owner reports release-tag, release-oci and release-notes green at 899961a, frontend-crds
+# 1.8.31 differing from 1.8.28 in Chart.yaml ONLY (so the CRDs are unchanged since my census), and
+# the pulled chart's configmap.yaml emitting the AGENTIKO_* names in 8 places.
 - name: builder-gate
   # THE GATE THAT HAS NEVER RUN. builder-gate exposes ONE MCP tool, `validate_draft`, which an
   # authoring agent is supposed to call before handing a Builder draft back. The chart has been
@@ -5232,7 +5284,7 @@ components:
   # No appVersion in this chart, so pin-ci reports n/a (no image, no component CI to resolve).
   kind: BuilderGate
   chart: builder-gate
-  version: 1.8.26
+  version: 1.8.32
   deps:
     - portal
     - kagent
