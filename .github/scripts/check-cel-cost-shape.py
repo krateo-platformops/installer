@@ -52,12 +52,34 @@ from pathlib import Path
 
 SCHEMA = Path("chart/values.schema.json")
 
-COMPILED_TO_CEL = ("not",)
+# core-provider ANSWERED THIS FROM CODE on 2026-11-08 — plumbing crdgen v1.32.0,
+# transpile_keywords.go emitNot, since feffae6 / plumbing v1.26.1, which core-provider 2.13.76
+# includes. It replaces the premise this gate was built on:
+#
+#   * `not` is NEVER compiled to CEL.
+#   * `not: {enum}` and `not: {const}` are emitted NATIVELY — no CEL, no cost budget. That is why
+#     the live Installer CRD at v0-3-542 carries 2 structural `not` and ZERO CEL rules, which is
+#     what I measured before asking.
+#   * ANY OTHER scalar `not`, `not: {pattern}` included, is DROPPED, with the warning
+#     "not (non-trivial) unsupported -> dropped", and surfaced on the definition's SchemaEnforced
+#     condition.
+#   * The 0.3.508 refusal was the OLD translation of a forbidden-values `not` into
+#     `!(self in [...])` over two unbounded arrays. feffae6 removed that translation.
+#
+# So THIS GATE WAS TESTING FOR A HAZARD THAT NO LONGER EXISTS, and refusing safe changes: it
+# blocked #748's `not: {pattern}` sampling guard for an unbounded cost that crdgen never incurs.
+# The real hazard is the opposite one — a `not` crdgen silently DROPS, so a constraint the author
+# believes they wrote is absent from the CRD and enforced only when helm validates values.
+#
+# NOT AN ERROR, deliberately. A dropped `not` is still enforced where the installer actually
+# validates: `helm template`/`helm install` reads values.schema.json. For the installer that is its
+# own render; for a component it is cdc's helm install, so a bad value fails the RECONCILE instead
+# of being refused by kubectl. Later, but still a refusal. The warning exists so nobody believes a
+# dropped constraint is an admission-time one.
+NOT_EMITTED_NATIVELY = ("enum", "const")
 SAME_SHAPE_UNPROVEN = ("oneOf", "anyOf", "allOf", "dependencies", "dependentSchemas",
                        "dependentRequired", "patternProperties", "propertyNames",
                        "if", "then", "else", "uniqueItems", "multipleOf")
-
-
 def unbounded_ancestors(root, path):
     """Every array without maxItems, or string without maxLength, at or above `path`."""
     node, cur, out = root, [], []
@@ -74,14 +96,16 @@ def unbounded_ancestors(root, path):
 
 
 def scan(root):
-    errors, warnings = [], []
+    errors, warnings, dropped = [], [], []
     def walk(node, path):
         if isinstance(node, dict):
-            for kw in COMPILED_TO_CEL:
-                if kw in node:
-                    ub = unbounded_ancestors(root, path)
-                    if ub:
-                        errors.append((kw, path, ub))
+            # `not` is never compiled to CEL (core-provider, from crdgen's emitNot). What matters
+            # is whether crdgen EMITS it or DROPS it: enum/const go native, everything else is
+            # dropped and the constraint is absent from the CRD.
+            if "not" in node and isinstance(node["not"], dict):
+                body = set(node["not"].keys())
+                if not (body & set(NOT_EMITTED_NATIVELY)):
+                    dropped.append((sorted(body) or ["<empty>"], path))
             for kw in SAME_SHAPE_UNPROVEN:
                 if kw in node:
                     ub = unbounded_ancestors(root, path)
@@ -93,7 +117,7 @@ def scan(root):
             for i, v in enumerate(node):
                 walk(v, path + [str(i)])
     walk(root, [])
-    return errors, warnings
+    return errors, warnings, dropped
 
 
 def pretty(path):
@@ -102,29 +126,34 @@ def pretty(path):
 
 def selftest(root):
     """A gate only ever shown to pass cannot be distinguished from one that cannot fail.
-    Re-introduce the exact 0.3.508 defect and require detection."""
+    BOTH arms, because this rule has two: a droppable `not` must be detected, and a natively
+    emitted one must NOT be."""
     import copy
+
+    # ARM 1 -- a `not: {pattern}` must be reported as DROPPED.
     probe = copy.deepcopy(root)
-    node = probe["properties"]["componentValues"]["properties"].get("identity-lifecycle")
-    if not node:
-        print("::error::self-test needs componentValues.identity-lifecycle")
-        return 1
-    ir = node["properties"]["identityResources"]
-    ir.pop("maxItems", None)
-    ir["items"]["properties"]["resources"].pop("maxItems", None)
-    ir["items"]["properties"]["resources"]["items"].pop("maxLength", None)
-    errs, _ = scan(probe)
-    hit = [e for e in errs if "identityResources" in pretty(e[1])]
-    print("  %s self-test: stripping the 0.3.508 bounds -> %s"
-          % ("ok  " if hit else "FAIL", "detected" if hit else "NOT DETECTED"))
+    probe["properties"]["__selftest"] = {"type": "string", "not": {"pattern": "^x$"}}
+    _, _, dropped = scan(probe)
+    hit = [d for d in dropped if "__selftest" in pretty(d[1])]
+    print("  %s self-test: a `not: {pattern}` -> %s"
+          % ("ok  " if hit else "FAIL", "detected as dropped" if hit else "NOT DETECTED"))
     if not hit:
-        print("::error::self-test: the gate did not detect the exact defect it exists for")
+        print("::error::self-test: the gate did not detect a droppable `not`, so it cannot fail")
         return 1
-    # and the inverse: HEAD itself must be clean, or the self-test above proves nothing
-    errs2, _ = scan(root)
-    print("  %s self-test: HEAD as committed -> %d error(s)"
-          % ("ok  " if not errs2 else "FAIL", len(errs2)))
-    return 0 if not errs2 else 1
+
+    # ARM 2 -- a `not: {enum}` is emitted natively and must NOT be reported.
+    probe2 = copy.deepcopy(root)
+    probe2["properties"]["__selftest2"] = {"type": "string", "not": {"enum": ["*"]}}
+    _, _, dropped2 = scan(probe2)
+    false_pos = [d for d in dropped2 if "__selftest2" in pretty(d[1])]
+    print("  %s self-test: a `not: {enum}` -> %s"
+          % ("ok  " if not false_pos else "FAIL",
+             "correctly NOT reported (crdgen emits it natively)" if not false_pos
+             else "WRONGLY reported"))
+    if false_pos:
+        print("::error::self-test: the gate flagged a natively emitted `not`, so it over-reports")
+        return 1
+    return 0
 
 
 def main() -> int:
@@ -132,36 +161,47 @@ def main() -> int:
         print(f"::error::{SCHEMA} not found -- run from the repo root")
         return 1
     root = json.loads(SCHEMA.read_text())
-    errors, warnings = scan(root)
+    errors, warnings, dropped = scan(root)
+
+    for body, path in dropped:
+        print(f"  DROP  `not: {{{', '.join(body)}}}` at {pretty(path)}")
+    if dropped:
+        print(f"  {len(dropped)} `not` keyword(s) crdgen DROPS. core-provider's crdgen emits only "
+              f"`not: {{enum}}` and `not: {{const}}` natively; anything else is dropped with "
+              f"\"not (non-trivial) unsupported -> dropped\" and surfaced on the definition's "
+              f"SchemaEnforced condition.")
+        print("        NOT A FAULT, but know what it means: the constraint is ABSENT from the "
+              "generated CRD, so kubectl will not refuse a bad value. It is enforced when helm "
+              "validates values.schema.json -- this chart's own render for the installer, and "
+              "cdc's helm install for a component, where a bad value fails the RECONCILE instead. "
+              "Later, but still a refusal. Do not describe it as admission-time validation.")
 
     for kw, path, ub in warnings:
         print(f"  WARN  `{kw}` at {pretty(path)}")
         for p, why in ub[:2]:
             print(f"          unbounded above it: {pretty(p.split('.'))} ({why})")
     if warnings:
-        print(f"  {len(warnings)} warning(s): same shape as the 0.3.508 defect, but NOT proven to "
-              f"compile to a cost-estimated rule -- when 0.3.508 failed the apiserver reported "
-              f"ONE structural error with these also present and unbounded.")
+        print(f"  {len(warnings)} warning(s): these keywords MAY compile to CEL, where the "
+              f"apiserver's cost estimator multiplies by every unbounded collection above the rule. "
+              f"Unlike `not`, nobody has asked core-provider how crdgen treats them -- so this is an "
+              f"open question, not a known defect.")
 
     for kw, path, ub in errors:
         print(f"  FAIL  `{kw}` at {pretty(path)}")
         for p, why in ub:
             print(f"          unbounded above it: {pretty(p.split('.'))} ({why})")
-
     if errors:
-        print("::error::cel-cost-shape: a keyword crdgen compiles into CEL sits under an unbounded "
-              "array or string. The apiserver's cost estimator multiplies by every unbounded "
-              "collection above the rule and refuses the WHOLE generated CRD -- which is why "
-              "0.3.507 and 0.3.508 cannot install on a fresh cluster. Add maxItems/maxLength, or "
-              "remove the keyword. Verify with: kubectl create --dry-run=server -f <generated crd>")
+        print("::error::cel-cost-shape: a keyword proven to compile into CEL sits under an "
+              "unbounded array or string. Add maxItems/maxLength, or remove the keyword.")
         return 1
 
     if selftest(root):
         return 1
-    print(f"\ncel-cost-shape: OK -- 0 error(s), {len(warnings)} warning(s), self-test detected the "
-          f"0.3.508 defect when re-introduced.")
-    print("WHAT THIS DOES NOT COVER: it reads the INPUT schema, not crdgen's output, and cannot "
-          "compute the apiserver's cost estimate -- only a server dry-run of the generated CRD can.")
+    print(f"\ncel-cost-shape: OK -- 0 error(s), {len(dropped)} dropped `not`, "
+          f"{len(warnings)} warning(s); self-test proved BOTH arms.")
+    print("WHAT THIS DOES NOT COVER: it reads the INPUT schema, not crdgen's output. The "
+          "authority on what is emitted is crdgen's emitNot (plumbing v1.32.0); the authority on "
+          "cost is a server-side dry-run of the generated CRD.")
     return 0
 
 
