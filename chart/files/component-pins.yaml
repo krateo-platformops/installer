@@ -346,7 +346,7 @@ components:
   # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
   # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
   # holds anyway because none is at the path that matters -- but check the path, not the presence.)
-  version: 1.8.32
+  version: 1.8.34
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1621,6 +1621,49 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+  # 1.8.34 -- all THREE frontend components move together, as one line, because they share a
+  # version and a release. 1.8.34 is 1.8.33 + F1 (frontend#641, main c5ed7a0), so ONE roll
+  # instead of two; it also unblocks portal#386's tooltip, since the List CRD widening is in both.
+  #
+  # THIS PIN REQUIRED A SCHEMA WIDENING FIRST, and it is the clearest example yet of why.
+  # Published 1.8.34 DEFAULTS agentName to `agentiko` -- confirmed with helm show values on the
+  # published chart, not from the release note. componentValues.frontend was a CLOSED object with
+  # 24 keys and no agentName, and the served Installer CRD leaves additionalProperties unset on
+  # that node, so Kubernetes PRUNES an undeclared key rather than rejecting it. Pinning 1.8.34
+  # without the widening would therefore have moved 057's portal onto agentiko AS A SIDE EFFECT
+  # OF A ROUTINE PIN -- that is Phase D step 15, which Diego has NOT approved; only Phase D's
+  # preparation is. The widening shipped as its own release first (#752), and 057's values now
+  # set componentValues.frontend.agentName: autopilot EXPLICITLY.
+  #
+  # ONE KEY, NOT TWO, and that came out of asking rather than assuming. F1 as first specified put
+  # the gateway-ON path on agentgateway.agentName and the gateway-OFF path on a separate
+  # relative-base default -- so holding one and silently missing the other was possible. I asked
+  # its owner which controlled gateway-off; they found the split was a design flaw and collapsed
+  # F1 onto a single top-level agentName driving both. agentgateway.agentName does not exist in
+  # the released chart, so nothing is widened for it.
+  #
+  # BOUNDS MATCH THE CHART'S OWN SCHEMA EXACTLY (pattern + maxLength 63). I had written 253, the
+  # DNS SUBDOMAIN limit, where the chart uses 63, the DNS LABEL limit. A WIDER bound here is not
+  # the safe direction: a 100-character agentName would have passed the installer schema and then
+  # been refused by the chart during cdc's helm install, surfacing as a composition that stops
+  # reconciling rather than as a values error where the change was made.
+  #
+  # CRDs: frontend-crds 1.8.34 differs from 1.8.33 only in Chart.yaml, so no CRD change since
+  # 1.8.33. Against what 057 runs today (1.8.32) the only CRD change is 1.8.33's widening: Listy
+  # gains the OPTIONAL itemTemplate.bar.tooltip. All three pins move together, so the
+  # app-past-its-crd-pin prune (shipped once as 0.3.495) cannot happen here.
+  #
+  # ALSO IN 1.8.34: #638 (builders' Chart.yaml fields), #639 (an Agentiko thread stays with its
+  # agent), #640 (the List bar tooltip, inert until portal#386), #641 (F1 itself: agentName and an
+  # /agentiko/ location NEXT TO an untouched /autopilot/). With agentName: autopilot nothing
+  # visible changes on 057 -- which is what the proof below has to demonstrate.
+  #
+  # PROOF AFTER THE ROLL, its owner's and mine: the frontend-config-vars ConfigMap's config.json
+  # BYTE-IDENTICAL to before, with
+  #   AGENTIKO_API_BASE_URL=https://portal.krateo.dev/api/a2a/krateo-system/autopilot
+  # A byte-identical config is the only thing that proves the pin did not move the portal; that
+  # agentName merely 'landed' would not.
+  # CONTROLS: all three charts resolve at 1.8.34; frontend resolves at 1.8.32; 9.9.9 does not.
 #
 # SWAPPED 1.8.31 -> 1.8.32 at frontend's request, 2026-11-07. 1.8.32 is 1.8.31 plus the
 # Agentiko brand (#636): violet primary, Syne font, black sidebar, the Agentiko mark, and
@@ -2592,7 +2635,7 @@ components:
   # GOOD releases. frontend has since corrected that: it also WITHHELD this defect, authored in
   # that same window. Fixing the gate shipped it. A gate failing closed for the wrong reason is
   # indistinguishable from protection while it holds.
-  version: 1.8.32
+  version: 1.8.34
   deps:
   - frontend-crd
   - authn
@@ -5516,7 +5559,7 @@ components:
   # No appVersion in this chart, so pin-ci reports n/a (no image, no component CI to resolve).
   kind: BuilderGate
   chart: builder-gate
-  version: 1.8.32
+  version: 1.8.34
   deps:
     - portal
     - kagent
