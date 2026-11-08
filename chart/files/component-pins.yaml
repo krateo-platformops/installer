@@ -5338,6 +5338,45 @@ components:
     - kagent
   tier: observability
   feature: coreAgents
+# krateo-autopilot 0.7.3, 2026-11-08. THREE `keep` ANNOTATIONS, AND NOTHING ELSE.
+#
+# Phase A step 3 of the autopilot->agentiko side-by-side rename (Diego's go). It adds
+# metadata.annotations.helm.sh/resource-policy: keep to Agent/k8s-agent, Agent/helm-agent and
+# RemoteMCPServer/clickhouse-mcp-server. WHY: the later handover to chart `agentiko` must not
+# delete those objects, and helm only spares an object if the LIVE object ALREADY carries `keep`.
+# So this has to roll BEFORE the handover, not with it.
+#
+# VERIFIED by rendering 0.7.2 and 0.7.3 against 057's LIVE values and diffing the object sets:
+#     0.7.2 LIVE   5 objects, 0 keep
+#     0.7.3 LIVE   5 objects, 3 keep
+#     objects added or removed: NONE
+#     objects that GAINED keep: Agent/helm-agent · Agent/k8s-agent
+#                               RemoteMCPServer/clickhouse-mcp-server
+#
+# *** THE TRAP, and its owner warned me before I hit it: ***
+#     0.7.3 DEFAULT values -> 3 objects, 1 keep
+# The chart's defaults do NOT enable the two sub-agents, so a default render shows one keep and
+# looks like a fault. RENDER WITH THE LIVE VALUES (helm get values krateo-autopilot) or the
+# verification is meaningless. On 057 agents.k8s.enabled and agents.helm.enabled are both true.
+#
+# A WIDENING THAT NEEDS NOTHING HERE YET: new chart keys agents.k8s.owned and agents.helm.owned,
+# default true, no schema default. Phase A sets neither. BUT our componentValues schema CANNOT
+# express them -- agents.<x> is closed to {enabled, modelConfig, skillRef} -- so the handover's
+# `owned: false` step needs a 3-line widening FIRST. Raised before Phase B rather than during it.
+#
+# DO NOT CONFLATE THE TWO ADJACENT KEYS:
+#   ours   componentValues.krateo-autopilot.agents.<x>.ENABLED -> gates the subAgents ROUTING
+#          entry in agentgateway-policies
+#   chart  agents.<x>.OWNED -> "This release creates and owns the Agent object. false: the
+#          orchestrator still delegates to an Agent of this name, owned by another release."
+# enabled:false silently stops routing to an Agent that still exists; owned:false hands over an
+# Agent that is still being routed to. Neither failure announces itself.
+#
+# CONTROLS: 0.7.3 resolves; the outgoing 0.7.2 resolves; 9.9.9 does not. Note the repo: this
+# component lives in krateo-agentiko, NOT the default registry.
+#
+# PROOF AFTER THE ROLL: helm list shows krateo-autopilot-0.7.3; the three objects each carry
+# helm.sh/resource-policy=keep; cm/krateo-prompts-eng key SIZES unchanged; Agent autopilot Ready.
 - name: krateo-autopilot
   # 0.7.1 (ANNOTATED tag 57a2c4a -> commit 87ccab1). PROMPT-ONLY (#152). Four installer-agent
   # skills were unreachable — upgrade-preflight, rollback-advisor, migration-assessment,
@@ -5677,7 +5716,7 @@ components:
   #   — so a dry run against the wrong order measures nothing and looks like a prompt failure.
   #   MARKER, grepped from both packaged charts by the author and confirmed here:
   #     'A PAGE IS DONE WHEN ITS PREVIEW SHOWS DATA'   (0.6.7=0, 0.6.8=1)
-  version: 0.7.2
+  version: 0.7.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
