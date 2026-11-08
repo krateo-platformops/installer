@@ -5519,11 +5519,6 @@ components:
   # repo named for the kind, and the retired krateo-oas target is dropped from the prompt. No image
   # or chart-structure change, so nothing to verify beyond the prompt text reaching the Agent CR.
   kind: KrateoAutopilot
-  # agentName — the gateway route name for THIS orchestrator. Stated explicitly rather than left to
-  # the template's `default "autopilot"`, so that during the agentiko rename both orchestrators'
-  # route names are visible side by side in this file. FROZEN at 0.7.3: the agentiko repo publishes
-  # only `agentiko` from 0.8.0 on, so this pin never moves again.
-  agentName: autopilot
   # 0.4.8 adds ONE thing to the chart: generic Kubernetes knowledge (files/knowledge/*.md) appended
   # to the K8S-AGENT's system prompt, gated on knowledge.kubernetes.playbook / .architecture — both
   # defaulted TRUE by the chart, and this chart sets agents.k8s.enabled=true, so an as-is bump would
