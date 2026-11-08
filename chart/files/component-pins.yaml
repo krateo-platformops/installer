@@ -4775,6 +4775,42 @@ components:
 # because kind could not start on their machine.
 # No -crd pin and no componentValues change. The certificate-alert fix is NOT in this chart; it
 # comes with the later krateo-observability chart.
+- name: otel-collector-tailsampling
+  # otel-collector-tailsampling 0.1.1 — step 1 of OTEL-10 (observability#118). SHIPS IDLE.
+  #
+  # A tail-sampling collector tier: one Deployment (otelcol-contrib 0.158.0, the same image as
+  # otel-collector-daemonset), a HEADLESS Service on 4317, a ServiceAccount and a ConfigMap.
+  # Verified by rendering the chart at this release name: 4 objects, 0 CRDs, 0 ClusterRoles,
+  # 0 hostPort, and the Service is otel-collector-tailsampling-opentelemetry-collector with
+  # clusterIP: None and one port otlp/4317 — the name step 2's daemonset will address.
+  #
+  # NOTHING SENDS TO IT UNTIL STEP 2 (otel-collector-daemonset 0.1.20), so on its own this changes
+  # nothing that is stored. That is why it can roll at any time while steps 2 and 3 need a quiet
+  # 30-minute window either side — their before/after compares RATES (otel_traces rows, the
+  # snowplow orphan rate, traces.span.metrics.calls per minute) and a pod restart corrupts a rate.
+  #
+  # 0.1.1 AND NOT 0.1.0: the tier now creates otel_traces itself (create_schema: true, the same
+  # 7-day ttl the daemonset used). The ClickHouse exporter creates a signal's tables only when
+  # that signal's exporter starts, so after step 2 the daemonset no longer creates otel_traces and
+  # a fresh install on 0.1.0 would have left it MISSING. On 057 and demo the table already exists,
+  # so it is an IF NOT EXISTS no-op there — the gap only shows on a fresh cluster.
+  #
+  # feature: portal, DELIBERATELY the same gate as both sibling collectors rather than a new one.
+  # A NEW features.* key would have been silently inert: features lives in the Installer CR and a
+  # values file cannot turn one on, so the component would never have installed. Sharing the
+  # daemonset's gate also means the two can never be installed apart, which is what step 2 needs.
+  #
+  # It reads the existing otel-clickhouse-credentials Secret: keys `username` -> CH_USERNAME and
+  # `password` -> CH_PASSWORD, confirmed against 057's actual Secret, which has exactly those two.
+  # A mismatch there fails at POD START, not at render.
+  #
+  # CONTROLS: 0.1.1 resolves; 0.1.0 resolves; 9.9.9 does not.
+  kind: OtelCollectorTailsampling
+  version: 0.1.1
+  deps:
+    - otel-collector-deployment
+  tier: observability
+  feature: portal
 - name: otel-collector-daemonset
   # 0.1.13 (observability#75, repo tag 3.1.22): PARTITION the OTLP log stream. krateo_audit had
   # acquired a SECOND producer -- the exact condition 0.1.11's own chart comment said to guard
