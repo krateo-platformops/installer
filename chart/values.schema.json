@@ -4986,7 +4986,8 @@
                                           },
                                           "grants": {
                                             "type": "array",
-                                            "description": "Grant statements applied to this user.",
+                                            "maxItems": 1,
+                                            "description": "Grant statements applied to this user. EXACTLY ONE ITEM, and maxItems enforces it: each list item becomes its own <grants> element in ClickHouse's preprocessed users.xml, and CLICKHOUSE READS ONLY THE FIRST, SILENTLY. Measured on krateo-057 at installer 0.3.532 — a chops user declared with 8 separate items received exactly one grant (SELECT ON system.disks) while both the Installer CR and the pod's 99-extra-users-config.yaml held all 8. The user logged in and every other check passed, so nothing failed: it was simply under-privileged, and a refusal for lack of a grant is indistinguishable from a refusal by design. Put every privilege in ONE statement, comma-separated, as the built-in `app` user does: \"GRANT SELECT ON system.disks, SELECT ON system.parts, ALTER DELETE, ALTER MATERIALIZE TTL ON default.otel_logs\". Reported as observability#117.",
                                             "items": {
                                               "type": "object",
                                               "additionalProperties": false,
