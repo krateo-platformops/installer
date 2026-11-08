@@ -4812,6 +4812,25 @@ components:
   tier: observability
   feature: portal
 - name: otel-collector-daemonset
+  # 0.1.20 -- STEP 2 of OTEL-10. THE CUTOVER: traces now go to the tail-sampling tier.
+  # Diffed 0.1.19 vs 0.1.20 by parsing both rendered configs rather than reading the release note.
+  # EXACTLY ONE pipeline changes, and nothing else in the file does:
+  #   traces      exporters: ['clickhouse']  ->  ['loadbalancing']
+  #   logs, logs/audit, logs/gateway, metrics, metrics/slo, traces/slo:  IDENTICAL
+  # loadbalancing resolves to
+  #   otel-collector-tailsampling-opentelemetry-collector.krateo-system.svc.cluster.local
+  # which is the HEADLESS Service step 1 (0.1.1) created -- headless is what lets the
+  # loadbalancing exporter see the individual backends instead of one virtual IP.
+  # WHY create_schema: true STAYING IS CORRECT, and not the contradiction it looks like. The
+  # `clickhouse` exporter keeps create_schema and still serves logs, logs/gateway, metrics and
+  # metrics/slo -- so it still creates otel_logs and the metric tables. What it loses is the TRACES
+  # pipeline, and the ClickHouse exporter creates a signal's tables only when THAT SIGNAL's exporter
+  # starts. So from here the daemonset no longer creates otel_traces, which is precisely why step 1
+  # had to be 0.1.1 (create_schema for traces moved to the tail-sampling tier) and not 0.1.0.
+  # traces/slo still exports to span_metrics, so the SLI call rate is expected UNCHANGED -- an
+  # independent confirmation of the owner's prediction, read off the config rather than assumed.
+  # CONTROLS: 0.1.20 resolves; 0.1.19 resolves; 9.9.9 does not.
+  # 0.1.19 carried NO reference to the tailsampling Service (0 occurrences); 0.1.20 carries 1.
   # 0.1.13 (observability#75, repo tag 3.1.22): PARTITION the OTLP log stream. krateo_audit had
   # acquired a SECOND producer -- the exact condition 0.1.11's own chart comment said to guard
   # against ("If a second ever appears, gate THIS pipeline with a filter on event.name==audit").
@@ -4895,7 +4914,7 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.19
+  version: 0.1.20
   deps:
   - otel-collector-deployment
   tier: observability
