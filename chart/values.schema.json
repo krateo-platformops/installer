@@ -366,7 +366,10 @@
           "apiRef": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["name", "namespace"],
+            "required": [
+              "name",
+              "namespace"
+            ],
             "properties": {
               "name": {
                 "type": "string",
@@ -386,7 +389,10 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["expression", "forPath"],
+              "required": [
+                "expression",
+                "forPath"
+              ],
               "properties": {
                 "expression": {
                   "type": "string",
@@ -400,7 +406,14 @@
                 },
                 "type": {
                   "type": "string",
-                  "enum": ["string", "integer", "number", "boolean", "object", "array"],
+                  "enum": [
+                    "string",
+                    "integer",
+                    "number",
+                    "boolean",
+                    "object",
+                    "array"
+                  ],
                   "description": "Pins the generated status property's scalar JSON-schema type."
                 },
                 "preserveUnknownFields": {
@@ -708,7 +721,9 @@
     },
     "componentValuesUnset": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Dotted paths under componentValues to REMOVE from the live Installer CR, e.g. authn.env.AUTHN_DUMP_ENV. Needed because components-patch.json is applied as an RFC-7386 merge patch: an OMITTED key is PRESERVED — which is what protects operator-set values from a chart upgrade — and only an explicit null deletes. A null cannot be written in the values because the schema types these fields, so without this key a componentValues entry could be set and changed but NEVER removed, and a temporary override became permanent. Measured on krateo-057 2026-11-07: nine components held live componentValues explained by neither the values file nor a schema default. A path whose parent is absent is a no-op, so re-running is safe. NO DEFAULT: a default on any installer schema property propagates into the live CR."
     },
     "componentValues": {
@@ -718,58 +733,58 @@
       "additionalProperties": false,
       "properties": {
         "selfservice-status": {
-        "type": "object",
-        "additionalProperties": false,
-        "description": "selfservice-status: the RESTAction giving a SelfserviceKrateo composition its portal URL, plan and trial deadline. Its chart's own values.schema.json declares exactly one property, `global`, so this override surface is the engine block and nothing else.",
-        "properties": {
-          "global": {
-            "type": "object",
-            "title": "Global values (injected by the Krateo composition engine)",
-            "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
-            "additionalProperties": false,
-            "properties": {
-              "compositionName": {
-                "type": "string"
-              },
-              "compositionNamespace": {
-                "type": "string"
-              },
-              "compositionId": {
-                "type": "string"
-              },
-              "compositionApiVersion": {
-                "type": "string"
-              },
-              "compositionGroup": {
-                "type": "string"
-              },
-              "compositionKind": {
-                "type": "string"
-              },
-              "compositionResource": {
-                "type": "string"
-              },
-              "compositionInstalledVersion": {
-                "type": "string"
-              },
-              "gracefullyPaused": {
-                "type": "string",
-                "enum": [
-                  "true",
-                  "false"
-                ]
-              },
-              "krateoNamespace": {
-                "type": "string"
-              },
-              "imageRegistry": {
-                "type": "string"
+          "type": "object",
+          "additionalProperties": false,
+          "description": "selfservice-status: the RESTAction giving a SelfserviceKrateo composition its portal URL, plan and trial deadline. Its chart's own values.schema.json declares exactly one property, `global`, so this override surface is the engine block and nothing else.",
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
               }
             }
           }
-        }
-      },
-      "service-desk-page": {
+        },
+        "service-desk-page": {
           "type": "object",
           "title": "service-desk-page values",
           "description": "Overrides for the service-desk page (component service-desk-page, gated on features.serviceDesk). NOTHING here carries a `default:`, and that is the point rather than an omission: an installer schema default is copied by crdgen into the composition CRD and then MATERIALIZED by the apiserver into every CR, so it would silently beat a value set through componentValues on the very install that needed to change it. The chart withholds defaults on these keys for that stated reason and keeps them in its values.yaml; this block mirrors the choice, including for namespace and raiseNamespace, so the chart stays the single source of their defaults.",
@@ -3574,10 +3589,22 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "configurationName": { "type": "string", "description": "Name for both Configuration objects. The chart defaults it to github-blueprints-config, which is what krateo-057 runs; NOT defaulted here, because a default on an installer schema property propagates into the live CR." },
-            "resourceGroup": { "type": "string", "description": "API group the Configurations target. Chart default github.krateo.io." },
-            "secretName": { "type": "string", "description": "Secret holding the git credential. Chart default git-provider-credentials." },
-            "secretKey": { "type": "string", "description": "Key within that Secret. Chart default token. NOTE: the portal chart defaults authMethod to basic with usernameRef, so a Secret carrying only token fails builder-publish at render -- that mismatch is the docs:487 fix still owed." }
+            "configurationName": {
+              "type": "string",
+              "description": "Name for both Configuration objects. The chart defaults it to github-blueprints-config, which is what krateo-057 runs; NOT defaulted here, because a default on an installer schema property propagates into the live CR."
+            },
+            "resourceGroup": {
+              "type": "string",
+              "description": "API group the Configurations target. Chart default github.krateo.io."
+            },
+            "secretName": {
+              "type": "string",
+              "description": "Secret holding the git credential. Chart default git-provider-credentials."
+            },
+            "secretKey": {
+              "type": "string",
+              "description": "Key within that Secret. Chart default token. NOTE: the portal chart defaults authMethod to basic with usernameRef, so a Secret carrying only token fails builder-publish at render -- that mismatch is the docs:487 fix still owed."
+            }
           }
         },
         "github-provider-kog": {
@@ -3588,7 +3615,40 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "enum": ["ActionsVariableOrg", "ActionsVariableRepo", "Autolink", "AutomatedSecurityFixes", "BranchProtection", "CodeSecurityConfig", "Collaborator", "CustomProperty", "DeployKey", "DeploymentBranchPolicy", "Environment", "EnvironmentVariable", "GitRef", "Issue", "Label", "Milestone", "OrgMembership", "OrgRuleset", "OrgWebhook", "PullRequest", "Release", "RepoContent", "RepoDeployment", "RepoRuleset", "RepoWebhook", "Repository", "RunnerGroup", "Team", "TeamMembership", "TeamRepo", "UserRepository", "Workflow"]
+                "enum": [
+                  "ActionsVariableOrg",
+                  "ActionsVariableRepo",
+                  "Autolink",
+                  "AutomatedSecurityFixes",
+                  "BranchProtection",
+                  "CodeSecurityConfig",
+                  "Collaborator",
+                  "CustomProperty",
+                  "DeployKey",
+                  "DeploymentBranchPolicy",
+                  "Environment",
+                  "EnvironmentVariable",
+                  "GitRef",
+                  "Issue",
+                  "Label",
+                  "Milestone",
+                  "OrgMembership",
+                  "OrgRuleset",
+                  "OrgWebhook",
+                  "PullRequest",
+                  "Release",
+                  "RepoContent",
+                  "RepoDeployment",
+                  "RepoRuleset",
+                  "RepoWebhook",
+                  "Repository",
+                  "RunnerGroup",
+                  "Team",
+                  "TeamMembership",
+                  "TeamRepo",
+                  "UserRepository",
+                  "Workflow"
+                ]
               },
               "description": "Which of the 32 GitHub RestDefinitions this component renders. EMPTY OR ABSENT RENDERS ALL 32 and is byte-identical to 0.7.3, so this carries NO DEFAULT -- a seeded list would silently narrow every install, and a default on any installer schema property propagates into the live CR. A child sets a subset to avoid roughly 32 rest-dynamic-controller pods against a 100-pod tenant quota. Needs the pin at 0.7.4 or later: the field does not exist in 0.7.3's schema. WARNING: omitting Repository or PullRequest while the github-provider-kog-config component is enabled leaves that chart unrenderable -- `deps` and `requiresApiGroups` both pass, because the component is Ready and the API group exists, so nothing catches it except the render guard in definitions.yaml."
             }
@@ -9680,23 +9740,6 @@
           "description": "Spec for the cert-manager-issuers edge component (feature: ingress), deep-merged into its Composition. Mirrors oci://ghcr.io/krateo-blueprints/charts/cert-manager-issuers (0.4.0: Issuers only, the operator is now the cert-manager component); REQUIRED: internalCA, acme (acme.gatewayRef points the ACME HTTP-01 solver at the Gateway API edge).",
           "additionalProperties": false,
           "properties": {
-            "internalCA": {
-              "type": "object",
-              "additionalProperties": false,
-              "description": "installer#489: declared as an object with NO properties, so the installer could only ever emit `{}` while the CRD requires `enabled` inside it — verified live on a cluster with features.ingress on. The default is on THIS object, not only on its children: structural-schema defaulting fills fields of objects that are PRESENT, so child defaults never apply when the parent is absent and the CR is rejected for the missing required key. Values copied from the chart's own values.yaml — the chart defaulting them does NOT satisfy the generated CRD, because crdgen keeps `required` and the CR's spec is built from componentValues (installer#489).",
-              "default": {
-                "enabled": true,
-                "name": "krateo-selfsigned-ca"
-              },
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "name": {
-                  "type": "string"
-                }
-              }
-            },
             "acme": {
               "type": "object",
               "additionalProperties": false,
@@ -9732,6 +9775,105 @@
                       "type": "string"
                     }
                   }
+                }
+              }
+            },
+            "acmeDns01": {
+              "type": "object",
+              "title": "ACME issuer, DNS-01 (edge / ingress)",
+              "description": "A SECOND ACME ClusterIssuer that solves DNS-01, mirroring blueprint cert-manager-issuers 0.10.0's `acmeDns01`. REQUIRED for wildcard certificates, which HTTP-01 cannot issue, and for any hostname whose A record does not exist yet -- DNS-01 proves control of the zone, not of the endpoint. installer#489 asked for this key: the schema exposed `acme` and `internalCA` but not `acmeDns01`, and with additionalProperties:false the installer could not create `krateo-acme-dns01` AT ALL, while pinning the 0.10.0 chart that offers it. The blueprint's tenant edge references that issuer by name (childKrateo.ingress.clusterIssuer), so the gap made a documented blueprint field unsatisfiable through the installer. Off by default because it needs a DNS provider API token, which is placed out-of-band and is never part of a blueprint or of these values. The default is on THIS object, not only on its children: structural-schema defaulting fills fields of objects that are PRESENT, so child defaults never apply when the parent is absent.",
+              "additionalProperties": false,
+              "default": {
+                "enabled": false,
+                "name": "krateo-acme-dns01",
+                "email": "",
+                "server": "https://acme-v02.api.letsencrypt.org/directory",
+                "cloudflare": {
+                  "apiTokenSecretRef": {
+                    "name": "cloudflare-api-token",
+                    "key": "api-token"
+                  }
+                }
+              },
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enabled",
+                  "default": false,
+                  "description": "Create the DNS-01 ClusterIssuer. `email` must be set when true -- Let's Encrypt rejects a registration without one."
+                },
+                "name": {
+                  "type": "string",
+                  "title": "ClusterIssuer name",
+                  "minLength": 1,
+                  "default": "krateo-acme-dns01",
+                  "description": "The blueprint's childKrateo.ingress.clusterIssuer references this by name. Changing it means every consumer must change too, so the default matches what the blueprints expect."
+                },
+                "email": {
+                  "type": "string",
+                  "title": "ACME account email",
+                  "description": "Required when enabled; Let's Encrypt uses it for expiry warnings."
+                },
+                "server": {
+                  "type": "string",
+                  "title": "ACME server",
+                  "minLength": 1,
+                  "default": "https://acme-v02.api.letsencrypt.org/directory",
+                  "description": "Point at https://acme-staging-v02.api.letsencrypt.org/directory to rehearse a solve without spending production quota: Let's Encrypt allows only 5 duplicate certificates per week per name, so a few failed attempts on production can lock a hostname out for a week."
+                },
+                "cloudflare": {
+                  "type": "object",
+                  "title": "Cloudflare DNS-01 solver",
+                  "additionalProperties": false,
+                  "default": {
+                    "apiTokenSecretRef": {
+                      "name": "cloudflare-api-token",
+                      "key": "api-token"
+                    }
+                  },
+                  "properties": {
+                    "apiTokenSecretRef": {
+                      "type": "object",
+                      "title": "API token reference",
+                      "additionalProperties": false,
+                      "description": "A Secret holding the Cloudflare API token, created out-of-band. cert-manager reads it from the namespace it runs in (its --cluster-resource-namespace, i.e. POD_NAMESPACE), NOT from where the ClusterIssuer is used -- a solver secret in the wrong namespace fails as a stuck Challenge with no error at apply time.",
+                      "default": {
+                        "name": "cloudflare-api-token",
+                        "key": "api-token"
+                      },
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "title": "Secret name",
+                          "minLength": 1,
+                          "default": "cloudflare-api-token"
+                        },
+                        "key": {
+                          "type": "string",
+                          "title": "Secret key",
+                          "minLength": 1,
+                          "default": "api-token"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "internalCA": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "installer#489: declared as an object with NO properties, so the installer could only ever emit `{}` while the CRD requires `enabled` inside it — verified live on a cluster with features.ingress on. The default is on THIS object, not only on its children: structural-schema defaulting fills fields of objects that are PRESENT, so child defaults never apply when the parent is absent and the CR is rejected for the missing required key. Values copied from the chart's own values.yaml — the chart defaulting them does NOT satisfy the generated CRD, because crdgen keeps `required` and the CR's spec is built from componentValues (installer#489).",
+              "default": {
+                "enabled": true,
+                "name": "krateo-selfsigned-ca"
+              },
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
                 }
               }
             }
