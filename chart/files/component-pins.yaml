@@ -2617,7 +2617,7 @@ components:
   # 0.15.0 adds status.templatingErrors to LocalResource+Repo — must move in lockstep with the
   # provider (was skewed 0.14.2 vs provider 0.14.1 for 10 days). 0.15.1 = security-only (no CRD
   # change); kept in lockstep with the provider to preserve the no-skew invariant.
-  version: 0.16.0
+  version: 0.17.0
   tier: platform
   feature: portal
   # 0.15.5 (#27, fixes #26): a Repo whose PUSH LANDED but whose status write afterwards hit a 409 stayed
@@ -2638,6 +2638,36 @@ components:
   # (publish-e2e-bp-0928-source, publish-pod-sizing-v1b-source) and they should converge. The other 18
   # Repos and all 146 marker-carrying LocalResources carry -succeeded too and must NOT move; movement
   # there is a stop signal, not a success.
+# git-provider + git-provider-crd 0.17.0, 2026-11-08. ONE NEW ENV KEY, ON BY DEFAULT.
+#
+# Verified by reading both charts rather than taking the claim:
+#   git-provider-crds 0.16.0 -> 0.17.0  diff -rq touches Chart.yaml ONLY -> NO CRD field changes
+#   git-provider      0.16.0 -> 0.17.0  Chart.yaml + values.yaml + values.schema.json, and the
+#                                       whole diff is one key:
+#       values.yaml:          GIT_PROVIDER_RATE_LIMIT_GOVERNOR: "true"
+#       values.schema.json:   the matching string property
+#   occurrences of that key in 0.16.0: ZERO. So it is genuinely new, not a default change.
+#
+# WHAT IT DOES: provider-runtime v1.11.0 slows down when a git server signals a rate limit,
+# rather than failing. Saturation is not exposed as a metric. git-provider#32.
+#
+# *** IT IS ON BY DEFAULT AND THE INSTALLER CANNOT TURN IT OFF. ***
+# componentValues does NOT declare `git-provider`, so the chart's own default applies and there
+# is no lever here. If the governor ever needs disabling on a cluster, that is a schema addition
+# first (the same gap as #489/#730 for cert-manager-issuers), not a values change. Worth knowing
+# BEFORE it is needed rather than during an incident.
+#
+# WHAT TO WATCH AFTER THE ROLL -- a NEW condition whose handling has only ever been exercised on
+# constructed objects: Synced=False with reason ReconcileDeferred. It appears only if a git
+# server actually rate-limits. Baseline taken 2026-11-08T10:29:18Z while 0.16.0 was live:
+# ZERO such objects on 057 AND on demo, so the first one is genuinely new rather than
+# pre-existing-and-unnoticed.
+#
+# THREE COPIES ON DEMO, ONE ON 057. demo syncs git-provider into both tenants
+# (tenant-acme, tenant-globex), so a change there lands in three places. 057 first for that
+# reason: one copy, no tenants, cheap to see.
+#
+# CONTROLS: both charts resolve at 0.17.0; both resolve at the outgoing 0.16.0; 9.9.9 does not.
 - name: git-provider
   #
   # 0.15.7 -> 0.16.0, pinned ALONE. git-provider and git-provider-crd move together: one version
@@ -2671,7 +2701,7 @@ components:
   # advisories: agent-constraint drop, key-constraint enforcement, VerifiedPublicKeyCallback skew,
   # @revoked auth bypass), go-git 5.19.2, moby/spdystream 0.5.1 (HIGH CRI DoS). git-provider speaks
   # SSH/git to forges so these matter here; 0.15.0 (running on 057) has them unpatched.
-  version: 0.16.0
+  version: 0.17.0
   deps:
   - git-provider-crd
   tier: platform
