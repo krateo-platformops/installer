@@ -6610,6 +6610,22 @@ components:
   tier: observability
   feature: portal
 - name: alert-provider-crd
+  # 0.2.64 -- per-group metric alerts (acmp PR #90, main cfb781f, the only change since 0.2.63).
+  # BOTH alert-provider AND alert-provider-crd move to 0.2.64 TOGETHER, and that pairing IS the point:
+  # the new surface is CRD FIELDS, not values. Rendered and counted rather than assumed --
+  #   alert-provider-crds 0.2.63: 16021 bytes, groupBy 0, consecutiveWindows 0, groupsTruncated 0
+  #   alert-provider-crds 0.2.64: 19952 bytes, groupBy 9, consecutiveWindows 3, groupsTruncated 2
+  # Bumping the app PAST its -crd pin would leave groupBy ABSENT from the served CRD, so the test Alert
+  # acmp intends to apply would have spec.groupBy SILENTLY PRUNED and the feature would read as broken.
+  # All 25 CI checks would still pass -- that exact pairing shipped once as 0.3.495.
+  # All four new fields (spec.groupBy, spec.consecutiveWindows, status.groups, status.groupsTruncated)
+  # are OPTIONAL, so existing Alerts are unchanged. Metric alerts still never open incidents and
+  # config.defaultAlerts stays []. That value is ALREADY expressible --
+  # componentValues.alert-provider.config declares defaultAlerts -- so unlike the frontend's agentName
+  # this pin needs NO schema widening first; checked before writing the pin, not at render.
+  # The shared HyperDX webhook body gains body + eventId, updated IN PLACE by PUT on the same id, so
+  # no Alert is recreated.
+  # CONTROLS: both charts resolve at 0.2.64 and at 0.2.63; neither resolves at 9.9.9.
   kind: AlertProviderCrds
   chart: alert-provider-crds
   # 0.2.42: PURE LOCKSTEP, verified byte-identical to 0.2.41. Note this breaks the recent run of LOAD-BEARING
@@ -6653,7 +6669,7 @@ components:
   # error, no event. A field the CRD DECLARES AS REQUIRED can never be pruned, because pruning only
   # removes fields absent from properties; the real hazard is a field the BACKEND requires that the
   # CRD does not declare.
-  version: 0.2.63
+  version: 0.2.64
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -6691,6 +6707,22 @@ components:
 # A count of 30 immediately after this roll is CORRECT, not a failure -- deleting the seeder's
 # default does not delete what it already seeded.
 - name: alert-provider
+  # 0.2.64 -- per-group metric alerts (acmp PR #90, main cfb781f, the only change since 0.2.63).
+  # BOTH alert-provider AND alert-provider-crd move to 0.2.64 TOGETHER, and that pairing IS the point:
+  # the new surface is CRD FIELDS, not values. Rendered and counted rather than assumed --
+  #   alert-provider-crds 0.2.63: 16021 bytes, groupBy 0, consecutiveWindows 0, groupsTruncated 0
+  #   alert-provider-crds 0.2.64: 19952 bytes, groupBy 9, consecutiveWindows 3, groupsTruncated 2
+  # Bumping the app PAST its -crd pin would leave groupBy ABSENT from the served CRD, so the test Alert
+  # acmp intends to apply would have spec.groupBy SILENTLY PRUNED and the feature would read as broken.
+  # All 25 CI checks would still pass -- that exact pairing shipped once as 0.3.495.
+  # All four new fields (spec.groupBy, spec.consecutiveWindows, status.groups, status.groupsTruncated)
+  # are OPTIONAL, so existing Alerts are unchanged. Metric alerts still never open incidents and
+  # config.defaultAlerts stays []. That value is ALREADY expressible --
+  # componentValues.alert-provider.config declares defaultAlerts -- so unlike the frontend's agentName
+  # this pin needs NO schema widening first; checked before writing the pin, not at render.
+  # The shared HyperDX webhook body gains body + eventId, updated IN PLACE by PUT on the same id, so
+  # no Alert is recreated.
+  # CONTROLS: both charts resolve at 0.2.64 and at 0.2.63; neither resolves at 9.9.9.
   # RE-GATED specialistAgents -> portal, and DEPS TRIMMED of incident-agent + model-configs.
   # Established on alert-provider#65 by its maintainer (EdmondDantes21) and the session working
   # that PR, not inferred here: `incident-agent` serves RCA only, and `model-configs` is reached
@@ -6765,7 +6797,7 @@ components:
   # `unevaluated` in the rollup's precedence. And oasgen 0.52.0 adds six new ways for a
   # RestDefinition child to be legitimately Creating, so mixed parents get MORE likely during
   # exactly the sampling window. Found before the run, not after.
-  version: 0.2.63
+  version: 0.2.64
   # 0.2.57 carries alert-provider#76 (provider-runtime v1.7.2) and #77, which adds 'incident-provider' to
   # DEFAULT_ALERTS_JSON's reconcile-error `NOT IN` list. Measured on the published chart here, not taken
   # from the release notes: rendered at --kube-version 1.33.0, rc=0, 294 -> 331 lines (floor asserted, so
