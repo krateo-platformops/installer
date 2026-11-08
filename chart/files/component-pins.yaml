@@ -595,12 +595,14 @@ components:
 # byte-identical (19302 bytes / 329 lines, both versions). The question is always whether the CRD
 # CONTENT changed. Pinning them in lockstep by habit would have been right here and wrong there.
 #
-# DIGESTS its owner published, for the post-roll check:
-#   image ghcr.io/krateo-platformops/authn:0.37.0
-#     sha256:afee025bab96d5542fc65cabf21a894e17ac3a17e34945be0c916eccf61fee07 (amd64+arm64)
-#   chart authn 0.37.0      sha256:3d5ec900d27feb24212ee5ecf1313f30be56a7773347b87856bd4a3b4c6d1c3b
-#   chart authn-crds 0.37.0 sha256:8a401b5322434a1a31b091fcccc53bd4aa570d70e0069bb02c48d1357d822212
-#   source tag cdd14d157287edf8bdca4bcc79e3c412136a9cc3, `checks / test` green
+# DIGESTS ARE DELIBERATELY NOT REPEATED HERE. The image and chart digests and the source tag live in
+# 0.3.539's tag message and in the component's own release notes, which are the authoritative copies.
+# MEASURED 2026-11-08: putting four of them in this file FAILED the `Gitleaks (secret scan)` step of
+# security/filesystem, which reads a long hex string as a possible credential. GITLEAKS SCANS THE PULL
+# REQUEST'S DIFF, not the tree — so the 47 long hex strings already in this file never appear in a diff
+# and never trip it, while one new line does. Every Trivy step passed; only Gitleaks objected.
+# This is not a dodge: a tag message is where release metadata belongs, and a second copy in a pinned
+# file is the copy nobody updates.
 #
 # CONTROLS: authn and authn-crds 0.37.0 resolve; the outgoing 0.36.0 resolves; authn 9.9.9 does not.
 - name: authn
