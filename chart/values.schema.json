@@ -9790,10 +9790,159 @@
           "description": "Krateo Frontend blueprint — full-coverage schema (chart 1.0.10).",
           "additionalProperties": false,
           "properties": {
-            "replicaCount": {
-              "type": "integer",
-              "title": "Replica count",
-              "default": 1
+            "affinity": {
+              "type": "object",
+              "title": "Affinity",
+              "default": {}
+            },
+            "agentName": {
+              "type": "string",
+              "title": "Agent name",
+              "description": "Which kagent Agent the portal talks to. The frontend chart drives BOTH modes from this one key: with the agentgateway on it appends /api/a2a/<namespace>/<agentName>, and with it off the relative base becomes /<agentName> unless config.AUTOPILOT_API_BASE_URL or config.AGENTIKO_API_BASE_URL is set explicitly, which still wins. LEAVE UNSET to keep the frontend chart's own default. Set it only to HOLD a cluster on a specific agent across a frontend bump whose default differs -- which is why this key exists: without it, pinning a frontend release whose default is `agentiko` would move the portal off `autopilot` as a side effect of a routine pin, performing a migration step nobody approved.",
+              "minLength": 1,
+              "maxLength": 253,
+              "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+            },
+            "agentgateway": {
+              "type": "object",
+              "title": "Agent gateway",
+              "additionalProperties": false,
+              "description": "Route the portal's Autopilot A2A calls through the agentgateway data plane instead of straight to kagent-ui, so the user Bearer they carry is validated and per-user RBAC applies. Injected fill-if-absent from features.agentGateway. NO `default` ON `enabled`, DELIBERATELY — see below.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "MUST NOT CARRY A `default`. compositions.yaml fills this with true via inst.fillPath (fill-if-ABSENT) when features.agentGateway is on, and core-provider applies this schema's defaults into the Installer CR spec — so `default: false` here is not documentation, it is a value that pre-occupies the key and silently blocks that fill. It shipped that way: every install with the gateway on served the bare gateway origin as AUTOPILOT_API_BASE_URL, the frontend chart appends /api/a2a/<ns>/autopilot only when this is true, so the rail POSTed to / and every Autopilot turn failed with 405. check-fill-defaults.py fails CI if a default returns on any fill-if-absent target."
+                }
+              }
+            },
+            "autoscaling": {
+              "type": "object",
+              "title": "Autoscaling",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enable autoscaling",
+                  "default": false
+                },
+                "minReplicas": {
+                  "type": "integer",
+                  "title": "Minimum replicas",
+                  "default": 1
+                },
+                "maxReplicas": {
+                  "type": "integer",
+                  "title": "Maximum replicas",
+                  "default": 100
+                },
+                "targetCPUUtilizationPercentage": {
+                  "type": "integer",
+                  "title": "Target CPU utilization percentage",
+                  "default": 80
+                },
+                "targetMemoryUtilizationPercentage": {
+                  "type": "integer",
+                  "title": "Target memory utilization percentage"
+                }
+              }
+            },
+            "config": {
+              "type": "object",
+              "title": "Frontend runtime config",
+              "description": "Runtime configuration rendered into the frontend ConfigMap (API base URLs and loader routes).",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "properties": {
+                "SNOWPLOW_API_BASE_URL": {
+                  "type": "string",
+                  "title": "Snowplow API base URL",
+                  "default": "http://localhost:8081"
+                },
+                "AUTHN_API_BASE_URL": {
+                  "type": "string",
+                  "title": "Authn API base URL",
+                  "default": "http://localhost:8082"
+                },
+                "EVENTS_PUSH_API_BASE_URL": {
+                  "type": "string",
+                  "title": "Events push API base URL",
+                  "default": "http://localhost:8083"
+                },
+                "EVENTS_API_BASE_URL": {
+                  "type": "string",
+                  "title": "Events API base URL",
+                  "default": "http://localhost:8083"
+                }
+              },
+              "default": {
+                "SNOWPLOW_API_BASE_URL": "http://localhost:8081",
+                "AUTHN_API_BASE_URL": "http://localhost:8082",
+                "EVENTS_PUSH_API_BASE_URL": "http://localhost:8083",
+                "EVENTS_API_BASE_URL": "http://localhost:8083"
+              }
+            },
+            "env": {
+              "type": "object",
+              "title": "Environment variables",
+              "description": "Free-form extra environment variables for the frontend container.",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "default": {}
+            },
+            "fullnameOverride": {
+              "type": "string",
+              "title": "Fullname override",
+              "default": ""
+            },
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
             },
             "image": {
               "type": "object",
@@ -9830,102 +9979,6 @@
                 "type": "object"
               },
               "default": []
-            },
-            "nameOverride": {
-              "type": "string",
-              "title": "Name override",
-              "default": ""
-            },
-            "fullnameOverride": {
-              "type": "string",
-              "title": "Fullname override",
-              "default": ""
-            },
-            "serviceAccount": {
-              "type": "object",
-              "title": "Service account",
-              "additionalProperties": false,
-              "properties": {
-                "create": {
-                  "type": "boolean",
-                  "title": "Create service account",
-                  "default": true
-                },
-                "automount": {
-                  "type": "boolean",
-                  "title": "Automount service account token",
-                  "default": true
-                },
-                "annotations": {
-                  "type": "object",
-                  "title": "Service account annotations",
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "default": {}
-                },
-                "name": {
-                  "type": "string",
-                  "title": "Service account name",
-                  "default": ""
-                }
-              }
-            },
-            "podAnnotations": {
-              "type": "object",
-              "title": "Pod annotations",
-              "additionalProperties": {
-                "type": "string"
-              },
-              "default": {}
-            },
-            "podLabels": {
-              "type": "object",
-              "title": "Pod labels",
-              "additionalProperties": {
-                "type": "string"
-              },
-              "default": {}
-            },
-            "podSecurityContext": {
-              "type": "object",
-              "title": "Pod security context",
-              "default": {}
-            },
-            "securityContext": {
-              "type": "object",
-              "title": "Container security context",
-              "default": {}
-            },
-            "service": {
-              "type": "object",
-              "title": "Service",
-              "additionalProperties": false,
-              "properties": {
-                "annotations": {
-                  "type": "object",
-                  "title": "Service annotations",
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "default": {}
-                },
-                "type": {
-                  "type": "string",
-                  "title": "Service type",
-                  "enum": [
-                    "ClusterIP",
-                    "NodePort",
-                    "LoadBalancer"
-                  ],
-                  "default": "ClusterIP"
-                },
-                "port": {
-                  "type": "integer",
-                  "title": "Service port",
-                  "default": 8080
-                }
-              }
             },
             "ingress": {
               "type": "object",
@@ -10001,6 +10054,95 @@
                 }
               }
             },
+            "livenessProbe": {
+              "type": "object",
+              "title": "Liveness probe",
+              "default": {
+                "httpGet": {
+                  "path": "/",
+                  "port": "http"
+                }
+              }
+            },
+            "nameOverride": {
+              "type": "string",
+              "title": "Name override",
+              "default": ""
+            },
+            "nodeSelector": {
+              "type": "object",
+              "title": "Node selector",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "default": {}
+            },
+            "podAnnotations": {
+              "type": "object",
+              "title": "Pod annotations",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "default": {}
+            },
+            "podLabels": {
+              "type": "object",
+              "title": "Pod labels",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "default": {}
+            },
+            "podSecurityContext": {
+              "type": "object",
+              "title": "Pod security context",
+              "default": {}
+            },
+            "previewSandbox": {
+              "type": "object",
+              "title": "Preview sandbox",
+              "description": "Wave-4 live-preview sandbox provisioning (krateo-preview namespace + author RBAC + ResourceQuota + TTL janitor). Passed through to the frontend chart; PREVIEW_SANDBOX_NAMESPACE is auto-forced from previewSandbox.namespace when enabled. The default {enabled:false} keeps the key in the schema-defaulted componentValues so a live-values override (enabled:true) durably merges through the self-bootstrap patch — matching how the config-object keys propagate. The frontend chart supplies namespace/ttl/quota defaults.",
+              "default": {
+                "enabled": false
+              },
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "namespace": {
+                  "type": "string"
+                },
+                "ttl": {
+                  "type": "string"
+                },
+                "quota": {
+                  "type": "object",
+                  "additionalProperties": false
+                },
+                "widgetPlurals": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "readinessProbe": {
+              "type": "object",
+              "title": "Readiness probe",
+              "default": {
+                "httpGet": {
+                  "path": "/",
+                  "port": "http"
+                }
+              }
+            },
+            "replicaCount": {
+              "type": "integer",
+              "title": "Replica count",
+              "default": 1
+            },
             "resources": {
               "description": "Resources is the resource requirements for the server container.\nApplied as a whole: operator defaults are used only when all resource fields are empty.",
               "properties": {
@@ -10064,64 +10206,70 @@
               },
               "type": "object"
             },
-            "livenessProbe": {
+            "securityContext": {
               "type": "object",
-              "title": "Liveness probe",
-              "default": {
-                "httpGet": {
-                  "path": "/",
-                  "port": "http"
-                }
-              }
+              "title": "Container security context",
+              "default": {}
             },
-            "readinessProbe": {
+            "service": {
               "type": "object",
-              "title": "Readiness probe",
-              "default": {
-                "httpGet": {
-                  "path": "/",
-                  "port": "http"
-                }
-              }
-            },
-            "autoscaling": {
-              "type": "object",
-              "title": "Autoscaling",
+              "title": "Service",
               "additionalProperties": false,
               "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "title": "Enable autoscaling",
-                  "default": false
+                "annotations": {
+                  "type": "object",
+                  "title": "Service annotations",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "default": {}
                 },
-                "minReplicas": {
-                  "type": "integer",
-                  "title": "Minimum replicas",
-                  "default": 1
+                "type": {
+                  "type": "string",
+                  "title": "Service type",
+                  "enum": [
+                    "ClusterIP",
+                    "NodePort",
+                    "LoadBalancer"
+                  ],
+                  "default": "ClusterIP"
                 },
-                "maxReplicas": {
+                "port": {
                   "type": "integer",
-                  "title": "Maximum replicas",
-                  "default": 100
-                },
-                "targetCPUUtilizationPercentage": {
-                  "type": "integer",
-                  "title": "Target CPU utilization percentage",
-                  "default": 80
-                },
-                "targetMemoryUtilizationPercentage": {
-                  "type": "integer",
-                  "title": "Target memory utilization percentage"
+                  "title": "Service port",
+                  "default": 8080
                 }
               }
             },
-            "nodeSelector": {
+            "serviceAccount": {
               "type": "object",
-              "title": "Node selector",
-              "additionalProperties": {
-                "type": "string"
-              },
-              "default": {}
+              "title": "Service account",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean",
+                  "title": "Create service account",
+                  "default": true
+                },
+                "automount": {
+                  "type": "boolean",
+                  "title": "Automount service account token",
+                  "default": true
+                },
+                "annotations": {
+                  "type": "object",
+                  "title": "Service account annotations",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "default": {}
+                },
+                "name": {
+                  "type": "string",
+                  "title": "Service account name",
+                  "default": ""
+                }
+              }
             },
             "tolerations": {
               "type": "array",
@@ -10130,146 +10278,6 @@
                 "type": "object"
               },
               "default": []
-            },
-            "affinity": {
-              "type": "object",
-              "title": "Affinity",
-              "default": {}
-            },
-            "config": {
-              "type": "object",
-              "title": "Frontend runtime config",
-              "description": "Runtime configuration rendered into the frontend ConfigMap (API base URLs and loader routes).",
-              "additionalProperties": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "properties": {
-                "SNOWPLOW_API_BASE_URL": {
-                  "type": "string",
-                  "title": "Snowplow API base URL",
-                  "default": "http://localhost:8081"
-                },
-                "AUTHN_API_BASE_URL": {
-                  "type": "string",
-                  "title": "Authn API base URL",
-                  "default": "http://localhost:8082"
-                },
-                "EVENTS_PUSH_API_BASE_URL": {
-                  "type": "string",
-                  "title": "Events push API base URL",
-                  "default": "http://localhost:8083"
-                },
-                "EVENTS_API_BASE_URL": {
-                  "type": "string",
-                  "title": "Events API base URL",
-                  "default": "http://localhost:8083"
-                }
-              },
-              "default": {
-                "SNOWPLOW_API_BASE_URL": "http://localhost:8081",
-                "AUTHN_API_BASE_URL": "http://localhost:8082",
-                "EVENTS_PUSH_API_BASE_URL": "http://localhost:8083",
-                "EVENTS_API_BASE_URL": "http://localhost:8083"
-              }
-            },
-            "env": {
-              "type": "object",
-              "title": "Environment variables",
-              "description": "Free-form extra environment variables for the frontend container.",
-              "additionalProperties": {
-                "type": "string"
-              },
-              "default": {}
-            },
-            "previewSandbox": {
-              "type": "object",
-              "title": "Preview sandbox",
-              "description": "Wave-4 live-preview sandbox provisioning (krateo-preview namespace + author RBAC + ResourceQuota + TTL janitor). Passed through to the frontend chart; PREVIEW_SANDBOX_NAMESPACE is auto-forced from previewSandbox.namespace when enabled. The default {enabled:false} keeps the key in the schema-defaulted componentValues so a live-values override (enabled:true) durably merges through the self-bootstrap patch — matching how the config-object keys propagate. The frontend chart supplies namespace/ttl/quota defaults.",
-              "default": {
-                "enabled": false
-              },
-              "additionalProperties": false,
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "namespace": {
-                  "type": "string"
-                },
-                "ttl": {
-                  "type": "string"
-                },
-                "quota": {
-                  "type": "object",
-                  "additionalProperties": false
-                },
-                "widgetPlurals": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
-              }
-            },
-            "global": {
-              "type": "object",
-              "title": "Global values (injected by the Krateo composition engine)",
-              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
-              "additionalProperties": false,
-              "properties": {
-                "compositionName": {
-                  "type": "string"
-                },
-                "compositionNamespace": {
-                  "type": "string"
-                },
-                "compositionId": {
-                  "type": "string"
-                },
-                "compositionApiVersion": {
-                  "type": "string"
-                },
-                "compositionGroup": {
-                  "type": "string"
-                },
-                "compositionKind": {
-                  "type": "string"
-                },
-                "compositionResource": {
-                  "type": "string"
-                },
-                "compositionInstalledVersion": {
-                  "type": "string"
-                },
-                "gracefullyPaused": {
-                  "type": "string",
-                  "enum": [
-                    "true",
-                    "false"
-                  ]
-                },
-                "krateoNamespace": {
-                  "type": "string"
-                },
-                "imageRegistry": {
-                  "type": "string"
-                }
-              }
-            },
-            "agentgateway": {
-              "type": "object",
-              "title": "Agent gateway",
-              "additionalProperties": false,
-              "description": "Route the portal's Autopilot A2A calls through the agentgateway data plane instead of straight to kagent-ui, so the user Bearer they carry is validated and per-user RBAC applies. Injected fill-if-absent from features.agentGateway. NO `default` ON `enabled`, DELIBERATELY — see below.",
-              "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "description": "MUST NOT CARRY A `default`. compositions.yaml fills this with true via inst.fillPath (fill-if-ABSENT) when features.agentGateway is on, and core-provider applies this schema's defaults into the Installer CR spec — so `default: false` here is not documentation, it is a value that pre-occupies the key and silently blocks that fill. It shipped that way: every install with the gateway on served the bare gateway origin as AUTOPILOT_API_BASE_URL, the frontend chart appends /api/a2a/<ns>/autopilot only when this is true, so the rail POSTed to / and every Autopilot turn failed with 405. check-fill-defaults.py fails CI if a default returns on any fill-if-absent target."
-                }
-              }
             }
           }
         },
