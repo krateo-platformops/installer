@@ -116,6 +116,48 @@ appVersion: CHART_VERSION
 # pod Ready, CompositionDefinitions Ready=True. Measured by its author across 820 helm operations
 # with 0 "another operation in progress" errors, and the new pod's write last in both windows.
 dependencies:
+# 2.13.76 (2026-11-08). THE FIX FOR THE DOUBLE ROLLOUT, and it rolls ALONE.
+#
+# 2.13.75 + the single commit #392, fixing #391 -- an issue filed from the measurement below and
+# credited to it. Its owner verified all six artifacts pull: core-provider 518c65fc, cdc 9c256885,
+# chart-inspector 6ec60a18. Published 06:51:02Z.
+#
+# WHAT #391 WAS. Deploy did two things to each cdc Deployment on EVERY Update: applied the new pod
+# template, then UNCONDITIONALLY patched kubectl.kubernetes.io/restartedAt -- a second template
+# change. If the deployment controller synced between them you got TWO ReplicaSets; if the patch
+# landed first they coalesced. Measured over all 68 cdcs on 0.3.528:
+#     43 of 68 took TWO · 25 took one · 0 falsifiers
+#     apply and patch are 0-2 s apart; 21 pairs were in the SAME second
+# So 25/43 is a sub-second race, not a pattern: it varies run to run, and the 25 were never "the
+# good case" -- the same bug, folded by Kubernetes.
+#
+# NOT roll-specific: Updates fire on routine propagation, so the double restart was paid far more
+# often than on upgrades (0.3.527's window alone had 20 Updates from one pin moving).
+#
+# *** THIS ROLL CARRIES NOTHING ELSE. *** Extra restarts track PIN MOVEMENT, so any component pin
+# moving in or near the window adds its own Update and makes the number unreadable.
+#
+# THE TEST, as its owner wrote it: exactly 1 new ReplicaSet per cdc in [helm start, +10 min], read
+# ONCE after the window closes, counted by creationTimestamp. Anything later is listed separately
+# with its restartedAt, as its own finding.
+#
+# HOW TO TELL THE OLD BEHAVIOUR FROM A NEW FAULT -- the signature measured on 0.3.528:
+#     old double:  RS-a image NEW + restartedAt ABSENT at replicas 0
+#                  RS-b image NEW + restartedAt NEW    at replicas 1
+#     coalesced:   ONE RS carrying both the new image AND a new restartedAt
+# 43 of 43 matched, zero falsifiers, so a pair whose EARLIER ReplicaSet has no restartedAt is the
+# old path. With the imperative restart gone there should be no such pair at all.
+#
+# RECORD THE PRE-ROLL RETAINED-RS MAXIMUM TOO: on 057 it reads 11, the revisionHistoryLimit
+# CEILING, so a post-roll TOTAL measures the retention cap rather than the burst.
+#
+# ON THE TAG NUMBER: this is 0.3.531, not 0.3.529. Diego chose "2.13.76 next and alone" in another
+# session while 0.3.529 (frontend 1.8.32) and 0.3.530 (observability + clickhouse) had already been
+# cut and published here. Tags are content addresses, not a sequence; only 0.3.528 had rolled, so
+# his ORDERING intent is intact even though the numbers do not ascend.
+#
+# CONTROLS: 2.13.76 and -crds both resolve; the outgoing 2.13.75 resolves; 9.9.9 does not.
+#
 # 2.13.46 IS A FLOOR, not merely the current version. Do not pin below it.
 #
 # PINNED 2.13.51 (2026-11-01), above that floor, for FRESH-INSTALL reasons specifically -- not
@@ -208,11 +250,11 @@ dependencies:
 - condition: bootstrap.coreProvider.enabled
   name: core-provider
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.75
+  version: 2.13.76
 - condition: bootstrap.coreProvider.enabled
   name: core-provider-crds
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.75
+  version: 2.13.76
 description: Umbrella orchestrator blueprint that sequences the per-component Krateo
   PlatformOps blueprints into one ordered, readiness-gated install.
 home: https://krateo.io
