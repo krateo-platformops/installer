@@ -21,7 +21,12 @@ on:
       - '.github/workflows/check-no-silent-downgrade.yaml'
   workflow_dispatch:
 jobs:
-  check:
+  # Named, not `check`. `gh pr checks` lists the JOB name, so a workflow whose job is called
+  # `check` appears in that output as a bare "check" shared with every other workflow that did
+  # the same. Grepping `gh pr checks` for this workflow's name therefore finds NOTHING and reads
+  # as "the gate did not run" — which is exactly the false conclusion its author drew on the
+  # first PR it ran on, minutes after writing it.
+  no-silent-downgrade:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
