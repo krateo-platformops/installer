@@ -612,7 +612,7 @@
 {{- /* Auto-orchestration: the ORCHESTRATOR (autopilot, `orchestrator: true`) attaches EVERY deployed
        agent as an A2A
        sub-agent. When extraAgents is NOT explicitly set, the installer AUTO-DERIVES it from the
-       feature-enabled `agent` components (excluding the orchestrator itself) — so the enterprise
+       feature-enabled `agent` components (excluding EVERY orchestrator, not merely itself) — so the enterprise
        profile wires the whole fleet (installer/authn/snowplow/frontend/clickstack/core-provider
        agents) and agent-only wires the CORE ones — installer-agent, incident-agent and, since
        core-provider-agent was promoted to coreAgents, that too — with no manual list. An explicit
@@ -636,7 +636,15 @@
 {{- end }}
 {{- else }}
 {{- range $comp := $components }}
-{{- if and $comp.agent (ne $comp.name $c.name) (hasKey $enabled $comp.name) }}
+{{- /* EXCLUDE EVERY ORCHESTRATOR, not just this one. `ne $comp.name $c.name` excluded only
+       SELF, which was sufficient while exactly one component carried orchestrator: true. With
+       TWO pinned side by side (the autopilot->agentiko rename) each one listed the OTHER as a
+       sub-agent, and kagent then failed to compile BOTH:
+         autopilot: Agent.kagent.dev "agentiko" not found
+         agentiko:  Agent.kagent.dev "krateo-autopilot" not found
+       Measured live on 057 at 0.3.540. An orchestrator routes the fleet; it is not a member of
+       it. `not $comp.orchestrator` also excludes self, so the old self-check is redundant. */ -}}
+{{- if and $comp.agent (not $comp.orchestrator) (hasKey $enabled $comp.name) }}
 {{- $fleet = append $fleet (dict "name" (default $comp.name $comp.chart)) }}
 {{- end }}
 {{- end }}
