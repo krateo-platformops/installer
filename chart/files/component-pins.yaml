@@ -3781,7 +3781,7 @@ components:
   # the label, the concrete path and krateo.io/nav-link-only (it links and owns nothing). ONLY the
   # exact string "true" enables it, so a half-recognised truthy value fails visibly instead of
   # silently claiming the route back.
-  version: 1.8.95
+  version: 1.8.96
   deps:
   - frontend
   - git-provider
@@ -3890,7 +3890,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.95
+  version: 1.8.96
   deps: ['portal']
   tier: platform
   feature: portal
@@ -3926,7 +3926,7 @@ components:
   # templates/_builder.tpl, inside `{{/* */}}` blocks. 26 files, 124539 -> 124537 bytes; Chart.yaml
   # and that one template differ, and the template's change cannot reach the render.
   kind: MarketplacePage
-  version: 1.8.95
+  version: 1.8.96
   deps:
   - portal
   tier: platform
@@ -3993,21 +3993,50 @@ components:
   feature: selfservice
 - name: service-desk-page
   kind: ServiceDeskPage
-  version: 1.8.95
+  version: 1.8.96
   deps:
   - portal
   tier: platform
   feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.95
+  version: 1.8.96
   deps:
   - portal
   tier: platform
   feature: portal
+# portal line 1.8.96, 2026-11-08. ALL 16 PORTAL COMPONENTS TOGETHER. The behaviour lives in ONE.
+#
+# portal#384, two fixes measured on 057 by the portal owner:
+#   1. the Marketplace Install page header showed the SNAPSHOT version (openstack read "v0.2.0")
+#      while the form pre-filled 0.3.37. RestAction blueprint-install-origin in MARKETPLACE-PAGE
+#      now reads through the live index, as the form already did.
+#   2. withLiveOwned in _catalog.tpl matches the github.com/krateo-blueprints/ prefix
+#      case-insensitively. The helper changes in all 5 copies; only marketplace-page's
+#      RestActions call it today.
+# Side effect: an operator's Install header now shows a version where it was blank.
+# No CRD, no RBAC, no values change.
+#
+# *** WHY ALL 16 AND NOT JUST `portal`: the behaviour change is ONLY in marketplace-page. ***
+# A portal-only bump would carry NONE of it and would look like a no-op regression. The 16 move
+# as one line, and `portal` and `portal-agents` must stay EQUAL (the long-standing invariant).
+#
+# TWO THINGS THE '1.8.x' VERSION STRING HIDES, both checked before writing this:
+#   * `builder-publish` is published at 1.8.96 by the same repo but is NOT a pinned component
+#     here. 17 charts ship; 16 are ours.
+#   * `frontend` 1.8.32, `frontend-crd` 1.8.32 and `builder-gate` 1.8.32 are ALSO '1.8.x' and are
+#     a DIFFERENT release train. They do NOT move with the portal set. Matching a bare '1.8.'
+#     prefix would have dragged all three.
+#
+# CONTROLS: all 17 charts resolve at 1.8.96; the outgoing portal 1.8.95 resolves; portal 9.9.9
+# does not.
+#
+# PROOF AFTER THE ROLL (the owner checks it too): helm list shows marketplace-page-1.8.96; on
+# 057 /marketplace/openstack/install shows "stable · v0.3.37" in the header and the form's
+# chart.version still reads 0.3.37.
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.95
+  version: 1.8.96
   deps:
   - portal
   tier: platform
@@ -4048,7 +4077,7 @@ components:
 - name: dashboard-page
   # Renders into krateo-dashboard, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: DashboardPage
-  version: 1.8.95
+  version: 1.8.96
   deps:
   - portal
   tier: platform
@@ -4087,7 +4116,7 @@ components:
   # original push failure is still UNKNOWN -- it did not recur, which is evidence of a blip and not
   # proof of one. Pinned only after confirming 1.8.89 pulls: version 1.8.89, appVersion 1.8.89.
   kind: CompositionsPage
-  version: 1.8.95
+  version: 1.8.96
   deps:
   - portal
   tier: platform
@@ -4095,7 +4124,7 @@ components:
 - name: blueprints-page
   # Renders into krateo-blueprints, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: BlueprintsPage
-  version: 1.8.95
+  version: 1.8.96
   deps:
   - portal
   tier: platform
@@ -4103,7 +4132,7 @@ components:
 - name: resources-page
   # Renders into krateo-resources, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: ResourcesPage
-  version: 1.8.95
+  version: 1.8.96
   deps:
   - portal
   tier: platform
@@ -4111,7 +4140,7 @@ components:
 - name: search-page
   # Renders into krateo-search, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: SearchPage
-  version: 1.8.95
+  version: 1.8.96
   deps:
   - portal
   tier: platform
@@ -4119,7 +4148,7 @@ components:
 - name: builders-page
   # Renders into krateo-builders, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: BuildersPage
-  version: 1.8.95
+  version: 1.8.96
   deps:
   - portal
   tier: platform
@@ -4127,7 +4156,7 @@ components:
 - name: clusters-page
   # Renders into krateo-clusters, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ClustersPage
-  version: 1.8.95
+  version: 1.8.96
   deps:
   - portal
   tier: platform
@@ -4135,7 +4164,7 @@ components:
 - name: reviews-page
   # Renders into krateo-reviews, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ReviewsPage
-  version: 1.8.95
+  version: 1.8.96
   deps:
   - portal
   tier: platform
@@ -4143,7 +4172,7 @@ components:
 - name: settings-page
   # Renders into krateo-settings, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: SettingsPage
-  version: 1.8.95
+  version: 1.8.96
   deps:
   - portal
   tier: platform
@@ -4151,7 +4180,7 @@ components:
 - name: observability-page
   # Renders into krateo-observability, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ObservabilityPage
-  version: 1.8.95
+  version: 1.8.96
   deps:
   - portal
   tier: platform
