@@ -9798,9 +9798,9 @@
             "agentName": {
               "type": "string",
               "title": "Agent name",
-              "description": "Which kagent Agent the portal talks to. The frontend chart drives BOTH modes from this one key: with the agentgateway on it appends /api/a2a/<namespace>/<agentName>, and with it off the relative base becomes /<agentName> unless config.AUTOPILOT_API_BASE_URL or config.AGENTIKO_API_BASE_URL is set explicitly, which still wins. LEAVE UNSET to keep the frontend chart's own default. Set it only to HOLD a cluster on a specific agent across a frontend bump whose default differs -- which is why this key exists: without it, pinning a frontend release whose default is `agentiko` would move the portal off `autopilot` as a side effect of a routine pin, performing a migration step nobody approved.",
+              "description": "Which kagent Agent the portal talks to. The frontend chart drives BOTH modes from this one key: with the agentgateway on it appends /api/a2a/<namespace>/<agentName>, and with it off the relative base becomes /<agentName> unless config.AUTOPILOT_API_BASE_URL or config.AGENTIKO_API_BASE_URL is set explicitly, which still wins. LEAVE UNSET to keep the frontend chart's own default, which is `agentiko` from 1.8.34. Bounds match the FRONTEND CHART'S OWN schema exactly (pattern + maxLength 63), deliberately: a wider bound here would accept a value the component chart then refuses, moving the error from this schema to a cdc reconcile where it is far harder to read. Set it only to HOLD a cluster on a specific agent across a frontend bump whose default differs -- which is why this key exists: without it, pinning a frontend release whose default is `agentiko` would move the portal off `autopilot` as a side effect of a routine pin, performing a migration step nobody approved.",
               "minLength": 1,
-              "maxLength": 253,
+              "maxLength": 63,
               "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
             },
             "agentgateway": {
