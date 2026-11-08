@@ -5553,10 +5553,11 @@
                 },
                 "clientSampling": {
                   "type": "string",
-                  "description": "Whether to honour a trace decision the CALLER already made. Empty by default: nothing upstream of this gateway propagates a trace context worth honouring, and honouring one would let a caller decide our span volume. A BARE INTEGER OTHER THAN 0 OR 1 IS REFUSED: agentgateway v1.5.0's cel eval_rng clamps an integer to 0..1, so \"5\" and \"100\" both mean ALWAYS, not 5% and not 100%. Someone reducing sampling by writing a percentage would silently maximise it. Accepted: \"0.05\", \"1\", \"0\", \"true\", \"1.0\" and CEL expressions. Mirrors agentgateway-policies 0.2.20's own schema, so the refusal happens here and not only at render.",
+                  "maxLength": 1024,
                   "not": {
                     "pattern": "^\\s*(?:[2-9]|[1-9][0-9]+)\\s*$"
-                  }
+                  },
+                  "description": "Whether to honour a trace decision the CALLER already made. Empty by default: nothing upstream of this gateway propagates a trace context worth honouring, and honouring one would let a caller decide our span volume. A BARE INTEGER OTHER THAN 0 OR 1 IS REFUSED: agentgateway v1.5.0's cel eval_rng clamps an integer to 0..1, so \"5\" and \"100\" both mean ALWAYS, not 5% and not 100%. Someone reducing sampling by writing a percentage would silently maximise it. Accepted: \"0.05\", \"1\", \"0\", \"true\", \"1.0\" and CEL expressions. Mirrors agentgateway-policies 0.2.20's own schema, so the refusal happens here and not only at render. BOUNDED AT 1024 FOR A REASON THE CHART DOES NOT SHARE: the `not` above compiles into a CEL rule in the generated Installer CRD, and the apiserver's cost estimator multiplies a rule's cost by every unbounded collection above it — an unbounded string makes it assume the maximum and REFUSE the CRD (the 0.3.508 defect; see check-cel-cost-shape). agentgateway-policies' own schema has the same `not` with NO maxLength, which is correct there because helm validates values directly and compiles nothing. 1024 is far beyond any realistic sampling expression — the longest its owner cites is 42 characters — so this bound is stricter than the chart's and can only accept what the chart accepts."
                 },
                 "enabled": {
                   "type": "boolean"
@@ -5580,10 +5581,11 @@
                   "properties": {
                     "clientSampling": {
                       "type": "string",
-                      "description": "As tracing.clientSampling, for the platform Gateway. MUST BE SET BEFORE BROWSER TRACING IS TURNED ON (installer#405): agentgateway v1.5.0's log.rs trace_sampled samples a request ALWAYS when this is unset and the request arrives carrying a traceparent — so the first browser to send one would have every request sampled. \"true\" with tail sampling, a float ratio without it. A BARE INTEGER OTHER THAN 0 OR 1 IS REFUSED: agentgateway v1.5.0's cel eval_rng clamps an integer to 0..1, so \"5\" and \"100\" both mean ALWAYS, not 5% and not 100%. Someone reducing sampling by writing a percentage would silently maximise it. Accepted: \"0.05\", \"1\", \"0\", \"true\", \"1.0\" and CEL expressions. Mirrors agentgateway-policies 0.2.20's own schema, so the refusal happens here and not only at render.",
+                      "maxLength": 1024,
                       "not": {
                         "pattern": "^\\s*(?:[2-9]|[1-9][0-9]+)\\s*$"
-                      }
+                      },
+                      "description": "As tracing.clientSampling, for the platform Gateway. MUST BE SET BEFORE BROWSER TRACING IS TURNED ON (installer#405): agentgateway v1.5.0's log.rs trace_sampled samples a request ALWAYS when this is unset and the request arrives carrying a traceparent — so the first browser to send one would have every request sampled. \"true\" with tail sampling, a float ratio without it. A BARE INTEGER OTHER THAN 0 OR 1 IS REFUSED: agentgateway v1.5.0's cel eval_rng clamps an integer to 0..1, so \"5\" and \"100\" both mean ALWAYS, not 5% and not 100%. Someone reducing sampling by writing a percentage would silently maximise it. Accepted: \"0.05\", \"1\", \"0\", \"true\", \"1.0\" and CEL expressions. Mirrors agentgateway-policies 0.2.20's own schema, so the refusal happens here and not only at render. BOUNDED AT 1024 FOR A REASON THE CHART DOES NOT SHARE: the `not` above compiles into a CEL rule in the generated Installer CRD, and the apiserver's cost estimator multiplies a rule's cost by every unbounded collection above it — an unbounded string makes it assume the maximum and REFUSE the CRD (the 0.3.508 defect; see check-cel-cost-shape). agentgateway-policies' own schema has the same `not` with NO maxLength, which is correct there because helm validates values directly and compiles nothing. 1024 is far beyond any realistic sampling expression — the longest its owner cites is 42 characters — so this bound is stricter than the chart's and can only accept what the chart accepts."
                     },
                     "filter": {
                       "type": "string",
@@ -5591,10 +5593,11 @@
                     },
                     "randomSampling": {
                       "type": "string",
-                      "description": "As tracing.randomSampling, for the platform Gateway. READ THE UNITS: agentgateway v1.5.0's cel eval_rng treats a bool as-is, a FLOAT as a probability clamped to 0..1 (\"0.05\" = 5%), and an INTEGER as clamped to 0..1 too — so \"100\" means ALWAYS and \"5\" ALSO means ALWAYS, not 5%. A bare integer meant as a percentage silently maximises sampling. The chart's owner is adding a pattern that rejects bare integers other than 0 and 1; mirror it here when it lands. A BARE INTEGER OTHER THAN 0 OR 1 IS REFUSED: agentgateway v1.5.0's cel eval_rng clamps an integer to 0..1, so \"5\" and \"100\" both mean ALWAYS, not 5% and not 100%. Someone reducing sampling by writing a percentage would silently maximise it. Accepted: \"0.05\", \"1\", \"0\", \"true\", \"1.0\" and CEL expressions. Mirrors agentgateway-policies 0.2.20's own schema, so the refusal happens here and not only at render.",
+                      "maxLength": 1024,
                       "not": {
                         "pattern": "^\\s*(?:[2-9]|[1-9][0-9]+)\\s*$"
-                      }
+                      },
+                      "description": "As tracing.randomSampling, for the platform Gateway. READ THE UNITS: agentgateway v1.5.0's cel eval_rng treats a bool as-is, a FLOAT as a probability clamped to 0..1 (\"0.05\" = 5%), and an INTEGER as clamped to 0..1 too — so \"100\" means ALWAYS and \"5\" ALSO means ALWAYS, not 5%. A bare integer meant as a percentage silently maximises sampling. The chart's owner is adding a pattern that rejects bare integers other than 0 and 1; mirror it here when it lands. A BARE INTEGER OTHER THAN 0 OR 1 IS REFUSED: agentgateway v1.5.0's cel eval_rng clamps an integer to 0..1, so \"5\" and \"100\" both mean ALWAYS, not 5% and not 100%. Someone reducing sampling by writing a percentage would silently maximise it. Accepted: \"0.05\", \"1\", \"0\", \"true\", \"1.0\" and CEL expressions. Mirrors agentgateway-policies 0.2.20's own schema, so the refusal happens here and not only at render. BOUNDED AT 1024 FOR A REASON THE CHART DOES NOT SHARE: the `not` above compiles into a CEL rule in the generated Installer CRD, and the apiserver's cost estimator multiplies a rule's cost by every unbounded collection above it — an unbounded string makes it assume the maximum and REFUSE the CRD (the 0.3.508 defect; see check-cel-cost-shape). agentgateway-policies' own schema has the same `not` with NO maxLength, which is correct there because helm validates values directly and compiles nothing. 1024 is far beyond any realistic sampling expression — the longest its owner cites is 42 characters — so this bound is stricter than the chart's and can only accept what the chart accepts."
                     },
                     "removeAttributes": {
                       "type": "array",
@@ -5621,10 +5624,11 @@
                 },
                 "randomSampling": {
                   "type": "string",
+                  "maxLength": 1024,
                   "not": {
                     "pattern": "^\\s*(?:[2-9]|[1-9][0-9]+)\\s*$"
                   },
-                  "description": " A BARE INTEGER OTHER THAN 0 OR 1 IS REFUSED: agentgateway v1.5.0's cel eval_rng clamps an integer to 0..1, so \"5\" and \"100\" both mean ALWAYS, not 5% and not 100%. Someone reducing sampling by writing a percentage would silently maximise it. Accepted: \"0.05\", \"1\", \"0\", \"true\", \"1.0\" and CEL expressions. Mirrors agentgateway-policies 0.2.20's own schema, so the refusal happens here and not only at render."
+                  "description": " A BARE INTEGER OTHER THAN 0 OR 1 IS REFUSED: agentgateway v1.5.0's cel eval_rng clamps an integer to 0..1, so \"5\" and \"100\" both mean ALWAYS, not 5% and not 100%. Someone reducing sampling by writing a percentage would silently maximise it. Accepted: \"0.05\", \"1\", \"0\", \"true\", \"1.0\" and CEL expressions. Mirrors agentgateway-policies 0.2.20's own schema, so the refusal happens here and not only at render. BOUNDED AT 1024 FOR A REASON THE CHART DOES NOT SHARE: the `not` above compiles into a CEL rule in the generated Installer CRD, and the apiserver's cost estimator multiplies a rule's cost by every unbounded collection above it — an unbounded string makes it assume the maximum and REFUSE the CRD (the 0.3.508 defect; see check-cel-cost-shape). agentgateway-policies' own schema has the same `not` with NO maxLength, which is correct there because helm validates values directly and compiles nothing. 1024 is far beyond any realistic sampling expression — the longest its owner cites is 42 characters — so this bound is stricter than the chart's and can only accept what the chart accepts."
                 },
                 "removeAttributes": {
                   "type": "array",
