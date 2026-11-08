@@ -7446,6 +7446,45 @@ components:
   tier: platform
   feature: agentGateway
 - name: agentgateway-policies
+  # 0.2.22 -- OTEL-10's tracing-policy half. NOT 0.2.21, and the reason is the point of this pin.
+  #
+  # 0.2.21 WAS REFUSED BY check-pin-ci, correctly. At 0.2.21's commit 98cd82c4 all 15 check-runs
+  # passed and NONE of them ran tests -- lint, lint-docs, regex-pii, package-and-push and two
+  # build-and-push jobs -- while the repo carried Go test files under cert-replay-hop/internal/
+  # proxy, cert-replay-hop/internal/userresolve and ui-token-hop/internal/proxy. The gate's own
+  # words: passing would report 'CI was green' for a commit nothing tested.
+  # Its owner confirmed it was NOT a false positive, which it could have been: no test stage in
+  # the Dockerfiles, release-image.yaml only builds and pushes, and the shared security workflow
+  # runs govulncheck and gosec, not go test. Those tests had NEVER run in CI. They also found a
+  # FOURTH test package I had missed, ui-token-hop/internal/tokensource.
+  #
+  # 0.2.22 = 0.2.21 + a go-test.yaml (their PR #76) running go vet and go test -race on both
+  # modules for PRs, main and tags. NOTHING IN THE CHART CHANGES between 0.2.21 and 0.2.22.
+  # VERIFIED AT THE TAGGED COMMIT fe6f2d38, not taken on trust:
+  #   go test (cert-replay-hop)  success   go test (ui-token-hop)  success
+  #   (each twice: once from the push to main, once from the tag push)
+  #   4 check-runs match /test/i, where 0.2.21's commit had 0.
+  #
+  # 0.2.18 -> 0.2.22 spans four releases. The maxLength: 1024 bound on
+  # tracing.{randomSampling,clientSampling} and tracing.platform.{same two} arrived in 0.2.21
+  # because I asked for it on check-cel-cost-shape's say-so -- and core-provider then answered
+  # from crdgen's emitNot (plumbing v1.32.0, feffae6) that `not` is NEVER compiled to CEL, so the
+  # cost hazard was imaginary and 0.2.20 was already safe. The bound ships anyway: strictly
+  # narrower, costs nothing, holds if a future crdgen does compile `not`. See #750.
+  # SO THE RECORD IS: the bound was not needed, and asking for it is what surfaced a test gap that
+  # had been there all along. The pin that was unnecessary found the problem that was real.
+  #
+  # EXPECT ON THIS ROLL: this component's CompositionDefinition reporting a SchemaEnforced drop
+  # for those four `not` patterns -- crdgen behaving as documented, NOT a fault. The constraint is
+  # still enforced when cdc's helm install validates values, so a bad value fails the RECONCILE.
+  #
+  # NO SCHEMA WIDENING NEEDED, checked before writing the pin: my componentValues schema matches
+  # the chart's tracing surface EXACTLY -- 12 keys at the top and 5 under .platform.
+  # repo is krateo-agentiko, NOT krateo-platformops. Probing the wrong org once made EVERY version
+  # look unresolvable, including the LIVE 0.2.18; the live-version control is what caught it.
+  # CONTROLS: 0.2.22, 0.2.21 and 0.2.18 all resolve from krateo-agentiko; 9.9.9 does not.
+  # tracing.platform.filter IS UNTOUCHED -- setting it to "" is step 3, its own window and its
+  # owner's go.
   kind: AgentgatewayPolicies
   # 0.1.23 added gateway.internalDataPlane (default false, off => byte-identical). 0.1.24 moves it to a
   # TWO-GATEWAY design (#114): when gateway.internalDataPlane is set the chart flips the PRIMARY
@@ -7621,7 +7660,7 @@ components:
   # alert-troubleshooter LLM 403s of 2026-09-29 stop recurring — same guardrail, plausibly same cause.
   # 0.2.17 (#71): drops the connection-string response rule, which rejected any database URL as a
   # live credential and cut off RCAs whose fix sets one (e.g. DATABASE_URL=postgres://...).
-  version: 0.2.18
+  version: 0.2.22
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
