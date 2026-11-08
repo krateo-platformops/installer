@@ -4453,6 +4453,32 @@ components:
 #
 # CONTROLS: 0.1.33 resolves; the outgoing 0.1.32 resolves; 9.9.9 does not -- so a not-found would
 # have meant absent rather than an unreachable registry.
+# krateo-observability 0.1.34, 2026-11-08. SIX ALERTS LEARN THE NEW AGENT'S NAME, AHEAD OF IT.
+#
+# Verified by reading both charts rather than taking the request:
+#   diff -rq 0.1.33 vs 0.1.34  ->  Chart.yaml and values.yaml ONLY
+#   'agentiko' occurrences:  0.1.33 = 0  ->  0.1.34 = 6
+#   'autopilot' occurrences: 0.1.33 = 6  ->  0.1.34 = 6   <- UNCHANGED, so it is added BESIDE
+#                                                            the old name, not substituted for it
+#   alerts that gained it: 6   alerts changed for any OTHER reason: NONE
+#     sre-app-out-of-memory · sre-app-panic · sre-certificate-expiry-warning
+#     sre-krateo-composition-reconcile-error      <- the four rendered on 057
+#     sre-rbac-denied-burst · sre-upstream-timeouts  <- extended tier, not rendered here
+#
+# WHY IT GOES IN BEFORE THE AGENT EXISTS. frontend's side-by-side rename (Phase A, Diego's go)
+# brings up an Agent named `agentiko` alongside `autopilot`. These alerts EXCLUDE 'autopilot' by
+# ServiceName; the new agent logs as 'agentiko' and would start matching them. So the exclusion
+# has to know the new name BEFORE the agent first runs, or the rename produces a burst of alerts
+# about an agent that is behaving normally.
+#
+# It is harmless on its own: adding a name to an exclusion list affects nothing until a service
+# logs under that name. There is no Agent, Service or ServiceName `agentiko` anywhere yet --
+# verified on 057.
+#
+# alert-provider reconciles the four live Alerts IN PLACE: no pod restarts.
+# THE CHECK: all four live Alerts contain 'agentiko' in spec, and still contain 'autopilot'.
+#
+# CONTROLS: 0.1.34 resolves; the outgoing 0.1.33 resolves; 9.9.9 does not.
 - name: krateo-observability
   kind: KrateoObservability
   # 0.1.19 (observability#62): the log-scoped default alerts also exclude ServiceName
@@ -4487,7 +4513,7 @@ components:
   # (that repo already has a krateo-observability-0.1.10 tag as precedent), or adopt snowplow's
   # proposal to stamp the source commit SHA onto the chart artifact so pin-ci stops inferring
   # provenance from appVersion at all. Do NOT unblock this by deleting `sources` or the appVersion.
-  version: 0.1.33
+  version: 0.1.34
   deps:
   - clickhouse-operator
   - mongodb-operator
