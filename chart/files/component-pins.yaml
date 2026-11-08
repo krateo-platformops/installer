@@ -5473,6 +5473,53 @@ components:
 #
 # PROOF AFTER THE ROLL: helm list shows krateo-autopilot-0.7.3; the three objects each carry
 # helm.sh/resource-policy=keep; cm/krateo-prompts-eng key SIZES unchanged; Agent autopilot Ready.
+- name: agentiko
+  # agentiko 0.8.0 — the side-by-side successor to krateo-autopilot, Phase B step 5.
+  #
+  # BOTH ORCHESTRATORS ARE PINNED AT ONCE AND THAT IS THE POINT: krateo-autopilot stays FROZEN at
+  # 0.7.3 (the agentiko repo publishes only `agentiko` from 0.8.0 on) while agentiko comes up
+  # beside it. They share NO object name — proven by the chart's owner by rendering both against
+  # 057's live values and intersecting the object sets: EMPTY, with a control showing the same
+  # comparison of live-against-itself gives 5 shared.
+  #
+  # agentName IS LOAD-BEARING HERE, and the pins schema had to declare it first (0.3.537). The
+  # orchestrator's gateway route name used to be the LITERAL "autopilot"; with two orchestrators a
+  # literal emits the same name twice — one duplicate entry and NO route for the second agent.
+  #
+  # agents.k8s/.helm carry `owned: false` in componentValues, which does TWO things:
+  #   1. it stops the reconcile fight over the LIVE k8s-agent/helm-agent, which krateo-autopilot
+  #      still owns (and which carry helm.sh/resource-policy: keep since 0.7.3);
+  #   2. it stops a DUPLICATE ROUTE. A sub-agent's route is contributed only by the orchestrator
+  #      that owns its Agent — found by check-subagents, not predicted. Setting `owned: true` here
+  #      "to be safe" would reintroduce both problems.
+  #
+  # NOT SET, deliberately: no `graphToggle` (mcpServers.repoSearch.graph is unchanged but the
+  # handover does not move it), and no mcpServers.clickhouse — this chart no longer reads it.
+  #
+  # CONTROLS: agentiko 0.8.0 resolves; agentiko 9.9.9 does not; krateo-autopilot 0.8.0 does NOT
+  # exist (the old name is frozen, as intended); krateo-autopilot 0.7.3 still resolves.
+  # The chart REFUSES agents.autopilot — proven against the PUBLISHED artifact: exit 1 with
+  # "agents.autopilot was renamed to agents.agentiko in chart agentiko 0.8.0"; absent, exit 0.
+  kind: Agentiko
+  agentName: agentiko
+  version: 0.8.0
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+    - repo-mcp-server
+    - config-refs-mcp-server
+    - kagent
+    - model-configs
+    - installer-agent
+    - incident-agent
+    - authn-agent
+    - snowplow-agent
+    - frontend-agent
+    - clickstack-agent
+    - core-provider-agent
+  tier: observability
+  feature: coreAgents
+  agent: true
+  orchestrator: true
 - name: krateo-autopilot
   # 0.7.1 (ANNOTATED tag 57a2c4a -> commit 87ccab1). PROMPT-ONLY (#152). Four installer-agent
   # skills were unreachable — upgrade-preflight, rollback-advisor, migration-assessment,
@@ -5519,6 +5566,9 @@ components:
   # repo named for the kind, and the retired krateo-oas target is dropped from the prompt. No image
   # or chart-structure change, so nothing to verify beyond the prompt text reaching the Agent CR.
   kind: KrateoAutopilot
+  # FROZEN at 0.7.3. agentName stated EXPLICITLY, not left to the template's
+  # `default "autopilot"`, so both orchestrators' route names are visible side by side.
+  agentName: autopilot
   # 0.4.8 adds ONE thing to the chart: generic Kubernetes knowledge (files/knowledge/*.md) appended
   # to the K8S-AGENT's system prompt, gated on knowledge.kubernetes.playbook / .architecture — both
   # defaulted TRUE by the chart, and this chart sets agents.k8s.enabled=true, so an as-is bump would
