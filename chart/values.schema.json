@@ -309,59 +309,13 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "name": {
-            "type": "string"
+          "agent": {
+            "type": "boolean",
+            "description": "This component DEPLOYS a kagent Agent. Drives four things at once: the .vertexAI injection (the pod's ADC env / SA-key mount), the HITL approval gate, agentgateway.enabled, and membership of the orchestrator's auto-derived extraAgents fleet. Not set on model-configs, which renders ModelConfigs but no Agent — see modelOwner."
           },
-          "kind": {
-            "type": "string"
-          },
-          "version": {
-            "type": "string"
-          },
-          "deps": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "requiresApiGroups": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "HARD render-time requirements, as API GROUPS this component's chart renders objects of (e.g. kagent.dev). Pass B emits the Composition only once every listed group has a served CRD in the cluster. Unlike `deps` -- an ORDERING constraint that inst.depsReady SKIPS when the dep's own feature is disabled -- a missing group suppresses emission for any reason it is missing. Use it whenever the chart renders a kind it does not itself ship: without that kind chart-inspector cannot render the chart at all and the composition 500s every reconcile forever (installer 0.3.474 did exactly this to krateo-demo via builder-gate -> kagent.dev). The unit is a GROUP, not a component: krateo-demo serves six cert-manager.io CRDs from a hand-install while the installer's cert-manager component is absent, so a component-keyed requirement would wrongly suppress two working compositions. Pass A never renders the chart with values and so cannot fail this way, and is not gated."
-          },
-          "tier": {
+          "agentName": {
             "type": "string",
-            "enum": [
-              "platform",
-              "observability",
-              "catalog"
-            ]
-          },
-          "feature": {
-            "type": "string"
-          },
-          "repo": {
-            "type": "string",
-            "description": "OCI registry base overriding ociRepo for this component's chart URL."
-          },
-          "chart": {
-            "type": "string",
-            "description": "Chart artifact name overriding the component name in the OCI URL (e.g. krateo-snowplow). The component name stays the CompositionDefinition/Composition identity; only the chart path changes."
-          },
-          "chartRepo": {
-            "type": "string",
-            "description": "CompositionDefinition spec.chart.repo — classic helm repo NAME (only for non-OCI helm-repo charts; OCI components don't need it)."
-          },
-          "expose": {
-            "type": "boolean"
-          },
-          "exposePort": {
-            "type": "integer"
-          },
-          "svcMatch": {
-            "type": "string"
+            "description": "The A2A route name this component's agent is reachable as on the agentgateway, when it differs from the component name. Only meaningful with `agent: true`. For an `orchestrator: true` component the template used to emit the LITERAL \"autopilot\"; it now reads this key and falls back to \"autopilot\", so every existing pin renders byte-identically. REQUIRED once two orchestrators are pinned side by side (the autopilot->agentiko rename): without it both emit the same subAgents[].name, producing one duplicate entry and NO route for the second agent. DELIBERATELY HAS NO DEFAULT: a `default:` on any key here is written into every existing deployment's Installer CR on the next roll."
           },
           "apiRef": {
             "type": "object",
@@ -383,6 +337,185 @@
               }
             },
             "description": "Pass-through to the generated CompositionDefinition's spec.apiRef — a RESTAction whose calls are resolved each reconcile, keyed under .api in the projection root. TYPED TO MATCH core.krateo.io/v1alpha1 CompositionDefinition EXACTLY (name+namespace, both required, both minLength 1), read from the live CRD rather than guessed: an open object here would let a typo through the installer and be rejected by the apiserver at apply time. spec.apiRef.extras is deliberately NOT exposed — it is free-form, nobody has asked for it, and adding it would reintroduce an untyped escape. Only meaningful on a registerOnly catalog blueprint, whose CompositionDefinition this chart owns. NO DEFAULT: a default on any installer schema property propagates into the live CR. FLOOR: snowplow >= 1.12.38 — per #504 a CompositionDefinition carrying spec.apiRef cannot reconcile on ANY snowplow 1.12.3x below that, so the field is BROKEN rather than inert and fails in a layer that looks unrelated."
+          },
+          "chart": {
+            "type": "string",
+            "description": "Chart artifact name overriding the component name in the OCI URL (e.g. krateo-snowplow). The component name stays the CompositionDefinition/Composition identity; only the chart path changes."
+          },
+          "chartRepo": {
+            "type": "string",
+            "description": "CompositionDefinition spec.chart.repo — classic helm repo NAME (only for non-OCI helm-repo charts; OCI components don't need it)."
+          },
+          "configKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "consumer": {
+            "type": "boolean"
+          },
+          "deps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expose": {
+            "type": "boolean"
+          },
+          "exposePort": {
+            "type": "integer"
+          },
+          "feature": {
+            "type": "string"
+          },
+          "frontendConfigEnv": {
+            "type": "string",
+            "description": "Opt-in: env var key to inject into this component's spec.env with the frontend config-vars ConfigMap name, COMPUTED from the consumer (frontend) component (see compositions.yaml). Used by snowplow's Phase-1 nav-prewarm walker."
+          },
+          "gatewayAuth": {
+            "type": "string",
+            "description": "exposure.type=Gateway + gatewayMode=path only: the listener-route auth posture in the platformRoutes entry — public (no token required; login and static portal assets) or optional (a token is verified when present but not required; snowplow content + sse-proxy events). Threaded into the platformRoutes entry as auth.mode.",
+            "enum": [
+              "public",
+              "optional"
+            ]
+          },
+          "gatewayListener": {
+            "type": "string",
+            "description": "exposure.type=Gateway + gatewayMode=path only: the agentgateway listener this component's route attaches to. Defaults to the shared platform-http listener; a root-asset app that cannot be path-prefixed (HyperDX) sets its OWN listener (platform-hdx). Threaded into the platformRoutes entry as listener.name."
+          },
+          "gatewayPath": {
+            "type": "string",
+            "description": "exposure.type=Gateway + gatewayMode=path only: the listener path prefix this component is routed at through the agentgateway on the single platform listener (frontend /, authn /auth, snowplow /content, sse-proxy /events). compositions.yaml emits it into agentgateway-policies spec.platformRoutes and, for the consumer's peer config URL, appends it to the gateway origin (http://<gw-ip>:<platformPort><path>). Ignored in host mode and for LoadBalancer/NodePort."
+          },
+          "gatewayPort": {
+            "type": "integer",
+            "description": "exposure.type=Gateway + gatewayMode=path only: the port of this component's gateway listener (and, when the component has no exposePort, its route backend port). Defaults to exposure.platformPort. Threaded into the platformRoutes entry as listener.port. HyperDX uses 3000."
+          },
+          "gatewayRewrite": {
+            "type": "boolean",
+            "description": "exposure.type=Gateway + gatewayMode=path only: whether the agentgateway strips gatewayPath before forwarding to the backend Service (true when the backend serves at / — authn/snowplow/sse-proxy; false for the frontend whose gatewayPath is / already). Threaded into the platformRoutes entry as `rewrite`."
+          },
+          "graphToggle": {
+            "type": "string",
+            "description": "Dotted path in this component's chart values to the boolean that turns on the repo-mcp-server domain-graph/OKF layer for it (server: graph.enabled; consumers: mcpServers.repoSearch.graph.enabled / repoSearch.graph.enabled). features.repoGraph forcePaths `true` here, in lockstep across every component that declares it. Off => never written."
+          },
+          "internalPorts": {
+            "type": "array",
+            "description": "Port-only sibling of internalUrls: an INTEGER port the chart hardcodes at an exposed peer's default — e.g. agentgateway-policies' jwt.jwks.port. Recomputed to exposure.port under the same gate.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Dotted path in the component chart's values to overwrite."
+                }
+              }
+            }
+          },
+          "internalUrls": {
+            "type": "array",
+            "description": "Internal (ClusterIP) URLs this component's chart hardcodes at a peer's per-component default port — e.g. snowplow's env.URL_AUTHN, sse-proxy's auth.urlAuthn. When exposure.port collapses the browser-facing Services onto one shared port those hardcoded ports go dead, so compositions.yaml recomputes each URL on the shared port.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Dotted path in the component chart's values to overwrite."
+                },
+                "peer": {
+                  "type": "string",
+                  "description": "Service name of the peer the URL points at."
+                }
+              }
+            }
+          },
+          "kind": {
+            "type": "string"
+          },
+          "mcpBackend": {
+            "type": "boolean",
+            "description": "#116 roll-guard marker: this component's pod is an MCP backend routed through the agentgateway proxy (kagent for kagent-tools; the repo/config-refs/clickhouse MCP servers; core-provider-agent which bundles the chart-gate MCP). compositions.yaml hashes the <name>:<version> of every mcpBackend component and stamps that hash on BOTH the proxy pod template (agentgateway-policies gateway.mcpBackendHash) and every agent pod (rollGuard env), so a version bump rolls proxy + fleet together and they re-resolve / re-init their pinned MCP sessions."
+          },
+          "modelOwner": {
+            "type": "boolean",
+            "description": "This component OWNS the shared ModelConfigs the rest of the fleet references (model-configs). It is NOT an `agent` (it deploys no Agent), but takes the same .vertexAI injection and agentgateway.enabled, plus the .localModel injection and the agentgateway LLM-route wiring that are its alone. Distinct from `orchestrator` — owning the fleet's models and orchestrating the fleet are different jobs on different components."
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+            "maxLength": 63,
+            "description": "Where this blueprint's CompositionDefinition is placed, instead of namespaces.krateo (convention: krateo-bp-<name>). Applies to the CompositionDefinition's placement ONLY, not to where any Composition is emitted, and only on an APPENDED registerOnly catalog blueprint (registerOnly emits no Composition). The namespace is created if absent and kept on uninstall, because deleting it would take any objects people put there with it; an empty krateo-bp-<name> left after an uninstall is expected. Moving an existing definition here needs core-provider with the one-controller-per-version hand-over (core-provider#203)."
+          },
+          "nodePort": {
+            "type": "integer",
+            "minimum": 30000,
+            "maximum": 32767,
+            "description": "Pinned NodePort for a browser-facing (expose:true) component when exposure.type=NodePort — deterministic + host-mappable. Wired to spec.service.nodePort in composition mode."
+          },
+          "orchestrator": {
+            "type": "boolean",
+            "description": "This agent is the fleet's ORCHESTRATOR (krateo-autopilot): it auto-attaches every deployed, feature-enabled `agent` component as an A2A sub-agent via extraAgents. Split out of modelOwner, which now marks the ModelConfig owner instead."
+          },
+          "readerGroups": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Groups that may see this blueprint on the Blueprints page: a Role reading compositiondefinitions in the blueprint `namespace`, bound to each group (never a ClusterRole). Requires `namespace` set to a blueprint namespace other than namespaces.krateo."
+          },
+          "registerOnly": {
+            "type": "boolean",
+            "description": "Catalog blueprint: Pass A registers this component's CompositionDefinition (making the blueprint available in the portal) but Pass B never emits a Composition for it — the operator/end-user instantiates it on demand. Use for tenant workload blueprints (e.g. openstack) that ship in the catalog rather than being auto-installed. Typically paired with tier: catalog."
+          },
+          "repo": {
+            "type": "string",
+            "description": "OCI registry base overriding ociRepo for this component's chart URL."
+          },
+          "requireApproval": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "GRANULAR kagent HITL override (compositions.yaml): the exact list of this agent's tool names that pause for human approval. When present it is threaded onto the agent's spec verbatim and the coarse global .hitlApproval boolean is NOT applied to this agent. Use [] for an agent whose only mutating-shaped tool is a NON-mutating validator (e.g. frontend-agent's k8s_apply_manifest server dry-run) so its authoring loop is not gated — the real write gate stays downstream (publishPage blast-radius). Omit the key entirely for agents that should inherit the coarse global gate on their own mutating tools."
+          },
+          "requiresApiGroups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "HARD render-time requirements, as API GROUPS this component's chart renders objects of (e.g. kagent.dev). Pass B emits the Composition only once every listed group has a served CRD in the cluster. Unlike `deps` -- an ORDERING constraint that inst.depsReady SKIPS when the dep's own feature is disabled -- a missing group suppresses emission for any reason it is missing. Use it whenever the chart renders a kind it does not itself ship: without that kind chart-inspector cannot render the chart at all and the composition 500s every reconcile forever (installer 0.3.474 did exactly this to krateo-demo via builder-gate -> kagent.dev). The unit is a GROUP, not a component: krateo-demo serves six cert-manager.io CRDs from a hand-install while the installer's cert-manager component is absent, so a component-keyed requirement would wrongly suppress two working compositions. Pass A never renders the chart with values and so cannot fail this way, and is not gated."
+          },
+          "resources": {
+            "type": "object",
+            "description": "Per-Kind CDC controller compute resources (corev1.ResourceRequirements), threaded onto the component CompositionDefinition spec.resources. Absent -> the core-provider chart cdc.resources default applies.",
+            "additionalProperties": false,
+            "properties": {
+              "limits": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "requests": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "serviceValuesPath": {
+            "type": "string",
+            "description": "Dotted path to the component chart's Service values block when it is NOT the chart top-level `service` (e.g. kagent's UI Service lives at `kagentapp.ui.service`). The exposure layer builds this nested path and sets `.type` = .Values.exposure.type, flipping the right Service to LoadBalancer/NodePort while the component chart keeps its default."
           },
           "statusDataTemplate": {
             "type": "array",
@@ -424,148 +557,19 @@
             },
             "description": "Pass-through to the generated CompositionDefinition's spec.statusDataTemplate — extra fields projected onto the composition's status each reconcile. THE FIELD NAMES ARE forPath AND expression, not path/value: typed from the live core.krateo.io/v1alpha1 CRD, where both are required with minLength 1. The CRD's free-form `schema` field is deliberately NOT exposed, for the same reason as apiRef.extras. Same registerOnly scope, no default, and the same snowplow >= 1.12.38 floor as apiRef."
           },
-          "gatewayPath": {
-            "type": "string",
-            "description": "exposure.type=Gateway + gatewayMode=path only: the listener path prefix this component is routed at through the agentgateway on the single platform listener (frontend /, authn /auth, snowplow /content, sse-proxy /events). compositions.yaml emits it into agentgateway-policies spec.platformRoutes and, for the consumer's peer config URL, appends it to the gateway origin (http://<gw-ip>:<platformPort><path>). Ignored in host mode and for LoadBalancer/NodePort."
+          "svcMatch": {
+            "type": "string"
           },
-          "gatewayRewrite": {
-            "type": "boolean",
-            "description": "exposure.type=Gateway + gatewayMode=path only: whether the agentgateway strips gatewayPath before forwarding to the backend Service (true when the backend serves at / — authn/snowplow/sse-proxy; false for the frontend whose gatewayPath is / already). Threaded into the platformRoutes entry as `rewrite`."
-          },
-          "gatewayAuth": {
+          "tier": {
             "type": "string",
-            "description": "exposure.type=Gateway + gatewayMode=path only: the listener-route auth posture in the platformRoutes entry — public (no token required; login and static portal assets) or optional (a token is verified when present but not required; snowplow content + sse-proxy events). Threaded into the platformRoutes entry as auth.mode.",
             "enum": [
-              "public",
-              "optional"
+              "platform",
+              "observability",
+              "catalog"
             ]
           },
-          "gatewayListener": {
-            "type": "string",
-            "description": "exposure.type=Gateway + gatewayMode=path only: the agentgateway listener this component's route attaches to. Defaults to the shared platform-http listener; a root-asset app that cannot be path-prefixed (HyperDX) sets its OWN listener (platform-hdx). Threaded into the platformRoutes entry as listener.name."
-          },
-          "gatewayPort": {
-            "type": "integer",
-            "description": "exposure.type=Gateway + gatewayMode=path only: the port of this component's gateway listener (and, when the component has no exposePort, its route backend port). Defaults to exposure.platformPort. Threaded into the platformRoutes entry as listener.port. HyperDX uses 3000."
-          },
-          "serviceValuesPath": {
-            "type": "string",
-            "description": "Dotted path to the component chart's Service values block when it is NOT the chart top-level `service` (e.g. kagent's UI Service lives at `kagentapp.ui.service`). The exposure layer builds this nested path and sets `.type` = .Values.exposure.type, flipping the right Service to LoadBalancer/NodePort while the component chart keeps its default."
-          },
-          "internalUrls": {
-            "type": "array",
-            "description": "Internal (ClusterIP) URLs this component's chart hardcodes at a peer's per-component default port — e.g. snowplow's env.URL_AUTHN, sse-proxy's auth.urlAuthn. When exposure.port collapses the browser-facing Services onto one shared port those hardcoded ports go dead, so compositions.yaml recomputes each URL on the shared port.",
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "path": {
-                  "type": "string",
-                  "description": "Dotted path in the component chart's values to overwrite."
-                },
-                "peer": {
-                  "type": "string",
-                  "description": "Service name of the peer the URL points at."
-                }
-              }
-            }
-          },
-          "internalPorts": {
-            "type": "array",
-            "description": "Port-only sibling of internalUrls: an INTEGER port the chart hardcodes at an exposed peer's default — e.g. agentgateway-policies' jwt.jwks.port. Recomputed to exposure.port under the same gate.",
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "path": {
-                  "type": "string",
-                  "description": "Dotted path in the component chart's values to overwrite."
-                }
-              }
-            }
-          },
-          "graphToggle": {
-            "type": "string",
-            "description": "Dotted path in this component's chart values to the boolean that turns on the repo-mcp-server domain-graph/OKF layer for it (server: graph.enabled; consumers: mcpServers.repoSearch.graph.enabled / repoSearch.graph.enabled). features.repoGraph forcePaths `true` here, in lockstep across every component that declares it. Off => never written."
-          },
-          "consumer": {
-            "type": "boolean"
-          },
-          "configKeys": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "frontendConfigEnv": {
-            "type": "string",
-            "description": "Opt-in: env var key to inject into this component's spec.env with the frontend config-vars ConfigMap name, COMPUTED from the consumer (frontend) component (see compositions.yaml). Used by snowplow's Phase-1 nav-prewarm walker."
-          },
-          "agent": {
-            "type": "boolean",
-            "description": "This component DEPLOYS a kagent Agent. Drives four things at once: the .vertexAI injection (the pod's ADC env / SA-key mount), the HITL approval gate, agentgateway.enabled, and membership of the orchestrator's auto-derived extraAgents fleet. Not set on model-configs, which renders ModelConfigs but no Agent — see modelOwner."
-          },
-          "mcpBackend": {
-            "type": "boolean",
-            "description": "#116 roll-guard marker: this component's pod is an MCP backend routed through the agentgateway proxy (kagent for kagent-tools; the repo/config-refs/clickhouse MCP servers; core-provider-agent which bundles the chart-gate MCP). compositions.yaml hashes the <name>:<version> of every mcpBackend component and stamps that hash on BOTH the proxy pod template (agentgateway-policies gateway.mcpBackendHash) and every agent pod (rollGuard env), so a version bump rolls proxy + fleet together and they re-resolve / re-init their pinned MCP sessions."
-          },
-          "modelOwner": {
-            "type": "boolean",
-            "description": "This component OWNS the shared ModelConfigs the rest of the fleet references (model-configs). It is NOT an `agent` (it deploys no Agent), but takes the same .vertexAI injection and agentgateway.enabled, plus the .localModel injection and the agentgateway LLM-route wiring that are its alone. Distinct from `orchestrator` — owning the fleet's models and orchestrating the fleet are different jobs on different components."
-          },
-          "requireApproval": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "GRANULAR kagent HITL override (compositions.yaml): the exact list of this agent's tool names that pause for human approval. When present it is threaded onto the agent's spec verbatim and the coarse global .hitlApproval boolean is NOT applied to this agent. Use [] for an agent whose only mutating-shaped tool is a NON-mutating validator (e.g. frontend-agent's k8s_apply_manifest server dry-run) so its authoring loop is not gated — the real write gate stays downstream (publishPage blast-radius). Omit the key entirely for agents that should inherit the coarse global gate on their own mutating tools."
-          },
-          "registerOnly": {
-            "type": "boolean",
-            "description": "Catalog blueprint: Pass A registers this component's CompositionDefinition (making the blueprint available in the portal) but Pass B never emits a Composition for it — the operator/end-user instantiates it on demand. Use for tenant workload blueprints (e.g. openstack) that ship in the catalog rather than being auto-installed. Typically paired with tier: catalog."
-          },
-          "namespace": {
-            "type": "string",
-            "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
-            "maxLength": 63,
-            "description": "Where this blueprint's CompositionDefinition is placed, instead of namespaces.krateo (convention: krateo-bp-<name>). Applies to the CompositionDefinition's placement ONLY, not to where any Composition is emitted, and only on an APPENDED registerOnly catalog blueprint (registerOnly emits no Composition). The namespace is created if absent and kept on uninstall, because deleting it would take any objects people put there with it; an empty krateo-bp-<name> left after an uninstall is expected. Moving an existing definition here needs core-provider with the one-controller-per-version hand-over (core-provider#203)."
-          },
-          "readerGroups": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            },
-            "description": "Groups that may see this blueprint on the Blueprints page: a Role reading compositiondefinitions in the blueprint `namespace`, bound to each group (never a ClusterRole). Requires `namespace` set to a blueprint namespace other than namespaces.krateo."
-          },
-          "nodePort": {
-            "type": "integer",
-            "minimum": 30000,
-            "maximum": 32767,
-            "description": "Pinned NodePort for a browser-facing (expose:true) component when exposure.type=NodePort — deterministic + host-mappable. Wired to spec.service.nodePort in composition mode."
-          },
-          "resources": {
-            "type": "object",
-            "description": "Per-Kind CDC controller compute resources (corev1.ResourceRequirements), threaded onto the component CompositionDefinition spec.resources. Absent -> the core-provider chart cdc.resources default applies.",
-            "additionalProperties": false,
-            "properties": {
-              "limits": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
-              },
-              "requests": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "orchestrator": {
-            "type": "boolean",
-            "description": "This agent is the fleet's ORCHESTRATOR (krateo-autopilot): it auto-attaches every deployed, feature-enabled `agent` component as an A2A sub-agent via extraAgents. Split out of modelOwner, which now marks the ModelConfig owner instead."
+          "version": {
+            "type": "string"
           }
         },
         "required": [
