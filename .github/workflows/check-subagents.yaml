@@ -1,0 +1,27 @@
+name: check-subagents
+on:
+  pull_request:
+    paths:
+      - chart/templates/_helpers.tpl
+      - chart/templates/compositions.yaml
+      - chart/files/component-pins.yaml
+      - .github/scripts/check-subagents.py
+      - .github/workflows/check-subagents.yaml
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  subagents:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up helm
+        uses: azure/setup-helm@v5.0.0
+        with:
+          version: v3.19.0
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Exercise the subAgents derivation
+        run: python3 .github/scripts/check-subagents.py

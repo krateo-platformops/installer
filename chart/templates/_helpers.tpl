@@ -1098,3 +1098,46 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- end -}}
 {{- $cv | toJson -}}
 {{- end -}}
+
+{{/*
+inst.subAgents — DERIVE the agentgateway's A2A delegation-target list from the pinned components.
+
+Args: (list $top $components)
+Returns: a YAML list of {name, port, subjects}, or "" when nothing qualifies.
+
+EXTRACTED FROM compositions.yaml SO IT CAN BE TESTED AT ALL. The derivation needs no `lookup` —
+only $components, $top.Values.componentValues and inst.featureEnabled — but it used to sit inline in
+compositions.yaml, and THAT FILE IS lookup-GATED (line 37 reads the live CRD list). `helm template`
+disables lookup, so the file renders ZERO composition objects and the derivation could not be
+exercised locally in any way. As a named helper it is reachable from a probe chart by plain render.
+
+The orchestrator's own route name comes from the pin's `agentName`, defaulting to "autopilot" so
+every pin that does not set it renders byte-identically. With TWO orchestrators pinned side by side
+(krateo-autopilot frozen at 0.7.3 and agentiko 0.8.0 during the rename) a literal emitted the SAME
+name twice: one duplicate entry and NO route for the second agent.
+
+A non-orchestrator agent is routed by its chart name, falling back to the component name.
+*/}}
+{{- define "inst.subAgents" -}}
+{{- $top := index . 0 -}}
+{{- $components := index . 1 -}}
+{{- $subAgents := list -}}
+{{- range $comp := $components }}
+{{- if and $comp.agent (eq (include "inst.featureEnabled" (list $top $comp.feature)) "true") }}
+{{- if $comp.orchestrator }}
+{{- $ap := dig $comp.name dict (default dict $top.Values.componentValues) }}
+{{- $subAgents = append $subAgents (dict "name" (default "autopilot" $comp.agentName) "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}
+{{- /* A sub-agent's route is contributed ONLY by the orchestrator that OWNS its Agent object.
+       `owned: false` means another release owns it, so contributing the route here would emit the
+       SAME name twice while two orchestrators are pinned side by side — k8s-agent and helm-agent
+       each appearing once per orchestrator. `owned` is absent on every pin today and the charts
+       default it to true, so `(ne ... false)` keeps the single-orchestrator render identical. */ -}}
+{{- if and (dig "agents" "k8s" "enabled" false $ap) (ne (dig "agents" "k8s" "owned" true $ap) false) }}{{- $subAgents = append $subAgents (dict "name" "k8s-agent" "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}{{- end }}
+{{- if and (dig "agents" "helm" "enabled" false $ap) (ne (dig "agents" "helm" "owned" true $ap) false) }}{{- $subAgents = append $subAgents (dict "name" "helm-agent" "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}{{- end }}
+{{- else }}
+{{- $subAgents = append $subAgents (dict "name" (default $comp.name $comp.chart) "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if gt (len $subAgents) 0 }}{{- toYaml $subAgents -}}{{- end }}
+{{- end -}}
