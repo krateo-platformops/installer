@@ -4347,9 +4347,31 @@ components:
 # operators install FIRST (krateo-observability deps them), then the data layer, collectors,
 # and sse-proxy (whose EVENTS_* config the frontend events bell consumes). All public
 # krateo-platformops/charts (no repo override).
+# clickhouse-operator 0.1.2, 2026-11-08. The kernel was OOM-killing it.
+#
+# ONE CHANGE, verified by reading both charts: diff -rq across 0.1.1 and 0.1.2 touches
+# Chart.yaml and values.yaml ONLY. The operator MANAGER gains:
+#     limits   cpu 500m  memory 256Mi      (upstream: 128Mi)
+#     requests cpu  10m  memory 128Mi      (upstream:  64Mi)
+#
+# WHY: its owner measured the kernel OOM-killing the manager FOUR TIMES on krateo-057 in the
+# week to 2026-11-08 -- 11-03 08:21, 11-04 10:11 and 11:09, 11-05 21:45 UTC -- each followed by a
+# restart within ~1.5s. It idles at 73Mi, which is already ABOVE upstream's 64Mi request. A
+# killed operator stops reconciling ClickHouse until it returns.
+#
+# It was found by accident: the owner was auditing all 20 of the observability chart's log alerts
+# for fire-on-deploy behaviour and the OOM kills turned up in the data. Nothing was alerting on
+# them -- a ~1.5s restart loop every day or two is invisible to a restart-count check.
+#
+# EXPECT AFTER THE ROLL: the operator Deployment restarts ONCE with the new resources.
+# ClickHouse and Keeper themselves do NOT restart -- only the operator's own pod template
+# changes. Same operator 0.0.7, same CRDs, no -crd pin to move.
+# THE CHECK: no further OOMKilling of a `manager` process followed by an operator restart.
+#
+# CONTROLS: 0.1.2 resolves; the outgoing 0.1.1 resolves; 9.9.9 does not.
 - name: clickhouse-operator
   kind: ClickhouseOperator
-  version: 0.1.1
+  version: 0.1.2
   # requiresApiGroups — HARD render-time requirements, found by hack/hard-dep-requires-gate.py.
   # This chart renders objects of the groups below but does not ship them, so without their CRDs
   # chart-inspector cannot render it AT ALL and the composition 500s every reconcile, forever.
