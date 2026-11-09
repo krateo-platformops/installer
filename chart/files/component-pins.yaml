@@ -6579,8 +6579,28 @@ components:
   agent: true
   requireApproval: []
 - name: clickstack-agent
+  # 3.1.8, NOT 3.1.7. pin-ci REFUSED 3.1.7 and the refusal was correct: the chart's `sources`
+  # named the repos the agent is ABOUT (krateo-platformops/clickstack, otel-collector) rather
+  # than the repo that BUILDS it, so appVersion 3.1.7 matched no tag and the gate reported
+  # UNRESOLVED -- 'an unresolvable pin is where an untested commit hides'.
+  # 3.1.8's sources[0] is https://github.com/krateo-agentiko/clickstack-agent/tree/3.1.8.
+  # NOTE THE LIVE 3.1.6 CARRIES THE SAME DEFECT, so no clickstack-agent pin before this one
+  # was ever traceable by this gate. It surfaced only because pin-ci is newer than that pin:
+  # a gate added after a pin does not retroactively vouch for it.
+  # CONTENT, rendered rather than read from the release note (3.1.6 -> 3.1.8):
+  #   toolNames lose run_select_query  -> [list_databases, run_query]
+  #   the PROMPT's tool line changes too -- a behaviour change its owner's first message
+  #   did not mention, and the agent is no longer told a fallback tool might exist
+  #   the prompt now also says list_tables is not available TO THE AGENT (it is served, but
+  #   deliberately unbound: mcp-clickhouse 0.5.0's list_tables declares page_size with
+  #   exclusiveMinimum, which Vertex's Schema proto rejects, and tool declarations go out on
+  #   EVERY request -- so binding it made every turn 400)
+  # I had reported that 'no list_tables' line as STALE. It is deliberate. An Agent's bound
+  # toolNames and its server's discoveredTools are DIFFERENT populations.
+  # One pod roll, no window.
+  # CONTROLS: 3.1.8 and 3.1.7 and 3.1.6 resolve; 3.1.9 does not. Chart in krateo-agentiko.
   kind: ClickstackAgent
-  version: 3.1.6
+  version: 3.1.8
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
