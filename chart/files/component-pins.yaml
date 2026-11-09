@@ -5130,6 +5130,31 @@ components:
   tier: observability
   feature: portal
 - name: otel-collector-daemonset
+  # 0.1.24 is the PREVENTION half of Diego's S1 decision; krateo-observability 0.1.38's
+  # sre-credential-header-in-traces, already live, is the DETECTION half.
+  # WHAT S1 IS: upstream kagent tools copy the raw Authorization header into span attributes
+  # when tracing is on (internal/telemetry/middleware.go:39-53, :94-98, snowplow's read). On 057
+  # tools tracing is OFF -- 0 mcp.tool.* spans and 0 http.header.* keys in 7 days -- so it is
+  # latent, and it is exactly what the held kagent-tracing roll would turn on.
+  # THE REDACTION THAT EXISTED WAS NARROWER THAN ITS NAME SUGGESTED, which is the real finding:
+  #   0.1.23  deletes ONE EXACT KEY: delete_key(attributes, "http.header.Authorization")
+  #           cookie occurrences in the whole render: 0
+  #   0.1.24  adds delete_matching_keys(attributes, ...) -- BY PATTERN
+  #           cookie occurrences: 3   authorization: 4 -> 7
+  # So before this pin, cookies had NO protection at all, and neither did the CURRENT semconv
+  # names (http.request.header.*) -- only the one legacy spelling was removed. A redaction rule
+  # that matches one exact key reads, in a config review, exactly like one that matches a class.
+  # COVERAGE, read from service.pipelines rather than from the processors block:
+  #   traces · traces/slo · logs · logs/audit · logs/gateway   all carry a transform
+  #   metrics pipelines do not, which is correct -- no headers there
+  # Its owner's Docker test in the collector image: all credential keys dropped, other keys
+  # kept, and the CONTROL without the rules leaks 4 of 5. Their 7-day count on 057 is 0 matching
+  # spans, so the new alert should not fire on existing data.
+  # WHAT THIS CHANGES FOR THE HELD DECISION: kagent tracing goes from 'latent and undetected'
+  # to 'latent, redacted and detected'. It does not FIX the upstream leak -- never patch
+  # upstream -- it stops the leaked value reaching storage and raises an alert if one does.
+  # Rolls the 4 node agents. No window.
+  # CONTROLS: 0.1.24 and 0.1.23 resolve; 0.1.25 does not.
   # 0.1.23 -- THREE releases in one pin, at its owner's request. 0.1.21 and 0.1.22 are skipped
   # because 0.1.23 is cumulative, and I verified that by rendering all four rather than trusting
   # that a later version is a superset:
@@ -5255,7 +5280,7 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.23
+  version: 0.1.24
   deps:
   - otel-collector-deployment
   tier: observability
