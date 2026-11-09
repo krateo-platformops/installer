@@ -6990,6 +6990,10 @@ components:
   tier: observability
   feature: portal
 - name: alert-provider-crd
+  # 0.2.66: the CRD is BYTE-IDENTICAL to 0.2.65. 24570 bytes both, 17 CEL rules both.
+  # Its owner predicted no schema change and asked me to confirm with the rule count; confirmed.
+  # Moved in lockstep with alert-provider anyway, because an app pin ahead of its -crd pin
+  # prunes silently and the rule is unconditional.
   # 0.2.65 IS NOT A COSMETIC BUMP. The rendered CRD grows 19952 -> 24570 bytes while the key
   # sets are IDENTICAL (36 -> 36, 0 added, 0 removed) and the description bytes are IDENTICAL
   # (931 both). My structural diff and my doc-text hypothesis therefore BOTH said 'cosmetic'.
@@ -7076,7 +7080,7 @@ components:
   # error, no event. A field the CRD DECLARES AS REQUIRED can never be pruned, because pruning only
   # removes fields absent from properties; the real hazard is a field the BACKEND requires that the
   # CRD does not declare.
-  version: 0.2.65
+  version: 0.2.66
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -7114,6 +7118,32 @@ components:
 # A count of 30 immediately after this roll is CORRECT, not a failure -- deleting the seeder's
 # default does not delete what it already seeded.
 - name: alert-provider
+  # 0.2.66 is exactly two commits (#94 provider-runtime 1.8.2 -> 1.12.0, controller-runtime
+  # 0.25.2, k8s.io 0.37.2, no behaviour change intended; #95 native OTel tracing, OFF unless
+  # otel.enabled). Diego authorised turning it ON in this roll, in his own words rather than a
+  # peer's relay -- the pin is ordinary work, the SWITCH is a feature enablement.
+  # THE SCHEMA WIDENING HAD TO LAND FIRST, and this pin asserts it did.
+  # componentValues.alert-provider is a CLOSED node (additionalProperties: false) that declared
+  # only [config, global, image, imagePullSecrets], so otel.enabled:true would have been
+  # SILENTLY PRUNED: the roll reports success, the pod gets no OTel env, tracing stays off, and
+  # nothing anywhere says so. Its owner asked the right question before requesting the pin.
+  # Declared in #772 with NO `default:` -- a default on an installer schema key propagates into
+  # the composition CR, so default:false would write otel:{enabled:false} onto every
+  # alert-provider composition on every install.
+  # WITH otel.enabled THE DEPLOYMENT GAINS: HOST_IP (fieldRef status.hostIP, declared first),
+  # OTEL_ENABLED, OTEL_TRACING_ENABLED, OTEL_EXPORTER_OTLP_ENDPOINT=http://$(HOST_IP):4318,
+  # OTEL_TRACES_SAMPLER, OTEL_SERVICE_NAME, SERVICE_VERSION. The exporter appends /v1/traces
+  # itself. The bootstrap Job is untouched: its pod template is immutable within a release.
+  # $(HOST_IP) RATHER THAN THE -local SERVICE is its owner's deliberate preference, confirmed
+  # with them rather than assumed: it does not depend on otel-collector-daemonset-local existing
+  # or being Ready, and it matches the RDC and snowplow wiring. Note core-provider's otel in the
+  # SAME roll goes the OTHER way, at observability's request, because a cdc's endpoint can only
+  # be a Service NAME and the chart's fallback is the HEADLESS one -- two components, two
+  # correct answers, for different reasons.
+  # tracesSampler and serviceName stay at the chart defaults (parentbased_always_on,
+  # krateo-alert-provider) and are therefore NOT set -- an unset key is the chart's default,
+  # while setting it to the same value would write it into the CR for no reason.
+  # CONTROLS: app and crds both resolve at 0.2.66 and 0.2.65; neither at 0.2.67.
   # 0.2.64 -- per-group metric alerts (acmp PR #90, main cfb781f, the only change since 0.2.63).
   # BOTH alert-provider AND alert-provider-crd move to 0.2.64 TOGETHER, and that pairing IS the point:
   # the new surface is CRD FIELDS, not values. Rendered and counted rather than assumed --
@@ -7204,7 +7234,7 @@ components:
   # `unevaluated` in the rollup's precedence. And oasgen 0.52.0 adds six new ways for a
   # RestDefinition child to be legitimately Creating, so mixed parents get MORE likely during
   # exactly the sampling window. Found before the run, not after.
-  version: 0.2.65
+  version: 0.2.66
   # 0.2.57 carries alert-provider#76 (provider-runtime v1.7.2) and #77, which adds 'incident-provider' to
   # DEFAULT_ALERTS_JSON's reconcile-error `NOT IN` list. Measured on the published chart here, not taken
   # from the release notes: rendered at --kube-version 1.33.0, rc=0, 294 -> 331 lines (floor asserted, so
