@@ -48,7 +48,7 @@ components:
   # 0.33.1 WAS SKIPPED DELIBERATELY. It exists and was approved, but authn recommended going straight
   # to 0.34.0 so both clusters roll once instead of twice, and Diego chose that. 0.33.1 was never
   # pinned or rolled anywhere.
-  version: 0.37.0
+  version: 0.39.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -606,6 +606,36 @@ components:
 #
 # CONTROLS: authn and authn-crds 0.37.0 resolve; the outgoing 0.36.0 resolves; authn 9.9.9 does not.
 - name: authn
+  # 0.39.0 -- BOTH authn and authn-crd move together, and this spans 0.38.0, so a cluster on
+  # 0.37.0 takes both releases' changes at once.
+  # RENDERED BOTH CRD CHARTS EITHER SIDE rather than trust the release notes:
+  #   authn-crds 0.37.0  25049 bytes  5 CRDs  'principal' 0  'delegation' 2
+  #   authn-crds 0.39.0  25591 bytes  5 CRDs  'principal' 2  'delegation' 2
+  # ServiceAccount v1alpha1 gains spec.principal, enum [agent, controller, service], omitted
+  # meaning `service`. Same CRD count, delegation untouched, nothing pruned.
+  # THE APP CHART IS NOT 'VERSION LABELS ONLY' ACROSS THIS SPAN, and that is expected rather
+  # than a discrepancy: 9026 -> 8910 bytes, same 11 objects, 'restactions' 2 -> 1. That is
+  # 0.38.0's Role change dropping get/create/update/delete on templates.krateo.io/restactions.
+  # Its owner said the chart changes only version labels AGAINST 0.38.0; I compared against
+  # 0.37.0, which spans it. Consistent, once the baseline is named.
+  # SAFE ON 057 because it has ZERO OAuthConfigs and ZERO OIDCConfigs, so nothing uses the
+  # legacy RESTAction copy path 0.38.0 removes. Counted from .items length with controls
+  # (restactions 99, compositiondefinitions 70), after a first count of '1 each' that was
+  # `grep -vc` treating a 'No resources found' line as an object.
+  # DEMO IS NOT IN THIS and must not be: demo has ONE OAuthConfig (krateo-system/github) whose
+  # RESTAction does carry ${ "Authorization: Bearer " + .token }, so it survives #91 -- but
+  # observability's before/after count for the header patch must read only from BEFORE 0.38.0
+  # reaches demo. Demo stays on 0.37.0 until they are done.
+  # WHY NOW, and this is a reconciliation rather than a fresh request: Diego said '057 first,
+  # own roll' in authn's session at ~06:50Z, then at ~07:08Z in mine chose snowplow 1.12.67 when
+  # offered both. I read the second as a decline; on re-reading it is more naturally an ORDERING
+  # choice -- snowplow had waited 1h45m with a dependent probe. That constraint is gone: 1.12.67
+  # is rolled and verified. AND new information appeared since: AUDIT-5's actor class is sourced
+  # from authn's `principal` claim (installer#716's posted schema), so #716's vocabulary cannot
+  # be fully populated on 057 without 0.39.0.
+  # CONTROLS: authn and authn-crds both resolve at 0.39.0 and 0.37.0; authn 9.9.9 does not.
+  # index digest sha256:36738af8b3f48db8e375e03975998bbef467cdfcf9e1f232c06de12ebe9d8f9c
+  # (amd64 f453f4bc..., arm64 91864baf...).
   # KRATEO-DEMO CONSTRAINT -- DO NOT BUMP TO >= 0.28.0 AS A ROUTINE UPDATE (acmp, 2026-10-29).
   # authn 0.28.0 (authn#42) stamps an `authn.krateo.io/groups` annotation, and AT STARTUP it
   # BACKFILLS that annotation onto every existing `<user>-clientconfig` Secret. On krateo-demo the
@@ -687,7 +717,7 @@ components:
   # REQUIRED-BEFORE child Krateos: Diego decided children move ONCE, to the first installer version
   # that pins authn 0.34.0, rather than stopping at 0.3.498 first. acmp sets that version as the
   # blueprint's childKrateo.installer.version and upgrades acme and globex on his word.
-  version: 0.37.0
+  version: 0.39.0
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
