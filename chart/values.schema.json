@@ -7228,6 +7228,38 @@
                   }
                 }
               }
+            },
+            "otel": {
+              "type": "object",
+              "title": "OpenTelemetry tracing",
+              "description": "Native OTel tracing for alert-provider (0.2.66+). Exports spans over OTLP/HTTP to the node-local collector agent at http://$(HOST_IP):4318. Off unless enabled is set: nothing renders and no tracer is registered. $(HOST_IP) rather than a Service name is deliberate and its owner's preference -- it does not depend on otel-collector-daemonset-local existing or being Ready, and it matches the RDC and snowplow wiring. Only the Deployment gets the variables; the bootstrap Job's pod template is immutable within a release. Declared with NO defaults on purpose: a default here would propagate into the composition CR.",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Tracing enabled",
+                  "description": "Sets OTEL_ENABLED, OTEL_TRACING_ENABLED, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_TRACES_SAMPLER, OTEL_SERVICE_NAME and SERVICE_VERSION on the Deployment. The chart's own default is false."
+                },
+                "tracesSampler": {
+                  "type": "string",
+                  "title": "Traces sampler",
+                  "description": "OTEL_TRACES_SAMPLER, read by the OpenTelemetry SDK. The chart's own default is parentbased_always_on, which keeps every root span and follows an inbound parent's decision otherwise.",
+                  "enum": [
+                    "always_on",
+                    "always_off",
+                    "traceidratio",
+                    "parentbased_always_on",
+                    "parentbased_always_off",
+                    "parentbased_traceidratio"
+                  ]
+                },
+                "serviceName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "title": "Service name",
+                  "description": "OTEL_SERVICE_NAME: service.name on every span. The chart's own default is krateo-alert-provider."
+                }
+              }
             }
           }
         },
