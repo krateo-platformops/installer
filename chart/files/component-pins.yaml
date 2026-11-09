@@ -4835,6 +4835,29 @@ components:
 #   having tested nothing. That fork produces the very stream this redaction targets.
 # EXPECT AFTER THE ROLL: the deployment collector restarts on the new image.
 - name: otel-collector-deployment
+  # 0.3.16 (observability#131) drops k8s.container.ready for incident-provider's run-to-
+  # completion CHECK pods (pod label app.kubernetes.io/component=incident-check). Those bare
+  # pods kept sre-container-not-ready in PENDING on a healthy 057.
+  # Its owner said 'no other series changes'. 0.3.16 RENAMES the processor pair, so that
+  # needed checking rather than accepting -- and it holds:
+  #   0.3.15  k8sattributes/job-owner        + filter/job-readiness
+  #   0.3.16  k8sattributes/run-to-completion + filter/run-to-completion-readiness
+  #           + transform/drop-tmp-component
+  # The PREDICATE is strictly additive, not replaced:
+  #   0.3.15 datapoints: [ready and k8s.job.name != nil]
+  #   0.3.16 datapoints: [ready and k8s.job.name != nil,                    <- RETAINED
+  #                       ready and krateo.tmp.pod.component == incident-check]  <- ADDED
+  # and k8sattributes keeps metadata:[k8s.job.name], merely ADDING the label extraction.
+  # So the rename is cosmetic and no existing readiness series loses its filter.
+  # PIPELINE ORDER CHECKED, because the processors being present proves nothing if the
+  # delete runs before the filter -- the YAML order of the processors block does NOT set
+  # pipeline order, service.pipelines does:
+  #   metrics: memory_limiter, k8sattributes/run-to-completion(1),
+  #            filter/run-to-completion-readiness(2), transform/drop-tmp-component(3), batch
+  #   => attrs(1) < filter(2) < delete(3)  CORRECT. The temp attribute exists when the
+  #      filter reads it and is gone before export, so it leaks into no series.
+  # Restarts the cluster collector's SINGLE pod. No window.
+  # CONTROLS: 0.3.16 and 0.3.15 resolve; 0.3.17 does not.
   # 0.3.15 -- k8s_cluster sampling halves to 30s, and k8s.container.ready is dropped for
   # Job-owned pods. For Diego's per-pod readiness alert; acmp's per-pod test and observability's
   # production per-pod Alert both wait on it.
@@ -4871,7 +4894,7 @@ components:
   #     v1-12-41 4/8 (50%)   v1-12-42 0/8 (0%)   v0-3-413 0/6 (0%)   <- both rolled that morning
   # The 48h AGGREGATE reads a flat ~100% and hides this entirely; only the per-apiVersion split
   # shows it. Read the split, never the rollup, when judging event correlation.
-  version: 0.3.15
+  version: 0.3.16
   deps:
   - krateo-observability
   tier: observability
