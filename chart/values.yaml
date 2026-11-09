@@ -590,3 +590,14 @@ componentValues:
 # version/repo/dep pins on upgrade (previously --reuse-values froze them and stalled upgrades).
 # User-tunable per-component overrides remain here under `componentValues:` above.
 # ---------------------------------------------------------------------------
+
+# authn's JWT signing-key generation. 1 (the default) renders exactly authn's own chart
+# defaults, so existing clusters see no diff and no upgrade ever rotates the key. Bump it to
+# rotate: generation N creates Secret `authn-jwt-signing-key-N` with a fresh RSA key and makes
+# authn mount it and advertise kid `krateo-authn-key-N`. The old Secret is left in place --
+# nothing here deletes key material. A bump signs out every session, because the key that
+# signed every outstanding token stops being served; that is the point of the lever, and the
+# reason it is not driven by anything automatic.
+authn:
+  jwt:
+    keyGeneration: 1

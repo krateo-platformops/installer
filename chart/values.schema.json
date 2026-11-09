@@ -60,6 +60,26 @@
         }
       }
     },
+    "authn": {
+      "type": "object",
+      "title": "authn JWT signing key",
+      "description": "Umbrella-owned settings for the RSA key authn signs JWTs with. The Secret itself is created by this chart before authn starts; authn mounts it and publishes the matching public key at GET /.well-known/jwks.json.",
+      "additionalProperties": false,
+      "properties": {
+        "jwt": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "keyGeneration": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "JWT signing key generation",
+              "description": "Which generation of the signing key to serve. 1 renders authn's own chart defaults (Secret authn-jwt-signing-key, kid krateo-authn-key-1), so existing clusters see no diff and no upgrade rotates the key. Raising it to N creates Secret authn-jwt-signing-key-N with a fresh RSA key and makes authn mount it and advertise kid krateo-authn-key-N. Because authn has no per-token revocation, a bump is the only way to stop honouring already-issued tokens -- it signs out every session, and nothing lowers it back automatically. The previous Secret is left in the cluster; removing key material is a separate, deliberate act."
+            }
+          }
+        }
+      }
+    },
     "bootstrap": {
       "type": "object",
       "title": "Bootstrap (composition engine)",

@@ -772,6 +772,42 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- end -}}
 
 {{/* ---------------------------------------------------------------------------------------
+     inst.authnSigningKeySecretName / inst.authnSigningKeyKid — the NAME and the KID of authn's
+     JWT signing key, both derived from ONE integer: authn.jwt.keyGeneration.
+
+     WHY A GENERATION COUNTER AND NOT A NAME. authn has no per-token revocation, so the only
+     lever against a leaked token is to stop serving the key that signed it. That means a NEW
+     key, which means a new Secret, which means a new kid — because a validator caches JWKS by
+     kid, and reusing the kid for different key material is the one combination that fails
+     silently in both directions (a stale cache accepts tokens signed by the dead key; a fresh
+     cache rejects tokens the dead key signed, with no way to tell which happened).
+
+     Deriving BOTH from one counter is the point. Three facts have to agree — the Secret the
+     umbrella creates, the Secret name authn mounts, and the kid authn advertises. Exposed as
+     three values they can disagree, and every disagreement is quiet: mount the wrong Secret and
+     authn signs with a key whose public half is not in its own JWKS, so every token it issues
+     is rejected by every verifier, while authn itself logs a clean boot.
+
+     GENERATION 1 IS THE IDENTITY CASE, deliberately. It returns authn's own chart defaults
+     (`authn-jwt-signing-key`, `krateo-authn-key-1`, read from authn 0.40.0 values.yaml), so
+     every existing cluster renders byte-identical objects and no upgrade rotates anything. A
+     rotation is only ever an explicit bump of the counter.
+
+     NEITHER CALLS `lookup`, for the same reason inst.jwtSigningKeyPEM does not: `helm template`
+     disables lookup, so anything downstream of it is unreachable in CI. These are pure
+     functions of the counter and .github/scripts/check-signing-key.py renders them directly.
+     --------------------------------------------------------------------------------------- */}}
+{{- define "inst.authnSigningKeySecretName" -}}
+{{- $gen := index . 0 | default 1 | int -}}
+{{- if le $gen 1 -}}authn-jwt-signing-key{{- else -}}authn-jwt-signing-key-{{ $gen }}{{- end -}}
+{{- end -}}
+
+{{- define "inst.authnSigningKeyKid" -}}
+{{- $gen := index . 0 | default 1 | int -}}
+{{- if le $gen 1 -}}krateo-authn-key-1{{- else -}}krateo-authn-key-{{ $gen }}{{- end -}}
+{{- end -}}
+
+{{/* ---------------------------------------------------------------------------------------
      inst.unmetApiGroups — the API groups a component DECLARES and the cluster does not serve.
      Returns a comma-joined list, or "" when every declared group is present.
 

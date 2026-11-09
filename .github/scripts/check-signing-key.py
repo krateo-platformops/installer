@@ -115,6 +115,45 @@ def render(helpers_text: str) -> dict:
         shutil.rmtree(work, ignore_errors=True)
 
 
+NAMES_TPL = (
+    "apiVersion: v1\n"
+    "kind: ConfigMap\n"
+    "metadata:\n"
+    "  name: names\n"
+    "data:\n"
+    "{{- range $g := .Values.gens }}\n"
+    '  name{{ $g }}: {{ (include "inst.authnSigningKeySecretName" (list $g)) | quote }}\n'
+    '  kid{{ $g }}: {{ (include "inst.authnSigningKeyKid" (list $g)) | quote }}\n'
+    "{{- end }}\n"
+)
+
+
+def render_names(helpers_text: str, gens: list) -> dict:
+    """Render the name/kid derivation helpers for a list of generations."""
+    work = Path(tempfile.mkdtemp(prefix="signing-name-"))
+    try:
+        chart = work / "probe"
+        (chart / "templates").mkdir(parents=True)
+        (chart / "Chart.yaml").write_text("apiVersion: v2\nname: probe\nversion: 0.0.0\n")
+        (chart / "templates" / "_helpers.tpl").write_text(helpers_text)
+        (chart / "templates" / "names.yaml").write_text(NAMES_TPL)
+        (chart / "values.yaml").write_text(yaml.safe_dump({"gens": gens}))
+        r = subprocess.run(["helm", "template", "probe", str(chart)],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            return {"__error__": r.stderr.strip()[:1200]}
+        doc = next(d for d in yaml.safe_load_all(r.stdout)
+                   if isinstance(d, dict) and d.get("kind") == "ConfigMap")
+        return {k: str(v) for k, v in (doc.get("data") or {}).items()}
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+# The generation branch of inst.authnSigningKeySecretName, replaced above by a version that
+# ignores the counter, to prove section (7) can detect exactly that.
+NAME_ARM = re.compile(r'\{\{-\s*if le \$gen 1\s*-\}\}authn-jwt-signing-key\{\{-\s*else\s*-\}\}')
+
+
 REUSE_ARM = re.compile(
     r'\{\{-\s*if and \$found \$found\.data \(hasKey \$found\.data "private\.pem"\)\s*-\}\}'
     r'\s*\{\{-\s*index \$found\.data "private\.pem" \| b64dec\s*-\}\}', re.S)
@@ -211,16 +250,68 @@ def main() -> int:
             print("  PASS  self-check: a mutant with the reuse branch deleted IS caught "
                   f"(it returned {'a fresh key' if is_fresh_key(mout.get('case0','')) else 'something else'})")
 
+    # (7) the generation derivation. SECRET_NAME is no longer a constant in the chart: it is
+    #     derived from authn.jwt.keyGeneration, and so is the kid. Two things must hold, and
+    #     both fail silently if they stop holding.
+    #       - generation 1 must reproduce authn's own chart defaults EXACTLY, or every existing
+    #         cluster rotates its key on the next upgrade of this chart.
+    #       - generation N must change BOTH the name and the kid, or a rotation serves new key
+    #         material under the old kid and every verifier with a warm JWKS cache keeps
+    #         accepting tokens the rotation was meant to kill.
+    names = render_names(helpers, [1, 2, 3, 7])
+    if "__error__" in names:
+        failures.append("the name/kid helpers did not render: " + names["__error__"][:300])
+    else:
+        for gen, want_name, want_kid in [
+            (1, "authn-jwt-signing-key",   "krateo-authn-key-1"),
+            (2, "authn-jwt-signing-key-2", "krateo-authn-key-2"),
+            (3, "authn-jwt-signing-key-3", "krateo-authn-key-3"),
+            (7, "authn-jwt-signing-key-7", "krateo-authn-key-7"),
+        ]:
+            got_n, got_k = names.get(f"name{gen}"), names.get(f"kid{gen}")
+            if got_n == want_name and got_k == want_kid:
+                print(f"  PASS  generation {gen} -> {got_n} / {got_k}")
+            else:
+                failures.append(f"generation {gen} derived {got_n!r}/{got_k!r}, expected "
+                                f"{want_name!r}/{want_kid!r}. Generation 1 MUST equal authn's "
+                                f"chart defaults (authn values.yaml jwt.signKeySecretName/kid) "
+                                f"or an ordinary upgrade rotates the key on every cluster.")
+        distinct = {names.get(f"name{g}") for g in (1, 2, 3, 7)}
+        if len(distinct) == 4:
+            print("  PASS  each generation yields a distinct Secret name")
+        else:
+            failures.append(f"generations collapsed to {len(distinct)} distinct Secret names "
+                            f"({sorted(distinct)}): a bump that reuses a name reuses the key, so "
+                            f"the rotation is a no-op while reporting success.")
+
+        # self-check: a helper that IGNORES the generation must be caught here.
+        blind = NAME_ARM.sub('{{- if true -}}authn-jwt-signing-key{{- else -}}', helpers, count=1)
+        if blind == helpers:
+            failures.append("could not construct the generation-blind mutant: NAME_ARM no longer "
+                            "matches inst.authnSigningKeySecretName, so this check is unverified.")
+        else:
+            bout = render_names(blind, [2])
+            if bout.get("name2") == "authn-jwt-signing-key-2":
+                failures.append("MUTANT NOT CAUGHT: a helper hard-wired to the generation-1 name "
+                                "still produced the generation-2 name. This check proves nothing.")
+            else:
+                print(f"  PASS  self-check: a generation-blind helper IS caught "
+                      f"(it returned {bout.get('name2')!r})")
+
     # (7) wiring. The one thing no cluster-free test can execute is the lookup, so assert it
     #     textually: the call, its name and namespace, the hand-off, and that the decision has
     #     not crept back inline.
     sec = SECRET.read_text()
     for needle, why in [
-        (f'lookup "v1" "Secret" $ns "{SECRET_NAME}"',
-         "the lookup call, with this exact Secret name"),
+        ('include "inst.authnSigningKeySecretName" (list $gen)',
+         "the Secret name derived from authn.jwt.keyGeneration"),
+        ('lookup "v1" "Secret" $ns $keyName',
+         "the lookup call, keyed by that SAME derived name"),
         (f'include "{HELPER_NAME}" (list $existingPriv)',
          "the hand-off of the lookup RESULT into the tested helper"),
-        (f"name: {SECRET_NAME}", "the emitted Secret's name"),
+        ("name: {{ $keyName }}",
+         "the emitted Secret's name -- the SAME variable the lookup used, so a miss is "
+         "impossible by construction rather than by inspection"),
         (f"{DATA_KEY}: |", "the emitted data key"),
     ]:
         if needle in sec:
@@ -228,6 +319,38 @@ def main() -> int:
         else:
             failures.append(f"secret.yaml no longer contains {needle!r} ({why}). The gate "
                             f"exercises a helper that the chart may no longer use this way.")
+    # (9) the CONSUMER side. The umbrella creating Secret N is only half of a rotation: authn
+    #     has to MOUNT N and advertise kid N. That wiring lives in compositions.yaml, which is
+    #     lookup-gated -- `helm template` renders zero composition objects, so this cannot be
+    #     executed cluster-free any more than the lookup itself can. Asserted textually, and
+    #     deliberately asserted as FORCE rather than fill: a stale
+    #     componentValues.authn.jwt.signKeySecretName must not be able to win and leave authn
+    #     mounting the retired key while the rotation reports success.
+    comp = Path("chart/templates/compositions.yaml").read_text()
+    for needle, why in [
+        ('{{- if eq $c.name "authn" -}}', "an authn-specific block"),
+        ('"path" (list "jwt" "signKeySecretName")', "the mounted Secret name is wired through"),
+        ('"path" (list "jwt" "kid")', "the advertised kid is wired through"),
+        ('include "inst.authnSigningKeySecretName" (list $keyGen)',
+         "that name comes from the SAME derivation secret.yaml used, not a second literal"),
+        ('include "inst.authnSigningKeyKid" (list $keyGen)',
+         "that kid comes from the same derivation"),
+    ]:
+        if needle in comp:
+            print(f"  PASS  compositions.yaml wires {why}")
+        else:
+            failures.append(f"compositions.yaml no longer contains {needle!r} ({why}). The "
+                            f"umbrella would create a new signing key that authn never mounts: "
+                            f"authn keeps signing with the retired key, the new Secret sits "
+                            f"unused, and every signal reports a successful rotation.")
+    if comp.count('"path" (list "jwt" "signKeySecretName")') and "inst.fillPath" in comp.split(
+            '{{- if eq $c.name "authn" -}}')[1].split("{{- end -}}")[0]:
+        failures.append("the authn jwt block uses inst.fillPath. These two fields must be FORCED: "
+                        "fill-if-absent lets a leftover componentValues override pin authn to the "
+                        "OLD Secret, so the rotation completes with every leaked token still valid.")
+    else:
+        print("  PASS  the authn jwt block forces rather than fills")
+
     if "genPrivateKey" in sec:
         failures.append("secret.yaml calls genPrivateKey directly again. The decision has moved "
                         "back inline beside `lookup`, where only its generate arm can ever be "
