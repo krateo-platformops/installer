@@ -5818,6 +5818,33 @@ components:
   agent: true
   orchestrator: true
 - name: krateo-autopilot
+  # PHASE E STEP 21 -- agent: false RETIRES autopilot's GATEWAY ROUTE while leaving the
+  # component pinned. This is NOT a values edit: inst.subAgents (_helpers.tpl:1121) DERIVES the
+  # gateway's A2A delegation list from the PINS --
+  #   range $comp := $components
+  #     if $comp.agent AND inst.featureEnabled $comp.feature
+  #       if $comp.orchestrator -> append (default "autopilot" $comp.agentName)
+  # so the `autopilot` subAgent exists BECAUSE this pin carries agent:true + orchestrator:true.
+  # There is no componentValues.agentgateway-policies.subAgents on 057 to edit (the key is
+  # absent; the chart ships no default either -- its subAgents and extraSubAgents are both
+  # null), so the ONLY lever is this field. agent:false drops the append, which drops the
+  # derived entry and with it HTTPRoute agentgateway-policies-subagent-autopilot.
+  # WHY NOT JUST DO STEP 22: removing the component also uninstalls it, and krateo-autopilot's
+  # recorded manifest is only NOW correct (2 objects, as of rev 118 at 09:31Z today). Step 21
+  # separates 'no traffic can reach it' from 'it is gone', so the second can be verified
+  # against a quiet component rather than a live one.
+  # EVIDENCE NOTHING CALLS IT (frontend, from the gateways' ACCESS LOGS in otel_logs rather
+  # than spans, because the agent gateway's tracing filter drops ordinary A2A calls;
+  # 20:52:00Z 2026-11-08 -> 09:45Z 2026-11-09, 8,678 lines):
+  #   autopilot  0 requests on either gateway, and 0 hits for the substring anywhere
+  #   agentiko   408 requests, 407 of them 200     <- THE CONTROL that makes the 0 mean something
+  # Plus: 13 kagent Agents, only agentiko and autopilot list sub-agents and NEITHER lists
+  # autopilot; 25 HTTPRoutes, the only one naming it is the one this removes; 11
+  # RemoteMCPServers mention it only in a part-of label; krateo-alert-provider's
+  # AUTOPILOT_A2A_URL already points at incident-agent through the gateway.
+  # agentName STAYS 'autopilot' -- it is unused once agent:false, and removing both at once
+  # would make a revert two edits instead of one.
+  # REVERT: set agent back to true. The route is re-derived on the next reconcile.
   # 0.7.1 (ANNOTATED tag 57a2c4a -> commit 87ccab1). PROMPT-ONLY (#152). Four installer-agent
   # skills were unreachable — upgrade-preflight, rollback-advisor, migration-assessment,
   # upgrade-plan — because the `## Specialists` roster described the agent only as "the platform
@@ -6175,7 +6202,7 @@ components:
   - core-provider-agent
   tier: observability
   feature: coreAgents
-  agent: true
+  agent: false
   # orchestrator: auto-attaches every deployed, feature-enabled agent as an A2A sub-agent
   orchestrator: true
   # features.repoGraph adds the 5 domain-graph toolNames to this agent's repo-mcp-server binding
