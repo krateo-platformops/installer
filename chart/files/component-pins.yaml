@@ -4991,6 +4991,29 @@ components:
   tier: observability
   feature: portal
 - name: otel-collector-daemonset
+  # 0.1.23 -- THREE releases in one pin, at its owner's request. 0.1.21 and 0.1.22 are skipped
+  # because 0.1.23 is cumulative, and I verified that by rendering all four rather than trusting
+  # that a later version is a superset:
+  #   0.1.20  25002 bytes  6 objects  Services 1  agentgateway 0  krateo-frontend 1   <- live
+  #   0.1.21  25726 bytes  7 objects  Services 2  agentgateway 0  krateo-frontend 1
+  #   0.1.22  27038 bytes  7 objects  Services 2  agentgateway 5  krateo-frontend 1
+  #   0.1.23  27348 bytes  7 objects  Services 2  agentgateway 5  krateo-frontend 2
+  # Each change is visible and each survives into 0.1.23:
+  #   0.1.21  the node-local Service -- Services 1 -> 2, internalTrafficPolicy: Local x2
+  #   0.1.22  the gateway metrics scrape (OTEL-14(a)) -- agentgateway 0 -> 5
+  #   0.1.23  the browser-resource fix (#129) -- krateo-frontend 1 -> 2
+  # WHY THE NODE-LOCAL SERVICE EXISTS: core-provider's cdcs can only be given a Service NAME
+  # via envFrom, and the existing OTLP Service is HEADLESS, so internalTrafficPolicy does not
+  # apply to it. That is the same headless-is-not-node-local trap that has bitten this platform
+  # before, and it is why OTEL-8's otel.enabled needs this pin first.
+  # WHY THE BROWSER FIX MATTERS BEYOND THIS ROLL: browser spans were carrying SNOWPLOW's pod
+  # metadata (k8s.pod.name, k8s.deployment.name, service.version 1.12.67) because the node
+  # collector's k8sattributes attributed spans snowplow FORWARDS to snowplow's own pod. The
+  # general rule its owner and I agreed: anything that FORWARDS spans picks up the forwarder's
+  # identity unless something strips it. 0.1.23 keeps only service.name on krateo-frontend
+  # resources.
+  # Rolls the 4 node agents, no window needed.
+  # CONTROLS: 0.1.23, 0.1.22, 0.1.21 and 0.1.20 all resolve; 0.1.24 does not.
   # 0.1.20 -- STEP 2 of OTEL-10. THE CUTOVER: traces now go to the tail-sampling tier.
   # Diffed 0.1.19 vs 0.1.20 by parsing both rendered configs rather than reading the release note.
   # EXACTLY ONE pipeline changes, and nothing else in the file does:
@@ -5093,7 +5116,7 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.20
+  version: 0.1.23
   deps:
   - otel-collector-deployment
   tier: observability
