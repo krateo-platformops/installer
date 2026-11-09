@@ -7220,7 +7220,7 @@
                       "thresholdType": {
                         "type": "string"
                       },
-                      "message": {
+                      "description": {
                         "type": "string"
                       }
                     },
@@ -13726,7 +13726,7 @@
                       "where": {
                         "type": "string"
                       },
-                      "message": {
+                      "description": {
                         "type": "string"
                       },
                       "threshold": {
