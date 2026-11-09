@@ -5012,6 +5012,19 @@ components:
 # No -crd pin and no componentValues change. The certificate-alert fix is NOT in this chart; it
 # comes with the later krateo-observability chart.
 - name: otel-collector-tailsampling
+  # AMENDED TO 0.1.6 BEFORE MERGE. My control in this PR's first commit recorded 0.1.6 as ABSENT,
+  # which was true at ~15:00Z; it published at 15:5xZ and its owner asked for it instead. I had
+  # promised exactly this: re-check the next version immediately before cutting and take the newer
+  # one if it is there. 0.1.6 = 0.1.5 + the `audited-write` policy (observability#133, AUDIT-9 /
+  # installer#415, Diego's decision), verified a STRICT SUPERSET: the only policy-name difference
+  # is the addition, 20 -> 21 policies, 9609 -> 9808 bytes.
+  # INERT UNTIL THE ATTRIBUTE EXISTS, verified from the rule text rather than accepted:
+  #   ottl_condition: error_mode: ignore
+  #   span.attributes["krateo.audit.recorded"] == true
+  # the shared audit library v0.4.0 will set that attribute; until then the lookup errors and
+  # error_mode: ignore swallows it, so nothing matches. Same shape as the snowplow-stage-failure
+  # rule 0.1.5 already carries.
+  # CONTROLS: 0.1.6 and 0.1.5 resolve; 0.1.7 does not.
   # 0.1.5, skipping 0.1.4, at its owner's request -- 0.1.5 CONTAINS 0.1.4's snowplow rule.
   # WHY NOW: alert-provider 0.2.66's tracing has stored ~220 spans/minute since 12:26Z, ~316K/day,
   # 2.3x the whole cluster's 139K the day before. 0.1.5 samples the routine loop to 5% while keeping
@@ -5084,7 +5097,7 @@ components:
   #
   # CONTROLS: 0.1.1 resolves; 0.1.0 resolves; 9.9.9 does not.
   kind: OtelCollectorTailsampling
-  version: 0.1.5
+  version: 0.1.6
   deps:
     - otel-collector-deployment
   tier: observability
