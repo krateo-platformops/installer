@@ -6186,8 +6186,38 @@ components:
   # (consumer side of the lockstep; server side is repo-mcp-server's graphToggle).
   graphToggle: repoSearch.graph.enabled
 - name: clickhouse-mcp-server
+  # 0.1.15 -- Phase E step 19. The chart now SHIPS the RemoteMCPServer, so the object stops
+  # being ownerless and gets a real owner.
+  # SKIPPING 0.1.14 DELIBERATELY. 0.1.14 was the release frontend arranged for step 18/19, but
+  # it never landed, and 0.1.15 is 0.1.14 + observability#17 (docs) and #18 (auth.tokenSecret).
+  # One roll instead of two. Both owners agreed: frontend owns the Phase E ordering and cleared
+  # the substitution; observability owns the chart.
+  # VERIFIED 0.1.15 STILL CARRIES WHAT STEP 19 NEEDS, rather than assume:
+  #   0.1.12   5593 bytes  4 objects  RemoteMCPServer 0  keep 0
+  #   0.1.14   6370 bytes  5 objects  RemoteMCPServer 1  keep 1
+  #   0.1.15   6389 bytes  5 objects  RemoteMCPServer 1  keep 1
+  # ITS OWNER SAID 0.1.15's RENDER IS BYTE-IDENTICAL TO 0.1.14 AND IT IS NOT, though the
+  # difference is harmless: two COMMENT lines about the upstream image
+  # (mcp/clickhouse:latest -> ghcr.io/clickhouse/mcp-clickhouse, noting its v0.5.0 Dockerfile
+  # sets no USER). The image digest is IDENTICAL at both:
+  #   ghcr.io/clickhouse/mcp-clickhouse:0.5.0@sha256:37564a952d1428984b2fc189cc3ef1e77453c7e1cb65dde286938dac282f9ab0
+  # They had compared 0.1.15 against main after the docs PR rather than against the 0.1.14 tag.
+  # #18 NEEDS NO VALUES HERE, checked rather than asked: the chart ships auth.disabled: true, and
+  # 057's live CR sets no auth at all, so auth.tokenSecret is inert. It is also NOT settable
+  # through my schema (componentValues.clickhouse-mcp-server is closed at 10 keys, no `auth`) --
+  # which is fine while disabled is wanted, but is the usual prune trap if that ever changes.
+  # A SCARE OF MINE THAT WAS MY OWN RENDER: I thought the chart hardcoded the url to
+  # clickhouse-mcp-server.default:8000/mcp while 057's live object uses .krateo-system, which
+  # would mean this pin REWRITES the url and breaks clickstack-agent and incident-agent. It was
+  # my helm template with no --namespace. With --namespace krateo-system both 0.1.14 and 0.1.15
+  # render exactly the live url. No hazard.
+  # TAKEOWNERSHIP IS SAFE NOW, per frontend: krateo-autopilot's RENDER no longer contains the
+  # object (proven offline: 2 objects), and its controller never runs the Upgrade because of the
+  # kept-deletion defect (core-provider#408 / plumbing#105). So nothing re-applies the stale
+  # stored manifest and there is no tug-of-war.
+  # CONTROLS: 0.1.15, 0.1.14 and 0.1.12 all resolve from krateo-agentiko; 9.9.9 does not.
   kind: ClickhouseMcpServer
-  version: 0.1.12
+  version: 0.1.15
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
