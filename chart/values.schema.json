@@ -7226,6 +7226,12 @@
                     },
                     "additionalProperties": false
                   }
+                },
+                "incidentCoverWindow": {
+                  "type": "string",
+                  "pattern": "^(0|([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+)$",
+                  "title": "Incident cover window",
+                  "description": "alert-provider 0.2.69+ (#100). Go duration an open, analyzed Incident keeps covering its Alert's firings after it opened or last covered one. Past it the Incident is stale and a firing opens a new Incident with a fresh RCA. \"0\" disables. The chart's own default is 24h; NO default is declared here, because a default on an installer schema key propagates into the composition CR."
                 }
               }
             },
@@ -11487,6 +11493,25 @@
                 },
                 "leaderElection": {
                   "type": "boolean"
+                },
+                "noVerdictRuns": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "title": "No-verdict runs",
+                  "description": "incident-provider 0.8.0+ (#18). Consecutive runs without exit 0 or 1 that stop the current script; 0 disables. The chart's own default is 6."
+                },
+                "noVerdictFor": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(ns|us|ms|s|m|h)$",
+                  "title": "No-verdict window",
+                  "description": "incident-provider 0.8.0+ (#18). How long runs may give no exit 0 or 1 before the current script stops; 0s disables. The chart's own default is 24h."
+                },
+                "alertGoneGrace": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(ns|us|ms|s|m|h)$",
+                  "title": "Alert-gone grace",
+                  "description": "incident-provider 0.8.0+ (#18). How long the Alert must stay NotFound before an Open or Verifying Incident is closed with resolution.by=alert-gone. The chart's own default is 10m."
                 }
               }
             },
