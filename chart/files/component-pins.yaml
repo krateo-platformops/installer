@@ -7948,9 +7948,24 @@ components:
   #   k8s_check_service_connectivity, helm_upgrade/uninstall/repo_*, argo_*, istio_*,
   #   36 cilium_* writes, and shell.
   # k8s_check_service_connectivity IS IN THE LIST -- the specific tool snowplow raised as S2,
-  # the one that runs `kubectl delete pod` and `kubectl run curlimages/curl`. So this pin
-  # closes the reachable path for every agent, including installer-agent, BEFORE I touch that
-  # chart. The chart change is then defence in depth rather than the only defence.
+  # the one that runs `kubectl delete pod` and `kubectl run curlimages/curl`.
+  # *** BUT ON 057 THIS POLICY DOES NOT SIT IN THE AGENTS' PATH AT ALL. *** Its owner corrected
+  # me and I verified all three parts:
+  #   1. RemoteMCPServer kagent-tool-server url = http://kagent-tools.krateo-system:8084/mcp
+  #      -- every agent calls the tool server DIRECTLY, not through the gateway.
+  #   2. The GKE network-policy addon is OFF: addonsConfig.networkPolicyConfig.disabled = True
+  #      and networkPolicy.enabled is UNSET. So NetworkPolicies are not enforced.
+  #   3. A THIRD reason its owner did not mention: NetworkPolicy
+  #      agentgateway-policies-kagent-agents has policyTypes [Ingress] and ZERO egress rules,
+  #      so it would NOT force the gateway path even if the addon were enforcing.
+  # So 0.2.24 refuses write tools ONLY for callers that use the gateway, and agents are not such
+  # callers today. Agent behaviour will NOT change after this roll.
+  # THAT INVERTS THE RATIONALE FOR THE ORDERING. Diego put the gateway rule first because one
+  # control covering every agent beats one chart at a time. On 057 it covers no agent. So the
+  # installer-agent chart change is NOT defence in depth -- it is currently the ONLY defence,
+  # and the gateway rule is correct-but-inert here. Its owner is taking the agent-side fix to
+  # Diego; I have put the inversion to him in these terms. Pinning it is still right: it is
+  # correct, it costs nothing, and it becomes effective the moment the agents' path moves.
   # MY FIRST COUNT OF THOSE TOOLS WAS 0, because I grepped a JSON dump with a pattern that did
   # not match how the names are embedded in a CEL string. The count above comes from reading
   # spec.backend. A regex returning 0 against a document that plainly contains the thing is an
