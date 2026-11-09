@@ -788,6 +788,29 @@ components:
 #   sha256:c8011bf5480e09261beec473a3514b8e73062780715863bc40647c4061761947 (tag commit 5659877d).
 #   Pre-roll live digest was sha256:91c6e6e80a2df4716205a86f44bb3046fa49790b600a8ccd56036fcde3b429e7.
 - name: snowplow
+  # 1.12.67 -- snowplow ALONE; snowplow-crd deliberately STAYS at 1.12.65.
+  # Its owner said the CRD does not change. I VERIFIED THAT MYSELF rather than take it, by
+  # rendering the crds chart at all three versions:
+  #   snowplow-crds 1.12.65   19373 bytes   sha256 ed5641481bba5e7f
+  #   snowplow-crds 1.12.66   19373 bytes   sha256 ed5641481bba5e7f
+  #   snowplow-crds 1.12.67   19373 bytes   sha256 ed5641481bba5e7f
+  # Byte-identical, so the app pin running ahead of the -crd pin cannot prune a field here.
+  # That pairing is normally the thing to refuse -- it shipped once as 0.3.495 and all 25 CI
+  # checks passed -- so it is only safe BECAUSE the render is identical, not because its owner
+  # said so. They also confirmed the git blob d32e2d89 is the same at 1.12.65, main (-> .67) and
+  # the Go 1.27 PR head, with a negative control showing the diff command does see go.mod moving.
+  # THE APP CHART IS IDENTICAL TOO, apart from the tag: 25460 bytes and 11 objects at both
+  # 1.12.66 and 1.12.67, with only `snowplow:1.12.66` -> `snowplow:1.12.67` differing. So the
+  # whole change is in the image, sha256 5b8dff3cd5c59ee25af56eee1edc5b173b696b8dc1c122e1bf5c5fba8408531e.
+  # CONTENTS: #1255, a cached answer whose RESTAction became uncacheable is EVICTED rather than
+  # served stale until TTL; and #1251 (AUDIT-3), every AuditEvent carrying
+  # krateo.request.source_ips, user_agent.original and krateo.request.uri, with every audit
+  # string valid UTF-8.
+  # WHY NOW: paired run 23 passed 1.12.66 vs 1.12.67 -- every judged cell within noise,
+  # throughput identical, Chrome page loads p95 ~1.5s / max 2.8s at 50K x 1000. The 23-row
+  # AUDIT-3 probe follows this roll and needs #1251's attributes to exist.
+  # ROLLBACK is a backward installer tag to 1.12.66, never an image override.
+  # CONTROLS: 1.12.67 and 1.12.66 resolve; snowplow-crds 1.12.65 resolves; 9.9.9 does not.
   # 1.12.56: paired-bench verdict from the snowplow session (run 16, 1.12.54 vs 1.12.56,
   # 50K x 1,000 users). Every judged cell passed, and the two that matter are large:
   #   login storm p95   4.93s -> 2.07s   (ratio 0.42)
@@ -1569,7 +1592,7 @@ components:
   # ROLLBACK: re-upgrade the installer to 0.3.429, which pins 1.12.49. Do NOT roll back via
   # componentValues.snowplow.image.tag -- an image-tag override on THIS component takes effect and
   # then PERMANENTLY MASKS every future chart bump (the krateo-sse-proxy 0.1.15 trap).
-  version: 1.12.66
+  version: 1.12.67
   deps:
   - snowplow-crd
   - authn
