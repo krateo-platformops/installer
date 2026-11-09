@@ -4777,6 +4777,29 @@ components:
 #
 # CONTROLS: 0.1.34 resolves; the outgoing 0.1.33 resolves; 9.9.9 does not.
 - name: krateo-observability
+  # 0.1.38, NOT the 0.1.37 its owner asked for. I had promised them exactly this: re-check
+  # immediately before cutting, take the newer one if it is there, and NAME the version so they
+  # know which they are getting. 0.1.38 verified a STRICT SUPERSET, not assumed:
+  #   0.1.37  37079 bytes  36 objects  24 Alerts
+  #   0.1.38  37913 bytes  37 objects  25 Alerts
+  #   the ONLY diff is one ADDED Alert; nothing is removed or changed.
+  # WHY 0.1.37 MATTERED AT ALL -- a live content regression I shipped in 0.3.557 and did not
+  # catch. 0.1.36's one-sentence rewrite DROPPED three safety instructions from text that the
+  # notification and the RCA both read. Measured in the render:
+  #   sre-clickhouse-disk-headroom  55 -> 145 chars, regaining
+  #       '...never by dropping audit partitions'
+  #   sre-jwt-in-traces             84 ->  89, regaining 'treat it as leaked and rotate it'
+  #   sre-jwt-in-telemetry          82 -> 131, regaining 'stop the emitting service from
+  #       logging it'
+  # All three survive into 0.1.38, checked individually rather than inferred from the version.
+  # THE ADDED ALERT IS TIMELY AND ITS OWNER DID NOT SAY SO: sre-credential-header-in-traces
+  # fires on `authorization|cookie` keys in SpanAttributes or Events.Attributes, description
+  # 'A credential header reached the traces, so the redaction failed; treat the credential as
+  # leaked and rotate it.' That is a DETECTOR for the exact leak class snowplow raised as S1
+  # today -- upstream kagent tools copying the raw Authorization header into span attributes
+  # when tracing is on. It does not fix S1, but it means the leak would be SEEN rather than
+  # silent, which changes what the kagent-tracing decision is choosing between.
+  # CONTROLS: 0.1.38, 0.1.37 and 0.1.36 all resolve; 0.1.39 does not.
   # 0.1.35 -- a per-container readiness alert, and readiness comes OUT of sre-probe-failing.
   # observability#126. Alert and Metric CRs only: NO pods restart.
   # DIFFED by rendering both and diffing the OBJECT SET by kind/name, not by counting:
@@ -4834,7 +4857,7 @@ components:
   # provenance from appVersion at all. Do NOT unblock this by deleting `sources` or the appVersion.
   # 0.1.36: every default alert carries a one-sentence description, not message. NEEDS
   # alert-provider-crd 0.2.68: an older CRD drops the field.
-  version: 0.1.36
+  version: 0.1.38
   deps:
   - clickhouse-operator
   - mongodb-operator
