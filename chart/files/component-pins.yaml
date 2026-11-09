@@ -3980,7 +3980,9 @@ components:
   # the label, the concrete path and krateo.io/nav-link-only (it links and owns nothing). ONLY the
   # exact string "true" enables it, so a half-recognised truthy value fails visibly instead of
   # silently claiming the route back.
-  version: 1.8.100
+  # 1.8.101: Agentiko entry points (`intent: agentiko`, declared by frontend 1.8.34's Button CRD).
+  # 1.8.102: the alerts table and alert page show each alert's description, not its SQL filter.
+  version: 1.8.102
   deps:
   - frontend
   - git-provider
@@ -4089,7 +4091,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.100
+  version: 1.8.102
   deps: ['portal']
   tier: platform
   feature: portal
@@ -4125,7 +4127,7 @@ components:
   # templates/_builder.tpl, inside `{{/* */}}` blocks. 26 files, 124539 -> 124537 bytes; Chart.yaml
   # and that one template differ, and the template's change cannot reach the render.
   kind: MarketplacePage
-  version: 1.8.100
+  version: 1.8.102
   deps:
   - portal
   tier: platform
@@ -4192,14 +4194,14 @@ components:
   feature: selfservice
 - name: service-desk-page
   kind: ServiceDeskPage
-  version: 1.8.100
+  version: 1.8.102
   deps:
   - portal
   tier: platform
   feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.100
+  version: 1.8.102
   deps:
   - portal
   tier: platform
@@ -4272,7 +4274,7 @@ components:
 #     gateway /content/debug/vars 401. A 200 WITH index.html IS A FALSE PASS (SPA fallback).
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.100
+  version: 1.8.102
   deps:
   - portal
   tier: platform
@@ -4313,7 +4315,7 @@ components:
 - name: dashboard-page
   # Renders into krateo-dashboard, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: DashboardPage
-  version: 1.8.100
+  version: 1.8.102
   deps:
   - portal
   tier: platform
@@ -4352,7 +4354,7 @@ components:
   # original push failure is still UNKNOWN -- it did not recur, which is evidence of a blip and not
   # proof of one. Pinned only after confirming 1.8.89 pulls: version 1.8.89, appVersion 1.8.89.
   kind: CompositionsPage
-  version: 1.8.100
+  version: 1.8.102
   deps:
   - portal
   tier: platform
@@ -4360,7 +4362,7 @@ components:
 - name: blueprints-page
   # Renders into krateo-blueprints, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: BlueprintsPage
-  version: 1.8.100
+  version: 1.8.102
   deps:
   - portal
   tier: platform
@@ -4368,7 +4370,7 @@ components:
 - name: resources-page
   # Renders into krateo-resources, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: ResourcesPage
-  version: 1.8.100
+  version: 1.8.102
   deps:
   - portal
   tier: platform
@@ -4376,7 +4378,7 @@ components:
 - name: search-page
   # Renders into krateo-search, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: SearchPage
-  version: 1.8.100
+  version: 1.8.102
   deps:
   - portal
   tier: platform
@@ -4384,7 +4386,7 @@ components:
 - name: builders-page
   # Renders into krateo-builders, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: BuildersPage
-  version: 1.8.100
+  version: 1.8.102
   deps:
   - portal
   tier: platform
@@ -4392,7 +4394,7 @@ components:
 - name: clusters-page
   # Renders into krateo-clusters, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ClustersPage
-  version: 1.8.100
+  version: 1.8.102
   deps:
   - portal
   tier: platform
@@ -4400,7 +4402,7 @@ components:
 - name: reviews-page
   # Renders into krateo-reviews, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ReviewsPage
-  version: 1.8.100
+  version: 1.8.102
   deps:
   - portal
   tier: platform
@@ -4408,7 +4410,7 @@ components:
 - name: settings-page
   # Renders into krateo-settings, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: SettingsPage
-  version: 1.8.100
+  version: 1.8.102
   deps:
   - portal
   tier: platform
@@ -4416,7 +4418,7 @@ components:
 - name: observability-page
   # Renders into krateo-observability, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ObservabilityPage
-  version: 1.8.100
+  version: 1.8.102
   deps:
   - portal
   tier: platform
@@ -4830,7 +4832,9 @@ components:
   # (that repo already has a krateo-observability-0.1.10 tag as precedent), or adopt snowplow's
   # proposal to stamp the source commit SHA onto the chart artifact so pin-ci stops inferring
   # provenance from appVersion at all. Do NOT unblock this by deleting `sources` or the appVersion.
-  version: 0.1.35
+  # 0.1.36: every default alert carries a one-sentence description, not message. NEEDS
+  # alert-provider-crd 0.2.68: an older CRD drops the field.
+  version: 0.1.36
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -5283,7 +5287,9 @@ components:
   # The near-miss worth recording: an earlier draft of this dep list named clickhouse-operator.
   # The OPERATOR being Ready does not mean a ClickHouse INSTANCE exists -- krateo-observability is
   # what deploys the instance, which is why every other consumer deps on that and not the operator.
-  version: 0.1.4
+  # 0.1.6: both alerts carry a description, not message (0.1.5 is comments only). NEEDS
+  # alert-provider-crd 0.2.68.
+  version: 0.1.6
   # 0.1.1 (observability#83, repo tag 3.1.27) drops `appVersion`, which 0.1.0 set to 0.1.0. The
   # chart builds NO image -- both CronJobs run upstream clickhouse/clickhouse-server:24.8-alpine --
   # so there is no component repo whose CI check-pin-ci could resolve, and appVersion 0.1.0 matched
@@ -5904,7 +5910,8 @@ components:
   # "agents.autopilot was renamed to agents.agentiko in chart agentiko 0.8.0"; absent, exit 0.
   kind: Agentiko
   agentName: agentiko
-  version: 0.8.0
+  # 0.8.1: the alert-authoring prompt names spec.description.
+  version: 0.8.1
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
     - repo-mcp-server
@@ -7132,7 +7139,8 @@ components:
   # error, no event. A field the CRD DECLARES AS REQUIRED can never be pruned, because pruning only
   # removes fields absent from properties; the real hazard is a field the BACKEND requires that the
   # CRD does not declare.
-  version: 0.2.66
+  # 0.2.68: spec.description (one plain sentence) replaces spec.message. Moves with alert-provider.
+  version: 0.2.68
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -7286,7 +7294,9 @@ components:
   # `unevaluated` in the rollup's precedence. And oasgen 0.52.0 adds six new ways for a
   # RestDefinition child to be legitimately Creating, so mixed parents get MORE likely during
   # exactly the sampling window. Found before the run, not after.
-  version: 0.2.66
+  # 0.2.67: one HyperDX alerts list per poll interval, and a 429 defers the pass.
+  # 0.2.68: reads spec.description, not spec.message.
+  version: 0.2.68
   # 0.2.57 carries alert-provider#76 (provider-runtime v1.7.2) and #77, which adds 'incident-provider' to
   # DEFAULT_ALERTS_JSON's reconcile-error `NOT IN` list. Measured on the published chart here, not taken
   # from the release notes: rendered at --kube-version 1.33.0, rc=0, 294 -> 331 lines (floor asserted, so
@@ -8087,7 +8097,8 @@ components:
   # alert-troubleshooter LLM 403s of 2026-09-29 stop recurring — same guardrail, plausibly same cause.
   # 0.2.17 (#71): drops the connection-string response rule, which rejected any database URL as a
   # live credential and cut off RCAs whose fix sets one (e.g. DATABASE_URL=postgres://...).
-  version: 0.2.22
+  # 0.2.23: the LLM budget alerts carry a description, not message. NEEDS alert-provider-crd 0.2.68.
+  version: 0.2.23
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
