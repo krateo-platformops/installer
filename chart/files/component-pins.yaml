@@ -7931,6 +7931,36 @@ components:
   tier: platform
   feature: agentGateway
 - name: agentgateway-policies
+  # 0.2.24 is STEP 1 of Diego's S2 ordering, and the order is deliberate: observability adds a
+  # GATEWAY rule that blocks write-capable kagent tools for EVERY agent first; only then do I
+  # drop k8s_check_service_connectivity from installer-agent (krateo-agentiko/charts). One
+  # control covering every agent beats one chart at a time, and if only one of the two ever
+  # ships you want it to be this one.
+  # VERIFIED BY OBJECT LIST, not by byte count: 52 -> 53 objects, exactly ONE added and ZERO
+  # removed -- AgentgatewayPolicy/agentgateway-policies-tools-kagent-tools, targeting
+  # AgentgatewayBackend/agentgateway-policies-mcp-kagent-tools. Its owner said 'one added
+  # object' and that is exactly what it is.
+  # THE RULE, read from spec.backend.mcp.authorization rather than taken from the summary:
+  #   action: Allow with a NEGATIVE match -- allow everything NOT in the list, OR anything
+  #   whose JWT groups include krateo-agent-tool-writers.
+  #   46 tool names, counted: 45 underscored identifiers plus bare `shell`. Its owner said 46.
+  #   k8s_apply/create/patch/delete/label/annotate/execute_command/rollout/scale,
+  #   k8s_check_service_connectivity, helm_upgrade/uninstall/repo_*, argo_*, istio_*,
+  #   36 cilium_* writes, and shell.
+  # k8s_check_service_connectivity IS IN THE LIST -- the specific tool snowplow raised as S2,
+  # the one that runs `kubectl delete pod` and `kubectl run curlimages/curl`. So this pin
+  # closes the reachable path for every agent, including installer-agent, BEFORE I touch that
+  # chart. The chart change is then defence in depth rather than the only defence.
+  # MY FIRST COUNT OF THOSE TOOLS WAS 0, because I grepped a JSON dump with a pattern that did
+  # not match how the names are embedded in a CEL string. The count above comes from reading
+  # spec.backend. A regex returning 0 against a document that plainly contains the thing is an
+  # instrument failure, not a finding -- and it is the fourth of those today.
+  # The writers group krateo-agent-tool-writers is EMPTY on 057 per its owner, so this refuses
+  # every caller including admins. That is intended and it is a BEHAVIOUR change: any agent
+  # call to a write tool now gets refused and the tools are filtered out of tools/list.
+  # Read tools are unchanged. 057's composition spec sets no mcpServers override, so the chart
+  # default applies.
+  # CONTROLS: 0.2.24 and 0.2.23 resolve; 0.2.25 does not. Chart is in krateo-agentiko.
   # 0.2.22 -- OTEL-10's tracing-policy half. NOT 0.2.21, and the reason is the point of this pin.
   #
   # 0.2.21 WAS REFUSED BY check-pin-ci, correctly. At 0.2.21's commit 98cd82c4 all 15 check-runs
@@ -8146,7 +8176,7 @@ components:
   # 0.2.17 (#71): drops the connection-string response rule, which rejected any database URL as a
   # live credential and cut off RCAs whose fix sets one (e.g. DATABASE_URL=postgres://...).
   # 0.2.23: the LLM budget alerts carry a description, not message. NEEDS alert-provider-crd 0.2.68.
-  version: 0.2.23
+  version: 0.2.24
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
