@@ -22,7 +22,7 @@ on:
 
 jobs:
   release-oci:
-    uses: krateo-platformops/.github/.github/workflows/release-oci.yaml@main
+    uses: krateo-platformops/.github/.github/workflows/release-oci.yaml@7a650944ec57be3f54b72b082bb1ad45ac828e07 # main @ 2026-11-09
     permissions:
       contents: read
       packages: write
