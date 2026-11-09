@@ -6175,6 +6175,28 @@ components:
   # (consumer side of the lockstep; server side is repo-mcp-server's graphToggle).
   graphToggle: mcpServers.repoSearch.graph.enabled
 - name: incident-agent
+  # 0.3.2, skipping 0.3.1, at its owner's request. Two changes, each verified by rendering
+  # all three versions rather than reading the release note:
+  #   0.3.0  87147 bytes  compaction x3  clickhouse toolNames [list_databases, run_select_query, run_query]
+  #   0.3.1  87116 bytes  compaction x3  clickhouse toolNames [list_databases, run_query]
+  #   0.3.2  86775 bytes  compaction x0  clickhouse toolNames [list_databases, run_query]
+  # 1. 0.3.1 REMOVES run_select_query from the clickhouse MCP toolNames. Note it is a
+  #    REMOVAL, not an addition -- the owner described the RESULTING state, which read like
+  #    an addition until I diffed it, and list_databases/run_query were present at 0.3.0.
+  #    Corroborated: the live RemoteMCPServer's discoveredTools are
+  #    [list_databases, list_tables, run_query] -- NO run_select_query. So 0.3.1 removes a
+  #    reference to a tool the server does not serve.
+  # 2. 0.3.2 drops context.compaction, which the Go runtime silently IGNORED.
+  #    FOUND BY READING EVERY CONDITION, not just Ready: incident-agent carried
+  #    UnsupportedFeatures=True alongside Accepted=True and Ready=True, saying 'context
+  #    compression/compaction (not implemented in Go runtime) will be ignored'.
+  #    lastTransition 2026-08-24 -- TWO AND A HALF MONTHS unnoticed, 1 of 13 Agents.
+  #    An RCA agent was configured for long investigations and silently was not getting it.
+  #    CONTROL on the compaction read: grep finds a PLANTED 'compaction' line in 0.3.2's
+  #    render (1), so the 0 is a measurement and not a broken pattern.
+  # One pod roll, no window. The chart lives in krateo-agentiko, NOT krateo-platformops --
+  # checking the platformops org reports that NO version exists, including the LIVE 0.3.0.
+  # CONTROLS: 0.3.2, 0.3.1 and 0.3.0 all resolve; 0.3.3 does not.
   kind: IncidentAgent
   # 0.1.9 adds ONE thing to the chart: the same generic Kubernetes knowledge, appended to the
   # incident-agent's own system prompt and gated on knowledge.kubernetes.playbook / .architecture,
@@ -6195,7 +6217,7 @@ components:
   # 0.2.2 (#20): prompt-only. The RCA's how to fix is three scripts (precondition, apply, verify) plus an
   # optional rollback, and the record is an Incident, matching alert-provider 0.2.45's output contract.
   # No new values.
-  version: 0.3.0
+  version: 0.3.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
