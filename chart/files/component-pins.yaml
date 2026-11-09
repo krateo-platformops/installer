@@ -6549,8 +6549,27 @@ components:
   agent: true
   requireApproval: []
 - name: clickstack-agent
+  # 3.1.7 drops the dead run_select_query tool, matching incident-agent 0.3.2's change.
+  # Its owner called it 'the same change as incident-agent's 0.3.1'. Rendered both and the
+  # diff is EXACTLY TWO things, the second of which the description did not mention:
+  #   3.1.6  12621 bytes  2 objects  run_select_query x2  list_databases x2  run_query x2
+  #   3.1.7  12484 bytes  2 objects  run_select_query x0  list_databases x2  run_query x2
+  #   1. toolNames loses run_select_query  -> [list_databases, run_query]
+  #   2. THE AGENT'S PROMPT TEXT CHANGES. 3.1.6 told the agent:
+  #        'the query tool -- named run_query on current servers, run_select_query on older
+  #         ones; use whichever one you have'
+  #      3.1.7 says simply 'list_databases and run_query'.
+  # That second one is a BEHAVIOUR change, not bookkeeping: the agent is no longer told a
+  # fallback tool might exist. It is the right change -- the live RemoteMCPServer's
+  # discoveredTools are [list_databases, list_tables, run_query], so run_select_query was
+  # never servable -- but a pin described as 'drop a dead tool' that also rewrites the
+  # agent's instructions deserves to say so.
+  # Note the prompt ALSO still claims 'There is no list_tables' while the server DOES
+  # discover list_tables. Not this pin's problem and not mine to fix; flagged to its owner.
+  # One pod roll, no window.
+  # CONTROLS: 3.1.7 and 3.1.6 resolve; 3.1.8 does not. Chart is in krateo-agentiko.
   kind: ClickstackAgent
-  version: 3.1.6
+  version: 3.1.7
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
