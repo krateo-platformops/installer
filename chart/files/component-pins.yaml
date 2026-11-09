@@ -3170,6 +3170,13 @@ components:
 # a zero on ONE arm while the other arm's control fires is a HALF-broken probe, which is worse,
 # because the working control certifies the instrument that is failing.
 - name: portal
+  # 1.8.100 fixes the Traces list showing 'No rows' (portal#388): in 1.8.99 the span-list
+  # query had its filter part URL-encoded TWICE, so ClickHouse rejected it with SYNTAX_ERROR.
+  # Only helm/observability-page changes, plus repo-only test scripts. No CRD change in
+  # either direction, and NO new values key.
+  # The frontend STAYS at 1.8.34 -- that hard stop still holds.
+  # CONTROLS: I re-ran the registry check myself rather than relay it -- all 16 portal-line
+  # components resolve at 1.8.100; 1.8.101 does not.
   # 1.8.99 -- portal#387, the OTEL-12 trace view. All SIXTEEN portal-line components move
   # together as always: one release, one version.
   # WHAT IT ADDS: a Traces tab on the admin-only Observability page and a trace page at
@@ -3919,7 +3926,7 @@ components:
   # the label, the concrete path and krateo.io/nav-link-only (it links and owns nothing). ONLY the
   # exact string "true" enables it, so a half-recognised truthy value fails visibly instead of
   # silently claiming the route back.
-  version: 1.8.99
+  version: 1.8.100
   deps:
   - frontend
   - git-provider
@@ -4028,7 +4035,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.99
+  version: 1.8.100
   deps: ['portal']
   tier: platform
   feature: portal
@@ -4064,7 +4071,7 @@ components:
   # templates/_builder.tpl, inside `{{/* */}}` blocks. 26 files, 124539 -> 124537 bytes; Chart.yaml
   # and that one template differ, and the template's change cannot reach the render.
   kind: MarketplacePage
-  version: 1.8.99
+  version: 1.8.100
   deps:
   - portal
   tier: platform
@@ -4131,14 +4138,14 @@ components:
   feature: selfservice
 - name: service-desk-page
   kind: ServiceDeskPage
-  version: 1.8.99
+  version: 1.8.100
   deps:
   - portal
   tier: platform
   feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.99
+  version: 1.8.100
   deps:
   - portal
   tier: platform
@@ -4211,7 +4218,7 @@ components:
 #     gateway /content/debug/vars 401. A 200 WITH index.html IS A FALSE PASS (SPA fallback).
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.99
+  version: 1.8.100
   deps:
   - portal
   tier: platform
@@ -4252,7 +4259,7 @@ components:
 - name: dashboard-page
   # Renders into krateo-dashboard, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: DashboardPage
-  version: 1.8.99
+  version: 1.8.100
   deps:
   - portal
   tier: platform
@@ -4291,7 +4298,7 @@ components:
   # original push failure is still UNKNOWN -- it did not recur, which is evidence of a blip and not
   # proof of one. Pinned only after confirming 1.8.89 pulls: version 1.8.89, appVersion 1.8.89.
   kind: CompositionsPage
-  version: 1.8.99
+  version: 1.8.100
   deps:
   - portal
   tier: platform
@@ -4299,7 +4306,7 @@ components:
 - name: blueprints-page
   # Renders into krateo-blueprints, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: BlueprintsPage
-  version: 1.8.99
+  version: 1.8.100
   deps:
   - portal
   tier: platform
@@ -4307,7 +4314,7 @@ components:
 - name: resources-page
   # Renders into krateo-resources, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: ResourcesPage
-  version: 1.8.99
+  version: 1.8.100
   deps:
   - portal
   tier: platform
@@ -4315,7 +4322,7 @@ components:
 - name: search-page
   # Renders into krateo-search, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: SearchPage
-  version: 1.8.99
+  version: 1.8.100
   deps:
   - portal
   tier: platform
@@ -4323,7 +4330,7 @@ components:
 - name: builders-page
   # Renders into krateo-builders, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: BuildersPage
-  version: 1.8.99
+  version: 1.8.100
   deps:
   - portal
   tier: platform
@@ -4331,7 +4338,7 @@ components:
 - name: clusters-page
   # Renders into krateo-clusters, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ClustersPage
-  version: 1.8.99
+  version: 1.8.100
   deps:
   - portal
   tier: platform
@@ -4339,7 +4346,7 @@ components:
 - name: reviews-page
   # Renders into krateo-reviews, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ReviewsPage
-  version: 1.8.99
+  version: 1.8.100
   deps:
   - portal
   tier: platform
@@ -4347,7 +4354,7 @@ components:
 - name: settings-page
   # Renders into krateo-settings, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: SettingsPage
-  version: 1.8.99
+  version: 1.8.100
   deps:
   - portal
   tier: platform
@@ -4355,7 +4362,7 @@ components:
 - name: observability-page
   # Renders into krateo-observability, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ObservabilityPage
-  version: 1.8.99
+  version: 1.8.100
   deps:
   - portal
   tier: platform
@@ -6861,6 +6868,33 @@ components:
   tier: observability
   feature: portal
 - name: alert-provider-crd
+  # 0.2.65 IS NOT A COSMETIC BUMP. The rendered CRD grows 19952 -> 24570 bytes while the key
+  # sets are IDENTICAL (36 -> 36, 0 added, 0 removed) and the description bytes are IDENTICAL
+  # (931 both). My structural diff and my doc-text hypothesis therefore BOTH said 'cosmetic'.
+  # The growth is comments plus TWO new CEL rules, 15 -> 17, which REFUSE what 0.2.64 accepts:
+  #   1. !has(self.groupBy) || !has(self.aggregation) || self.aggregation != 'increase'
+  #   2. !(self in [34 reserved identifier names: ServiceName, Attributes, Sum, Rate,
+  #      __hdx_time_bucket, group, counts, ...])
+  # A CRD bump that ADDS a CEL rule can make an existing object UNUPDATABLE -- the object
+  # survives, the next write to it fails admission. Not visible in a version number, not
+  # visible in helm diff, and invisible to a key-set diff.
+  # CHECKED AGAINST THE LIVE POPULATION on krateo-057 before pinning:
+  #   alerts.observability.krateo.io   28 objects
+  #   metrics.observability.krateo.io   2 objects
+  #   rule 1: groupBy x1, aggregation:increase x0  -> 0 violations
+  #   rule 2: the one groupBy is sre-container-not-ready
+  #           ['k8s.namespace.name','k8s.pod.name','k8s.container.name'] -> 0 collisions
+  #   CONTROL: a planted groupBy of ['ServiceName','ok_key'] IS flagged by the same scanner,
+  #            so the zero is a measurement and not an empty instrument.
+  # HONEST LIMIT: one groupBy site in 28 Alerts is a weak sample, and these rules bind on
+  # every FUTURE write. Anyone authoring Alerts with groupBy must check the key names against
+  # those 34 reserved identifiers -- ServiceName and group are what a human reaches for.
+  # App side 0.2.64 -> 0.2.65 is byte-identical but for the image tag (15111 bytes, 11
+  # objects, both), so the app is a rebuild and the CRD carries the whole change.
+  # Moved together with alert-provider, per the rule that an app pin ahead of its -crd pin
+  # prunes silently.
+  # CONTROLS: both charts resolve at 0.2.65 and 0.2.64; neither at 0.2.66. NOTE the chart is
+  # named alert-provider-crdS (plural) -- checking 'alert-provider-crd' says NO version exists.
   # 0.2.64 -- per-group metric alerts (acmp PR #90, main cfb781f, the only change since 0.2.63).
   # BOTH alert-provider AND alert-provider-crd move to 0.2.64 TOGETHER, and that pairing IS the point:
   # the new surface is CRD FIELDS, not values. Rendered and counted rather than assumed --
@@ -6920,7 +6954,7 @@ components:
   # error, no event. A field the CRD DECLARES AS REQUIRED can never be pruned, because pruning only
   # removes fields absent from properties; the real hazard is a field the BACKEND requires that the
   # CRD does not declare.
-  version: 0.2.64
+  version: 0.2.65
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -7048,7 +7082,7 @@ components:
   # `unevaluated` in the rollup's precedence. And oasgen 0.52.0 adds six new ways for a
   # RestDefinition child to be legitimately Creating, so mixed parents get MORE likely during
   # exactly the sampling window. Found before the run, not after.
-  version: 0.2.64
+  version: 0.2.65
   # 0.2.57 carries alert-provider#76 (provider-runtime v1.7.2) and #77, which adds 'incident-provider' to
   # DEFAULT_ALERTS_JSON's reconcile-error `NOT IN` list. Measured on the published chart here, not taken
   # from the release notes: rendered at --kube-version 1.33.0, rc=0, 294 -> 331 lines (floor asserted, so
