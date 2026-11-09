@@ -4836,6 +4836,22 @@ components:
 # No -crd pin and no componentValues change. The certificate-alert fix is NOT in this chart; it
 # comes with the later krateo-observability chart.
 - name: otel-collector-tailsampling
+  # 0.1.2 -- the sampler's policies only. krateo-frontend joins the portal path, so
+  # browser-originated traces are SAMPLED at 5% instead of kept whole. The OTTL paths also gain
+  # their context prefixes, same behaviour, which is what its owner's 0.1.1 log notes were about.
+  # DIFFED by rendering both charts rather than reading the release note:
+  #   0.1.1  9274 bytes  4 objects  'krateo-frontend' occurrences: 0
+  #   0.1.2  9379 bytes  4 objects  'krateo-frontend' occurrences: 1
+  # Same object count, +105 bytes, one new exclusion. Nothing structural moves.
+  # ORDER: this goes BEFORE OTEL-10 step 3, at its owner's request, so step 3 measures the FINAL
+  # sampler rather than one that changes underneath it. Their step-3 slot is 08:00Z and they will
+  # move it if this is not live by 07:30Z.
+  # The single tier pod restarts. The daemonset's loadbalancing exporter retries, so traces in
+  # flight resume -- that is its owner's statement, and the reason this needs no quiet window.
+  # NO new values keys, NO CRD change -- asked before pinning, per the standing question.
+  # CONTROLS: 0.1.2 and 0.1.1 both resolve; 9.9.9 does not.
+  # Repo is the DEFAULT ociRepo (krateo-platformops), not krateo-agentiko -- checked, because
+  # probing the wrong org cost me two false conclusions earlier tonight.
   # otel-collector-tailsampling 0.1.1 — step 1 of OTEL-10 (observability#118). SHIPS IDLE.
   #
   # A tail-sampling collector tier: one Deployment (otelcol-contrib 0.158.0, the same image as
@@ -4866,7 +4882,7 @@ components:
   #
   # CONTROLS: 0.1.1 resolves; 0.1.0 resolves; 9.9.9 does not.
   kind: OtelCollectorTailsampling
-  version: 0.1.1
+  version: 0.1.2
   deps:
     - otel-collector-deployment
   tier: observability
