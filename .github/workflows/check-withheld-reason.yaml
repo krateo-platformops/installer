@@ -45,9 +45,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 — was v4 (Node 20, deprecated)
       - name: Set up Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0 — was v4 (Node 20, deprecated)
         with:
           version: v3.16.3
       - name: Install PyYAML
