@@ -4692,6 +4692,28 @@ components:
 #
 # CONTROLS: 0.1.34 resolves; the outgoing 0.1.33 resolves; 9.9.9 does not.
 - name: krateo-observability
+  # 0.1.35 -- a per-container readiness alert, and readiness comes OUT of sre-probe-failing.
+  # observability#126. Alert and Metric CRs only: NO pods restart.
+  # DIFFED by rendering both and diffing the OBJECT SET by kind/name, not by counting:
+  #   0.1.34  38383 bytes  34 objects  23 Alerts  1 Metric
+  #   0.1.35  39862 bytes  36 objects  24 Alerts  2 Metrics
+  #   added:   Alert/sre-container-not-ready, Metric/k8s-container-ready
+  #   removed: NOTHING
+  # The new Alert takes max(k8s.container.ready) grouped by ns/pod/container over 5 consecutive
+  # 1-minute windows below 1 -- which is why it NEEDS alert-provider >= 0.2.64 for groupBy and
+  # consecutiveWindows. 057 has 0.2.64 (pinned in 0.3.545) so that holds.
+  # IT ALSO NEEDS otel-collector-deployment 0.3.15, live here since 0.3.548: without 0.3.15's
+  # Job-pod readiness drop, FINISHED Job pods report ready=0 forever and the new alert fires on
+  # them permanently. Both prerequisites are met on 057 and I checked both rather than trust the
+  # release note.
+  # DEMO IS NOT READY FOR THIS: it has alert-provider 0.2.64, but NOT 0.3.15. So 0.1.35 must not
+  # reach demo before 0.3.15 does. Its owner first said demo was blocked on alert-provider and
+  # then corrected themselves; the real demo blocker is the collector.
+  # sre-probe-failing's spec grows 566 -> 663 bytes. Its owner says it now matches only liveness
+  # and startup probes. The rendered spec still contains the string 'Readiness', which I expect is
+  # a negation rather than a match -- I have NOT verified which, and have not claimed it.
+  # NO new values keys: componentValues.krateo-observability is closed at 5 keys and needs none.
+  # CONTROLS: 0.1.35 and 0.1.34 resolve; 9.9.9 does not.
   kind: KrateoObservability
   # 0.1.19 (observability#62): the log-scoped default alerts also exclude ServiceName
   # 'krateo-alert-provider', so they never count the alert-provider's own logs.
@@ -4725,7 +4747,7 @@ components:
   # (that repo already has a krateo-observability-0.1.10 tag as precedent), or adopt snowplow's
   # proposal to stamp the source commit SHA onto the chart artifact so pin-ci stops inferring
   # provenance from appVersion at all. Do NOT unblock this by deleting `sources` or the appVersion.
-  version: 0.1.34
+  version: 0.1.35
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -4884,6 +4906,17 @@ components:
 # No -crd pin and no componentValues change. The certificate-alert fix is NOT in this chart; it
 # comes with the later krateo-observability chart.
 - name: otel-collector-tailsampling
+  # 0.1.3 -- sse-proxy joins the sampler's portal path, so plain SSE traces are sampled at 5%
+  # while errors, 4xx and JWT-shaped values are still kept whole. observability#125.
+  # WHY: step 3's measurement found 408 of 618 platform-gateway spans came from 204 traces that
+  # ALSO carried an sse-proxy span, which the sampler kept whole because sse-proxy was not on its
+  # portal-services list. Its owner raised that as a design question rather than a defect in any
+  # roll, and Diego chose to sample sse-proxy. So this is the answer to a measurement, not a fix.
+  # DIFFED by rendering both:
+  #   0.1.2  9041 bytes  4 objects  sse-proxy 0  krateo-frontend 1
+  #   0.1.3  9096 bytes  4 objects  sse-proxy 1  krateo-frontend 1
+  # +55 bytes, one added service name, nothing structural. Restarts only the tail sampler.
+  # CONTROLS: 0.1.3 and 0.1.2 resolve.
   # 0.1.2 -- the sampler's policies only. krateo-frontend joins the portal path, so
   # browser-originated traces are SAMPLED at 5% instead of kept whole. The OTTL paths also gain
   # their context prefixes, same behaviour, which is what its owner's 0.1.1 log notes were about.
@@ -4930,7 +4963,7 @@ components:
   #
   # CONTROLS: 0.1.1 resolves; 0.1.0 resolves; 9.9.9 does not.
   kind: OtelCollectorTailsampling
-  version: 0.1.2
+  version: 0.1.3
   deps:
     - otel-collector-deployment
   tier: observability
