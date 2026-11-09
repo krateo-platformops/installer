@@ -3170,6 +3170,28 @@ components:
 # a zero on ONE arm while the other arm's control fires is a HALF-broken probe, which is worse,
 # because the working control certifies the instrument that is failing.
 - name: portal
+  # 1.8.99 -- portal#387, the OTEL-12 trace view. All SIXTEEN portal-line components move
+  # together as always: one release, one version.
+  # WHAT IT ADDS: a Traces tab on the admin-only Observability page and a trace page at
+  # /observability/traces/<TraceId>, backed by three new RestActions over otel_traces through
+  # the existing clickhouse-endpoint in krateo-observability, readable by `admins` only.
+  # builder-publish 1.8.99 rides IMPLICITLY and must not become a 17th pin -- it is registered
+  # by the PORTAL chart at charts/builder-publish:{{portal version}}. Confirmed on 057 at the
+  # previous bump: its CD was managed-by Helm with the portal's version and all 17 CRs followed.
+  # ORDERING, already satisfied: it validates against frontend-crds 1.8.34, which 057 has had
+  # since 0.3.545. No CRD change in this release, and no RBAC beyond the page's existing admins
+  # binding.
+  # ONE NEW CHART VALUE, which I DO NOT set: observability-page gains tracesHiddenService,
+  # defaulting to `krateo-observability` in the chart's own values.yaml and declared in the
+  # chart's own schema. It hides HyperDX's own spans by default, per Diego. observabilityConsoleUrl
+  # stays '' so the HyperDX deep link stays hidden. Its owner confirmed I need not set it, and I
+  # verified the chart default IS the wanted value rather than taking that on trust.
+  # NOT settable through my componentValues schema today -- see the note above the frontend
+  # components. That is fine while the default is wanted; if HyperDX ever gets a stable public
+  # URL, THAT is when the widening has to land, BEFORE anyone tries to set it.
+  # CONTROLS: all 16 charts resolve at 1.8.99, verified one chart at a time rather than by
+  # resolving `portal` and assuming the other 15; builder-publish 1.8.99 resolves; portal 9.9.9
+  # does not.
   # 1.8.98 -- portal#386: the Dashboard rail's "No signal" rows show the controller's REASON on hover.
   # All SIXTEEN portal-line components move together, as always: one release, one version.
   # builder-publish 1.8.98 is NOT pinned here and must not be. It is co-released with portal and
@@ -3897,7 +3919,7 @@ components:
   # the label, the concrete path and krateo.io/nav-link-only (it links and owns nothing). ONLY the
   # exact string "true" enables it, so a half-recognised truthy value fails visibly instead of
   # silently claiming the route back.
-  version: 1.8.98
+  version: 1.8.99
   deps:
   - frontend
   - git-provider
@@ -4006,7 +4028,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.98
+  version: 1.8.99
   deps: ['portal']
   tier: platform
   feature: portal
@@ -4042,7 +4064,7 @@ components:
   # templates/_builder.tpl, inside `{{/* */}}` blocks. 26 files, 124539 -> 124537 bytes; Chart.yaml
   # and that one template differ, and the template's change cannot reach the render.
   kind: MarketplacePage
-  version: 1.8.98
+  version: 1.8.99
   deps:
   - portal
   tier: platform
@@ -4109,14 +4131,14 @@ components:
   feature: selfservice
 - name: service-desk-page
   kind: ServiceDeskPage
-  version: 1.8.98
+  version: 1.8.99
   deps:
   - portal
   tier: platform
   feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.98
+  version: 1.8.99
   deps:
   - portal
   tier: platform
@@ -4189,7 +4211,7 @@ components:
 #     gateway /content/debug/vars 401. A 200 WITH index.html IS A FALSE PASS (SPA fallback).
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.98
+  version: 1.8.99
   deps:
   - portal
   tier: platform
@@ -4230,7 +4252,7 @@ components:
 - name: dashboard-page
   # Renders into krateo-dashboard, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: DashboardPage
-  version: 1.8.98
+  version: 1.8.99
   deps:
   - portal
   tier: platform
@@ -4269,7 +4291,7 @@ components:
   # original push failure is still UNKNOWN -- it did not recur, which is evidence of a blip and not
   # proof of one. Pinned only after confirming 1.8.89 pulls: version 1.8.89, appVersion 1.8.89.
   kind: CompositionsPage
-  version: 1.8.98
+  version: 1.8.99
   deps:
   - portal
   tier: platform
@@ -4277,7 +4299,7 @@ components:
 - name: blueprints-page
   # Renders into krateo-blueprints, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: BlueprintsPage
-  version: 1.8.98
+  version: 1.8.99
   deps:
   - portal
   tier: platform
@@ -4285,7 +4307,7 @@ components:
 - name: resources-page
   # Renders into krateo-resources, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: ResourcesPage
-  version: 1.8.98
+  version: 1.8.99
   deps:
   - portal
   tier: platform
@@ -4293,7 +4315,7 @@ components:
 - name: search-page
   # Renders into krateo-search, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: SearchPage
-  version: 1.8.98
+  version: 1.8.99
   deps:
   - portal
   tier: platform
@@ -4301,7 +4323,7 @@ components:
 - name: builders-page
   # Renders into krateo-builders, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: BuildersPage
-  version: 1.8.98
+  version: 1.8.99
   deps:
   - portal
   tier: platform
@@ -4309,7 +4331,7 @@ components:
 - name: clusters-page
   # Renders into krateo-clusters, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ClustersPage
-  version: 1.8.98
+  version: 1.8.99
   deps:
   - portal
   tier: platform
@@ -4317,7 +4339,7 @@ components:
 - name: reviews-page
   # Renders into krateo-reviews, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ReviewsPage
-  version: 1.8.98
+  version: 1.8.99
   deps:
   - portal
   tier: platform
@@ -4325,7 +4347,7 @@ components:
 - name: settings-page
   # Renders into krateo-settings, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: SettingsPage
-  version: 1.8.98
+  version: 1.8.99
   deps:
   - portal
   tier: platform
@@ -4333,7 +4355,7 @@ components:
 - name: observability-page
   # Renders into krateo-observability, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ObservabilityPage
-  version: 1.8.98
+  version: 1.8.99
   deps:
   - portal
   tier: platform
