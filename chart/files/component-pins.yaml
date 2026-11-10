@@ -8423,3 +8423,37 @@ components:
   - identity-lifecycle-crd
   tier: platform
   feature: identityLifecycle
+- name: krateo-capability-roles
+  # ADOPTION, not a new install (Diego, 2026-11-10). This chart is already deployed on krateo-demo as
+  # a HAND-INSTALLED release (rev 5, krateo-capability-roles-0.6.2, krateo-system) that the installer
+  # does not manage. Pinning it at the version that is LIVE — 0.6.2, not a newer one — so the takeover
+  # changes OWNERSHIP and nothing else; any version bump is then a separate, observable change.
+  #
+  # Published under a NON-DEFAULT OCI base: krateo-saas/, not charts/. The component name is not a
+  # chart path here, so `repo` is mandatory.
+  #
+  # CONDITIONAL KYVERNO DEPENDENCY — the reason there is no `requiresApiGroups` on this entry.
+  # templates/tenant-reader-policies.yaml renders ValidatingPolicy + GeneratingPolicy on
+  # policies.kyverno.io/v1, and it is gated on `tenantReader.enabled` (line 32). Measured offline:
+  #   tenantReader.enabled=true  -> 14 objects, 6 policies.kyverno.io refs
+  #   tenantReader.enabled=false -> 11 objects, 0 kyverno refs
+  # So kyverno is required only when that value is on. `requiresApiGroups: [policies.kyverno.io]`
+  # would HARD-block every cluster that does not need the policies, which is most of them — 057 has
+  # 0 kyverno CRDs. Instead the dependency is expressed as a componentValues knob, and a cluster
+  # that enables tenantReader without kyverno fails loudly at render, which is the right failure.
+  #
+  # demo runs CHART DEFAULTS (helm get values returns null), and the default is
+  # tenantReader.enabled=true — which works there only because kyverno is hand-installed (20 CRDs).
+  # Enabling this feature on 057 therefore requires componentValues tenantReader.enabled=false until
+  # kyverno is itself an installer component; kyverno is deliberately NOT adopted, because its
+  # release owns the 22 CRDs behind the tenant-namespace-on-login ClusterPolicy, whose generate rules
+  # are immutable and whose deletion removes every tenant namespace it generated (the chart's own
+  # tenant-reader-policies.yaml header says so).
+  kind: KrateoCapabilityRoles
+  chart: krateo-capability-roles
+  repo: oci://ghcr.io/krateo-platformops/krateo-saas
+  version: 0.6.2
+  deps:
+  - portal
+  tier: platform
+  feature: capabilityRoles
