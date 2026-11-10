@@ -6555,7 +6555,7 @@ components:
   #   delegates AS WELL, not INSTEAD. So this leaves no gap, and the reverse order would only
   #   double-sort on the same key, which is idempotent. Checked rather than assumed.
   #   MARKER: 'WIDGET-AGNOSTIC -- A RESTACTION IS DATA'   (1.2.3=0, 1.2.4=1)
-  version: 1.2.4
+  version: 1.2.5
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
