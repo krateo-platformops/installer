@@ -273,6 +273,8 @@ features:
                                   #   model-configs.agentgateway.modelRoute.enabled=false, fill-if-absent, so an explicit
                                   #   override still wins).
   auditWorm: false
+  capabilityRoles: false     # OPT-IN. Adoption target: already hand-installed on demo at
+                             # 0.6.2. Needs Kyverno only if tenantReader.enabled stays true.
   showback: false                 # OPT-IN tamper-EVIDENT mirror of the krateo_audit table (component
   identityLifecycle: false
   accessReview: false
