@@ -606,6 +606,18 @@ components:
 #
 # CONTROLS: authn and authn-crds 0.37.0 resolve; the outgoing 0.36.0 resolves; authn 9.9.9 does not.
 - name: authn
+  # PRECONDITION CORRECTION (2026-11-10, after authn pushed back): an earlier note in this repo's
+  # history said krateo-057 has 0 basic Users. That number came from the DEMO cluster and was
+  # attributed to 057 — a wrong-cluster read, not a broken instrument. Measured on 057:
+  #   users.basic.authn.krateo.io     13   (all in krateo-system)
+  #   oauthconfigs.oauth.authn...      0
+  #   oidcconfigs.oidc.authn...        0
+  #   ldapconfigs.ldap.authn...        0
+  # The conclusion is unchanged and this is why: 0.41.0's breaking change requires `subject` on
+  # OAuth RESTActions and `sub` on OIDC, and rejects `system:` groups. Basic Users are not subject
+  # to the subject/sub requirement at all, and 0 of the 13 carry a `system:` group. The guard's only
+  # effect on them is that each existing clientconfig Secret gains its claim at the user's next
+  # sign-in; the one `unknown` Secret is adopted by a basic or serviceaccount login.
   # 0.40.0 is core-provider 2.13.78's OTHER HALF, and they ship in the same tag for that reason.
   # 2.13.78 stops deleting authn's cdc clientconfig Secret (it never created it); 0.40.0 makes
   # /serviceaccount/login write that Secret with its ServiceAccount mapping as ownerReference (by
