@@ -5139,7 +5139,7 @@ components:
   #
   # CONTROLS: 0.1.1 resolves; 0.1.0 resolves; 9.9.9 does not.
   kind: OtelCollectorTailsampling
-  version: 0.1.6
+  version: 0.1.7
   deps:
     - otel-collector-deployment
   tier: observability
