@@ -93,17 +93,32 @@ bootstrap:
 
 # Bootstrap engine (core-provider subchart) values. Engine OTLP export is OFF by default
 # (otel.enabled=false in the subchart) and EVERY OTEL_* env is gated on that flag, so this endpoint
-# is inert and byte-identical until export is turned on. It is committed here as the ONE correct
-# target so no per-operator deploy value can drift (#229): the OTel collector DAEMONSET that the
-# installer itself deploys is the only one with an OTLP :4318 listener — the gateway
-# (`...-deployment-...`) is a k8s_cluster/k8sobjects scraper and refuses :4318. To turn on engine
-# telemetry, set `core-provider.otel.enabled=true` at deploy time and DO NOT also pass
-# `otel.endpoint` — inherit this default so it stays correct across redeploys. (Endpoint namespace
-# is namespaces.krateo's default `krateo-system`; the subchart reads endpoint literally — a
-# non-default krateo namespace needs an explicit endpoint override.)
+# is inert and byte-identical until export is turned on.
+# THIS DEFAULT NAMED THE HEADLESS COLLECTOR UNTIL 0.3.563, AND THAT WAS WRONG. It used to say the
+# headless Service was "the ONE correct target" and told operators NOT to pass their own endpoint.
+# Inheriting it is what produces spans with no pod metadata: the headless Service's DNS spreads
+# each controller's OTLP across every node agent, and each agent's k8sattributes is node-filtered
+# by K8S_NODE_NAME, so a span landing on another node's agent is never matched to its pod and
+# loses k8s.deployment.name and the rest. 057 carried an explicit -local override that silently
+# protected it from this default; when I dropped that override (believing core-provider 2.13.80's
+# #420 would then route node-local) the value fell back to HERE, and 72 of 74 per-version
+# ConfigMaps got the headless endpoint with 0 of 71 cdc Deployments carrying HOST_IP. Measured,
+# reverted, and fixed at the source rather than per cluster.
+# PRECONDITION, and it is NOT free (core-provider corrected me on this): internalTrafficPolicy:
+# Local routes ONLY to an agent on the sending pod's node and DROPS the traffic when there is
+# none -- it does not fall back. The daemonset's tolerations are EMPTY, so a TAINTED node gets no
+# agent and its controllers' spans are lost silently. Verified on 057 at 0.3.562: 4 nodes, none
+# tainted, 4/4 with an agent pod, all 4 cdc-bearing nodes covered, ds desired=4 ready=4
+# misscheduled=0. Re-check that on any cluster with taints or a partial daemonset.
+# OPT-IN ALTERNATIVE on core-provider >= 2.13.79: set `core-provider.otel.endpoint: ""` to get
+# otlpNodeLocal, which exports to http://$(HOST_IP):4318 from the pod's own fieldRef and depends
+# on no Service name at all. It needs hostPort 4318 on the daemonset (present on 057: 4318 and
+# 4317) and shares the SAME node-coverage precondition above. After changing either way, read the
+# endpoint the controllers actually RECEIVED -- preconditions for a route being usable are not
+# evidence of the route taken, which is the whole lesson of this comment.
 core-provider:
   otel:
-    endpoint: http://otel-collector-daemonset-opentelemetry-collector.krateo-system.svc:4318
+    endpoint: http://otel-collector-daemonset-local.krateo-system.svc:4318
 
 # Namespaces the umbrella manages. The observability stack (ClickStack, collectors,
 # MCP, agents) now runs entirely in `krateo` — there is no separate clickhouse
