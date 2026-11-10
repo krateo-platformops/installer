@@ -7087,7 +7087,7 @@ components:
   # NOT block this cutover -- it means that until it lands, incident-provider's own reconcile errors
   # can open Incidents ABOUT incident-provider. A known cost, not a surprise.
   kind: IncidentProvider
-  version: 0.7.0
+  version: 0.8.0
   deps:
   - incident-provider-crd
   tier: observability
@@ -7108,7 +7108,7 @@ components:
   # The OCI repo does not change: both charts resolve at ghcr.io/krateo-platformops/charts.
   kind: IncidentProviderCrds
   chart: incident-provider-crds
-  version: 0.7.0
+  version: 0.8.0
   tier: observability
   feature: portal
 - name: alert-provider-crd
@@ -7203,7 +7203,7 @@ components:
   # removes fields absent from properties; the real hazard is a field the BACKEND requires that the
   # CRD does not declare.
   # 0.2.68: spec.description (one plain sentence) replaces spec.message. Moves with alert-provider.
-  version: 0.2.68
+  version: 0.2.69
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -7359,7 +7359,7 @@ components:
   # exactly the sampling window. Found before the run, not after.
   # 0.2.67: one HyperDX alerts list per poll interval, and a 429 defers the pass.
   # 0.2.68: reads spec.description, not spec.message.
-  version: 0.2.68
+  version: 0.2.69
   # 0.2.57 carries alert-provider#76 (provider-runtime v1.7.2) and #77, which adds 'incident-provider' to
   # DEFAULT_ALERTS_JSON's reconcile-error `NOT IN` list. Measured on the published chart here, not taken
   # from the release notes: rendered at --kube-version 1.33.0, rc=0, 294 -> 331 lines (floor asserted, so
