@@ -5590,7 +5590,7 @@ components:
   feature: coreAgents
 - name: kagent
   kind: Kagent
-  version: 0.1.18
+  version: 0.1.19
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
@@ -5651,7 +5651,7 @@ components:
   #   VERIFICATION LIMIT, from the handoff and not re-tested here: the 2.7 and 3.0 line-detection
   #   branches are UNVERIFIED — no cluster on either line was reachable. Only the 4.0 branch is
   #   confirmed. Do not trust a generated plan from an older cluster until a real 3.0 cluster exists.
-  version: 0.3.3
+  version: 0.3.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -5959,7 +5959,7 @@ components:
   kind: Agentiko
   agentName: agentiko
   # 0.8.1: the alert-authoring prompt names spec.description.
-  version: 0.8.1
+  version: 0.8.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
     - repo-mcp-server
@@ -6411,7 +6411,7 @@ components:
   # 0.2.2 (#20): prompt-only. The RCA's how to fix is three scripts (precondition, apply, verify) plus an
   # optional rollback, and the record is an Incident, matching alert-provider 0.2.45's output contract.
   # No new values.
-  version: 0.3.2
+  version: 0.3.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
