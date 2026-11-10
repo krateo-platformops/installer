@@ -48,7 +48,7 @@ components:
   # 0.33.1 WAS SKIPPED DELIBERATELY. It exists and was approved, but authn recommended going straight
   # to 0.34.0 so both clusters roll once instead of twice, and Diego chose that. 0.33.1 was never
   # pinned or rolled anywhere.
-  version: 0.40.0
+  version: 0.41.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -741,7 +741,7 @@ components:
   # REQUIRED-BEFORE child Krateos: Diego decided children move ONCE, to the first installer version
   # that pins authn 0.34.0, rather than stopping at 0.3.498 first. acmp sets that version as the
   # blueprint's childKrateo.installer.version and upgrades acme and globex on his word.
-  version: 0.40.0
+  version: 0.41.0
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
@@ -2916,7 +2916,7 @@ components:
   requiresApiGroups:
   - github.krateo.io
   tier: platform
-  version: 0.8.0
+  version: 0.9.0
 - name: github-provider-kog
   # HISTORICAL (resolved by oasgen-provider 0.27.0 — see the 0.3.2 note below). REVERTED TO 0.3.1 at
   # the time because: 0.3.2 COULD NOT BE INSTALLED IN PLACE and this was not a transient — it was
@@ -3062,7 +3062,7 @@ components:
   # diffs, reporulesets/orgrulesets CRDs Established carrying a 23-value rules[].type enum, 057's
   # PR/Repo counts identical to baseline, and Synced on every CR. THE ENUM IS THE PROOF THE CHECK
   # BITES: it reads 15 today, so a vacuous pass is not available to it.
-  version: 0.8.0
+  version: 0.9.0
   # 0.7.0 adds two kinds and removes none -- measured on the published chart, not read from the
   # release notes: rendered at --kube-version 1.33.0, rc=0 on both sides, 8104 -> 8882 lines (floor
   # asserted), RestDefinition docs 30 -> 32, ADDED {RepoContent, UserRepository}, REMOVED {} . 0.7.1
