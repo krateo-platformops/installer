@@ -4,3 +4,10 @@ chart/Chart.lock
 *.tgz
 dist/
 __pycache__/
+
+# kubectl's discovery/http cache. kubectl writes it to $HOME/.kube, but when HOME
+# is unset or a tool runs with this repo as its working directory it lands HERE as
+# ./.kube/cache — ~400 JSON files. Harmless content (API discovery, no credentials:
+# the only "token" string is the serviceaccounts/token RESOURCE NAME), but it is not
+# ours and a plain `git add .` would commit all of it into a shared repo.
+.kube/
