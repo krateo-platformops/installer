@@ -10853,6 +10853,80 @@
           "additionalProperties": false,
           "description": "Values for the keycloak component. Deliberately minimal: the realm's own configuration (identity provider, authentication flows, required actions, group mappers) is NOT set here -- it is reconciled from keycloak-config-kog CRs, so there is nothing to declare for it. The database comes from the blueprint's defaults plus CloudNativePG. Only values the installer must set per cluster belong here, and an undeclared key is pruned silently with every CI check green.",
           "properties": {
+            "db": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "REQUIRED ON THE COMPOSITION CR. keycloak 0.2.3's values.schema.json carries a root-level `required: [keycloak, db]`, which crdgen turns into mandatory fields on the Keycloak Composition CR. The umbrella emits that CR carrying only what componentValues supplies -- the chart's own values.yaml defaults do NOT populate it -- so omitting `db` makes the apiserver reject the object with `spec.db: Required value`, and because that rejection happens inside the Installer composition's own helm reconcile it stalls EVERY component, not just Keycloak. Measured on krateo-demo 2026-11-11 at 0.3.582: Installer went Synced=False/ReconcileError with 108 managed children frozen. The proper fix is for the keycloak chart to drop the root `required` (its values.yaml already carries full defaults); this node exists so the installer is not wedged while that lands, and remains useful afterwards for overriding the database wiring.",
+              "properties": {
+                "vendor": {
+                  "type": "string"
+                },
+                "database": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "host": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "integer"
+                },
+                "cloudnativepg": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "clusterName": {
+                      "type": "string"
+                    },
+                    "instances": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "owner": {
+                      "type": "string"
+                    },
+                    "imageName": {
+                      "type": "string"
+                    },
+                    "storage": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "size": {
+                          "x-kubernetes-int-or-string": true
+                        },
+                        "storageClass": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "secret": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "create": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "username": {
+                      "type": "string"
+                    },
+                    "usernameKey": {
+                      "type": "string"
+                    },
+                    "passwordKey": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
             "keycloak": {
               "type": "object",
               "additionalProperties": false,
@@ -10860,6 +10934,49 @@
                 "hostname": {
                   "type": "string",
                   "description": "The externally reachable base URL Keycloak issues tokens for. MUST be set per cluster: the chart's default is the placeholder https://keycloak.example.com, and an issuer that does not match the URL users actually reach makes every OIDC validation fail. On krateo-demo it has to match the hand-installed TLS edge, so it is a per-cluster value rather than a chart default."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The Keycloak CR's name. Structural, not environmental -- defaulted in values.yaml, not here: a default in this file would be written into the Installer CR itself."
+                },
+                "instances": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Keycloak replica count. Defaulted in values.yaml."
+                },
+                "image": {
+                  "type": "string"
+                },
+                "proxyHeaders": {
+                  "type": "string"
+                },
+                "additionalOptions": {
+                  "type": "array"
+                },
+                "http": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "httpEnabled": {
+                      "type": "boolean"
+                    },
+                    "tlsSecretName": {
+                      "type": "string",
+                      "description": "Names a Secret the installer does NOT create. On krateo-demo the TLS edge is hand-installed, so this points at an object whose lifecycle is outside this chart."
+                    }
+                  }
+                },
+                "ingress": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "className": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
