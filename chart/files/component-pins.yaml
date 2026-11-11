@@ -7143,7 +7143,20 @@ components:
   deps:
   - incident-provider-crd
   tier: observability
-  feature: specialistAgents
+  # GATE ALIGNED WITH ITS OWN CRD, 2026-11-11 (Diego). It was `specialistAgents`
+  # while incident-provider-crd is `portal`, so any cluster with portal on and
+  # specialistAgents off got the CRD and the incidents page WITHOUT the
+  # controller. Found live on krateo-demo by acmp: 1,690 incidents closed with
+  # spec.closed=true stayed `state: Open, resolution.by: none` because nothing
+  # reconciled them, and none of 0.9.0's lifecycle (ChecksUnknown bounds,
+  # AlertGone close, analysis-failed) ran at all.
+  # `portal` rather than a new default-on feature, because that is what the CRD
+  # half already uses and every other component/-crd pair in this file moves
+  # together. SAFE: this component hard-requires observability.krateo.io, and
+  # alert-provider -- which provides that group -- is ALSO gated on `portal`, so
+  # the requirement is satisfied on exactly the clusters this now installs on.
+  # NOT a behaviour change on 057, which already has specialistAgents on.
+  feature: portal
   requiresApiGroups:
   - observability.krateo.io
 
