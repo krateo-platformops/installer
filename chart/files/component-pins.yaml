@@ -8530,7 +8530,7 @@ components:
   kind: KeycloakConfigKog
   chart: keycloak-config-kog
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.5.1
+  version: 0.5.2
   requiresApiGroups:
   - ogen.krateo.io
   - external-secrets.io
