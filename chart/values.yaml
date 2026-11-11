@@ -468,6 +468,24 @@ componentValues:
   #       tracing: true
   #       endpoint: "http://<otel-collector>.<ns>.svc:4318"
   #       protocol: http/protobuf
+  keycloak-config-kog:
+    # BOOTSTRAP MODE. The keycloak blueprint creates Secret keycloak-bootstrap-service alongside the
+    # instance, and that service account is how the KOG authenticates as admin. The alternative --
+    # externalSecret mode with a pre-provisioned client credential -- needs Secret
+    # keycloak-kog-client, which nothing in this platform creates. Measured on krateo-demo
+    # 2026-11-11: with the chart defaults the KOG sat in externalSecret mode pointing at an
+    # absent keycloak-kog-client AND an endpoint in a namespace that does not exist, so both admin
+    # ExternalSecrets stayed SecretSyncedError and the KOG reconciled nothing.
+    #
+    # DO NOT add auth.externalSecret.enabled: false here. Bootstrap is a SUB-MODE of externalSecret:
+    # the ExternalSecrets and the Webhook generator render only when externalSecret.enabled is true,
+    # so disabling it means nothing mints a token at all. It stays at the chart's default (true).
+    #
+    # auth.bootstrap.namespace and auth.externalSecret.tokenEndpoint are NOT set here: they depend on
+    # namespaces.krateo and are derived by inst.componentValuesResolved. Only the mode is constant.
+    auth:
+      bootstrap:
+        enabled: true
   keycloak:
     # REQUIRED ON THE COMPOSITION CR, NOT MERELY USEFUL. keycloak 0.2.3's values.schema.json
     # carries a root-level `required: [keycloak, db]`, and crdgen turns that into mandatory

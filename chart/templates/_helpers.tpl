@@ -1158,6 +1158,43 @@ the surgical upgrade patch — so the two paths cannot drift.
 {{- if not (dig "baseUrl" "" $kc) -}}
 {{- $_ := set $kc "baseUrl" (printf "http://keycloak-service.%s.svc.cluster.local:8080" $ns) -}}
 {{- end -}}
+{{/* auth.externalSecret.tokenEndpoint and auth.bootstrap.namespace are the SAME class as baseUrl:
+     the chart's own defaults name `keycloak-system`, while Krateo installs every composition into
+     namespaces.krateo. Measured on krateo-demo 2026-11-11: the chart default made the Webhook
+     generator POST to a host in a namespace that does not exist, both admin ExternalSecrets stayed
+     SecretSyncedError, and the KOG could authenticate to nothing -- so it reconciled nothing.
+
+     tokenEndpoint is consulted in BOOTSTRAP MODE TOO (confirmed from the 0.5.3 chart source by
+     keycloak-provider-kog): bootstrap only changes the credential SOURCE, not the token URL.
+
+     auth.bootstrap.namespace must hold the namespace of Secret keycloak-bootstrap-service, which the
+     keycloak blueprint creates alongside the instance -- so it is the Keycloak namespace, i.e. the
+     same $ns. The chart `required`s it whenever bootstrap is enabled, so a missing value FAILS the
+     render rather than misbehaving quietly. Enabling bootstrap is a MODE choice and not
+     namespace-dependent, so it is a constant default in values.yaml, not derived here.
+
+     NOT set here and deliberately: auth.externalSecret.enabled. Bootstrap is a SUB-MODE of
+     externalSecret -- the ExternalSecrets and the Webhook generator render only when
+     externalSecret.enabled is true -- so forcing it false would mean nothing mints a token at all.
+     It stays at the chart's own default. */}}
+{{- if not (and (hasKey $entry "auth") (kindIs "map" (index $entry "auth"))) -}}
+{{- $_ := set $entry "auth" dict -}}
+{{- end -}}
+{{- $auth := index $entry "auth" -}}
+{{- if not (and (hasKey $auth "externalSecret") (kindIs "map" (index $auth "externalSecret"))) -}}
+{{- $_ := set $auth "externalSecret" dict -}}
+{{- end -}}
+{{- $es := index $auth "externalSecret" -}}
+{{- if not (dig "tokenEndpoint" "" $es) -}}
+{{- $_ := set $es "tokenEndpoint" (printf "http://keycloak-service.%s.svc.cluster.local:8080/realms/master/protocol/openid-connect/token" $ns) -}}
+{{- end -}}
+{{- if not (and (hasKey $auth "bootstrap") (kindIs "map" (index $auth "bootstrap"))) -}}
+{{- $_ := set $auth "bootstrap" dict -}}
+{{- end -}}
+{{- $bs := index $auth "bootstrap" -}}
+{{- if not (dig "namespace" "" $bs) -}}
+{{- $_ := set $bs "namespace" $ns -}}
+{{- end -}}
 {{- end -}}
 {{- $cv | toJson -}}
 {{- end -}}
