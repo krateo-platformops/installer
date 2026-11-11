@@ -10864,6 +10864,43 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "auth": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Admin authentication for the KOG. On demo it runs in BOOTSTRAP mode against the Secret keycloak-bootstrap-service that the keycloak blueprint creates. Bootstrap is a SUB-MODE of externalSecret -- the ExternalSecrets and the Webhook generator render only when externalSecret.enabled is true -- so externalSecret.enabled is deliberately NOT declared here: forcing it false would mean nothing mints a token. Left absent, tokenEndpoint and bootstrap.namespace are derived from namespaces.krateo by inst.componentValuesResolved, because the chart defaults name keycloak-system and Krateo installs compositions into namespaces.krateo.",
+              "properties": {
+                "externalSecret": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "tokenEndpoint": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "The Webhook generator URL the KOG mints its admin token from. CONSULTED IN BOOTSTRAP MODE TOO -- bootstrap changes only the credential source, not the token URL. Derived when absent."
+                    }
+                  }
+                },
+                "bootstrap": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "Use the keycloak blueprint's bootstrap service account instead of a pre-provisioned client credential. Defaulted true in values.yaml: it is a mode choice, not namespace-dependent."
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Namespace holding Secret keycloak-bootstrap-service, i.e. the Keycloak namespace. The chart `required`s it whenever bootstrap is enabled, so a missing value FAILS the render rather than misbehaving quietly. Derived from namespaces.krateo when absent."
+                    },
+                    "secretName": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            },
             "keycloak": {
               "type": "object",
               "additionalProperties": false,
