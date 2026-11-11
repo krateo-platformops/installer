@@ -48,6 +48,16 @@ def kubectl(ctx, *args, check=True):
 def snapshot(ctx, outdir, phase):
     d = os.path.join(outdir, phase)
     os.makedirs(d, exist_ok=True)
+    # STAMP THE WINDOW. The watch dumps each pod's WHOLE log on purpose (the errors we want happen
+    # in a pod's first seconds and we may attach late), so it also picks up errors that were already
+    # there from an EARLIER roll. Measured on the 0.3.588 roll: the first two lines captured were
+    # from 17:27/17:28, the previous roll, while this one started at 18:13 -- and without a window
+    # the report would have correlated stale errors against this roll's version diff and read as
+    # five fresh occurrences. The pre phase stamps when the window opened; report() uses it.
+    if phase == "pre":
+        with open(os.path.join(outdir, "window.json"), "w") as f:
+            json.dump({"preAt": datetime.datetime.now(datetime.timezone.utc)
+                       .isoformat().replace("+00:00", "Z")}, f)
     # --show-managed-fields IS REQUIRED. kubectl strips managedFields from `get -o json` by
     # default, so without it every snapshot carries an empty managedFields and the correlation in
     # report() silently reports "NO version add names this kind" for every error. Caught by the
@@ -162,10 +172,22 @@ def report(outdir):
             added_index[(b["kind"], v)] = t[-1] if t else None  # newest controller write
     errf = os.path.join(outdir, "errors.jsonl")
     errs = [json.loads(l) for l in open(errf)] if os.path.exists(errf) else []
+    win = None
+    wf = os.path.join(outdir, "window.json")
+    if os.path.exists(wf):
+        win = json.load(open(wf)).get("preAt")
+    fresh = [e for e in errs if win and str(e.get("timestamp") or "") >= win]
+    stale = [e for e in errs if not (win and str(e.get("timestamp") or "") >= win)]
     out = ["VERSION-SET DIFF (pre -> post)", ""]
     out += ["  " + l for l in lines] or ["  (no served-version changes)"]
-    out += ["", f"ERRORS CAPTURED: {len(errs)}", ""]
-    for e in errs:
+    out += ["", f"ROLL WINDOW OPENED: {win or 'UNKNOWN -- run the pre phase to stamp it'}"]
+    out += [f"ERRORS IN THIS WINDOW: {len(fresh)}   PRE-EXISTING IN POD LOGS: {len(stale)}"]
+    if stale:
+        out += ["", "  (pre-existing, from an earlier roll -- NOT evidence for this one:)"]
+        for e in stale:
+            out.append(f"    {e['timestamp']}  {str(e['err'])[:100]}")
+    out += ["", "ERRORS IN THIS WINDOW, in full:", ""]
+    for e in fresh:
         hit = [f"{k}/{v} added (newest controller write {t})" for (k, v), t in added_index.items()
                if k in str(e["err"]) or v in str(e["err"])]
         out.append(f"  {e['timestamp']}  pod={e['pod']}")
