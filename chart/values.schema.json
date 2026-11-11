@@ -314,6 +314,11 @@
           "default": false,
           "description": "Opt-in. Reconciles downstream identity CRs for a user's lifecycle (component identity-lifecycle, with identity-lifecycle-crd for its UserLifecycle CRD). Defaults false because it is a new component and `features.*` is inert on an upgrade, so enabling it is a deliberate CR edit rather than something a version bump can switch on. The CRD carries helm.sh/resource-policy: keep, so disabling the feature drains the component without deleting any UserLifecycle object."
         },
+        "keycloak": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in. Installs the Keycloak realm stack that fronts Krateo sign-in: keycloak-operator (provides k8s.keycloak.org), cloudnative-pg (provides postgresql.cnpg.io for the embedded database), external-secrets (provides external-secrets.io and generators.external-secrets.io), and keycloak itself. OFF by default because it creates a realm and an identity broker, which is a policy decision rather than a default. NOTE this flag does NOT yet install keycloak-config-kog, which turns realm configuration (identity provider, authentication flows, required actions, mappers) into CRs: that needs keycloak-config-kog >= 0.5.1, which renders the execution controller's authn ServiceAccount allowlist CR plus its two Roles. At 0.5.0 those do not exist and authn refuses the execution controller with 403 'not in the exchange allowlist', so the locked first-broker-login flow and the browser-flow redirector never reconcile. Until 0.5.1 is pinned here, enabling this gives a running Keycloak whose realm must be configured by hand."
+        },
         "accessReview": {
           "type": "boolean",
           "default": false,

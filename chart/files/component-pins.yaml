@@ -8431,6 +8431,71 @@ components:
 # by the realm, and the two rotate independently. He creates both Secrets; the installer checks
 # key names only and never reads values. GroupMembership.spec.identityProvider.clientSecretRef
 # points at the narrow one, in krateo-system.
+- name: cloudnative-pg
+  # NEW COMPONENT, wired 2026-11-11 for demo Phase 2 (the Keycloak stack behind the core
+  # self-service film). PROVIDES postgresql.cnpg.io, which keycloak's embedded-database path
+  # consumes. UPSTREAM CHART, not a krateo mirror: resolved from ghcr.io/cloudnative-pg/charts at
+  # 0.29.1 (appVersion 1.30.1), verified with `helm show chart` before pinning. There is no
+  # cloudnative-pg package in krateo-platformops, krateo-agentiko or krateo-blueprints -- I checked
+  # all three org package listings, so the upstream repo is deliberate and not a fallback.
+  # No requiresApiGroups: it PROVIDES a group rather than consuming one.
+  kind: CloudnativePg
+  chart: cloudnative-pg
+  repo: oci://ghcr.io/cloudnative-pg/charts
+  version: 0.29.1
+  tier: platform
+  feature: keycloak
+- name: external-secrets
+  # NEW COMPONENT, wired 2026-11-11 for demo Phase 2. PROVIDES external-secrets.io and
+  # generators.external-secrets.io, both consumed by keycloak-config-kog. UPSTREAM CHART from
+  # ghcr.io/external-secrets/charts at 2.14.0 (appVersion v2.14.0) -- the version already exercised
+  # on 057, not "latest 2.14.x", per the no-floating-version rule that the clickhouse 26.8-alpine
+  # tag just demonstrated the cost of (a restart silently pulled 26.8.7.19 -> 26.8.36.3).
+  # NOTE this chart delivers its CRDs through templates/crds/ (25 files), which helm DOES upgrade,
+  # unlike a crds/ directory which helm installs once and never touches again.
+  kind: ExternalSecrets
+  chart: external-secrets
+  repo: oci://ghcr.io/external-secrets/charts
+  version: 2.14.0
+  tier: platform
+  feature: keycloak
+- name: keycloak-operator
+  # NEW COMPONENT, wired 2026-11-11 for demo Phase 2. PROVIDES k8s.keycloak.org, which the keycloak
+  # component hard-requires. keycloak-provider-kog confirmed it needs NO requiresApiGroups of its
+  # own. Lives in krateo-blueprints, NOT the default krateo-platformops/charts, so the repo key is
+  # mandatory -- I probed all candidate repos rather than assuming the default.
+  # Ships no values.schema.json at all, so the reserved-`global` trap does not apply to it (that
+  # trap is what held access-review at 0.1.7 and still blocks tenant-access/trial-reaper).
+  kind: KeycloakOperator
+  chart: keycloak-operator
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.2.3
+  tier: platform
+  feature: keycloak
+- name: keycloak
+  # NEW COMPONENT, wired 2026-11-11 for demo Phase 2. The realm itself, plus the GitHub broker that
+  # replaces authn's retired GitHub OAuthConfig (Diego chose design A on 2026-11-11: sign-in returns
+  # via Keycloak's broker, NOT by restoring krateo-system/oauthconfigs/github, which a person
+  # deleted on 2026-11-10 at 11:10:35Z).
+  # requiresApiGroups lists k8s.keycloak.org ONLY. postgresql.cnpg.io is deliberately NOT listed
+  # even though this chart can consume it: that dependency is VALUE-GATED on the embedded-database
+  # path, and a hard requiresApiGroups entry for a value-gated group makes the umbrella withhold
+  # this component (and everything that depends on it) on any cluster that does not install
+  # cloudnative-pg. Same reasoning as krateo-capability-roles, whose Kyverno dependency is gated on
+  # tenantReader.enabled and which therefore carries no requiresApiGroups either.
+  # Schema checked for the global trap: root `additionalProperties` is UNSET at 0.2.3, so it is not
+  # exposed to it.
+  kind: Keycloak
+  chart: keycloak
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.2.3
+  requiresApiGroups:
+  - k8s.keycloak.org
+  deps:
+  - keycloak-operator
+  - cloudnative-pg
+  tier: platform
+  feature: keycloak
 - name: identity-lifecycle-crd
   # NEW COMPONENT, wired 2026-11-04. The CRD half of identity-lifecycle, split out by acmp into its
   # own chart so it follows the 11-of-12 `-crds` convention rather than shipping crds/ inside the
