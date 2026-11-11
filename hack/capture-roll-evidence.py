@@ -23,7 +23,7 @@ WHAT IT CAPTURES
 USAGE
   python3 hack/capture-roll-evidence.py --context <ctx> --out <dir> pre
   # ... run the helm upgrade ...
-  python3 hack/capture-roll-evidence.py --context <ctx> --out <dir> watch --seconds 600
+  python3 hack/capture-roll-evidence.py --context <ctx> --out <dir> watch --seconds 600 --interval 3
   python3 hack/capture-roll-evidence.py --context <ctx> --out <dir> post
 
 TIMESTAMPS ARE UTC AND THAT MATTERS. The cdc's log `timestamp` field ends in Z and agrees with
@@ -106,8 +106,54 @@ def snapshot(ctx, outdir, phase):
     return kept
 
 
-def sample_served(ctx, outdir):
-    """Append a timestamped served-version sample for every composition.krateo.io CRD.
+def _discovery(ctx, version):
+    """The resource plurals the apiserver lists under ONE group version.
+
+    THIS, NOT THE GROUP ENDPOINT, IS THE MAPPER'S PRECONDITION. core-provider first proposed
+    /apis/composition.krateo.io, then found and corrected the flaw from their own side: that endpoint
+    lists a version when ANY kind in the group serves it, and on 057 v1-8-109 is served by 18 page
+    kinds at once (servicedeskpages, dashboardpages, searchpages, ... blueprintspages). So the
+    version can appear the instant the FIRST of them is published while BuildersPage is still not
+    mappable, and a group-level check would read as "no lag" for exactly the kinds that lagged.
+    helm resolves a KIND AT A VERSION, so the question has to be asked per plural per version.
+
+    Calibrated by core-provider on 057: searchpages under v1-8-109 -> listed; installers under
+    v1-8-109 -> not listed. sample_state() re-runs that negative control on every poll.
+
+    Returns None when the apiserver does not serve the version at all (`get --raw` 404s). That is
+    ABSENT, not a failed probe, and the caller must keep the two apart -- collapsing them would make
+    a missing version look like a lagging one.
+    """
+    raw = kubectl(ctx, "get", "--raw", f"/apis/{GROUP}/{version}", check=False)
+    if not raw:
+        return None
+    try:
+        rs = json.loads(raw).get("resources", [])
+    except Exception:
+        return None
+    # Subresources arrive as "searchpages/status" and are not mappable kinds; drop them, or a
+    # plural would appear "listed" on the strength of its own status subresource.
+    return sorted({r["name"] for r in rs if "/" not in (r.get("name") or "")})
+
+
+def _pre_served(outdir):
+    """kind -> set(served versions) as of the pre snapshot, used to decide what is NEW this roll."""
+    d, out = os.path.join(outdir, "pre"), {}
+    if not os.path.isdir(d):
+        return out
+    for fn in os.listdir(d):
+        if not fn.endswith(".json"):
+            continue
+        try:
+            r = json.load(open(os.path.join(d, fn)))
+        except Exception:
+            continue
+        out[r["kind"]] = set(r.get("servedVersions") or [])
+    return out
+
+
+def sample_state(ctx, outdir, pre_served):
+    """Append a timestamped sample for every composition.krateo.io CRD.
 
     WHY PER-POLL AND NOT JUST pre/post. A pre-snapshot bounds absence at ONE instant, and I asserted
     a conclusion it could not carry: that an error naming v1-8-109 at 18:15:20 proved the version
@@ -118,33 +164,70 @@ def sample_served(ctx, outdir):
     What settles it is the served set AT the error's instant. compositions.yaml:37 does a LIVE
     lookup of all CRDs in the same helm action whose post-render later fails, so the two are seconds
     apart; sampling every poll brackets any error within one interval.
+
+    AND THE APISERVER SIDE, IN THE SAME SAMPLE. The CRD's served list is what core-provider WROTE;
+    discovery is what the apiserver SERVES. A poll where the CRD serves V for a plural but that
+    version's resource list omits the plural is apiserver lag, measured directly -- and if discovery
+    always lists the plural by the first poll its CRD does, lag is ruled out at this resolution and
+    the misses point back at the cdc's own cache instead. Both reads go in ONE record so they cannot
+    be paired across different instants.
     """
     path = os.path.join(outdir, "served-timeline.jsonl")
     raw = kubectl(ctx, "get", "crd", "-o", "json", check=False)
     if not raw:
         return 0
     try:
-        items = json.loads(raw).get("items", [])
+        items = [c for c in json.loads(raw).get("items", []) if c["spec"].get("group") == GROUP]
     except Exception:
         return 0
-    snap = {c["spec"]["names"]["kind"]: sorted(v["name"] for v in c["spec"]["versions"]
-                                               if v.get("served"))
-            for c in items if c["spec"].get("group") == GROUP}
-    if not snap:
+    if not items:
         return 0
+    served = {c["spec"]["names"]["kind"]: sorted(v["name"] for v in c["spec"]["versions"]
+                                                 if v.get("served")) for c in items}
+    plural = {c["spec"]["names"]["kind"]: c["spec"]["names"]["plural"] for c in items}
+
+    # Only the versions this roll is ADDING get a discovery GET -- one per version, which is
+    # core-provider's stated budget. Probing every served version would be hundreds of GETs a poll.
+    interest = sorted({v for k, vs in served.items() for v in vs
+                       if v not in (pre_served.get(k) or set())})
+    disc = {v: _discovery(ctx, v) for v in interest}
+
+    # NEGATIVE CONTROL, free -- it reuses the GET already made. For each probed version, a plural
+    # whose own CRD does NOT serve that version must be ABSENT from the list. If it turns up
+    # present, the probe cannot discriminate and every "listed" verdict this poll is vacuous.
+    control = {}
+    for v, lst in disc.items():
+        if lst is None:
+            continue
+        neg = next((plural[k] for k, vs in sorted(served.items()) if v not in vs and plural.get(k)),
+                   None)
+        if neg:
+            control[v] = {"negativePlural": neg, "absentAsExpected": neg not in lst}
     with open(path, "a") as f:
-        f.write(json.dumps({"at": datetime.datetime.now(datetime.timezone.utc)
-                            .isoformat().replace("+00:00", "Z"), "served": snap}) + "\n")
-    return len(snap)
+        f.write(json.dumps({
+            "at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
+            "served": served, "plurals": plural, "probed": interest,
+            "discovery": disc, "control": control,
+        }) + "\n")
+    return len(served)
 
 
-def watch(ctx, outdir, seconds):
+def watch(ctx, outdir, seconds, interval):
     """Follow every installers-v* controller and append any line carrying an `err`, verbatim."""
     path = os.path.join(outdir, "errors.jsonl")
     seen_pods, n = set(), 0
     emitted = set()   # (pod, timestamp, err-prefix) -> written already
+    # FLOOR BEFORE THE FIRST POLL. Without pre/ there is no baseline, so EVERY served version counts
+    # as new and the discovery probe would fire one GET per version per poll -- hundreds. Refuse
+    # rather than quietly probe the wrong set.
+    pre_served = _pre_served(outdir)
+    if not pre_served:
+        print("::error::capture: no pre/ snapshot in this out dir, so there is no baseline for "
+              "'which versions are new'. Run the pre phase before the helm upgrade.")
+        sys.exit(1)
     deadline = time.time() + seconds
-    print(f"  watching for {seconds}s -> {path}")
+    print(f"  watching for {seconds}s at {interval}s intervals -> {path}")
+    print(f"  baseline: {len(pre_served)} kinds from pre/")
     with open(path, "a") as out:
         while time.time() < deadline:
             pods = [l.split("/", 1)[1] for l in
@@ -179,12 +262,23 @@ def watch(ctx, outdir, seconds):
                                           "msg": d.get("msg"), "err": d.get("err")}) + "\n")
                     out.flush()
                     n += 1
-            sample_served(ctx, outdir)
-            time.sleep(10)
+            sample_state(ctx, outdir, pre_served)
+            time.sleep(interval)
     tl = os.path.join(outdir, "served-timeline.jsonl")
-    samples = sum(1 for _ in open(tl)) if os.path.exists(tl) else 0
-    print(f"  captured {n} error line(s) from {len(seen_pods)} pod(s); "
-          f"{samples} served-version sample(s)")
+    samples = [json.loads(l) for l in open(tl)] if os.path.exists(tl) else []
+    probed = sorted({v for s in samples for v in (s.get("probed") or [])})
+    bad = [(s["at"], v, c) for s in samples for v, c in (s.get("control") or {}).items()
+           if not c.get("absentAsExpected")]
+    print(f"  captured {n} error line(s) from {len(seen_pods)} pod(s); {len(samples)} sample(s)")
+    print(f"  versions probed in discovery: {probed or '(none -- no version was added)'}")
+    if bad:
+        print(f"::error::capture: the discovery negative control FAILED on {len(bad)} sample(s) "
+              f"(first: {bad[0][0]} version={bad[0][1]} {bad[0][2]}). A plural whose CRD does not "
+              f"serve that version was listed under it, so the probe cannot discriminate and the "
+              f"lag table must not be believed.")
+        return n
+    if samples and probed:
+        print("  discovery negative control passed on every sample")
     return n
 
 
@@ -232,9 +326,60 @@ def report(outdir):
         out += ["", "  (pre-existing, from an earlier roll -- NOT evidence for this one:)"]
         for e in stale:
             out.append(f"    {e['timestamp']}  {str(e['err'])[:100]}")
-    out += ["", "ERRORS IN THIS WINDOW, in full:", ""]
     tl = os.path.join(outdir, "served-timeline.jsonl")
     timeline = [json.loads(l) for l in open(tl)] if os.path.exists(tl) else []
+
+    def _t(s):
+        try:
+            return datetime.datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    # APISERVER LAG. Two instruments that must agree: what core-provider WROTE on the CRD, and what
+    # the apiserver SERVES under that version. Per plural per version, because the group endpoint
+    # lists a version as soon as any ONE of its 18 page kinds is published -- see _discovery().
+    out += ["", "APISERVER LAG: CRD-served vs that version's own discovery list", ""]
+    ctl_fail = [(s["at"], v) for s in timeline
+                for v, c in (s.get("control") or {}).items() if not c.get("absentAsExpected")]
+    if not timeline:
+        out += ["  (no samples -- run the watch phase across the roll)"]
+    elif ctl_fail:
+        # WITHHOLD, do not caveat. A table whose probe cannot tell listed from unlisted would be
+        # read as evidence of no lag, which is the reassuring direction.
+        out += [f"  NEGATIVE CONTROL FAILED on {len(ctl_fail)} sample(s); first {ctl_fail[0]}.",
+                "  A plural whose own CRD does not serve that version was listed under it, so the",
+                "  probe cannot discriminate. Table withheld deliberately -- fix the probe first."]
+    elif not added_index:
+        out += ["  (no version was added, so there was nothing to probe)"]
+    else:
+        probed_any = {v for s in timeline for v in (s.get("probed") or [])}
+        for (kind, ver) in sorted(added_index):
+            plural = next((s["plurals"].get(kind) for s in timeline
+                           if (s.get("plurals") or {}).get(kind)), None)
+            crd_at = next((s["at"] for s in timeline
+                           if ver in ((s.get("served") or {}).get(kind) or [])), None)
+            disc_at = next((s["at"] for s in timeline
+                            if plural and isinstance((s.get("discovery") or {}).get(ver), list)
+                            and plural in s["discovery"][ver]), None)
+            if ver not in probed_any:
+                verdict = "NOT PROBED (version was not new relative to pre/)"
+            elif crd_at is None:
+                verdict = "CRD never observed serving it in-window (add fell outside the samples)"
+            elif disc_at is None:
+                verdict = "CRD served it but discovery NEVER listed the plural in-window -> LAG"
+            else:
+                d = (_t(disc_at) - _t(crd_at)).total_seconds() if _t(disc_at) and _t(crd_at) else None
+                if d is None:
+                    verdict = "timestamps unparseable"
+                elif d <= 0:
+                    verdict = "no lag at this resolution (listed by the first sample the CRD served it)"
+                else:
+                    verdict = f"LAG {d:.0f}s (CRD {crd_at} -> discovery {disc_at})"
+            out.append(f"  {kind}/{ver}  plural={plural or '?'}")
+            out.append(f"      {verdict}")
+        out += ["", f"  samples: {len(timeline)}; negative control passed on all of them"]
+
+    out += ["", "ERRORS IN THIS WINDOW, in full:", ""]
     import re as _re
 
     def bracket(err_ts, err_text):
@@ -283,6 +428,10 @@ def main():
     ap.add_argument("--context", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--seconds", type=int, default=600)
+    # 2-3s, not 10s. core-provider measured the misses 6-13s from the CRD write, so a 10s
+    # grid can land the add and the miss in the SAME sample and show no lag where there was
+    # some. 3s is their recommended floor for the minutes around a version add.
+    ap.add_argument("--interval", type=int, default=3)
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     if a.phase in ("pre", "post"):
@@ -290,7 +439,7 @@ def main():
         if a.phase == "post":
             return report(a.out)
     elif a.phase == "watch":
-        watch(a.context, a.out, a.seconds)
+        watch(a.context, a.out, a.seconds, a.interval)
     else:
         return report(a.out)
     return 0
