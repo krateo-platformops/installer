@@ -8564,7 +8564,13 @@ components:
   kind: KeycloakConfigKog
   chart: keycloak-config-kog
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.5.3
+  # 0.6.0 (tag on a7fc622): the realm keys are FINAL, which is what unblocked
+  # krateo-keycloak-realm below. VERIFIED AT PIN TIME, not taken on trust: values.schema.json and
+  # values.yaml are BYTE-IDENTICAL to 0.5.3 and the template count is unchanged at 17, so the
+  # existing auth/bootstrap componentValues carry over untouched and no widening is needed first.
+  # No root or nested `required`, so it cannot wedge the umbrella the way a blueprint root
+  # `required` did twice on demo today.
+  version: 0.6.0
   requiresApiGroups:
   - ogen.krateo.io
   - external-secrets.io
@@ -8580,6 +8586,36 @@ components:
   - authn
   tier: platform
   feature: keycloak
+- name: krateo-keycloak-realm
+  # NEW COMPONENT, wired 2026-11-11. The realm itself, its top-level groups and the portal's OIDC
+  # client, all as keycloak-config-kog custom resources -- so the KOG's controllers reconcile them
+  # against Keycloak and heal changes made in the Keycloak console.
+  # WHY IT IS A SEPARATE COMPONENT and not part of keycloak-config-kog: the KOG ships the CRDs and
+  # the controllers; this ships the INSTANCES. They move on different clocks -- a KOG bump is a
+  # controller change, a realm change is configuration -- and the realm must not be re-applied
+  # every time the KOG moves.
+  kind: KrateoKeycloakRealm
+  chart: krateo-keycloak-realm
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.1.0
+  # THE RENDER-TIME GATE THAT MATTERS. Every object this chart emits is a KOG-generated kind in
+  # keycloak.ogen.krateo.io, and those CRDs do not exist until keycloak-config-kog's oasgen
+  # RestDefinitions have been reconciled. requiresApiGroups is hard-ANDed outside the $exists
+  # escape, so it BLOCKS the render until the group exists rather than merely ordering the install
+  # -- which is the difference between waiting and a post-render failure on the whole umbrella.
+  requiresApiGroups:
+  - keycloak.ogen.krateo.io
+  # deps order the install; requiresApiGroups above is what actually protects it. keycloak-config-kog
+  # for the CRDs and the bearer-token Secret it keeps fresh, keycloak for the server itself.
+  deps:
+  - keycloak-config-kog
+  - keycloak
+  tier: platform
+  feature: keycloak
+  # NOT `upstream: true`: this is a Krateo-authored blueprint, unlike keycloak and keycloak-operator.
+  # deletionPolicy defaults to `orphan` IN THE CHART, which is the only reason a prune or a mistaken
+  # uninstall cannot wipe the realm and every user in it. Do not set it to `delete` on a cluster that
+  # has real users. Same class as the github-provider-kog deletion-policy annotation.
 - name: identity-lifecycle-crd
   # NEW COMPONENT, wired 2026-11-04. The CRD half of identity-lifecycle, split out by acmp into its
   # own chart so it follows the 11-of-12 `-crds` convention rather than shipping crds/ inside the
