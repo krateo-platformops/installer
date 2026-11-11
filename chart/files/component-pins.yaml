@@ -8271,7 +8271,7 @@ components:
   # 0.2.17 (#71): drops the connection-string response rule, which rejected any database URL as a
   # live credential and cut off RCAs whose fix sets one (e.g. DATABASE_URL=postgres://...).
   # 0.2.23: the LLM budget alerts carry a description, not message. NEEDS alert-provider-crd 0.2.68.
-  version: 0.2.27
+  version: 0.2.29
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
