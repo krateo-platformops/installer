@@ -503,6 +503,10 @@
             },
             "description": "Groups that may see this blueprint on the Blueprints page: a Role reading compositiondefinitions in the blueprint `namespace`, bound to each group (never a ClusterRole). Requires `namespace` set to a blueprint namespace other than namespaces.krateo."
           },
+          "upstream": {
+            "type": "boolean",
+            "description": "Declares that this component's APPLICATION belongs to another project, not to Krateo. Set it only on a genuinely third-party chart, or on a Krateo chart that wraps a third-party app. It changes one thing: check-pin-ci stops resolving the chart's appVersion to a tag in a source repo, because for someone else's app that resolution either fails outright or aims the gate at an upstream project's CI -- a green tick from a pipeline Krateo does not own, which is a different claim wearing the same colour. Any chartVersion-to-tag route in a Krateo source repo is STILL asserted, so a Krateo chart wrapping a third-party app keeps its own commit verified. The flag is deliberately explicit and never inferred: an inferred exemption is how a Krateo-owned component would drift into 'unverified' with nobody choosing it. check-pins still requires the chart to resolve in the registry."
+          },
           "registerOnly": {
             "type": "boolean",
             "description": "Catalog blueprint: Pass A registers this component's CompositionDefinition (making the blueprint available in the portal) but Pass B never emits a Composition for it \u2014 the operator/end-user instantiates it on demand. Use for tenant workload blueprints (e.g. openstack) that ship in the catalog rather than being auto-installed. Typically paired with tier: catalog."

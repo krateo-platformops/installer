@@ -135,6 +135,8 @@ def changed_pins(base_ref):
                     "version": new,
                     "previous": old,
                     "repo": entry.get("repository") or entry.get("repo"),
+                    # EXPLICIT, PER PIN, NEVER INFERRED. See the `upstream` arm in main().
+                    "upstream": bool(entry.get("upstream")),
                     "source_file": path,
                 })
     return out
@@ -709,7 +711,7 @@ def main():
             cv_sha = tag_sha(slug, version)
             if cv_sha:
                 route, sha = f"chartVersion->tag {version}", cv_sha
-            else:
+            elif not pin["upstream"]:
                 av_sha = tag_sha(slug, app)
                 if av_sha:
                     route, sha = f"appVersion->tag {app}", av_sha
@@ -725,6 +727,29 @@ def main():
                 checked.append((st_slug, verdict,
                                 f"[stamped {st_sha[:8]} -- appVersion {app} matched no Krateo tag, "
                                 f"so this is the CHART's own commit, not the app's] {detail}"))
+
+        if not checked and pin["upstream"]:
+            # DECLARED THIRD-PARTY APP (`upstream: true` on the pin). The gate's claim is "the
+            # component's own CI was green at its tagged commit", and for a chart whose app
+            # belongs to another project there is no such claim to make: asserting upstream's CI
+            # is the route this file already records as PROPOSED AND REJECTED a few hundred lines
+            # above, because a green tick from someone else's pipeline is a different claim wearing
+            # the same colour.
+            #
+            # So this does NOT verify anything -- it says so, by name, instead of passing quietly.
+            # What still protects the pin: check-pins asserts the chart RESOLVES in the registry,
+            # and any chartVersion->tag route in a Krateo `sources` repo is still asserted above
+            # (keycloak-operator 0.2.3 is exactly that case: its krateo-blueprints chart commit is
+            # checked, only the upstream keycloak/keycloak-k8s-resources appVersion route is not).
+            #
+            # WHY THE FLAG IS EXPLICIT AND NEVER INFERRED: an inferred exemption is precisely how a
+            # Krateo component would drift into "unverified" without anyone choosing it -- the
+            # failure mode this gate exists to prevent. Marking a Krateo-owned component `upstream`
+            # is a lie that must be made by hand, in a reviewed diff, in the pins file.
+            print(f"  {name} {pin['previous']} -> {version}  app {app}  external "
+                  f"(declared upstream: the app belongs to another project, so no Krateo CI is "
+                  f"asserted for it; the chart still had to resolve in the registry)")
+            continue
 
         if not checked:
             # WHY it did not resolve matters: "no such tag" is the pin's problem, "cannot read
