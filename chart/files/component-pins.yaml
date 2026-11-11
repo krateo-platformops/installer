@@ -4924,7 +4924,7 @@ components:
   # provenance from appVersion at all. Do NOT unblock this by deleting `sources` or the appVersion.
   # 0.1.36: every default alert carries a one-sentence description, not message. NEEDS
   # alert-provider-crd 0.2.68: an older CRD drops the field.
-  version: 0.1.42
+  version: 0.1.44
   deps:
   - clickhouse-operator
   - mongodb-operator
