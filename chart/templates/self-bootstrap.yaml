@@ -189,6 +189,12 @@ data:
        while spec.features and other runtime edits are preserved (not clobbered by a full
        re-apply). Single-entry in-place CR edits remain safe (whole list shipped). */}}
 {{- $spec := pick .Values "ociRepo" "installDefinitions" "namespaces" "exposure" "features" "vertexAI" "hitlApproval" "componentValues" "registryAuth" }}
+{{- /* componentValues goes through inst.componentValuesResolved so the FRESH-INSTALL CR carries the
+       same derived required keys as the surgical upgrade patch. Without this the two paths differ:
+       an upgrade would supply keycloak-config-kog's baseUrl and a fresh install would not, so the
+       wedge would reappear only on new clusters -- the hardest case to notice. NOT the patch helper,
+       which injects explicit nulls for componentValuesUnset; a literal null is not writable here. */}}
+{{- $_ := set $spec "componentValues" ((include "inst.componentValuesResolved" .) | fromJson) }}
 {{- /* components pins come from the chart FILE (files/component-pins.yaml), NOT .Values, so a
        chart bump always propagates its pins on upgrade even under `helm upgrade --reuse-values`. */}}
 {{- $_ := set $spec "components" (include "inst.componentsYaml" $ | fromYaml).components }}
