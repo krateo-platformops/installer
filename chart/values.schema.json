@@ -1419,7 +1419,11 @@
                   "type": "string",
                   "description": "Name of the second Gateway that carries the platform listeners (and gets the platform LoadBalancer) when internalDataPlane is on. Empty => derived as `<gateway.name>-platform`."
                 },
-                "platformHostname": {
+                "gcpServiceAccount": {
+                "type": "string",
+                "description": "The GCP service account that both gateway KSAs should impersonate via Workload Identity, as a full email. Setting it adds the iam.gke.io/gcp-service-account annotation to the krateo-agent-gateway and krateo-agent-gateway-platform KSAs plus a parametersRef on the platform Gateway. INERT until the cluster's node pool runs GKE_METADATA, so it is safe to set before the node-pool switch and pointless before the IAM binding exists. Unset, the chart renders byte-identical to the behaviour without it. Declared because this gateway node is a closed object: an undeclared key here is pruned silently with every CI check green."
+              },
+              "platformHostname": {
                   "type": "string",
                   "description": "#115: DNS hostname for the platform LoadBalancer. When set (installer passes exposure.tls.host), the platform Gateway's Service is annotated external-dns.alpha.kubernetes.io/hostname, so a deployed external-dns publishes/updates a DNS record following the LB IP (DNS-follows-LB). Only meaningful in the two-gateway split (internalDataPlane). Empty => no annotation, byte-identical."
                 }
