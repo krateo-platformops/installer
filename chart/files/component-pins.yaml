@@ -5347,7 +5347,7 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.26
+  version: 0.1.27
   deps:
   - otel-collector-deployment
   tier: observability
@@ -6478,7 +6478,7 @@ components:
   # 0.2.2 (#20): prompt-only. The RCA's how to fix is three scripts (precondition, apply, verify) plus an
   # optional rollback, and the record is an Incident, matching alert-provider 0.2.45's output contract.
   # No new values.
-  version: 0.3.3
+  version: 0.3.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -7139,7 +7139,7 @@ components:
   # NOT block this cutover -- it means that until it lands, incident-provider's own reconcile errors
   # can open Incidents ABOUT incident-provider. A known cost, not a surprise.
   kind: IncidentProvider
-  version: 0.9.0
+  version: 0.10.0
   deps:
   - incident-provider-crd
   tier: observability
@@ -7173,7 +7173,7 @@ components:
   # The OCI repo does not change: both charts resolve at ghcr.io/krateo-platformops/charts.
   kind: IncidentProviderCrds
   chart: incident-provider-crds
-  version: 0.9.0
+  version: 0.10.0
   tier: observability
   feature: portal
 - name: alert-provider-crd
