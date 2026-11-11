@@ -465,6 +465,36 @@ componentValues:
   #       tracing: true
   #       endpoint: "http://<otel-collector>.<ns>.svc:4318"
   #       protocol: http/protobuf
+  keycloak:
+    # REQUIRED ON THE COMPOSITION CR, NOT MERELY USEFUL. keycloak 0.2.3's values.schema.json
+    # carries a root-level `required: [keycloak, db]`, and crdgen turns that into mandatory
+    # fields on the Keycloak Composition CR. The umbrella emits that CR carrying only what
+    # componentValues supplies -- the chart's OWN values.yaml defaults do not populate it --
+    # so omitting these makes the apiserver reject the object:
+    #
+    #   Keycloak.composition.krateo.io "keycloak" is invalid:
+    #     [spec.db: Required value, spec.keycloak: Required value]
+    #
+    # and because that rejection happens inside the Installer composition's own helm reconcile,
+    # it stalls EVERY component rather than just Keycloak. Measured on krateo-demo 2026-11-11 at
+    # 0.3.582: Installer Synced=False/ReconcileError with all 108 managed children frozen, while
+    # keycloak-operator, cloudnative-pg and external-secrets were individually healthy.
+    #
+    # These are the STRUCTURAL values only, and they live here rather than in
+    # values.schema.json on purpose: a `default:` in the schema is written into the Installer CR
+    # itself, which makes it a silent live override that cannot be removed from values.
+    #
+    # `keycloak.hostname` is deliberately NOT defaulted -- it is per-cluster. The chart's own
+    # default is the placeholder https://keycloak.example.com, and an issuer URL that does not
+    # match what users actually reach makes every OIDC validation fail. Set it per cluster when
+    # enabling features.keycloak.
+    db:
+      vendor: postgres
+      database: keycloak
+      provider: cloudnativepg
+    keycloak:
+      name: keycloak
+      instances: 1
   krateo-autopilot:
     # ORCHESTRATOR BY DEFAULT: the autopilot auto-attaches EVERY deployed agent as an A2A
     # sub-agent — the installer derives extraAgents from the feature-enabled `agent`
