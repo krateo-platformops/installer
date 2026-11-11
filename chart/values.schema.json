@@ -12656,6 +12656,41 @@
           "title": "Keycloak realm, groups and the portal OIDC client",
           "description": "Overrides for krateo-keycloak-realm. Every object here is a keycloak-config-kog custom resource, so this component renders nothing until the KOG has generated its CRDs -- which is what requiresApiGroups keycloak.ogen.krateo.io gates on. The key list is keycloak-provider-kog's final one for 0.1.0; resourceGroup is deliberately NOT exposed, because it names the API group the KOG generates into and belongs to keycloak-config-kog, not to a per-install override. NO `default:` anywhere below: a default here would propagate into the Installer CR and become a silent live override. The chart's own values.yaml carries the defaults instead.",
           "properties": {
+            "oidcConfig": {
+              "type": "object",
+              "additionalProperties": false,
+              "title": "authn OIDCConfig emitted by the realm chart",
+              "description": "Added by krateo-keycloak-realm 0.2.0, which emits authn's OIDCConfig alongside the realm. The realm chart owns it deliberately: the OIDCConfig must agree with the realm on issuer, clientID, redirectURI and the allowed groups, and all four live in this same chart -- templating it installer-side would duplicate them and drift into a login that returns a token the portal rejects. The object renders ONLY where authn's oidc.authn.krateo.io/v1alpha1 API exists (.Capabilities.APIVersions.Has), so a cluster without authn does not block the realm. Key names and casing mirror the chart exactly, including discoveryUrl with a lowercase 'rl' -- the chart reads discoveryUrl and renders it into the CRD's discoveryURL, and 'correcting' it here would silently stop the value reaching the release.",
+              "properties": {
+                "enabled": {"type": "boolean"},
+                "name": {"type": "string", "description": "Name of the OIDCConfig object. The portal's strategy list keys off it."},
+                "keycloakUrl": {
+                  "type": "string",
+                  "description": "The PUBLICLY reachable Keycloak base URL, which becomes the issuer together with the realm name. It must be the host the user's BROWSER reaches, not an in-cluster Service: the browser is redirected there and validates the token's issuer claim. Derive it from the same source as componentValues['keycloak'].keycloak.hostname and keep the two identical."
+                },
+                "discoveryUrl": {
+                  "type": "string",
+                  "description": "Override for the discovery document URL. Leave UNSET when Keycloak is publicly exposed over HTTPS, which is the supported posture: authn then discovers on the public host over TLS with system CAs. Do NOT point this at plain in-cluster http -- authn does not verify ID-token signatures (it relies on receiving the token directly from the token endpoint over TLS, OIDC Core 3.1.3.7), so an unauthenticated in-cluster exchange would let anything able to tamper with cluster traffic mint an ID token with groups [platform-admins]. In-cluster https with a private-CA cert that authn trusts is the safe alternative."
+                },
+                "allowedGroups": {
+                  "type": "array",
+                  "items": {"type": "string"},
+                  "description": "Realm groups permitted to sign in. Empty or unset means every group name in the realm."
+                },
+                "additionalScopes": {"type": "string"},
+                "graphics": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Presentation of the sign-in button in the portal's strategy list.",
+                  "properties": {
+                    "displayName": {"type": "string"},
+                    "icon": {"type": "string"},
+                    "backgroundColor": {"type": "string"},
+                    "textColor": {"type": "string"}
+                  }
+                }
+              }
+            },
             "deletionPolicy": {
               "type": "string",
               "enum": ["orphan", "delete"],

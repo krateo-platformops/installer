@@ -8518,7 +8518,13 @@ components:
   kind: KeycloakOperator
   chart: keycloak-operator
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.2.4
+  # 0.2.6 adds a post-install/post-upgrade Job that stamps Helm ownership on its two
+  # crds/-installed CRDs (get/patch on exactly those two names, idempotent). Its kubectl image is
+  # pinned v1.36.4 by digest to stay inside skew.
+  # ORDERING, LOAD-BEARING: every cluster MUST run 0.2.6 BEFORE any future 0.3.0, because 0.3.0
+  # moves the CRDs into templates/ and that Job is what hands them to Helm first. A 0.3.0 pin that
+  # skips 0.2.6 is a refusal, not a judgement call.
+  version: 0.2.6
   upstream: true
   tier: platform
   feature: keycloak
@@ -8538,7 +8544,9 @@ components:
   kind: Keycloak
   chart: keycloak
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.2.5
+  # 0.2.6 adds an opt-in serving certificate, off by default -- nothing changes for an install that
+  # does not ask for it.
+  version: 0.2.6
   upstream: true
   requiresApiGroups:
   - k8s.keycloak.org
@@ -8546,6 +8554,19 @@ components:
   - keycloak-operator
   - cloudnative-pg
   tier: platform
+  # EXPOSE THE ISSUER. An OIDC login redirects the USER'S BROWSER to keycloak.hostname, so that
+  # host must be publicly resolvable and routed or no sign-in can complete -- Diego's decision
+  # (2026-11-12) after the realm went live on demo with the issuer unreachable.
+  # svcMatch is the EXACT Service name on purpose: inst.svcname matches exactly first and then by
+  # `contains`, so a bare `keycloak` could bind keycloak-operator or keycloak-db-rw instead.
+  # The hostname comes from exposure.hosts.keycloak; without that override inst.hostname derives
+  # <svcMatch>.<baseDomain> = keycloak-service.<domain>, which is NOT the issuer.
+  # NB on a BYO-edge cluster (features.ingress false, e.g. demo) this emits the HTTPRoute but NOT
+  # the Gateway listener -- that belongs to the hand-installed agentgateway release. The listener
+  # must land FIRST or the route dangles unattached.
+  expose: true
+  svcMatch: keycloak-service
+  exposePort: 8080
   feature: keycloak
 - name: keycloak-config-kog
   # NEW COMPONENT, wired 2026-11-11, the last piece of demo Phase 2. Turns realm configuration into
@@ -8597,7 +8618,19 @@ components:
   kind: KrateoKeycloakRealm
   chart: krateo-keycloak-realm
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.1.0
+  # 0.2.0 (tag a9aab35, acmp-approved): ADDS templates/oidcconfig.yaml, so the realm now also
+  # emits authn's OIDCConfig. That ownership is deliberate and was my argument: the OIDCConfig has
+  # to agree with the realm on issuer, clientID, redirectURI and groups, and this chart already
+  # owns all four -- templating it installer-side would duplicate them and drift into a login that
+  # returns a token the portal rejects, invisibly from both sides.
+  # It renders ONLY where authn's oidc.authn.krateo.io/v1alpha1 API exists, gated on
+  # .Capabilities.APIVersions.Has rather than a lookup -- real discovery at install, testable in CI
+  # with --api-versions, and it cannot block the realm on a cluster without authn.
+  # Verified at pin time: no root `required`, 0 schema defaults, the one nested `required` is still
+  # `name` inside groups[] items, and oidcConfig is a CLOSED object whose types match exactly what
+  # its owner published. Measured end to end by its owner through a CompositionDefinition on
+  # core-provider 2.13.82: a real PKCE sign-in, 200 with groups [tenants], 403 for a non-member.
+  version: 0.2.0
   # THE RENDER-TIME GATE THAT MATTERS. Every object this chart emits is a KOG-generated kind in
   # keycloak.ogen.krateo.io, and those CRDs do not exist until keycloak-config-kog's oasgen
   # RestDefinitions have been reconciled. requiresApiGroups is hard-ANDed outside the $exists
