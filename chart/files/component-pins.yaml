@@ -5404,7 +5404,33 @@ components:
   # what deploys the instance, which is why every other consumer deps on that and not the operator.
   # 0.1.6: both alerts carry a description, not message (0.1.5 is comments only). NEEDS
   # alert-provider-crd 0.2.68.
-  version: 0.1.7
+  # 0.1.8 (observability tag 3.1.90, 2d92f2b, their PR #165) FIXES A CHAIN-RESET BUG AND
+  # SUPERSEDES 0.1.7. Both scripts tested a query answer inline -- `[ "$(has T)" != "1" ]` -- and
+  # `set -e` does not see a failure INSIDE a test, so a query that FAILED read as the answer
+  # "absent". The same shape guarded the chain RESET, so one failed count on a chain with no seals
+  # could have restarted the chain from a reset genesis, destroying the tamper-evidence this
+  # component exists to provide. 0.1.8 assigns every answer before testing it and has() refuses
+  # anything but 0/1, so an outage now fails the Job with the connection error in the log and can
+  # never trigger a reset. Their docker test runs both scripts against an unreachable ClickHouse
+  # with a really-absent-table control, and fails twice against 0.1.7.
+  # FOUND FROM A LIVE FAILURE, not from review, which is why it is taken immediately: on 057 at
+  # 0.3.589 the 19:15 seal Job failed both attempts (exit 1) with `Connection refused
+  # (krateo-clickstack-clickhouse-clickhouse-headless...:9000)` while ClickHouse restarted for the
+  # 26.10.3.7 pin -- and printed "source table krateo_audit does not exist yet" in the SAME run.
+  # A NETWORK_ERROR reported as a missing table is the conflation, visible in the log.
+  # SAFE TO PIN WITH NO OTHER CHANGE, each point checked at pin time rather than assumed:
+  #   values.schema.json and values.yaml are BYTE-IDENTICAL to 0.1.7, so the schema's five
+  #     `required` blocks (clickhouse{host,port,database,credentialsSecret}, credentialsSecret
+  #     {name,usernameKey,passwordKey}, image{repository,tag}, seal{schedule,lagSeconds},
+  #     verify{schedule,staleAfterSeconds}) are PRE-EXISTING and already satisfied by the live
+  #     0.1.7 install -- no componentValues widening is needed before this pin.
+  #   image tag unchanged at 24.8.14.39-alpine, so no new image is pulled.
+  #   the whole diff lives in templates/configmap-scripts.yaml, so NOTHING RESTARTS: the next
+  #     CronJob run mounts the new scripts ConfigMap.
+  # VERIFY AFTER THE ROLL (its owner's two checks): the scripts ConfigMap contains
+  # `HAS_SOURCE=$(has`, and the next seal and verify Jobs exit 0.
+  # The seal window skipped at 19:15 is NOT lost -- the next seal covers (last window_end, now-lag].
+  version: 0.1.8
   # 0.1.1 (observability#83, repo tag 3.1.27) drops `appVersion`, which 0.1.0 set to 0.1.0. The
   # chart builds NO image -- both CronJobs run upstream clickhouse/clickhouse-server:24.8-alpine --
   # so there is no component repo whose CI check-pin-ci could resolve, and appVersion 0.1.0 matched
