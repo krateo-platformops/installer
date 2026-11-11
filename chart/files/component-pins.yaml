@@ -5151,7 +5151,7 @@ components:
   #
   # CONTROLS: 0.1.1 resolves; 0.1.0 resolves; 9.9.9 does not.
   kind: OtelCollectorTailsampling
-  version: 0.1.9
+  version: 0.1.10
   deps:
     - otel-collector-deployment
   tier: observability
@@ -5307,7 +5307,7 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.25
+  version: 0.1.26
   deps:
   - otel-collector-deployment
   tier: observability
@@ -5512,7 +5512,7 @@ components:
   # sse-proxy#15/#16/#17 (1.45 breaks trace export, snowplow#596/#695).
   # The 0.1.15 note above about image.tag still applies verbatim: do NOT set
   # componentValues.krateo-sse-proxy.image.tag here.
-  version: 0.1.23
+  version: 0.1.24
   deps:
   - krateo-observability
   tier: observability
