@@ -10818,6 +10818,23 @@
             }
           }
         },
+        "keycloak": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Values for the keycloak component. Deliberately minimal: the realm's own configuration (identity provider, authentication flows, required actions, group mappers) is NOT set here -- it is reconciled from keycloak-config-kog CRs, so there is nothing to declare for it. The database comes from the blueprint's defaults plus CloudNativePG. Only values the installer must set per cluster belong here, and an undeclared key is pruned silently with every CI check green.",
+          "properties": {
+            "keycloak": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "hostname": {
+                  "type": "string",
+                  "description": "The externally reachable base URL Keycloak issues tokens for. MUST be set per cluster: the chart's default is the placeholder https://keycloak.example.com, and an issuer that does not match the URL users actually reach makes every OIDC validation fail. On krateo-demo it has to match the hand-installed TLS edge, so it is a per-cluster value rather than a chart default."
+                }
+              }
+            }
+          }
+        },
         "identity-lifecycle": {
           "type": "object",
           "additionalProperties": false,
