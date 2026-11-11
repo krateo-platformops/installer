@@ -6436,7 +6436,11 @@
                         }
                       }
                     },
-                    "promptLogging": {
+                    "auditFacts": {
+                  "type": "boolean",
+                  "description": "Whether the access-log policy emits the six AUDIT-4 fact attributes: principal, act, backend_host, baggage_session, source_xff and user_agent. The chart DEFAULTS IT TO TRUE, so the facts arrive without setting anything -- this key exists so a cluster can turn them OFF, which is otherwise impossible because this accessLog node is a closed object and an undeclared key is pruned silently with every CI check green. Declared with NO default here, so the component's own default governs unless a cluster opts out explicitly. Note what the six are: `principal` is an identity class derived from the JWT (jwt.act.principal on a delegated RFC 8693 token, else jwt.principal), while baggage_session, source_xff and user_agent are CLIENT-CONTROLLED correlation keys and must not be treated as identity. agentgateway-policies 0.2.27 filters any baggage session value starting with `eyJ` so a JWT cannot be logged as a session id, and no token appears in any of the six expressions."
+                },
+                "promptLogging": {
                       "type": "object",
                       "additionalProperties": false,
                       "description": "Prompt and completion TEXT. Its own switch, off, and it should stay off unless someone has decided the retention question: turning it on writes every prompt a user types, and every answer the model returns, into ClickHouse - where the otel_logs TTL, not this chart, decides how long it lives.",
