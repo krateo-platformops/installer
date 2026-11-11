@@ -1,3 +1,12 @@
+---
+type: Architecture
+title: installer — AUDIT-5 admission records for direct writes
+description: Design for installer#411. Why an admission record is a record of an accepted ATTEMPT and not of a write, why server dry-runs must be dropped rather than labelled, why the completeness signal cannot come from the webhook itself, and the acceptance cases #411 does not list (nameless deletecollection, impersonation, installer#781's hook Jobs, status subresource volume).
+resource: oci://ghcr.io/krateo-platformops/charts/installer
+tags: [design, audit, admission-webhook, audit-5]
+timestamp: 2026-11-11T00:00:00Z
+---
+
 # AUDIT-5 — admission records for direct writes to `*.krateo.io`
 
 Design for installer#411. Parent #391. Depends-on nothing; installer#781's hook Jobs are
