@@ -10826,6 +10826,28 @@
             }
           }
         },
+        "keycloak-operator": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Values for the keycloak-operator component. Deliberately minimal: only what a cluster may need to override. The chart's own defaults are watchNamespaces=krateo-system, startupProbe.failureThreshold=3, image.tag=26.6.3 and keycloakImage=26.6.3, and those are left to the chart. Declared at all because componentValues is a closed object -- before this node existed, ANY value for this component was pruned silently with every CI check green, which made a measured startupProbe recommendation unimplementable rather than merely unset.",
+          "properties": {
+            "watchNamespaces": {
+              "type": "string",
+              "description": "watchNamespaces for the operator, which the chart maps to the Quarkus KEYCLOAKCONTROLLER and KEYCLOAKREALMIMPORTCONTROLLER namespace env vars. Defaults to krateo-system, where the realm lives today. Set it only if Keycloak or KeycloakRealmImport CRs must be reconciled in other namespaces -- a per-tenant realm would need it, and without widening it the operator SILENTLY IGNORES CRs outside krateo-system rather than erroring."
+            },
+            "startupProbe": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "failureThreshold": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "startupProbe.failureThreshold for the operator pod. The chart ships 3, about 35 s, and keycloak-provider-kog measured the JVM operator being KILLED by it under load on kind; they recommend around 30. Raise it on a cluster where the operator starts slowly. This is a liveness-shaped value, so getting it wrong presents as a CrashLoopBackOff that looks like a broken image rather than a probe that fired too early."
+                }
+              }
+            }
+          }
+        },
         "keycloak": {
           "type": "object",
           "additionalProperties": false,
