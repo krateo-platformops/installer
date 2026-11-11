@@ -658,10 +658,28 @@ components:
   # legacy RESTAction copy path 0.38.0 removes. Counted from .items length with controls
   # (restactions 99, compositiondefinitions 70), after a first count of '1 each' that was
   # `grep -vc` treating a 'No resources found' line as an object.
-  # DEMO IS NOT IN THIS and must not be: demo has ONE OAuthConfig (krateo-system/github) whose
+  # DEMO IS NOT IN THIS and must not be: demo had ONE OAuthConfig (krateo-system/github) whose
   # RESTAction does carry ${ "Authorization: Bearer " + .token }, so it survives #91 -- but
   # observability's before/after count for the header patch must read only from BEFORE 0.38.0
   # reaches demo. Demo stays on 0.37.0 until they are done.
+  # STALE AS WRITTEN, corrected 2026-11-11: demo now has ZERO OAuthConfigs, so the clause above
+  # describes an object that no longer exists and nothing on demo exercises the OAuth path today.
+  # A PERSON deleted krateo-system/oauthconfigs/github on 2026-11-10 at 11:10:35Z (authn read it
+  # from demo's audit log), two hours BEFORE the 0.40.0 roll -- so it was deliberate and no roll
+  # of mine caused it. /strategies is empty and GitHub sign-in is off on demo as a result.
+  # PENDING RESTORE: Diego decided (authn's session, 2026-11-11) to bring GitHub sign-in back on
+  # demo after Phase 1. authn adds the `subject` field to krateo-system/github-oauth-restaction --
+  # which 0.41.0 requires in the OUTPUT of the RESTAction an OAuthConfig names via restActionRef --
+  # and restores the OAuthConfig. Both are demo writes on Diego's go, and they are authn's to make,
+  # not the installer's: that RESTAction is hand-created, carries no helm annotations, no
+  # ownerReferences and no managedFields, so no release reconciles it and no chart renders it
+  # (checked by name across all 46 charts Phase 1 moved, control: `sidebar-nav` matched 16 files).
+  # NOTE the scope of that `subject` requirement, because the wide reading is wrong and alarming:
+  # it is NOT a RESTAction spec field and does NOT apply to ordinary portal RESTActions. Measured
+  # 2026-11-11: 96 of 99 chart-rendered RESTActions carry no `subject` (the 3 apparent exceptions
+  # are a jq expression `subject: (.spec.subject // "-")` in a response mapping), and 057 runs
+  # authn 0.41.0 with 106 RESTActions, ALL 106 without spec.subject, and snowplow shows 0
+  # RESTActionFailed across 2413 log lines. Only the OAuth sign-in RESTAction is in scope.
   # WHY NOW, and this is a reconciliation rather than a fresh request: Diego said '057 first,
   # own roll' in authn's session at ~06:50Z, then at ~07:08Z in mine chose snowplow 1.12.67 when
   # offered both. I read the second as a decline; on re-reading it is more naturally an ORDERING
@@ -681,6 +699,28 @@ components:
   # with a Role, a RoleBinding naming User/<name>, a LimitRange and a ResourceQuota. They do not
   # exist today only because both clientconfigs PREDATE the policy and every rule sets
   # `generateExisting: false`, so no backfill ever ran for them.
+  # NO LONGER TRUE -- THE PREDICTION CAME TRUE, corrected 2026-11-11. tenant-admin and
+  # tenant-authn EXIST on demo, created 2026-10-31T14:52:41Z and 14:52:39Z, two days after this
+  # note was written. Something fired the policy on 10-31; it was NOT the 0.40.0 roll, whose authn
+  # pod started 2026-11-10T13:18:11Z, ten days later. Both are flagged for Diego's cutover cleanup
+  # with the other spurious service tenants, per the instruction below -- DO NOT delete them as
+  # part of a routine roll, and NEVER touch the policy itself (its generate rules are immutable and
+  # deleting it wipes every tenant).
+  # WHY A FURTHER authn BUMP IS NEVERTHELESS SAFE, verified with acmp 2026-11-11 before Phase 1
+  # moved authn 0.40.0 -> 0.41.0: demo is ALREADY past 0.28.0, so the threshold this constraint
+  # protects was crossed before. 11 clientconfig Secrets, 9 carry authn.krateo.io/groups and 2 do
+  # not (acme-, globex-, both created 2026-11-05), so a startup backfill can only UPDATE those two.
+  # acmp confirmed read-only that all four tenants carry
+  # generate.kyverno.io/policy-name=tenant-namespace-on-login and managed-by=kyverno, and that all
+  # 5 rules are `synchronize: true` / `generateExisting: false`. So that UPDATE re-runs generate
+  # against objects the policy ALREADY owns -- an idempotent re-assert to the rule's spec, not a new
+  # namespace, and generate never deletes on update. One side effect worth knowing: synchronize=true
+  # reverts manual drift in the generated objects, and tenant-acme's ResourceQuota is the generated
+  # one at the policy default pods=100, so there is nothing to lose there.
+  # STILL OPEN: why the two 2026-11-05 clientconfigs lack the annotation while the 9 older ones
+  # carry it, given 0.40.0 started on 11-10 and should have seen them. Either the backfill is
+  # login-triggered rather than startup-triggered, or it runs once and is marked done. That is
+  # authn's to answer and it decides whether a bump triggers the policy at all.
   # The cutover runbook rolls authn >= 0.28.0 at STEP 3, after the legacy policy is orphaned and
   # deleted, in Diego's window. Kyverno 3.9.2 is unaffected and still goes first.
   # 057 IS NOT AFFECTED: it has no Kyverno at all, so there is no policy to trigger.
