@@ -106,6 +106,38 @@ def snapshot(ctx, outdir, phase):
     return kept
 
 
+def sample_served(ctx, outdir):
+    """Append a timestamped served-version sample for every composition.krateo.io CRD.
+
+    WHY PER-POLL AND NOT JUST pre/post. A pre-snapshot bounds absence at ONE instant, and I asserted
+    a conclusion it could not carry: that an error naming v1-8-109 at 18:15:20 proved the version
+    was not yet added, when all the pre-snapshot showed was absence at 18:12:19. core-provider had
+    already warned me that managedFields keeps only the NEWEST write per manager, so it cannot date
+    a specific event -- and I used it as if it could, twice.
+
+    What settles it is the served set AT the error's instant. compositions.yaml:37 does a LIVE
+    lookup of all CRDs in the same helm action whose post-render later fails, so the two are seconds
+    apart; sampling every poll brackets any error within one interval.
+    """
+    path = os.path.join(outdir, "served-timeline.jsonl")
+    raw = kubectl(ctx, "get", "crd", "-o", "json", check=False)
+    if not raw:
+        return 0
+    try:
+        items = json.loads(raw).get("items", [])
+    except Exception:
+        return 0
+    snap = {c["spec"]["names"]["kind"]: sorted(v["name"] for v in c["spec"]["versions"]
+                                               if v.get("served"))
+            for c in items if c["spec"].get("group") == GROUP}
+    if not snap:
+        return 0
+    with open(path, "a") as f:
+        f.write(json.dumps({"at": datetime.datetime.now(datetime.timezone.utc)
+                            .isoformat().replace("+00:00", "Z"), "served": snap}) + "\n")
+    return len(snap)
+
+
 def watch(ctx, outdir, seconds):
     """Follow every installers-v* controller and append any line carrying an `err`, verbatim."""
     path = os.path.join(outdir, "errors.jsonl")
@@ -147,8 +179,12 @@ def watch(ctx, outdir, seconds):
                                           "msg": d.get("msg"), "err": d.get("err")}) + "\n")
                     out.flush()
                     n += 1
+            sample_served(ctx, outdir)
             time.sleep(10)
-    print(f"  captured {n} error line(s) from {len(seen_pods)} pod(s)")
+    tl = os.path.join(outdir, "served-timeline.jsonl")
+    samples = sum(1 for _ in open(tl)) if os.path.exists(tl) else 0
+    print(f"  captured {n} error line(s) from {len(seen_pods)} pod(s); "
+          f"{samples} served-version sample(s)")
     return n
 
 
@@ -197,13 +233,42 @@ def report(outdir):
         for e in stale:
             out.append(f"    {e['timestamp']}  {str(e['err'])[:100]}")
     out += ["", "ERRORS IN THIS WINDOW, in full:", ""]
+    tl = os.path.join(outdir, "served-timeline.jsonl")
+    timeline = [json.loads(l) for l in open(tl)] if os.path.exists(tl) else []
+    import re as _re
+
+    def bracket(err_ts, err_text):
+        """The served set for each kind/version the error names, just before and just after."""
+        pairs = _re.findall(r'no matches for kind "([^"]+)" in version "composition\.krateo\.io/([^"]+)"',
+                            str(err_text))
+        if not pairs or not timeline:
+            return ["  (no served-version samples, or the error names no kind/version)"]
+        before = [s for s in timeline if s["at"] <= err_ts]
+        after = [s for s in timeline if s["at"] > err_ts]
+        out = []
+        for kind, ver in sorted(set(pairs)):
+            b = (f"{before[-1]['at']}: {ver in (before[-1]['served'].get(kind) or [])}"
+                 if before else "no sample before")
+            a = (f"{after[0]['at']}: {ver in (after[0]['served'].get(kind) or [])}"
+                 if after else "no sample after")
+            out.append(f"  {kind}/{ver} served? before={b}  after={a}")
+        return out
+
     for e in fresh:
-        hit = [f"{k}/{v} added (newest controller write {t})" for (k, v), t in added_index.items()
+        # NB the label. This is the NEWEST controller write on that CRD, which is NOT the moment
+        # the version was added -- managedFields keeps only the latest entry per manager. I read it
+        # as the add time twice and sent a peer a wrong conclusion built on it. The SERVED AT ERROR
+        # TIME block below is the authoritative one; if the two disagree, believe the samples.
+        hit = [f"{k}/{v} in the version diff (newest controller write on that CRD: {t} "
+               f"-- NOT the add time)" for (k, v), t in added_index.items()
                if k in str(e["err"]) or v in str(e["err"])]
         out.append(f"  {e['timestamp']}  pod={e['pod']}")
         out.append(f"    msg: {e['msg']}")
         out.append(f"    err: {e['err']}")
-        out.append(f"    correlates with: {hit or 'NO version add names this kind/version'}")
+        out.append(f"    in the version diff: {hit or 'NO version add names this kind/version'}")
+        out.append("    SERVED AT ERROR TIME (this is what decides ordering vs lag):")
+        for l in bracket(str(e.get("timestamp") or ""), e.get("err")):
+            out.append("    " + l)
         out.append("")
     txt = "\n".join(out)
     open(os.path.join(outdir, "report.txt"), "w").write(txt)
