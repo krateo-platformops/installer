@@ -8484,7 +8484,7 @@ components:
   kind: KeycloakOperator
   chart: keycloak-operator
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.2.3
+  version: 0.2.4
   upstream: true
   tier: platform
   feature: keycloak
@@ -8511,6 +8511,39 @@ components:
   deps:
   - keycloak-operator
   - cloudnative-pg
+  tier: platform
+  feature: keycloak
+- name: keycloak-config-kog
+  # NEW COMPONENT, wired 2026-11-11, the last piece of demo Phase 2. Turns realm configuration into
+  # CRs: the GitHub identity provider with clientSecretRef, the locked first-broker-login flow and
+  # its executions, KeycloakRequiredAction (VERIFY_PROFILE off) and the group mapper.
+  # 0.5.1 SPECIFICALLY, not 0.5.0. keycloak-provider-kog measured that 0.5.0 ships every KIND but
+  # NOT the execution controller's identity and RBAC, so authn refuses that controller with
+  # `403 ... not in the exchange allowlist` and the locked flow -- the username lock the demo film
+  # depends on -- never reconciles. Verified here: templates go 16 -> 17 between 0.5.0 and 0.5.1,
+  # and authenticationexecution-identity.yaml exists ONLY in 0.5.1.
+  # requiresApiGroups read from the chart's own templates rather than taken on report; all five
+  # appear there. serviceaccount.authn.krateo.io is only rendered at >= 0.5.1, which is another
+  # reason 0.5.0 would have been the wrong pin.
+  # `authn` is a dep as well as authn-crd's group: the execution controller exchanges its token
+  # with authn BEFORE calling snowplow, so the CRD alone is not enough (keycloak-provider-kog).
+  kind: KeycloakConfigKog
+  chart: keycloak-config-kog
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.5.2
+  requiresApiGroups:
+  - ogen.krateo.io
+  - external-secrets.io
+  - generators.external-secrets.io
+  - templates.krateo.io
+  - serviceaccount.authn.krateo.io
+  deps:
+  - oasgen-provider
+  - keycloak
+  - external-secrets
+  - snowplow
+  - snowplow-crd
+  - authn
   tier: platform
   feature: keycloak
 - name: identity-lifecycle-crd
