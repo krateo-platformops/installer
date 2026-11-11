@@ -10848,6 +10848,23 @@
             }
           }
         },
+        "keycloak-config-kog": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "keycloak": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "baseUrl": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "REQUIRED ON THE COMPOSITION CR. keycloak-config-kog 0.5.2's values.schema.json has root `required: [keycloak]` and nested `keycloak.required: [baseUrl]`, so the Composition CR is uncreatable without it and the rejection freezes the whole umbrella. Left ABSENT it is derived by inst.componentValuesResolved as http://keycloak-service.<namespaces.krateo>.svc.cluster.local:8080 -- NOT the chart's own default, which names keycloak-system while Krateo installs compositions into namespaces.krateo. Set it explicitly only to point at a Keycloak outside the cluster."
+                }
+              }
+            }
+          }
+        },
         "keycloak": {
           "type": "object",
           "additionalProperties": false,

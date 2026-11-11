@@ -1082,6 +1082,52 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
      A path whose parent is absent is a no-op, not an error: re-running an unset after it has
      taken effect must stay safe, or the values file becomes un-rerunnable.
 */}}
+{{/*
+inst.componentValuesResolved — .Values.componentValues plus DERIVED defaults that cannot live in
+values.yaml because they depend on other values.
+
+WHY THIS EXISTS. A blueprint chart whose values.schema.json marks a key `required` makes that key
+MANDATORY on the generated Composition CR, and the umbrella emits that CR carrying only what
+componentValues supplies — the component chart's own values.yaml defaults do NOT populate it. So a
+missing required key makes the CR uncreatable, and because the rejection happens inside the
+Installer composition's own helm reconcile it freezes EVERY component. Measured twice on
+krateo-demo 2026-11-11: keycloak 0.2.3 (`spec.db`/`spec.keycloak`) froze all 108 managed children.
+
+A plain default in values.yaml covers the keys that are constant. This helper covers the ones that
+are NOT: keycloak-config-kog's `keycloak.baseUrl` is an in-cluster Service URL whose NAMESPACE is
+whatever `namespaces.krateo` is set to. Hardcoding the upstream chart's own default would be wrong
+for us twice over — it names `keycloak-system`, while Krateo installs every composition into
+`namespaces.krateo` (krateo-system on both 057 and demo), and it would silently stop being true the
+moment someone changed that value.
+
+An explicitly set componentValues value always wins; this only fills an ABSENT key.
+
+Returns the resolved map. Used by the fresh-install CR AND, through inst.componentValuesPatch, by
+the surgical upgrade patch — so the two paths cannot drift.
+*/}}
+{{- define "inst.componentValuesResolved" -}}
+{{- $top := . -}}
+{{- $cv := deepCopy (default dict $top.Values.componentValues) -}}
+{{- $ns := $top.Values.namespaces.krateo -}}
+{{- $known := dict -}}
+{{- range $c := (include "inst.componentsYaml" $top | fromYaml).components -}}
+{{- $_ := set $known (toString $c.name) true -}}
+{{- end -}}
+{{- if hasKey $known "keycloak-config-kog" -}}
+{{- $comp := "keycloak-config-kog" -}}
+{{- if not (hasKey $cv $comp) -}}{{- $_ := set $cv $comp dict -}}{{- end -}}
+{{- $entry := index $cv $comp -}}
+{{- if not (and (hasKey $entry "keycloak") (kindIs "map" (index $entry "keycloak"))) -}}
+{{- $_ := set $entry "keycloak" dict -}}
+{{- end -}}
+{{- $kc := index $entry "keycloak" -}}
+{{- if not (dig "baseUrl" "" $kc) -}}
+{{- $_ := set $kc "baseUrl" (printf "http://keycloak-service.%s.svc.cluster.local:8080" $ns) -}}
+{{- end -}}
+{{- end -}}
+{{- $cv | toJson -}}
+{{- end -}}
+
 {{- define "inst.componentValuesPatch" -}}
 {{- /* Builds components-patch.json's componentValues, turning every componentValuesUnset path into
        an EXPLICIT NULL so the RFC-7386 merge patch DELETES it. An omitted key is PRESERVED by that
@@ -1108,7 +1154,7 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
        break every componentValues update rather than just its own. So an unknown component name
        fails the render loudly, exactly as an unknown name does in inst.componentsYaml. */}}
 {{- $top := . -}}
-{{- $cv := deepCopy (default dict $top.Values.componentValues) -}}
+{{- $cv := (include "inst.componentValuesResolved" $top) | fromJson -}}
 {{- $known := dict -}}
 {{- range $c := (include "inst.componentsYaml" $top | fromYaml).components -}}
 {{- $_ := set $known (toString $c.name) true -}}
