@@ -5683,7 +5683,24 @@ components:
   feature: coreAgents
 - name: kagent
   kind: Kagent
-  version: 0.1.20
+  # 0.1.22 (tag 3d4de3a) FIXES A LIVE TOKEN LEAK: on a failed kubectl call the per-user tool path
+  # returned the user's JWT in the tool result (kagent-dev/tools#107). All 98 stored tokens were
+  # already expired; its owner redacts the session store separately. Security priority, Diego
+  # accepted the interim private-build window.
+  # The per-user tool server now comes from a PRIVATE package pinned BY DIGEST ONLY:
+  # ghcr.io/krateo-agentiko/kagent-tools@sha256:6308035d...230c under the new key
+  # perUserRbac.toolImage. There is NO tag field at all, so no stale tag can win over the digest --
+  # the trap that defeated the ClickHouse digest pin. Do NOT set repository/digest in
+  # componentValues: the chart default IS the pin, and a second source would re-create that hazard.
+  # 0.1.21 IS DELIBERATELY SKIPPED. It carried the pull secret INSIDE toolImage, whose schema
+  # requires [repository, digest]. crdgen preserves chart `required` into the composition CRD
+  # (verified with krateo-audit-worm as a control: its 5 chart blocks appear verbatim as .spec.*
+  # required in both served versions), and the image-pull injection below CREATES the parent object
+  # while setting only the leaf -- so the installer would have written toolImage: {pullSecrets: [...]}
+  # with neither required sibling, and the apiserver would have REJECTED the Kagent CR outright on
+  # any cluster with registryAuth on. 0.1.22 moves the secret to the sibling key
+  # perUserRbac.toolImagePullSecrets, so the injection never touches toolImage.
+  version: 0.1.22
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:

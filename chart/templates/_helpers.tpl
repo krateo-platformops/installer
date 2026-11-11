@@ -110,6 +110,16 @@ components:
   - uiTokenHop
   - image
   - pullSecrets
+{{/* kagent's PER-USER tool server runs a private krateo-agentiko build (the token-leak fix). The
+     path is the SIBLING key toolImagePullSecrets, and NOT the pullSecrets inside toolImage:
+     toolImage's schema requires repository and digest, crdgen carries chart `required` into the
+     composition CRD, and the injection below CREATES the parent object while setting only the leaf.
+     So aiming at toolImage would write it with neither required sibling and the apiserver would
+     reject the Kagent CR. Only the UPSTREAM sub-chart tool path is public; this one needs the cred. */}}
+- name: kagent
+  path:
+  - perUserRbac
+  - toolImagePullSecrets
 - name: alert-provider
   path:
   - imagePullSecrets
