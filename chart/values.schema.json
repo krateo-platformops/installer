@@ -12650,6 +12650,150 @@
             }
           }
         },
+        "krateo-keycloak-realm": {
+          "type": "object",
+          "additionalProperties": false,
+          "title": "Keycloak realm, groups and the portal OIDC client",
+          "description": "Overrides for krateo-keycloak-realm. Every object here is a keycloak-config-kog custom resource, so this component renders nothing until the KOG has generated its CRDs -- which is what requiresApiGroups keycloak.ogen.krateo.io gates on. The key list is keycloak-provider-kog's final one for 0.1.0; resourceGroup is deliberately NOT exposed, because it names the API group the KOG generates into and belongs to keycloak-config-kog, not to a per-install override. NO `default:` anywhere below: a default here would propagate into the Installer CR and become a silent live override. The chart's own values.yaml carries the defaults instead.",
+          "properties": {
+            "deletionPolicy": {
+              "type": "string",
+              "enum": ["orphan", "delete"],
+              "description": "What happens IN KEYCLOAK when one of this chart's resources is deleted (helm uninstall, a prune, a kubectl delete). orphan (the chart default): the Kubernetes object goes and the realm, its groups and the client stay in Keycloak untouched, so a mistaken prune cannot wipe the realm and every user in it; a reinstall adopts them again. delete: set it explicitly only to really decommission the realm."
+            },
+            "configuration": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The per-kind <Kind>Configuration the KOG controllers authenticate with, pointing at the bearer-token Secret keycloak-config-kog rotates.",
+              "properties": {
+                "name": {"type": "string"},
+                "tokenSecret": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Read from the release namespace, so no cross-namespace Secret access is needed. Install this component where keycloak-config-kog keeps the token.",
+                  "properties": {
+                    "name": {"type": "string"},
+                    "key": {"type": "string"}
+                  }
+                }
+              }
+            },
+            "realm": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {"type": "string"},
+                "displayName": {"type": "string"},
+                "enabled": {"type": "boolean"},
+                "registrationAllowed": {"type": "boolean", "description": "Self-registration. Off in the demo design: accounts are created only through an administrator-approved joiner flow."},
+                "resetPasswordAllowed": {"type": "boolean"},
+                "verifyEmail": {"type": "boolean"},
+                "loginWithEmailAllowed": {"type": "boolean"},
+                "actionTokenGeneratedByAdminLifespan": {
+                  "type": "integer",
+                  "description": "Lifetime of administrator-sent action links (the set-password email), in SECONDS. 259200 is 72 hours."
+                },
+                "events": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {"type": "boolean"},
+                    "types": {"type": "array", "items": {"type": "string"}},
+                    "listeners": {"type": "array", "items": {"type": "string"}}
+                  }
+                },
+                "smtp": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Outgoing mail. Off by default: an install without SMTP gets a realm that sends nothing, and the realm, groups and client still reconcile -- only sending fails.",
+                  "properties": {
+                    "enabled": {"type": "boolean"},
+                    "host": {"type": "string"},
+                    "port": {
+                      "type": "string",
+                      "description": "A STRING, not an integer -- this is the chart's type and Keycloak's realm field is a string. 587 must be quoted."
+                    },
+                    "from": {"type": "string"},
+                    "fromDisplayName": {"type": "string"},
+                    "replyTo": {"type": "string"},
+                    "auth": {
+                      "type": "string",
+                      "enum": ["true", "false"],
+                      "description": "A STRING enum, not a boolean. Keycloak stores these realm flags as strings, so `true` unquoted is rejected."
+                    },
+                    "starttls": {"type": "string", "enum": ["true", "false"], "description": "A STRING enum, not a boolean."},
+                    "ssl": {"type": "string", "enum": ["true", "false"], "description": "A STRING enum, not a boolean."},
+                    "authType": {
+                      "type": "string",
+                      "enum": ["basic", "token"],
+                      "description": "basic: SMTP AUTH with a password. token: XOAUTH2 with an OAuth2 client-credentials token (Keycloak >= 26.2), required by providers that disable password SMTP AUTH, e.g. Microsoft 365."
+                    },
+                    "token": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "Used when authType is token.",
+                      "properties": {
+                        "url": {"type": "string"},
+                        "clientId": {"type": "string"},
+                        "scope": {"type": "string"}
+                      }
+                    },
+                    "credentialsSecret": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "The SMTP credentials as keys of ONE Secret in the release namespace, placed by the operator of the cluster and never carried in chart values. userKey is the SASL user in both modes; passwordKey is used by authType basic, clientSecretKey by token.",
+                      "properties": {
+                        "name": {"type": "string"},
+                        "userKey": {"type": "string"},
+                        "passwordKey": {"type": "string"},
+                        "clientSecretKey": {"type": "string"}
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "groups": {
+              "type": "array",
+              "description": "Top-level realm groups. Membership is managed by the joiner flow, never here. Names are emitted verbatim in the groups claim, so they must not start with \"/\" (that is a group PATH) or \"system:\" (reserved by Kubernetes).",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name"],
+                "properties": {
+                  "name": {"type": "string"},
+                  "attributes": {
+                    "type": "object",
+                    "additionalProperties": {"type": "array", "items": {"type": "string"}},
+                    "description": "Keycloak group attributes, typed as its REST API types them: each key maps to a LIST of strings, so a bare string value is rejected. The chart passes this through verbatim."
+                  }
+                }
+              }
+            },
+            "parentClient": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The portal's OIDC client: public (no secret), authorization code + PKCE S256, with a groups claim carrying bare group names. clientId must match the value authn's OIDCConfig uses.",
+              "properties": {
+                "enabled": {"type": "boolean"},
+                "clientId": {"type": "string"},
+                "name": {"type": "string"},
+                "rootUrl": {"type": "string"},
+                "redirectUris": {
+                  "type": "array",
+                  "items": {"type": "string"},
+                  "description": "Required in practice when parentClient is enabled: the chart defaults it to an EMPTY list, which the schema permits, so a client with no redirect URI installs cleanly and then cannot complete a login."
+                },
+                "webOrigins": {"type": "array", "items": {"type": "string"}},
+                "postLogoutRedirectUris": {
+                  "type": "string",
+                  "description": "A STRING, unlike redirectUris and webOrigins which are arrays. The chart default is \"+\", meaning the redirect URIs are reused."
+                },
+                "groupsClaim": {"type": "string"}
+              }
+            }
+          }
+        },
         "krateo-audit-worm": {
           "type": "object",
           "title": "krateo-audit-worm values",
