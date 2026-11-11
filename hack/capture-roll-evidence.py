@@ -110,6 +110,7 @@ def watch(ctx, outdir, seconds):
     """Follow every installers-v* controller and append any line carrying an `err`, verbatim."""
     path = os.path.join(outdir, "errors.jsonl")
     seen_pods, n = set(), 0
+    emitted = set()   # (pod, timestamp, err-prefix) -> written already
     deadline = time.time() + seconds
     print(f"  watching for {seconds}s -> {path}")
     with open(path, "a") as out:
@@ -118,8 +119,13 @@ def watch(ctx, outdir, seconds):
                     kubectl(ctx, "get", "pods", "-n", "krateo-system", "-o", "name", check=False).split()
                     if "installers-v" in l]
             for p in pods:
-                if p in seen_pods:
-                    continue
+                # RE-READ EVERY POLL, not once per pod. The first version read a pod's log when it
+                # was first DISCOVERED and never again -- so an error appearing after that first
+                # read was never captured. Measured on the 0.3.588 roll: the tool reported 0
+                # in-window errors while the Installer CR was visibly Synced=False, and the two real
+                # errors (18:15:20 and 18:16:02) had to be pulled by hand. The contradiction between
+                # the CR and the tool was the only tell. Dedup below makes re-reading cheap and
+                # idempotent.
                 seen_pods.add(p)
                 # --since-time is deliberately omitted: we want the pod's WHOLE log, because the
                 # errors we care about happen in its first seconds and we may attach late.
@@ -133,6 +139,10 @@ def watch(ctx, outdir, seconds):
                         continue
                     if not d.get("err"):
                         continue
+                    key = (p, d.get("timestamp"), str(d.get("err"))[:200])
+                    if key in emitted:
+                        continue
+                    emitted.add(key)
                     out.write(json.dumps({"pod": p, "timestamp": d.get("timestamp"),
                                           "msg": d.get("msg"), "err": d.get("err")}) + "\n")
                     out.flush()
