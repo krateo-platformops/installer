@@ -29,7 +29,7 @@
 {{- if eq (toString $c.name) "alert-provider" }}{{- $alertProvider = $c }}{{- end }}
 {{- end }}
 {{- if $alertProvider.name }}
-{{- if eq (include "inst.featureEnabled" (list $ $alertProvider.feature)) "true" }}
+{{- if eq (include "inst.compEnabled" (list $ $alertProvider)) "true" }}
 {{- $ns := .Values.namespaces.krateo }}
 {{- $existing := lookup "v1" "Secret" $ns "hyperdx-admin-creds" }}
 {{- $pw := "" }}

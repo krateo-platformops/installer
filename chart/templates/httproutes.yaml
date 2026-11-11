@@ -28,7 +28,7 @@
 {{- if $gwName }}
 {{- $components := (include "inst.componentsYaml" $ | fromYaml).components }}
 {{- range $c := $components }}
-{{- if and $c.expose (not $c.registerOnly) (eq (include "inst.featureEnabled" (list $top $c.feature)) "true") }}
+{{- if and $c.expose (not $c.registerOnly) (eq (include "inst.compEnabled" (list $top $c)) "true") }}
 {{- $host := include "inst.hostname" (list $top $c) }}
 {{- $svc := include "inst.svcname" (list $top $c.svcMatch) }}
 {{/* $c.exposePort is the Service port for the backendRef; skip (don't guess :80) if a future

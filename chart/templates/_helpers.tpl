@@ -183,6 +183,40 @@ components:
      the agent provision it later by editing the Installer CR. Defaults in values.yaml are all true,
      so a plain `helm install` still brings up the full platform. */}}
 {{- define "inst.coreFeatures" -}}{{- end -}}
+{{/*
+inst.compEnabled — is this COMPONENT's feature gate on? args: (list $top $c)
+
+`feature` OR ANY entry in `alsoFeatures`. Use this wherever a COMPONENT decides; use
+inst.featureEnabled directly only for a literal feature name.
+
+WHY `alsoFeatures` AND NOT A LIST IN `feature`. A component several features need is owned by none
+of them: cloudnative-pg is Keycloak's database today and kagent's tomorrow. Gating it on `keycloak`
+alone would mean enabling Keycloak to get a Postgres operator; moving it to a dedicated feature
+alone would turn it OFF underneath the Keycloak already using it. So it names one and also-names
+the other.
+
+The shape matters and is not a style choice. `properties.components.items` feeds crdgen VERBATIM
+and becomes the Installer CRD's structural schema, and self-bootstrap applies the fully rendered pin
+list as spec.components[] against it. A `oneOf`/type-union on `feature` would therefore be a CRD
+shape, and crdgen's primaryType() keeps only the FIRST type of a union — the documented
+int-or-string trap — so `feature` would likely compile as `string` and the apiserver would reject
+every pin list carrying an array. `alsoFeatures` is `array of string`, which this schema already
+ships and installs (deps, requiresApiGroups, configKeys, readerGroups).
+
+This answers only "may this component be enabled". What must be HEALTHY before it renders is
+`deps`, which is separate and unaffected.
+*/}}
+{{- define "inst.compEnabled" -}}
+{{- $top := index . 0 -}}{{- $c := index . 1 -}}
+{{- $on := include "inst.featureEnabled" (list $top $c.feature) -}}
+{{- if ne $on "true" -}}
+{{- range $f := (default list $c.alsoFeatures) -}}
+{{- if eq (include "inst.featureEnabled" (list $top $f)) "true" -}}{{- $on = "true" -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $on -}}
+{{- end -}}
+
 {{- define "inst.featureEnabled" -}}
 {{- $top := index . 0 -}}{{- $feat := index . 1 -}}
 {{- if not $feat -}}true
@@ -400,9 +434,9 @@ components:
 {{- $top := index . 0 -}}{{- $deps := index . 1 -}}{{- $comps := index . 2 -}}{{- $allCRDs := index . 3 -}}
 {{- $all := "true" -}}
 {{- range $d := $deps -}}
-  {{- $kind := "" -}}{{- $ver := "" -}}{{- $feat := "" -}}
-  {{- range $c := $comps -}}{{- if eq $c.name $d -}}{{- $kind = $c.kind -}}{{- $ver = $c.version -}}{{- $feat = $c.feature -}}{{- end -}}{{- end -}}
-  {{- if eq (include "inst.featureEnabled" (list $top $feat)) "true" -}}
+  {{- $kind := "" -}}{{- $ver := "" -}}{{- $dcomp := dict -}}
+  {{- range $c := $comps -}}{{- if eq $c.name $d -}}{{- $kind = $c.kind -}}{{- $ver = $c.version -}}{{- $dcomp = $c -}}{{- end -}}{{- end -}}
+  {{- if eq (include "inst.compEnabled" (list $top $dcomp)) "true" -}}
   {{- if ne (include "inst.ready" (list $top $kind $d $ver $allCRDs)) "true" -}}{{- $all = "" -}}{{- end -}}
   {{- end -}}
 {{- end -}}
@@ -475,7 +509,7 @@ components:
 {{- $top := index . 0 -}}{{- $c := index . 1 -}}{{- $comps := index . 2 -}}{{- $allCRDs := index . 3 -}}
 {{- $emit := include "inst.emitTag" (list $top $c.kind $c.name $c.version $allCRDs) -}}
 {{- if $emit -}}
-{{- if eq (include "inst.featureEnabled" (list $top $c.feature)) "true" -}}
+{{- if eq (include "inst.compEnabled" (list $top $c)) "true" -}}
 {{/* HARD API-group requirements are ANDed OUTSIDE the $exists escape on purpose: that escape rides
      out a momentary depsReady flap without pruning a live workload, but a missing API GROUP is not a
      flap -- chart-inspector cannot render the chart at all, so emitting anyway buys an endless 500. */}}
@@ -1205,7 +1239,7 @@ A non-orchestrator agent is routed by its chart name, falling back to the compon
 {{- $components := index . 1 -}}
 {{- $subAgents := list -}}
 {{- range $comp := $components }}
-{{- if and $comp.agent (eq (include "inst.featureEnabled" (list $top $comp.feature)) "true") }}
+{{- if and $comp.agent (eq (include "inst.compEnabled" (list $top $comp)) "true") }}
 {{- if $comp.orchestrator }}
 {{- $ap := dig $comp.name dict (default dict $top.Values.componentValues) }}
 {{- $subAgents = append $subAgents (dict "name" (default "autopilot" $comp.agentName) "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}

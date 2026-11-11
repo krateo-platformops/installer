@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CI guard (installer#145): every distinct `feature:` value a component pin gates on in
+"""CI guard (installer#145): every distinct `feature:` / `alsoFeatures:` value a component pin gates on in
 component-pins.yaml must exist as a property under `features.properties` in values.schema.json.
 
 Each pin's `feature:` names the spec.features.<key> flag that turns that component on. self-bootstrap
@@ -39,9 +39,23 @@ used = {}  # feature -> first pin name that uses it
 for c in pins:
     if not isinstance(c, dict):
         continue
+    # `feature` AND `alsoFeatures` both name spec.features.<key> flags, so BOTH must be declared.
+    # alsoFeatures exists for a shared dependency several features need (cloudnative-pg is
+    # Keycloak's database and will be kagent's). Missing it here would let a pin gate on an
+    # undeclared flag through the also-path -- the exact hole this guard exists to close, just one
+    # key along. Note `feature` is a string and `alsoFeatures` a list: the old code used the value
+    # as a dict key directly, which would raise TypeError on a list rather than check it.
     f = c.get("feature")
     if f is not None:
         used.setdefault(f, c.get("name"))
+    also = c.get("alsoFeatures")
+    if isinstance(also, list):
+        for a in also:
+            used.setdefault(a, "%s (alsoFeatures)" % c.get("name"))
+    elif also is not None:
+        print("::error::%s: pin %r has a non-list alsoFeatures (%r). It must be an array of "
+              "feature names." % ('check-feature-keys', c.get("name"), also))
+        sys.exit(1)
 
 orphans = sorted((f, used[f]) for f in used if f not in declared)
 if orphans:

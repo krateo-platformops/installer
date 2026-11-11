@@ -275,6 +275,10 @@
           "type": "boolean",
           "description": "Opt-in the repo-mcp-server DOMAIN-graph / OKF tools (graph_find, graph_map, graph_neighbors, graph_path, knowledge_lookup) \u2014 multi-hop structural, reverse-impact and curated-provenance answers grep cannot give. Unlike structureGraph this deploys NO new component: it flips a config layer on three EXISTING coreAgents components in LOCKSTEP \u2014 the server (repo-mcp-server graph.enabled) and its consumers' toolNames (krateo-autopilot, incident-agent, via each pin's graphToggle) \u2014 so it can never half-enable into the silent Accepted-but-empty server/agent mismatch the repo-mcp-server chart warns about. Distinct from structureGraph (the separate code-STRUCTURE AST server). Needs coreAgents. Default false: more grounding tools is not always better \u2014 measure (the repo-mcp-server grounding eval harnesses / a bench A/B) before defaulting on."
         },
+        "cloudnativePg": {
+          "type": "boolean",
+          "description": "The CloudNativePG operator for consumers other than Keycloak (kagent's Postgres). cloudnative-pg names `keycloak` as its feature and `cloudnativePg` in alsoFeatures, so either flag turns it on and neither forces the other. Leaving this false while keycloak is true is demo's current state and changes nothing there."
+        },
         "configConnector": {
           "type": "boolean",
           "default": false,
@@ -397,6 +401,14 @@
           },
           "exposePort": {
             "type": "integer"
+          },
+          "alsoFeatures": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            },
+            "description": "ADDITIONAL feature flags that also enable this component (ANY-of with `feature`), for a SHARED DEPENDENCY several features need. cloudnative-pg is Keycloak's database and will be kagent's: gating it on `keycloak` alone would mean enabling Keycloak to get a Postgres operator, and moving it to a dedicated feature alone would turn it off underneath the Keycloak already using it. Deliberately an array of string and NOT a oneOf on `feature`: this node feeds crdgen verbatim and becomes the Installer CRD structural schema, and crdgen keeps only the first type of a union. It answers only whether the component MAY be enabled; what must be healthy first is `deps`."
           },
           "feature": {
             "type": "string"
