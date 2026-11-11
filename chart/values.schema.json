@@ -12168,6 +12168,11 @@
               "title": "namespace",
               "type": "string"
             },
+            "serviceDeskNamespace": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Namespace the incidents page reads the service-desk ticket queue from (portal 1.8.109, #410/#411). NO default here on purpose: a default in this file is written into the Installer CR and becomes a silent live override. The chart's own values.yaml defaults it to krateo-service-desk, which is correct on 057 (read from the cluster), so nothing needs to set this today -- it is declared so it CAN be set, because this node is additionalProperties:false and an undeclared key is silently pruned with every check green. If the key is absent the Tickets card reads the chart default; on an install with no service desk that 404s and the card hides."
+            },
             "readerGroups": {
               "description": "Groups granted read of these pages in `namespace`. A group listed here sees /incidents in the sidebar and can open it; a group absent cannot list the page roots, so the entry never renders. `devs` is deliberately NOT a default \u2014 keeping it out is the point of the split (#261). No schema default: the installer applies schema defaults, so one here would silently re-assert itself over a group set through componentValues. The chart default lives in values.yaml instead.",
               "items": {
