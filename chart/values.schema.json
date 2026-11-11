@@ -14303,21 +14303,27 @@
                 "url": {
                   "type": "string"
                 },
-                "user": {
-                  "type": "string"
-                },
-                "passwordSecret": {
+                "credentialsSecret": {
                   "type": "object",
                   "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "userKey",
+                    "passwordKey"
+                  ],
+                  "description": "The Secret holding sse-proxy's OWN ClickHouse user, mandatory since krateo-sse-proxy 0.1.26: a missing Secret stops the pod with CreateContainerConfigError rather than falling back to the `default` user. Created by krateo-observability >= 0.1.42 as clickhouse-sse-proxy-credentials, which is why 0.1.26 must NOT reach a cluster whose krateo-observability is older. Read by secretKeyRef, which cannot cross namespaces, so the Secret must live in the sse-proxy release's OWN namespace -- krateo-system on 057 and demo, where krateo-observability creates it. The chart defaults all three keys correctly (clickhouse-sse-proxy-credentials / username / password), so this carries NO default here and only needs setting on a cluster that departs from them. REPLACES `user` and `passwordSecret`, which 0.1.26 removed from its own schema -- leaving them declared here would advertise keys the chart now rejects.",
                   "properties": {
                     "name": {
-                      "type": "string"
+                      "type": "string",
+                      "minLength": 1
                     },
-                    "key": {
-                      "type": "string"
+                    "userKey": {
+                      "type": "string",
+                      "minLength": 1
                     },
-                    "optional": {
-                      "type": "boolean"
+                    "passwordKey": {
+                      "type": "string",
+                      "minLength": 1
                     }
                   }
                 }
