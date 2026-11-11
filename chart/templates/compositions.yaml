@@ -643,7 +643,7 @@
 {{- if $c.orchestrator }}
 {{- $enabled := dict }}
 {{- range $comp := $components }}
-{{- if eq (include "inst.featureEnabled" (list $top $comp.feature)) "true" }}
+{{- if eq (include "inst.compEnabled" (list $top $comp)) "true" }}
 {{- $_ := set $enabled $comp.name true }}
 {{- end }}
 {{- end }}
@@ -685,7 +685,7 @@
 {{- if and (eq $c.name "agentgateway-policies") $gwPathMode }}
 {{- $routes := list }}
 {{- range $d := $components }}
-{{- if and $d.gatewayPath (eq (include "inst.featureEnabled" (list $top $d.feature)) "true") }}
+{{- if and $d.gatewayPath (eq (include "inst.compEnabled" (list $top $d)) "true") }}
 {{- $backendName := include "inst.svcname" (list $top $d.svcMatch) }}
 {{- if not $backendName }}{{- $backendName = $d.name }}{{- end }}
 {{/* Listener + ports: default to the shared platform-http:$gwPlatformPort listener and the peer's

@@ -35,7 +35,7 @@
 {{- $withheld := dict }}
 {{- range $c := $components }}
 {{- if not $c.registerOnly }}
-{{- if eq (include "inst.featureEnabled" (list $top $c.feature)) "true" }}
+{{- if eq (include "inst.compEnabled" (list $top $c)) "true" }}
 {{- $declared = add1 $declared }}
 {{/* Read the DECISION, never a copy of it. This file used to restate the gate expression so it
      could report on it; #477 then changed the gate and left the copy keyed on the pinned version,

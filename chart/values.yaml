@@ -251,6 +251,9 @@ features:
                                   #   credentials env + domainFilters); pairs with exposure.tls.host (the platform gateway is annotated
                                   #   with that host so external-dns publishes a record following the LB IP — DNS-follows-LB, no static IP).
   agentGateway: false              # OPT-IN: agentgateway in front of the kagent fleet — JWT auth + per-user RBAC over
+  # CloudNativePG for consumers other than Keycloak (kagent's Postgres). cloudnative-pg
+  # names keycloak as its feature and cloudnativePg in alsoFeatures, so either turns it on.
+  cloudnativePg: false
   configConnector: false          # OPT-IN Google Config Connector (operator + CRDs), for provisioning GCP
                                   #   resources from Compositions. Cluster mode by default: ONE Google service
                                   #   account for the whole cluster, authenticating with the key Secret named by

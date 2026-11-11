@@ -14,7 +14,7 @@
 {{- range $c := $components }}
 {{/* registerOnly (catalog) blueprints are always registered while installDefinitions is on, so the
      blueprint appears in the portal; their Composition emission is suppressed in compositions.yaml. */}}
-{{- if or $c.registerOnly (eq (include "inst.featureEnabled" (list $ $c.feature)) "true") (eq (include "inst.compositionExists" (list $ $c.kind $c.name $c.version $allCRDs)) "true") }}
+{{- if or $c.registerOnly (eq (include "inst.compEnabled" (list $ $c)) "true") (eq (include "inst.compositionExists" (list $ $c.kind $c.name $c.version $allCRDs)) "true") }}
 {{/* Blueprint namespace (portal#261: a blueprint's namespace is its visibility scope). An APPENDED
      registerOnly catalog blueprint may set `namespace` to place its CompositionDefinition there
      instead of namespaces.krateo, and `readerGroups` to let those groups see it on the Blueprints

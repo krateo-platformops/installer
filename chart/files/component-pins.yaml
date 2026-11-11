@@ -8459,6 +8459,14 @@ components:
   upstream: true
   tier: platform
   feature: keycloak
+  # SHARED DEPENDENCY: enabled by EITHER feature. Keycloak uses it as its database;
+  # kagent will use it to move off its bundled Postgres and that chart's hardcoded
+  # public password. Gating on keycloak alone would mean enabling Keycloak to get a
+  # Postgres operator; moving it to cloudnativePg alone would turn it OFF underneath
+  # the Keycloak already using it on demo. Inert as shipped: demo has keycloak=true so
+  # CNPG stays on, 057 has both false so it stays off -- exactly today on both.
+  alsoFeatures:
+  - cloudnativePg
 - name: external-secrets
   # NEW COMPONENT, wired 2026-11-11 for demo Phase 2. PROVIDES external-secrets.io and
   # generators.external-secrets.io, both consumed by keycloak-config-kog. UPSTREAM CHART from
