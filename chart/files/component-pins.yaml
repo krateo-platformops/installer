@@ -4924,7 +4924,7 @@ components:
   # provenance from appVersion at all. Do NOT unblock this by deleting `sources` or the appVersion.
   # 0.1.36: every default alert carries a one-sentence description, not message. NEEDS
   # alert-provider-crd 0.2.68: an older CRD drops the field.
-  version: 0.1.44
+  version: 0.1.45
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -5191,7 +5191,7 @@ components:
   #
   # CONTROLS: 0.1.1 resolves; 0.1.0 resolves; 9.9.9 does not.
   kind: OtelCollectorTailsampling
-  version: 0.1.11
+  version: 0.1.12
   deps:
     - otel-collector-deployment
   tier: observability
@@ -5404,7 +5404,7 @@ components:
   # what deploys the instance, which is why every other consumer deps on that and not the operator.
   # 0.1.6: both alerts carry a description, not message (0.1.5 is comments only). NEEDS
   # alert-provider-crd 0.2.68.
-  version: 0.1.6
+  version: 0.1.7
   # 0.1.1 (observability#83, repo tag 3.1.27) drops `appVersion`, which 0.1.0 set to 0.1.0. The
   # chart builds NO image -- both CronJobs run upstream clickhouse/clickhouse-server:24.8-alpine --
   # so there is no component repo whose CI check-pin-ci could resolve, and appVersion 0.1.0 matched
@@ -8271,7 +8271,7 @@ components:
   # 0.2.17 (#71): drops the connection-string response rule, which rejected any database URL as a
   # live credential and cut off RCAs whose fix sets one (e.g. DATABASE_URL=postgres://...).
   # 0.2.23: the LLM budget alerts carry a description, not message. NEEDS alert-provider-crd 0.2.68.
-  version: 0.2.29
+  version: 0.2.30
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
