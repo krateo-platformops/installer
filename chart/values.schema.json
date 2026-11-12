@@ -5560,7 +5560,7 @@
                     "truncate": {
                       "type": "object",
                       "additionalProperties": false,
-                      "description": "Truncate tool results the model has already acted on, keeping the newest one whole. Rendered as a stage of the backend's composed `messages` rewrite, applied before provider conversion, so it is provider-independent and invisible to the agent. Needs agentgateway-policies >= 0.2.10.",
+                      "description": "Truncate tool results the model has already acted on, and bound the newest one. Rendered as a stage of the backend's composed `messages` rewrite, applied before provider conversion, so it is provider-independent and invisible to the agent. Needs agentgateway-policies >= 0.2.10.",
                       "properties": {
                         "enabled": {
                           "type": "boolean",
@@ -5569,7 +5569,12 @@
                         "maxChars": {
                           "type": "integer",
                           "minimum": 1,
-                          "description": "Characters kept from each already-acted-on tool result; the newest is exempt at any length. Defaults to 8000, which leaves six results in seven whole while still removing ~70% of tool-output characters. Lower it if prefill still dominates; raise it for agents that read back."
+                          "description": "Characters kept from each already-acted-on tool result; the newest is bounded by newestMaxChars instead. Defaults to 8000, which leaves six results in seven whole while still removing ~70% of tool-output characters. Lower it if prefill still dominates; raise it for agents that read back."
+                        },
+                        "newestMaxChars": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "Characters kept from the newest tool result, half from its head and half from its tail; 0 keeps it whole at any length. Must be 0 or at least maxChars. Defaults to 100000 (~25-30k tokens). Needs agentgateway-policies >= 0.2.31."
                         }
                       }
                     }
