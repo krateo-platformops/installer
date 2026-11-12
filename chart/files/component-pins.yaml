@@ -4600,7 +4600,17 @@ components:
   # 0.28.0: co-versioned with oasgen-provider (the triple moves together). Declares NO kubeVersion
   # floor — it ships no CRDs and no controller, so it installs anywhere.
   # 0.28.1: co-versioned with oasgen-provider (the triple moves together). No kubeVersion floor.
-  version: 0.48.0
+  # 0.61.0 (2026-11-12): LOCKSTEP WITH oasgen-provider. This chart is not a separate service -- it
+  # runs the oasgen-provider IMAGE with the /bin/oasgen-render entrypoint, so its version IS
+  # oasgen's version. Measured on 057 at 0.48.0: renderer oasgen-provider:0.48.0 vs controller
+  # oasgen-provider:0.61.0, drifted 13 versions (11 on krateo-demo). `crdgen.GenerateWithWarnings`
+  # first exists in plumbing v1.26.1 and oasgen only began calling it at 0.53.0, so the 0.48.0
+  # renderer calls plain `Generate` and has NO WARNING CHANNEL: the Controller Builder showed a
+  # CLEAN PREVIEW for documents the controller warns about. frontend cleared the bump (their UI
+  # shows warnings distinctly from errors and arms publish only on zero problems), so newly visible
+  # warnings are the preview finally telling the truth. Enforced by
+  # .github/scripts/check-same-version-line.py.
+  version: 0.61.0
   tier: platform
   feature: portal
   chart: controller-render-service
