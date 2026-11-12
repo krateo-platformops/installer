@@ -4090,7 +4090,7 @@ components:
   # silently claiming the route back.
   # 1.8.101: Agentiko entry points (`intent: agentiko`, declared by frontend 1.8.34's Button CRD).
   # 1.8.102: the alerts table and alert page show each alert's description, not its SQL filter.
-  version: 1.8.109
+  version: 1.8.110
   deps:
   - frontend
   - git-provider
@@ -4199,7 +4199,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.109
+  version: 1.8.110
   deps: ['portal']
   tier: platform
   feature: portal
@@ -4309,7 +4309,7 @@ components:
   feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.109
+  version: 1.8.110
   deps:
   - portal
   tier: platform
@@ -4382,7 +4382,7 @@ components:
 #     gateway /content/debug/vars 401. A 200 WITH index.html IS A FALSE PASS (SPA fallback).
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.109
+  version: 1.8.110
   deps:
   - portal
   tier: platform
@@ -7244,7 +7244,7 @@ components:
   # NOT block this cutover -- it means that until it lands, incident-provider's own reconcile errors
   # can open Incidents ABOUT incident-provider. A known cost, not a surprise.
   kind: IncidentProvider
-  version: 0.10.0
+  version: 0.11.0
   deps:
   - incident-provider-crd
   tier: observability
@@ -7278,7 +7278,7 @@ components:
   # The OCI repo does not change: both charts resolve at ghcr.io/krateo-platformops/charts.
   kind: IncidentProviderCrds
   chart: incident-provider-crds
-  version: 0.10.0
+  version: 0.11.0
   tier: observability
   feature: portal
 - name: alert-provider-crd
@@ -7378,7 +7378,7 @@ components:
   # LOCKSTEP with alert-provider. NB the CHART is alert-provider-crdS, plural -- the `chart:` key
   # above carries that. Probing the pin NAME instead of the resolved chart name reported this
   # chart ABSENT once; always resolve `chart:` before concluding a version is unpublished.
-  version: 0.2.75
+  version: 0.2.76
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -7541,7 +7541,7 @@ components:
   # incident-provider's next release: an older CRD drops status.reanalysis.cause harmlessly.
   # Verified at pin time: values.schema.json AND values.yaml byte-identical to 0.2.74, no root or
   # nested `required`, so it is a drop-in with no widening.
-  version: 0.2.75
+  version: 0.2.76
   # 0.2.57 carries alert-provider#76 (provider-runtime v1.7.2) and #77, which adds 'incident-provider' to
   # DEFAULT_ALERTS_JSON's reconcile-error `NOT IN` list. Measured on the published chart here, not taken
   # from the release notes: rendered at --kube-version 1.33.0, rc=0, 294 -> 331 lines (floor asserted, so
