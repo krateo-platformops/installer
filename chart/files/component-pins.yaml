@@ -4090,7 +4090,7 @@ components:
   # silently claiming the route back.
   # 1.8.101: Agentiko entry points (`intent: agentiko`, declared by frontend 1.8.34's Button CRD).
   # 1.8.102: the alerts table and alert page show each alert's description, not its SQL filter.
-  version: 1.8.111
+  version: 1.8.112
   deps:
   - frontend
   - git-provider
@@ -4199,7 +4199,7 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.111
+  version: 1.8.112
   deps: ['portal']
   tier: platform
   feature: portal
@@ -4309,7 +4309,7 @@ components:
   feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.111
+  version: 1.8.112
   deps:
   - portal
   tier: platform
@@ -4382,7 +4382,7 @@ components:
 #     gateway /content/debug/vars 401. A 200 WITH index.html IS A FALSE PASS (SPA fallback).
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.111
+  version: 1.8.112
   deps:
   - portal
   tier: platform
