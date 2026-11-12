@@ -3114,7 +3114,29 @@ components:
   # diffs, reporulesets/orgrulesets CRDs Established carrying a 23-value rules[].type enum, 057's
   # PR/Repo counts identical to baseline, and Synced on every CR. THE ENUM IS THE PROOF THE CHECK
   # BITES: it reads 15 today, so a vacuous pass is not available to it.
-  version: 0.9.0
+  # 0.10.0 is NOT purely additive, and the risky half is a NARROWING -- a CRD enum restriction can
+  # make an EXISTING object unupdatable, which is normally a refusal. Taken because the narrowed
+  # fields are provably unused on every cluster this pin reaches, verified BY ME rather than
+  # relayed (its owner's identical reading is independent corroboration, not the source):
+  #   057   OrgRuleset 0, RepoRuleset 0, UserRepository 0; 15 Repository CRs, visibility UNSET on
+  #         all 15; 17 PullRequest CRs, spec.state UNSET on all 17
+  #   demo  0 of every one of those kinds
+  # REMOVED (OrgRuleset only): rule types merge_queue and license_compliance_scanning plus
+  # merge_queue's 7 parameters -- GitHub rejects both at org level, proven by its owner's live
+  # probe. RepoRuleset KEEPS merge_queue.
+  # NARROWED: Repository/UserRepository visibility to public|private|internal, PullRequest PATCH
+  # state to open|closed. Both were already rejected by GitHub; now the apiserver rejects at apply.
+  # ADDED: OrgRuleset target `repository`; RepoRuleset code_coverage, code_quality and
+  # require_extra_approval_for_unattributed_changes (the last also on OrgRuleset).
+  # github-provider-kog-config DOES NOT need to move: its owner diffed 0.9.0..0.10.0 over the
+  # config chart and it is byte-identical, appVersion still 0.1.9. Same 32 kinds, same
+  # resourceGroup, no identifier/auth/securityScheme line touched -- so no mapping rename, which
+  # is the thing that would have deleted a credential.
+  # OASGEN FLOOR RISES 0.38.0 -> 0.52.0 (spec.serverURL). 057 and demo both run 0.59.0.
+  # NEW chart value githubBaseUrl (GitHub Enterprise, default "") is deliberately NOT declared in
+  # componentValues: unset renders no serverURL at all, so leaving it pruned is identical to
+  # leaving it unset. It gets its own widening tag if an Enterprise cluster ever appears.
+  version: 0.10.0
   # 0.7.0 adds two kinds and removes none -- measured on the published chart, not read from the
   # release notes: rendered at --kube-version 1.33.0, rc=0 on both sides, 8104 -> 8882 lines (floor
   # asserted), RestDefinition docs 30 -> 32, ADDED {RepoContent, UserRepository}, REMOVED {} . 0.7.1
@@ -7319,7 +7341,10 @@ components:
   # 0.2.68: spec.description (one plain sentence) replaces spec.message. Moves with alert-provider.
   # Moves in LOCKSTEP with alert-provider: an app pin ahead of its -crd pin prunes fields the CRD
   # does not declare, silently, with CI green.
-  version: 0.2.74
+  # LOCKSTEP with alert-provider. NB the CHART is alert-provider-crdS, plural -- the `chart:` key
+  # above carries that. Probing the pin NAME instead of the resolved chart name reported this
+  # chart ABSENT once; always resolve `chart:` before concluding a version is unpublished.
+  version: 0.2.75
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -7477,7 +7502,12 @@ components:
   # 0.2.68: reads spec.description, not spec.message.
   # 0.2.74 moves to provider-runtime v1.15.0 so acting reconcile roots carry
   # provider_runtime.acted=true for observability's tail sampler. NO production code change.
-  version: 0.2.74
+  # 0.2.75 (main a469b1a) adds reanalysis prompts carrying the previous applyAction, the stale
+  # line and the cause, matching incident-agent 0.3.5 which shipped in 0.3.594. Safe BEFORE
+  # incident-provider's next release: an older CRD drops status.reanalysis.cause harmlessly.
+  # Verified at pin time: values.schema.json AND values.yaml byte-identical to 0.2.74, no root or
+  # nested `required`, so it is a drop-in with no widening.
+  version: 0.2.75
   # 0.2.57 carries alert-provider#76 (provider-runtime v1.7.2) and #77, which adds 'incident-provider' to
   # DEFAULT_ALERTS_JSON's reconcile-error `NOT IN` list. Measured on the published chart here, not taken
   # from the release notes: rendered at --kube-version 1.33.0, rc=0, 294 -> 331 lines (floor asserted, so
