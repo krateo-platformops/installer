@@ -5403,7 +5403,7 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.28
+  version: 0.1.29
   deps:
   - otel-collector-deployment
   tier: observability
@@ -5817,7 +5817,7 @@ components:
   #   VERIFICATION LIMIT, from the handoff and not re-tested here: the 2.7 and 3.0 line-detection
   #   branches are UNVERIFIED — no cluster on either line was reachable. Only the 4.0 branch is
   #   confirmed. Do not trust a generated plan from an older cluster until a real 3.0 cluster exists.
-  version: 0.3.5
+  version: 0.3.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -6125,7 +6125,7 @@ components:
   kind: Agentiko
   agentName: agentiko
   # 0.8.1: the alert-authoring prompt names spec.description.
-  version: 0.8.2
+  version: 0.8.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
     - repo-mcp-server
@@ -6583,7 +6583,7 @@ components:
   # alert-provider#107's ApplyActionStale prompt and re-resolves against the served schema. The
   # second half is INERT until acmp's provider-side condition ships. The Agent's system-prompt
   # ConfigMap changes and the agent pod restarts once.
-  version: 0.3.5
+  version: 0.3.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -6637,7 +6637,7 @@ components:
   feature: specialistAgents
 - name: authn-agent
   kind: AuthnAgent
-  version: 0.24.0
+  version: 0.24.2
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -6835,7 +6835,7 @@ components:
   #   were wrong about PLACEMENT, not about the jq-ascending observation. Every check run on that pair
   #   asked "did the stated change land?" and none asked "is this the right place for it?" — a chart
   #   diff cannot answer the second question, and for a prompt change it is the only one that matters.
-  version: 1.5.8
+  version: 1.5.9
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -6879,7 +6879,7 @@ components:
   # One pod roll, no window.
   # CONTROLS: 3.1.8 and 3.1.7 and 3.1.6 resolve; 3.1.9 does not. Chart in krateo-agentiko.
   kind: ClickstackAgent
-  version: 3.1.8
+  version: 3.1.9
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -6920,7 +6920,7 @@ components:
   # was pinned to the 1.6.64 frontend: ahead of the frontend, the gate passes charts as "edges enforced"
   # that the live frontend does not gate. The reverse skew was checked too — 1.6.64...1.6.66 touches
   # nothing matching lint, schema, gate or verb — so a frontend AHEAD of the pinned kernel is fine.
-  version: 0.62.0
+  version: 0.62.1
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
