@@ -11,6 +11,15 @@ The owed measurement could not be taken on the 0.3.434 roll: the before-half fou
 ZERO naming a retired ServiceAccount, because every recent bump's Observe had already run. The fix
 only has something to exercise during a gate-out window, so the sampling has to span one.
 
+WHAT THIS DETECTOR CAN AND CANNOT SEE, per core-provider reading retire.go. retireController calls
+deploy.Undeploy (which deletes the retired controller and its ServiceAccount) and only THEN
+deploy.ResubjectDerivedRBAC. Those are sequential calls in one function, so a dangling-subject
+window exists in the NORMAL path by construction -- two API round-trips, sub-second. Polling at 5s
+misses it essentially always. This detector therefore measures LONG windows only, and a zero is a
+bound ("shorter than the interval"), never an absence. The long-window cases are a gate-out, where
+no Observe runs the repair at all, and -- unverified, treat as an open question -- a
+ResubjectDerivedRBAC failure after the SA is already gone.
+
 WHY IT SAMPLES THE LIVE OBJECT AND NOT LOGS. kubectl logs on 057 retains minutes, not hours, and a
 binding's subject mid-window leaves no trace afterwards. By the time you know you wanted the data it
 is gone. So: arm this BEFORE the roll.
@@ -122,6 +131,15 @@ def report(out):
     if not os.path.exists(path):
         print("::error::no rbac-timeline.jsonl -- run the watch phase"); return 1
     rows = [json.loads(l) for l in open(path)]
+
+    def t(x):
+        """Defined up here on purpose: both the zero branch and the window branch use it, and the
+        first draft defined it only after the zero branch -- which raised UnboundLocalError on
+        exactly the path that matters most, the one that reports a clean result."""
+        try:
+            return datetime.datetime.fromisoformat(x.replace("Z", "+00:00"))
+        except Exception:
+            return None
     ok = [r for r in rows if "error" not in r]
     print("STALE-RBAC WINDOW (core-provider#166)")
     print()
@@ -138,15 +156,46 @@ def report(out):
     bad = [r for r in ok if r["dangling"]]
     print(f"  samples with a DANGLING subject: {len(bad)} of {len(ok)}")
     if not bad:
-        print("  NO WINDOW OBSERVED at this resolution.")
-        print("  NB this is only meaningful if a gate-out actually happened in the window. A roll")
-        print("  that withdrew no CR exercises nothing, which is exactly why the 0.3.434 attempt")
-        print("  measured zero and proved nothing.")
+        print("  NO DANGLING SUBJECT SEEN IN ANY SAMPLE.")
+        print()
+        print("  READ THIS AS A BOUND, NOT AS AN ABSENCE. There is a dangling window in the normal")
+        print("  path BY CONSTRUCTION, and this detector cannot resolve it. core-provider's")
+        print("  retireController (compositiondefinitions/retire.go) calls deploy.Undeploy -- which")
+        print("  deletes the retired controller AND its ServiceAccount -- and only THEN")
+        print("  deploy.ResubjectDerivedRBAC. Two sequential API round-trips, so expect sub-second.")
+        gaps = []
+        for i in range(len(ok) - 1):
+            x, y = t(ok[i]["at"]), t(ok[i + 1]["at"])
+            if x and y:
+                gaps.append((y - x).total_seconds())
+        gaps.sort()
+        med = gaps[len(gaps) // 2] if gaps else None
+        shown = ("%.1fs" % med) if med is not None else "unknown"
+        print("  The MEASURED median gap between samples here was " + shown + ", so a sub-second")
+        print("  window is missed essentially always. A zero therefore means \"shorter than that")
+        print("  gap\", never \"no window\".")
+        print()
+        print("  WHAT A ZERO DOES RULE OUT: a LONG window. Two cases would produce one --")
+        print("    (a) a gate-out, where no Observe runs the repair at all. That was unbounded")
+        print("        before #166 and is the case this measurement exists for; it needs a")
+        print("        WITHHELD component, so a roll that withdrew no CR exercises nothing. That is")
+        print("        exactly why the 0.3.434 attempt measured zero and proved nothing.")
+        print("    (b) ResubjectDerivedRBAC FAILING after Undeploy has already removed the SA.")
+        print("        TRACED by core-provider at kp/main and largely CLOSED: retireController")
+        print("        returns the error, Update propagates it, the definition requeues with")
+        print("        backoff, and on the retry Undeploy finds the objects already gone and the")
+        print("        re-subject runs again. So it is BOUNDED BY THE RECONCILE BACKOFF, not")
+        print("        unbounded. One step is inference rather than traced: that the recorded old")
+        print("        version survives the failed pass. #457 helps incidentally -- VersionInfo")
+        print("        mirrors the served versions, which now linger >= 5m, so the branch stays")
+        print("        reachable that long.")
+        print("  So (a) is effectively the ONLY long-window case left: the cdc's own Observe")
+        print("  re-subjects its binding (#167), which means a long window needs the composition CR")
+        print("  to be ABSENT -- i.e. withheld by the dependency gate.")
+        print("  If no gate-out occurred in this window, report #166 as STILL OUTSTANDING -- not as")
+        print("  a pass.")
         return 0
     first, last = bad[0]["at"], bad[-1]["at"]
-    def t(x):
-        try: return datetime.datetime.fromisoformat(x.replace("Z", "+00:00"))
-        except Exception: return None
     dur = (t(last) - t(first)).total_seconds() if t(first) and t(last) else None
     print(f"  WINDOW OBSERVED: {first} .. {last}"
           + (f"  ({dur:.0f}s, plus up to one interval either side)" if dur is not None else ""))
