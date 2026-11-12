@@ -1,0 +1,45 @@
+name: check-same-version-line
+# Refuses a pin set where members of one RELEASE LINE carry different versions.
+#
+# Not the `<x>`/`<x>-crd` rule (that is check-pin-crd-lockstep.yaml, which tolerates independent
+# version lines). This is for groups that are the SAME ARTIFACT released together, where differing
+# versions have no valid reading.
+#
+# It exists because `controller-render-service` IS oasgen-render -- the oasgen-provider image with
+# the /bin/oasgen-render entrypoint -- and was pinned independently, drifting 13 versions on 057 and
+# 11 on krateo-demo. Below oasgen 0.53.0 that renderer cannot report generation warnings at all, so
+# the Controller Builder showed a CLEAN PREVIEW for documents the controller warns about. The chart's
+# own comment claimed the drift was impossible; a description is not a constraint.
+on:
+  pull_request:
+    paths:
+      - 'chart/files/component-pins.yaml'
+      - '.github/pin-version-lines.yaml'
+      - '.github/scripts/check-same-version-line.py'
+      - '.github/workflows/check-same-version-line.yaml'
+  workflow_dispatch:
+jobs:
+  # Named, not `check`: `gh pr checks` lists the JOB name, so a job called `check` is
+  # indistinguishable from every other workflow that did the same and grepping for this gate finds
+  # nothing -- which reads as "the gate did not run".
+  same-version-line:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Fetch main for the self-test's historical case
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+      # The self-test runs FIRST and includes the real pre-fix pin set (renderer 0.48.0 against
+      # controller 0.61.0), which it must REFUSE. A gate that can only pass is not a gate; this one
+      # is held to the skew it was written for, plus a synthetic skew, a synthetic agreement, and a
+      # typo'd member name (which must fail rather than make the line vacuously true).
+      - name: Self-test the gate against the real skew
+        run: python3 .github/scripts/check-same-version-line.py --self-test
+      - name: Refuse release lines that are out of step
+        run: python3 .github/scripts/check-same-version-line.py
