@@ -13043,7 +13043,27 @@
                   "properties": {
                     "enabled": {"type": "boolean"},
                     "types": {"type": "array", "items": {"type": "string"}},
-                    "listeners": {"type": "array", "items": {"type": "string"}}
+                    "listeners": {"type": "array", "items": {"type": "string"}},
+                    "expiration": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "description": "How long Keycloak keeps USER events, in SECONDS. New in krateo-keycloak-realm 0.3.1; the chart defaults it to 7776000 (90 days). NO DEFAULT HERE on purpose: a `default:` in this schema is written into every Installer CR by the self-bootstrap patch, which would stamp a retention period onto clusters that never chose one and freeze the chart's ability to change its own default (installer-schema-defaults-propagate-to-cr). Inert on a pin older than 0.3.1: that chart's values.schema.json has no such key, so the generated CRD prunes it silently — which is why this widening ships BEFORE the pin bump, never after."
+                    }
+                  }
+                },
+                "adminEvents": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "ADMIN event recording — a SIBLING of `events`, not a field inside it (confirmed against the released 0.3.1 schema rather than inferred, because declaring it one level deep would be pruned silently). New in krateo-keycloak-realm 0.3.1. Both keys are left WITHOUT a default so the chart's own defaults (enabled true, includeRepresentation false) govern; see the note on events.expiration.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "Record admin events (realm/client/user changes made through the admin API). The chart defaults this to TRUE, so pinning 0.3.1 turns admin-event recording on by itself — that is the chart owner's decision, deliberately not overridden here. Set false to keep the pre-0.3.1 behaviour."
+                    },
+                    "includeRepresentation": {
+                      "type": "boolean",
+                      "description": "Store the full JSON representation of the changed object with each admin event. Chart default false. Turning it on writes complete object bodies into the Keycloak event store, so it grows the realm database and can capture configuration values; treat it as a data-retention decision, not a verbosity knob."
+                    }
                   }
                 },
                 "smtp": {
