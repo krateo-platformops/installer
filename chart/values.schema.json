@@ -239,6 +239,12 @@
           "default": true,
           "description": "The non-agent platform: authn/snowplow/frontend/portal + portal-starter + the observability stack (operators, krateo-observability, otel collectors, sse-proxy the portal's events bell consumes)."
         },
+        "openstack": {
+          "type": "boolean",
+          "default": false,
+          "title": "OpenStack capabilities",
+          "description": "Install openstack-capabilities: the openstack-view, -provision, -decommission and -compute-tier-guard ClusterRoles plus the compute-tier ValidatingAdmissionPolicy (failurePolicy Fail, one validation, no matchConditions). Per-cluster and only where OpenStack is offered, so OFF by default. Install it BEFORE the first Openstack instance: openstack-provision is what lets a non-admin create one, and the compute-tier guard matches CREATE, so a guard installed by that create's own release never sees the create that matters. On a cluster that previously ran the 0.3.46/0.3.47 openstack umbrella the six objects are owned by that release; the cdc sets TakeOwnership unconditionally (core-provider 2.13.82, composition.go) so adoption needs no knob, and the blueprint stops rendering an object once another release owns it. NO componentValues entry exists by design: the chart's serviceContract default is the canonical contract and a per-instance Composition override is not knowable from here, so overrides are deliberately not expressible (openstack-as-a-service's decision, so their schema stays the single source)."
+        },
         "oasgenProvider": {
           "type": "boolean",
           "default": true,
