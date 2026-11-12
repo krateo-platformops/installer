@@ -7296,6 +7296,12 @@
                   "title": "Incident comparison candidates",
                   "description": "How many of an alert's newest open, analyzed Incidents one comparison weighs (default 50)."
                 },
+                "maxConcurrentAnalyses": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "title": "Concurrent RCAs",
+                  "description": "How many RCAs run at once; more wait, Analyzing, for a free slot. One RCA reads up to ~1M input tokens a minute, so alerts that fire together would otherwise exhaust the model's per-minute quota and fail every RCA at once."
+                },
                 "failedAnalysisHold": {
                   "type": "integer",
                   "title": "Failed-RCA hold (s)",
