@@ -48,7 +48,9 @@ components:
   # 0.33.1 WAS SKIPPED DELIBERATELY. It exists and was approved, but authn recommended going straight
   # to 0.34.0 so both clusters roll once instead of twice, and Diego chose that. 0.33.1 was never
   # pinned or rolled anywhere.
-  version: 0.41.0
+  # LOCKSTEP with authn, as its owner required. NB the CHART is authn-crdS, plural; the `chart:`
+  # key carries that, and probing the pin NAME instead reports it absent.
+  version: 0.42.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -793,7 +795,23 @@ components:
   # REQUIRED-BEFORE child Krateos: Diego decided children move ONCE, to the first installer version
   # that pins authn 0.34.0, rather than stopping at 0.3.498 first. acmp sets that version as the
   # blueprint's childKrateo.installer.version and upgrades acme and globex on his word.
-  version: 0.41.0
+  # 0.42.0 (digest efb245e2). Diego's go in session, as its OWN tag -- its owner asked for that so
+  # its restart and any surprise attribute cleanly rather than hiding in a multi-component roll.
+  # WHAT IT ADDS: OpenTelemetry, ON BY DEFAULT. The chart ships env.OTEL_ENABLED="true" and a new
+  # otel.endpoint defaulting to http://$(HOST_IP):4318 -- the NODE-LOCAL collector agent.
+  # THAT DEFAULT IS ONLY SAFE WHERE A NODE-LOCAL AGENT EXISTS, and it is verified on 057:
+  # otel-collector-daemonset-opentelemetry-collector-agent is desired=4 ready=4 with otlp-http
+  # 4318 bound as hostPort 4318 on every node. A cluster WITHOUT that DaemonSet would have authn
+  # exporting into nothing, silently -- so check the hostPort before pinning this anywhere else.
+  # componentValues['authn'].otel.endpoint is declared in THIS SAME commit: the authn node is
+  # additionalProperties:false, so without the declaration the endpoint could never be overridden
+  # and a cluster whose collector is not node-local would be stuck with a dead default.
+  # env.OTEL_ENABLED needs no declaration -- that node already allows extra keys, checked rather
+  # than assumed. Three other chart env keys (AUTHN_CRT_RENEWAL_ENABLED, AUTHN_CRT_RENEWAL_THRESHOLD,
+  # AUTHN_SERVICE_CRT_EXPIRES_IN) were already undeclared at 0.41.0, so that is not new.
+  # The four preconditions were verified clear on BOTH clusters before the go: 0 identities carry a
+  # krateo: group, and the otel agent is Ready on every node with hostPort 4318.
+  version: 0.42.0
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
