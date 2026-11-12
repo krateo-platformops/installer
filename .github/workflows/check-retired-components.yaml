@@ -1,0 +1,50 @@
+name: check-retired-components
+# Refuses a PR that UNPINS a component without finishing the retirement.
+#
+# Deleting a pin is half a retirement. A live Installer CR keeps the retired name on TWO surfaces
+# and each fails closed:
+#   spec.components       -> inst.componentsYaml's typo-guard `fail`s and the ENTIRE umbrella
+#                            render aborts (ChartRenderable=False). Repair: list the name in
+#                            chart/files/retired-components.yaml.
+#   componentValues.<name> -> additionalProperties:false refuses the values outright. Repair: keep
+#                            the schema key declared until every cluster has drained it.
+#
+# The rule was a comment in retired-components.yaml and nothing in CI read that file. It was broken
+# twice: incident-controller (2026-11-04, wedged krateo-demo's umbrella render) and krateo-autopilot
+# (2026-11-12, #849, which would have refused krateo-demo's catch-up roll on both surfaces).
+on:
+  pull_request:
+    paths:
+      - 'chart/files/component-pins.yaml'
+      - 'chart/files/retired-components.yaml'
+      - 'chart/values.schema.json'
+      - '.github/scripts/check-retired-components.py'
+      - '.github/workflows/check-retired-components.yaml'
+  workflow_dispatch:
+jobs:
+  # Named, not `check`: `gh pr checks` lists the JOB name, so a job called `check` is
+  # indistinguishable from every other workflow that did the same and grepping for this gate finds
+  # nothing — which reads as "the gate did not run" (check-no-silent-downgrade.yaml learned this).
+  retired-components:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Fetch the base branch
+        run: git fetch --no-tags origin "${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+      # The gate's own self-test runs FIRST, against the two commits that caused the real outages.
+      # A gate that can no longer detect them must fail the build rather than silently pass the PR.
+      - name: Self-test the gate against both real incidents
+        run: python3 .github/scripts/check-retired-components.py --self-test
+      - name: Refuse unfinished retirements
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python3 .github/scripts/check-retired-components.py
