@@ -1,0 +1,38 @@
+name: check-audit5-admission-cases
+# AUDIT-5 (installer#411): the AdmissionReview shapes a record builder must survive.
+#
+# Diego decided AUDIT-5 ships with `failurePolicy: Ignore` plus an alert on the apiserver's
+# webhook-failure metrics. `Ignore` means a broken webhook does not block writes -- it silently
+# records nothing. So the trail's correctness cannot be enforced at admission time and has to be
+# enforced here instead: a webhook that passes a happy-path create/update test and fails these cases
+# produces a trail that is CONFIDENTLY WRONG, which is worse than no trail, because a query
+# returning no records becomes indistinguishable from nothing having happened.
+#
+# NO `paths:` FILTER, DELIBERATELY. The harness is pure stdlib Python and runs in about a second
+# with no network and no cluster, so gating it behind paths buys nothing and costs correctness: the
+# webhook implementation does not exist yet, and a paths list written today would not name the files
+# it will live in. Running on every PR means the harness already guards that implementation on the
+# day it lands, instead of waiting for someone to remember to extend a trigger.
+on:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  # Named, not `check`: `gh pr checks` lists the JOB name, so a job called `check` is
+  # indistinguishable from every other workflow that did the same, and grepping for this gate finds
+  # nothing -- which reads as "the gate did not run" (check-no-silent-downgrade.yaml learned this).
+  audit5-admission-cases:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      # No dependency install step: the harness imports only json and sys. Adding `pip install`
+      # here would make a stdlib-only check fail on a network blip.
+      #
+      # The harness carries its OWN negative control -- it feeds a deliberately broken builder (one
+      # that emits dry-run records) and asserts that at least one case FAILS. So a green run means
+      # "9 cases pass AND the harness can still detect a broken builder", not merely "nothing
+      # errored". A check that cannot fail is not a check.
+      - name: AdmissionReview shapes, and the harness's own mutation check
+        run: python3 .github/scripts/check-audit5-admission-cases.py
