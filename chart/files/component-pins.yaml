@@ -8690,7 +8690,7 @@ components:
   # existing auth/bootstrap componentValues carry over untouched and no widening is needed first.
   # No root or nested `required`, so it cannot wedge the umbrella the way a blueprint root
   # `required` did twice on demo today.
-  version: 0.6.0
+  version: 0.7.0
   requiresApiGroups:
   - ogen.krateo.io
   - external-secrets.io

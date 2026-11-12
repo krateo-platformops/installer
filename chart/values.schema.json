@@ -10946,6 +10946,217 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "restDefinitions": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Which RestDefinitions the KOG emits. Mirrors the chart's restDefinitions, declared as the UNION of its values.yaml and its own values.schema.json: the chart's schema omits `user` while its values.yaml sets it, and this node is additionalProperties:false, so declaring only the schema's eleven would leave restDefinitions.user unexpressible. No `default:` on any leaf -- a default here materializes into the CR and would freeze the chart's own value.",
+              "properties": {
+                "authenticationexecution": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "Authentication execution",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakAuthenticationExecution RestDefinition."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD (chart default KeycloakAuthenticationExecution)."
+                    }
+                  }
+                },
+                "authenticationflow": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "Authentication flow",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakAuthenticationFlow RestDefinition."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD (chart default KeycloakAuthenticationFlow)."
+                    }
+                  }
+                },
+                "client": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "Client",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakClient RestDefinition."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD (chart default KeycloakClient)."
+                    }
+                  }
+                },
+                "clientscope": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "Client scope",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakClientScope RestDefinition."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD (chart default KeycloakClientScope)."
+                    }
+                  }
+                },
+                "group": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "Group",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakGroup RestDefinition."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD (chart default KeycloakGroup)."
+                    }
+                  }
+                },
+                "identityprovider": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "Identity provider",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakIdentityProvider RestDefinition."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD (chart default KeycloakIdentityProvider)."
+                    }
+                  }
+                },
+                "idpmapper": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "Identity provider mapper",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakIdentityProviderMapper RestDefinition."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD (chart default KeycloakIdentityProviderMapper)."
+                    }
+                  }
+                },
+                "protocolmapper": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "Protocol mapper",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakProtocolMapper RestDefinition."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD (chart default KeycloakProtocolMapper)."
+                    }
+                  }
+                },
+                "realm": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "Realm",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakRealm RestDefinition."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD (chart default KeycloakRealm)."
+                    }
+                  }
+                },
+                "requiredaction": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "Required action",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakRequiredAction RestDefinition."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD (chart default KeycloakRequiredAction)."
+                    }
+                  }
+                },
+                "user": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "User",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakUser RestDefinition."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD (chart default KeycloakUser)."
+                    }
+                  }
+                },
+                "userprofile": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "User profile",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakUserProfile RestDefinition."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD (chart default KeycloakUserProfile)."
+                    }
+                  }
+                }
+              }
+            },
             "auth": {
               "type": "object",
               "additionalProperties": false,
