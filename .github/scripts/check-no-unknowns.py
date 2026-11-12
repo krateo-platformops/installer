@@ -55,6 +55,19 @@ DECLARED_OPEN = {
         "bootstrap subchart passthrough — core-provider's own values surface, not ours to enumerate",
     "/properties/core-provider-crds":
         "bootstrap subchart passthrough — the CRD chart's own values surface",
+    "/properties/componentValues/properties/krateo-autopilot":
+        "RETIRED-COMPONENT DRAIN WINDOW, temporary. The component was unpinned by 0.3.606 (#849) "
+        "and its real 404-line node deleted in the same commit, which made the render fail closed "
+        "for any cluster whose CR still set the key (componentValues is additionalProperties:false) "
+        "-- krateo-demo did, so its catch-up roll would have been refused. The key is re-declared "
+        "OPEN rather than typed because the point is to accept whatever a live CR already holds, "
+        "which no longer has a maintained shape; typing it would mean restoring 404 lines of schema "
+        "for a component that has no pin and therefore no release to read it. Being open, crdgen "
+        "emits x-kubernetes-preserve-unknown-fields, so the contents are PRESERVED, not pruned: the "
+        "key does not drain by itself and removing it is an explicit step (a CR merge patch setting "
+        "componentValues.krateo-autopilot: null, or deleting this entry once no CR carries it). "
+        "Delete this entry together with the schema node and the files/retired-components.yaml line; "
+        "check-retired-components.py enforces the pairing",
     "/properties/componentValues/properties/agentgateway-policies/properties/costCatalog/properties/overrides":
         "per-model price overrides; the KEYS are model names, so there is no fixed set to enumerate",
     "/properties/componentValues/properties/agentgateway-policies/properties/gateway/properties/parameters/properties/deployment":

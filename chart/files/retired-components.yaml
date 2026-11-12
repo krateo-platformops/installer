@@ -43,3 +43,17 @@ retired:
 # (68 components, checked 2026-11-05) so it was never exposed.
 - incident-controller
 - incident-controller-crd
+# Retired 2026-11-12 by installer 0.3.606 (#849), which deleted the pin. ITS NAME WAS NOT APPENDED
+# HERE IN THAT COMMIT, repeating the incident-controller mistake above, and the exposure was
+# measured the same day: krateo-057 was already clear (its self-bootstrap had rewritten
+# spec.components, 86 entries, name absent) but krateo-demo's CR carried `krateo-autopilot` in
+# spec.components with no registerOnly, i.e. the `fail` branch, AND carried
+# componentValues.krateo-autopilot (agents, knowledge). Reproduced against 0.3.606 with demo's own
+# block: the components entry gives
+#   components[krateo-autopilot]: unknown name not in files/component-pins.yaml
+# from withheld-components.yaml:31, and the values key gives
+#   at '/componentValues': additional properties 'krateo-autopilot' not allowed
+# -- the schema error masks the render error, so fixing one reveals the other. demo is frozen on
+# 0.3.592 (which still pins it) and was never wedged; both would have fired on its catch-up roll.
+# `.github/scripts/check-retired-components.py` now enforces this file mechanically.
+- krateo-autopilot

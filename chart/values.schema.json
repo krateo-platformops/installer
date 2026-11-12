@@ -6805,6 +6805,11 @@
             }
           }
         },
+        "krateo-autopilot": {
+          "title": "krateo-autopilot values (RETIRED \u2014 tolerated, never read)",
+          "description": "RETIRED COMPONENT, KEPT ONLY SO A LIVE CR CAN DRAIN. krateo-autopilot was unpinned by 0.3.606 (#849) and its real 404-line node deleted in the same change. That made the render FAIL CLOSED for any cluster whose CR still carried this key: `at '/componentValues': additional properties 'krateo-autopilot' not allowed`, because componentValues sets additionalProperties:false. krateo-demo carried it (agents, knowledge), so its catch-up roll would have been refused. This node re-declares the key as a bare object so helm accepts whatever a CR already holds; it is an untyped object on purpose, because the values it has to tolerate no longer have a maintained shape. crdgen therefore emits x-kubernetes-preserve-unknown-fields for it, so the contents are PRESERVED, not pruned -- the key does NOT drain by itself, and clearing it is an explicit CR merge patch setting componentValues.krateo-autopilot: null. The hole is registered in check-no-unknowns.py's DECLARED_OPEN with that reason. Nothing reads it \u2014 with no pin there is no release. Deliberately NO `default`, which would materialize the key into every CR that does not have it (installer-schema-defaults-propagate-to-cr). Remove this node and the files/retired-components.yaml entry TOGETHER, in one commit, once no live CR carries either; check-retired-components.py enforces the pairing. Set nothing here: use componentValues.agentiko, the successor.",
+          "type": "object"
+        },
         "agentiko": {
           "title": "krateo-autopilot values",
           "type": "object",
