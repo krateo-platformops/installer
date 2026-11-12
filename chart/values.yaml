@@ -516,43 +516,6 @@ componentValues:
     keycloak:
       name: keycloak
       instances: 1
-  krateo-autopilot:
-    # ORCHESTRATOR BY DEFAULT: the autopilot auto-attaches EVERY deployed agent as an A2A
-    # sub-agent — the installer derives extraAgents from the feature-enabled `agent`
-    # components (excluding the autopilot itself). So the enterprise profile wires the whole fleet
-    # (installer/authn/snowplow/frontend/clickstack/core-provider agents) and agent-only wires the core
-    # ones (installer-agent + incident-agent + core-provider-agent, promoted to coreAgents 2026-09-25)
-    # — no manual list needed, and it adapts to whatever profile is enabled.
-    # To pin an EXPLICIT set instead, list them here (still gated to deployed agents); an explicit
-    # `extraAgents: []` means standalone (no orchestration).
-    #   extraAgents:
-    #     - name: installer-agent
-    #     - name: krateo-core-provider-agent
-    # Generic Kubernetes + Helm sub-agents (built into the autopilot chart, gemini-flash) — ON for
-    # every profile so the orchestrator can delegate raw cluster/Helm work alongside the krateo
-    # specialists. Their mutations are HITL-gated by hitlApproval. Deep-merges with the chart's
-    # `agents` defaults (keeps agents.autopilot on, flips k8s/helm on).
-    agents:
-      k8s:
-        enabled: true
-      helm:
-        enabled: true
-    # Generic Kubernetes knowledge (chart 0.4.8+): two markdown files the chart appends to the
-    # K8S-AGENT's system prompt — "## Kubernetes failure playbook" (~5,000 words, ~6.5k tokens) and
-    # "## Kubernetes architecture for investigators" (~4,000 words, ~5.2k tokens). The chart
-    # defaults BOTH to true and agents.k8s.enabled is true above, so they would be live here.
-    # OFF on purpose: ~11.7k input tokens ride EVERY model call of that agent (the system message is
-    # resent per turn and is never compacted), and the content is unmeasured. Off keeps the pin bump
-    # to 0.4.8 behaviour-neutral — the rendered agents are byte-identical to 0.4.7 — and leaves the
-    # knowledge as a flag to turn on deliberately, one file at a time, with a measurement either
-    # side. Mirrored as a values.schema.json default (componentValues.krateo-autopilot.knowledge) so
-    # the key is present in the schema-defaulted componentValues and a live-values override merges
-    # durably instead of being dropped.
-    knowledge:
-      kubernetes:
-        playbook: false
-        architecture: false
-
   # ---- Fleet model policy -------------------------------------------------
   # WHICH ModelConfig each agent runs on. The names are slots the model-configs component
   # renders (its `models.<alias>.name`); to change a slot's underlying model id instead, set
