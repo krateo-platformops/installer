@@ -8216,6 +8216,39 @@ components:
   upstream: true
   tier: platform
   feature: keycloak
+- name: openstack-capabilities
+  # Per-cluster OpenStack capability objects: four ClusterRoles + the compute-tier
+  # ValidatingAdmissionPolicy and its binding. All six are CLUSTER-SCOPED.
+  #
+  # NO componentValues ENTRY, DELIBERATELY. The chart's serviceContract default is the canonical
+  # contract and a per-instance Composition override cannot be known from here, so overrides are
+  # not expressible through the installer. That is openstack-as-a-service's decision, so their
+  # values.schema.json stays the single source rather than being copied into 60 paths here.
+  #
+  # ADOPTION needs no knob: the cdc sets TakeOwnership unconditionally on Observe, Create and
+  # Update (core-provider 2.13.82, composition.go:587/949/1194), reaching helm v3.20.2. On a
+  # cluster that ran the 0.3.46/0.3.47 umbrella the six objects are owned by that release and are
+  # adopted; the blueprint then stops rendering an object once another release owns it, and every
+  # copy carries helm.sh/resource-policy: keep so neither release's uninstall removes the guard.
+  #
+  # ORDERING: install BEFORE the first Openstack instance. openstack-provision is what lets a
+  # non-admin create one, and the compute-tier guard matches CREATE, so a guard installed by that
+  # create's own release never sees the create that mattered.
+  #
+  # KNOWN GAP, flagged to openstack-as-a-service: a pinned component cannot carry a `namespace`
+  # (that aborts the umbrella render), so this installs into the installer's namespace, not
+  # openstack-system. The six objects are cluster-scoped so that is cosmetic for them -- but the
+  # blueprint's handoff check compares meta.helm.sh/release-NAMESPACE as well as release-name, so
+  # on a cluster where the umbrella ran, confirm the handoff still matches before enabling.
+  #
+  # VAP: failurePolicy Fail, one validation, no matchConditions. 0.3.47 -> 0.3.48 added a
+  # has(object.metadata.annotations) guard; the ADMITTED SET is identical, so no object 0.3.47
+  # admits is denied by 0.3.48. 0.3.47 was never published (#218 slipped) -- 0.3.48 is the first.
+  kind: OpenstackCapabilities
+  version: 0.3.48
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  tier: platform
+  feature: openstack
 - name: keycloak-operator
   # NEW COMPONENT, wired 2026-11-11 for demo Phase 2. PROVIDES k8s.keycloak.org, which the keycloak
   # component hard-requires. keycloak-provider-kog confirmed it needs NO requiresApiGroups of its
