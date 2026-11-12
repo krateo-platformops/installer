@@ -223,11 +223,37 @@ def sample_state(ctx, outdir, pre_served):
                    None)
         if neg:
             control[v] = {"negativePlural": neg, "absentAsExpected": neg not in lst}
+    # THE PRUNE CLOCK, straight from core-provider rather than inferred. From #457 every
+    # CompositionDefinition carries status.servedVersionsPendingPrune: [{version, eligibleSince}],
+    # written when core-provider first sees a version prune-eligible. That removes the need to guess
+    # a clock start from managedFields, which cannot date a specific event -- the mistake I made
+    # twice. Recorded per poll so the LAST eligibleSince before a prune is available: a version that
+    # becomes eligible, is referenced again, then becomes eligible again RESTARTS its clock, so the
+    # first value would understate the window. Absent until 2.13.85 is live, and recorded as absent
+    # rather than as an empty list, so "no clock" and "clock with no entries" stay distinguishable.
+    pending = None
+    raw_cd = kubectl(ctx, "get", "compositiondefinitions.core.krateo.io", "-A", "-o", "json",
+                     check=False)
+    if raw_cd:
+        try:
+            pending = {}
+            for d in json.loads(raw_cd).get("items", []):
+                sv = (d.get("status") or {}).get("servedVersionsPendingPrune")
+                if sv is None:
+                    continue
+                pending[d["metadata"]["name"]] = [
+                    {"version": e.get("version"), "eligibleSince": e.get("eligibleSince")}
+                    for e in sv if isinstance(e, dict)]
+            if not pending:
+                pending = None          # the field exists nowhere: absent, not empty
+        except Exception:
+            pending = None
     with open(path, "a") as f:
         f.write(json.dumps({
             "at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
             "served": served, "plurals": plural, "probed": interest,
             "probedKind": kindOf, "discovery": disc, "control": control,
+            "pendingPrune": pending,
         }) + "\n")
     return len(served)
 
@@ -467,6 +493,59 @@ def report(outdir):
             out += ["", "  NB the negative control is NOT APPLICABLE for a vacated version (%s):" % ", ".join(na),
                     "  no CRD serves it, so the control would pass without testing anything. These",
                     "  verdicts rest on the probe being calibrated elsewhere, not on a per-poll control."]
+
+    # PRUNE CLOCK (core-provider#457). Reads status.servedVersionsPendingPrune rather than guessing
+    # a clock start from managedFields, which cannot date a specific event.
+    out += ["", "PRUNE CLOCK: eligibleSince -> actual prune (core-provider#457)", ""]
+    have_clock = any(s_.get("pendingPrune") for s_ in timeline)
+    if not timeline:
+        out += ["  (no samples -- run the watch phase across the roll)"]
+    elif not have_clock:
+        out += ["  status.servedVersionsPendingPrune is ABSENT on every CompositionDefinition in",
+                "  every sample. That is expected before core-provider 2.13.85 is live. Nothing is",
+                "  measured here -- this is not a zero, it is no instrument."]
+    elif not removed_index:
+        out += ["  (the clock field is present, but no version was vacated in this window)"]
+    else:
+        for (kind, ver) in sorted(removed_index):
+            prune_at = next((s_["at"] for s_ in timeline
+                             if ver not in ((s_.get("served") or {}).get(kind) or [])), None)
+            # the LAST eligibleSince seen at or before the prune: a version that becomes eligible,
+            # is referenced again, then becomes eligible again RESTARTS its clock, so the first
+            # value would understate the window.
+            last_es = last_cd = None
+            for s_ in timeline:
+                if prune_at and s_["at"] > prune_at:
+                    break
+                for cd, entries in (s_.get("pendingPrune") or {}).items():
+                    for e in entries:
+                        if e.get("version") == ver and e.get("eligibleSince"):
+                            last_es, last_cd = e["eligibleSince"], cd
+            out.append(f"  {kind}/{ver}")
+            if prune_at is None:
+                out.append("      never observed pruned in-window (it may still be inside its grace window)")
+            elif last_es is None:
+                out.append(f"      pruned at {prune_at}, but NO eligibleSince was ever recorded for it")
+                out.append("      -> cannot compute the window; the clock entry was missed or never written")
+            else:
+                d = (_t(prune_at) - _t(last_es)).total_seconds() if _t(prune_at) and _t(last_es) else None
+                out.append(f"      definition={last_cd}")
+                out.append(f"      last eligibleSince {last_es}  ->  pruned {prune_at}")
+                if d is None:
+                    out.append("      timestamps unparseable")
+                else:
+                    ok = d >= 300
+                    out.append(f"      held {d:.0f}s before pruning -- {'>=' if ok else 'BELOW'} the 5m window"
+                               + ("" if ok else "  *** the grace window did NOT hold ***"))
+                    out.append("      NB eligibleSince is written by Observe, so it lags true eligibility by up")
+                    out.append("         to one poll: '>= 5m' is the claim, 'exactly 5m' is not.")
+                # any prune-race error between the clock start and shortly after the prune
+                race = [e for e in fresh
+                        if str(e.get("timestamp") or "") >= last_es
+                        and "could not find the requested resource" in str(e.get("err") or "")
+                        and ver in str(e.get("err") or "")]
+                out.append(f"      prune-race errors naming this version in that span: {len(race)}"
+                           + ("  (expected 0)" if not race else "  *** NOT ZERO ***"))
 
     out += ["", "ERRORS IN THIS WINDOW, in full:", ""]
     import re as _re
