@@ -789,6 +789,70 @@
           "title": "Access Review",
           "description": "Full-coverage override surface for the access-review chart (pinned 0.1.8). Every key of the chart's values.yaml is typed and nothing is left open: componentValues is additionalProperties:false and check-no-unknowns.py fails any PR reintroducing additionalProperties:true or x-kubernetes-preserve-unknown-fields. `resources`, `podSecurityContext` and `securityContext` are type:object with NO additionalProperties in the chart's own schema -- neither false nor true, so permissive -- and acmp confirmed the chart does not mean to accept arbitrary fields, so they are closed here to exactly the keys its values.yaml sets.",
           "properties": {
+              "extraEnv": {
+                "type": "array",
+                "description": "Kubernetes EnvVar entries for the access-review controller, mirrored verbatim from the chart's own values.schema.json so the two cannot drift. Closed at every level: the chart REFUSES POD_NAMESPACE and POD_SERVICE_ACCOUNT. To get audit records out, AUDIT-4 needs OTEL_ENABLED=true and OTEL_EXPORTER_OTLP_ENDPOINT set to the collector base URL here; the component appends the logs path itself. No default: a default in this file would propagate into the Installer CR and become a silent live override.",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    },
+                    "valueFrom": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "secretKeyRef": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "key": {
+                              "type": "string"
+                            },
+                            "optional": {
+                              "type": "boolean"
+                            }
+                          }
+                        },
+                        "configMapKeyRef": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "key": {
+                              "type": "string"
+                            },
+                            "optional": {
+                              "type": "boolean"
+                            }
+                          }
+                        },
+                        "fieldRef": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "apiVersion": {
+                              "type": "string"
+                            },
+                            "fieldPath": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
             "global": {
               "type": "object",
               "title": "Global values (injected by the Krateo composition engine)",
