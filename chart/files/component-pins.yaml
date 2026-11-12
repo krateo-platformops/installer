@@ -3124,8 +3124,15 @@ components:
   # REMOVED (OrgRuleset only): rule types merge_queue and license_compliance_scanning plus
   # merge_queue's 7 parameters -- GitHub rejects both at org level, proven by its owner's live
   # probe. RepoRuleset KEEPS merge_queue.
-  # NARROWED: Repository/UserRepository visibility to public|private|internal, PullRequest PATCH
-  # state to open|closed. Both were already rejected by GitHub; now the apiserver rejects at apply.
+  # NARROWED: Repository visibility to public|private|internal, and PullRequest PATCH state to
+  # open|closed. Both were already rejected by GitHub; now the apiserver rejects at apply.
+  # NOT UserRepository: its `visibility` is still a FREE STRING at 0.10.0, confirmed on the
+  # served CRD as {type: string}. An earlier version of this comment said
+  # "Repository/UserRepository", which was wrong -- its owner corrected it after the roll. The
+  # exposure reading is unaffected (057 and demo both have 0 UserRepositories), but a future
+  # reader checking another cluster must look at Repository only, or they will search for a
+  # constraint that does not exist and may wrongly clear a cluster that has UserRepositories
+  # carrying some other visibility value.
   # ADDED: OrgRuleset target `repository`; RepoRuleset code_coverage, code_quality and
   # require_extra_approval_for_unattributed_changes (the last also on OrgRuleset).
   # github-provider-kog-config DOES NOT need to move: its owner diffed 0.9.0..0.10.0 over the
@@ -3133,6 +3140,15 @@ components:
   # resourceGroup, no identifier/auth/securityScheme line touched -- so no mapping rename, which
   # is the thing that would have deleted a credential.
   # OASGEN FLOOR RISES 0.38.0 -> 0.52.0 (spec.serverURL). 057 and demo both run 0.59.0.
+  # ROLLED AND VERIFIED on 057 at installer 0.3.595 (2026-11-12). Its owner diffed pre/post:
+  # all 15 Repository CRs line-for-line identical on namespace, name, uid, orphan annotation,
+  # deleting flag, Ready and Synced; and all 15 BACKING GITHUB REPOS still resolve with identical
+  # repo ids. That second half is the one that matters and it is not visible from the cluster --
+  # the Repository controller log runs without debug and prints no HTTP methods, so it cannot
+  # count DELETEs. The repo ids are the evidence that none happened.
+  # The 32 RDC controllers were NOT restarted and did not need to be: at 0.59.0 the
+  # rest-dynamic-controller rebuilds its client per reconcile from the RestDefinition's ConfigMap,
+  # so new assets apply without a restart.
   # NEW chart value githubBaseUrl (GitHub Enterprise, default "") is deliberately NOT declared in
   # componentValues: unset renders no serverURL at all, so leaving it pruned is identical to
   # leaving it unset. It gets its own widening tag if an Enterprise cluster ever appears.
