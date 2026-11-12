@@ -1,0 +1,56 @@
+# Groups of pins that MUST carry the same version, because they are not independent charts: they
+# ship from one source and one release, and a skew between them is a silent inconsistency rather
+# than a supported configuration.
+#
+# This is NOT the `<x>` / `<x>-crd` rule -- that is check-pin-crd-lockstep.py, which compares a
+# component against its own CRD chart. This file is for groups whose members are the SAME ARTIFACT
+# released together, where "the versions differ" has no valid reading at all.
+#
+# Each entry is a CLAIM THAT GETS CHECKED, not a suppression: check-same-version-line.py fails when
+# the members disagree, so a group cannot rot into documentation nobody enforces.
+
+lines:
+  - name: oasgen
+    members: [oasgen-provider, oasgen-provider-crd, controller-render-service]
+    # `controller-render-service` is NOT a separate service. Its chart runs the SAME IMAGE as
+    # oasgen-provider with a different entrypoint -- measured on krateo-057, 2026-11-12:
+    #   controller-render-service  ghcr.io/krateo-platformops/oasgen-provider:0.48.0
+    #                              command: [/bin/oasgen-render]
+    #   oasgen-provider            ghcr.io/krateo-platformops/oasgen-provider:0.61.0
+    # Its chart sets image.tag: "" so appVersion drives the tag, and it is published per oasgen
+    # version (0.48.0, 0.59.0, 0.61.0, 0.62.0 all exist; 0.99999.0 does not, as a control).
+    #
+    # The chart's own values.yaml claims "same image, same tag, different command - so the renderer
+    # can never drift from the controller". That is true of the CHART and false of this repo's
+    # delivery model, because these were pinned as two independent components. They drifted by 13
+    # versions on 057 and 11 on krateo-demo.
+    #
+    # THE CONSEQUENCE IS USER-VISIBLE, not just a broken measuring instrument.
+    # `crdgen.GenerateWithWarnings` first exists in plumbing v1.26.1, and oasgen only began CALLING
+    # it at 0.53.0 (references: 0.48.0 -> 0, 0.53.0 -> 3, 0.61.0 -> 3). The 0.48.0 renderer calls
+    # plain `Generate`, which has NO WARNING CHANNEL. The Controller Builder posts its draft to this
+    # service's POST /render, so at 0.48.0 an author gets a CLEAN PREVIEW for a document the
+    # controller will warn about -- a dropped constraint, a vendor-shape conflict, a schema that
+    # silently will not appear. frontend confirmed their UI shows warnings distinctly from errors
+    # and arms publish only on zero problems, so moving to 0.61.0 is pure gain: newly visible
+    # warnings are the preview finally telling the truth.
+    #
+    # NOT the reason, recorded because I asserted it and it was false: I first justified this by
+    # the `not`-subschema transpile change between plumbing v1.33.0 and v1.40.0. oasgen 0.61.0 pins
+    # v1.33.0, BELOW v1.40.0, so the controller does not have that change either; it arrives only
+    # with the unreleased v1.60.0 bump. The real divergence span is v1.14.2 -> v1.33.0.
+    reason: >-
+      controller-render-service runs the oasgen-provider image with the /bin/oasgen-render
+      entrypoint, so its version IS oasgen's version. A skew means the renderer predicts CRDs with
+      a different transpile than the controller applies, and below 0.53.0 it cannot report
+      generation warnings at all.
+
+  - name: frontend
+    members: [frontend, frontend-crd, builder-gate]
+    # Enforced by hand until now, and it has slipped: check-no-silent-downgrade.py records that
+    # installer#727 would have reverted frontend/frontend-crd/builder-gate 1.8.32 -> 1.8.28
+    # together. They are one release line in the frontend repo; frontend confirms a single tag
+    # publishes all three (e.g. 1.8.41 ships frontend, frontend-crds and builder-gate).
+    reason: >-
+      One release line in the frontend repo: a single tag publishes all three charts. An app pinned
+      past its -crd pin prunes fields silently.
