@@ -186,18 +186,38 @@ def sample_state(ctx, outdir, pre_served):
                                                  if v.get("served")) for c in items}
     plural = {c["spec"]["names"]["kind"]: c["spec"]["names"]["plural"] for c in items}
 
-    # Only the versions this roll is ADDING get a discovery GET -- one per version, which is
+    # Only the versions this roll CHANGES get a discovery GET -- one per version, which is
     # core-provider's stated budget. Probing every served version would be hundreds of GETs a poll.
-    interest = sorted({v for k, vs in served.items() for v in vs
-                       if v not in (pre_served.get(k) or set())})
+    #
+    # BOTH DIRECTIONS, and the removed side is the one that matters for the prune race. The first
+    # version of this probed only versions being ADDED, so when core-provider asked whether a PRUNED
+    # version was still in discovery at the moment a render failed on it, I had no data at all --
+    # the interesting versions were precisely the ones I had excluded. `added` answers "is a new
+    # version mappable yet"; `removed` answers "is a vacated version still mappable", which is the
+    # precondition of the emit-then-prune failure.
+    added = {v for k, vs in served.items() for v in vs if v not in (pre_served.get(k) or set())}
+    removed = {v for k, vs in pre_served.items() for v in vs if v not in set(served.get(k) or [])}
+    interest = sorted(added | removed)
+    kindOf = {v: ("both" if v in added and v in removed
+                  else "added" if v in added else "removed") for v in interest}
     disc = {v: _discovery(ctx, v) for v in interest}
 
     # NEGATIVE CONTROL, free -- it reuses the GET already made. For each probed version, a plural
     # whose own CRD does NOT serve that version must be ABSENT from the list. If it turns up
     # present, the probe cannot discriminate and every "listed" verdict this poll is vacuous.
+    #
+    # DELIBERATELY NOT RUN FOR A REMOVED-ONLY VERSION. Once a version is vacated, NO CRD serves it,
+    # so "a plural whose CRD does not serve this version is absent from the list" is satisfied by
+    # every plural and by an empty or 404 list -- it would pass without testing anything. A control
+    # that cannot fail is worse than no control, because it is reported as if it had discriminated.
+    # Those versions are marked controlNotApplicable so the report never counts them as passing.
     control = {}
     for v, lst in disc.items():
         if lst is None:
+            continue
+        if kindOf.get(v) == "removed":
+            control[v] = {"controlNotApplicable": True,
+                          "why": "no CRD serves a vacated version, so a negative control is vacuous"}
             continue
         neg = next((plural[k] for k, vs in sorted(served.items()) if v not in vs and plural.get(k)),
                    None)
@@ -207,7 +227,7 @@ def sample_state(ctx, outdir, pre_served):
         f.write(json.dumps({
             "at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
             "served": served, "plurals": plural, "probed": interest,
-            "discovery": disc, "control": control,
+            "probedKind": kindOf, "discovery": disc, "control": control,
         }) + "\n")
     return len(served)
 
@@ -268,17 +288,35 @@ def watch(ctx, outdir, seconds, interval):
     samples = [json.loads(l) for l in open(tl)] if os.path.exists(tl) else []
     probed = sorted({v for s in samples for v in (s.get("probed") or [])})
     bad = [(s["at"], v, c) for s in samples for v, c in (s.get("control") or {}).items()
-           if not c.get("absentAsExpected")]
+           if not c.get("controlNotApplicable") and not c.get("absentAsExpected")]
     print(f"  captured {n} error line(s) from {len(seen_pods)} pod(s); {len(samples)} sample(s)")
-    print(f"  versions probed in discovery: {probed or '(none -- no version was added)'}")
+    kinds = {}
+    for s_ in samples:
+        for v, kv in (s_.get("probedKind") or {}).items(): kinds[v] = kv
+    print("  versions probed in discovery: " + (", ".join(f"{v}({kinds.get(v,'?')})" for v in probed)
+                                                if probed else "(none -- no version was added or vacated)"))
     if bad:
         print(f"::error::capture: the discovery negative control FAILED on {len(bad)} sample(s) "
               f"(first: {bad[0][0]} version={bad[0][1]} {bad[0][2]}). A plural whose CRD does not "
               f"serve that version was listed under it, so the probe cannot discriminate and the "
               f"lag table must not be believed.")
         return n
-    if samples and probed:
-        print("  discovery negative control passed on every sample")
+    # DO NOT CLAIM A CONTROL PASSED WHEN THERE WAS NONE TO RUN. A vacated version 404s, so the
+    # control loop never produces an entry for it, and the old wording printed "passed on every
+    # sample" over an EMPTY control set -- the exact vacuous reassurance this control exists to
+    # prevent, in my own output. Count the applicable entries and say which case it is.
+    applicable = sum(1 for s_ in samples
+                     for c in (s_.get("control") or {}).values()
+                     if not c.get("controlNotApplicable") and "absentAsExpected" in c)
+    na = sum(1 for s_ in samples
+             for c in (s_.get("control") or {}).values() if c.get("controlNotApplicable"))
+    if applicable:
+        print(f"  discovery negative control passed on all {applicable} applicable sample-checks"
+              + (f"; {na} skipped as not applicable (vacated versions)" if na else ""))
+    elif probed:
+        print(f"  discovery negative control: NO applicable checks ran"
+              f"{' (' + str(na) + ' skipped: vacated versions, where a negative control is vacuous)' if na else ''}"
+              f" -- the 'listed' verdicts rest on prior calibration, not on a per-poll control")
     return n
 
 
@@ -287,7 +325,7 @@ def report(outdir):
     if not (os.path.isdir(pre) and os.path.isdir(post)):
         print("::error::capture: need both pre/ and post/ snapshots to report")
         return 1
-    lines, added_index = [], {}
+    lines, added_index, removed_index = [], {}, {}
     for fn in sorted(os.listdir(pre)):
         if not fn.endswith(".json") or not os.path.exists(os.path.join(post, fn)):
             continue
@@ -310,6 +348,8 @@ def report(outdir):
                      f"newest non-apiserver write={t[-1] if t else '?'}")
         for v in add:
             added_index[(b["kind"], v)] = t[-1] if t else None  # newest controller write
+        for v in rem:
+            removed_index[(b["kind"], v)] = t[-1] if t else None
     errf = os.path.join(outdir, "errors.jsonl")
     errs = [json.loads(l) for l in open(errf)] if os.path.exists(errf) else []
     win = None
@@ -340,7 +380,8 @@ def report(outdir):
     # lists a version as soon as any ONE of its 18 page kinds is published -- see _discovery().
     out += ["", "APISERVER LAG: CRD-served vs that version's own discovery list", ""]
     ctl_fail = [(s["at"], v) for s in timeline
-                for v, c in (s.get("control") or {}).items() if not c.get("absentAsExpected")]
+                for v, c in (s.get("control") or {}).items()
+                if not c.get("controlNotApplicable") and not c.get("absentAsExpected")]
     if not timeline:
         out += ["  (no samples -- run the watch phase across the roll)"]
     elif ctl_fail:
@@ -378,6 +419,54 @@ def report(outdir):
             out.append(f"  {kind}/{ver}  plural={plural or '?'}")
             out.append(f"      {verdict}")
         out += ["", f"  samples: {len(timeline)}; negative control passed on all of them"]
+
+    # PRUNE LAG, the mirror of the table above and the one that bears on the emit-then-prune
+    # failure: once core-provider vacates a version, is it still listed in discovery? A render whose
+    # CRD snapshot still showed the version will try to map it, and whether that succeeds depends on
+    # discovery, not on the CRD. A gap here is the window.
+    out += ["", "PRUNE LAG: CRD stopped serving vs discovery stopped listing", ""]
+    if not timeline:
+        out += ["  (no samples -- run the watch phase across the roll)"]
+    elif not removed_index:
+        out += ["  (no version was vacated in this window)"]
+    else:
+        for (kind, ver) in sorted(removed_index):
+            plural = next((s["plurals"].get(kind) for s in timeline
+                           if (s.get("plurals") or {}).get(kind)), None)
+            probed = any(ver in (s.get("probed") or []) for s in timeline)
+            crd_gone = next((s["at"] for s in timeline
+                             if ver not in ((s.get("served") or {}).get(kind) or [])), None)
+            # discovery "stopped listing" = the version 404s (None) or the plural left its list
+            disc_gone = next((s["at"] for s in timeline
+                              if ver in (s.get("probed") or [])
+                              and (not isinstance((s.get("discovery") or {}).get(ver), list)
+                                   or (plural and plural not in s["discovery"][ver]))), None)
+            if not probed:
+                verdict = "NOT PROBED in discovery (it was not new or vacated relative to pre/)"
+            elif crd_gone is None:
+                verdict = "the CRD never stopped serving it in-window"
+            elif disc_gone is None:
+                verdict = ("CRD stopped serving it but discovery STILL listed the plural for the "
+                           "rest of the window -> a render could still map a vacated version")
+            else:
+                d = (_t(disc_gone) - _t(crd_gone)).total_seconds() if _t(disc_gone) and _t(crd_gone) else None
+                if d is None:
+                    verdict = "timestamps unparseable"
+                elif d > 0:
+                    verdict = f"discovery lagged the CRD by {d:.0f}s (CRD {crd_gone} -> discovery {disc_gone})"
+                elif d < 0:
+                    verdict = (f"discovery dropped it {abs(d):.0f}s BEFORE the CRD did -- a render "
+                               f"holding the older CRD snapshot would fail to map it")
+                else:
+                    verdict = "same sample; no lag at this resolution"
+            out.append(f"  {kind}/{ver}  plural={plural or '?'}")
+            out.append(f"      {verdict}")
+        na = sorted({v for s in timeline for v, c in (s.get("control") or {}).items()
+                     if c.get("controlNotApplicable")})
+        if na:
+            out += ["", "  NB the negative control is NOT APPLICABLE for a vacated version (%s):" % ", ".join(na),
+                    "  no CRD serves it, so the control would pass without testing anything. These",
+                    "  verdicts rest on the probe being calibrated elsewhere, not on a per-poll control."]
 
     out += ["", "ERRORS IN THIS WINDOW, in full:", ""]
     import re as _re
