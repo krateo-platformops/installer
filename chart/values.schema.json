@@ -8344,6 +8344,12 @@
               "title": "Preview sandbox namespace",
               "description": "Chart default krateo-preview, matching the portal's preview sandbox."
             },
+              "snowplowJqModulesConfigMap": {
+                "type": "string",
+                "description": "The name of snowplow's operator jq-modules ConfigMap (snowplow's chart: <fullname>-jq-custom-modules, snowplow-jq-custom-modules on a standard install), in this release's namespace. Mounted at /jq-modules with JQ_MODULES_PATH set, so the gate resolves `include \"custom\"` as snowplow does. Empty: built-in modules only.",
+                "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$",
+                "maxLength": 253
+              },
             "snowplowUrl": {
               "type": "string",
               "title": "snowplow base URL",
@@ -10267,6 +10273,60 @@
                 }
               }
             },
+              "login": {
+                "type": "object",
+                "title": "Login screen",
+                "description": "Optional login-screen branding, rendered as the \"login\" object of config.json. Every key is optional and off when unset; config.json carries only the keys that are set, and no \"login\" object at all when none is.",
+                "additionalProperties": false,
+                "properties": {
+                  "installationName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "title": "Installation name",
+                    "description": "This installation's name, shown on the login screen as \"to Krateo PlatformOps \u00b7 <name>\"."
+                  },
+                  "requestAccountUrl": {
+                    "type": "string",
+                    "minLength": 1,
+                    "title": "Request-account URL",
+                    "description": "Target of the login screen's \"Request an account\" link, which is shown only when this is set: an absolute https URL, or a same-origin path starting with '/'.",
+                    "pattern": "^(https://[^/\\\\\\s?#]+([/?#]\\S*)?|/([^/\\\\\\s]\\S*)?)$"
+                  },
+                  "logoUrl": {
+                    "type": "string",
+                    "minLength": 1,
+                    "title": "Logo URL",
+                    "description": "Login-panel logo: an absolute URL or a path the frontend serves. Unset: the bundled Krateo logo."
+                  },
+                  "logoAlt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "title": "Logo alt text",
+                    "description": "Alt text for the logo."
+                  },
+                  "headline": {
+                    "type": "string",
+                    "minLength": 1,
+                    "title": "Headline"
+                  },
+                  "subtitle": {
+                    "type": "string",
+                    "minLength": 1,
+                    "title": "Subtitle"
+                  },
+                  "highlights": {
+                    "type": "array",
+                    "title": "Highlights",
+                    "description": "Up to five short lines of copy.",
+                    "maxItems": 5,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    }
+                  }
+                }
+              },
             "nameOverride": {
               "type": "string",
               "title": "Name override",
