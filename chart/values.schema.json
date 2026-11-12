@@ -7421,6 +7421,18 @@
           "description": "Krateo PlatformOps AuthN service. Full-coverage schema for the authn chart (pinned to installer 2.7.0 / chart 0.22.2). Every key of the chart's values.yaml is settable on the Composition spec; omitted keys use chart defaults.",
           "additionalProperties": false,
           "properties": {
+            "otel": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "OpenTelemetry settings the authn chart wires, added in 0.42.0. The OTEL_* gates themselves live under env, not here. Declared so the endpoint can be overridden: the chart defaults it to the NODE-LOCAL agent, reachable only where a DaemonSet binds hostPort 4318. No `default:` here -- a default in this file would propagate into the Installer CR and silently override the chart's own.",
+              "properties": {
+                "endpoint": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "OTLP/HTTP endpoint for every signal, audit records included. $(HOST_IP) expands to the node IP, so the chart default http://$(HOST_IP):4318 requires a node-local collector agent; point it at a Service URL where there is none."
+                }
+              }
+            },
             "replicaCount": {
               "type": "integer",
               "title": "Replica count",
