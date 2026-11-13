@@ -19430,31 +19430,35 @@
                 "resources": {
                   "type": "object",
                   "additionalProperties": false,
-                  "description": "Present in the chart's values.yaml but ABSENT from the chart's own values.schema.json. Declared here so it stays expressible.",
+                  "description": "Present in the chart's values.yaml and, since 0.2.2, in its schema too. Both leaves are open typed maps because the chart's are.",
                   "properties": {
                     "limits": {
                       "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "cpu": {
-                          "type": "string"
-                        },
-                        "memory": {
-                          "type": "string"
-                        }
-                      }
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "integer"
+                          }
+                        ]
+                      },
+                      "description": "Open TYPED map, matching the chart exactly: any resource name (cpu, memory, ephemeral-storage, a device plugin's) with a quantity. A closed cpu/memory-only object would silently PRUNE anything else, since this node is additionalProperties:false."
                     },
                     "requests": {
                       "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "cpu": {
-                          "type": "string"
-                        },
-                        "memory": {
-                          "type": "string"
-                        }
-                      }
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "integer"
+                          }
+                        ]
+                      },
+                      "description": "Open TYPED map, matching the chart exactly: any resource name (cpu, memory, ephemeral-storage, a device plugin's) with a quantity. A closed cpu/memory-only object would silently PRUNE anything else, since this node is additionalProperties:false."
                     }
                   }
                 },
@@ -19500,19 +19504,6 @@
                   "type": "string"
                 },
                 "passwordKey": {
-                  "type": "string"
-                }
-              }
-            },
-            "requestAuth": {
-              "type": "object",
-              "additionalProperties": false,
-              "description": "Present in the chart's values.yaml but referenced by NO template -- verified by grepping the packaged templates at pin time. Declared only so it stays expressible if the chart starts using it. acmp is deleting it in 0.2.2.",
-              "properties": {
-                "secretName": {
-                  "type": "string"
-                },
-                "tokenKey": {
                   "type": "string"
                 }
               }

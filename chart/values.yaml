@@ -656,15 +656,15 @@ componentValues:
   # zendesk-kog: the end-user request path. Only rendered where features.serviceDesk is true
   # (default false), so these defaults are inert on an install that does not enable the service desk.
   #
-  # WHY zendesk.baseUrl IS SET HERE AND NOT LEFT TO THE CR. The chart's OWN values.schema.json
-  # declares `required: [zendesk]` at its root and `required: [baseUrl]` under it. The installer
-  # renders every component through ONE umbrella chart, so a pinned chart with an unsatisfied
-  # `required` fails the WHOLE render -- every other component stops reconciling, and the failure
-  # does not name zendesk-kog. That class of mistake froze the demo cluster twice. A value here
-  # guarantees the key is present at render time for every install that enables the feature.
-  # It is a VALUES default, not a schema `default:`, so it does NOT materialize into any Installer
-  # CR and an operator's CR value still wins. acmp is removing the chart-side `required` in 0.2.2;
-  # this block can stay regardless, but do not remove it before that lands.
+  # WHY zendesk.baseUrl IS SET HERE. 0.2.1 declared `required: [zendesk]` at its schema root and
+  # `required: [baseUrl]` under it; one unsatisfied `required` in any pinned chart fails the WHOLE
+  # umbrella render, so every other component stops reconciling and the failure does not name the
+  # culprit -- the mistake that froze the demo twice. acmp REMOVED that in 0.2.2 (verified at pin
+  # time: zero `required` entries anywhere in the 0.2.2 schema), so this is no longer load-bearing
+  # against a wedge. It stays because it is the correct value: the plugin refuses to start without
+  # a baseUrl, so leaving it unset turns a render failure into a CrashLoop instead. It is a VALUES
+  # default, not a schema `default:`, so it does NOT materialize into any Installer CR and an
+  # operator's CR value still wins.
   zendesk-kog:
     zendesk:
       baseUrl: https://krateo.zendesk.com

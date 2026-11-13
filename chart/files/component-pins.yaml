@@ -8518,7 +8518,7 @@ components:
   kind: ZendeskKog
   chart: zendesk-kog
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.2.1
+  version: 0.2.2
   requiresApiGroups:
   - ogen.krateo.io
   deps:
