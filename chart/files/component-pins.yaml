@@ -8419,7 +8419,7 @@ components:
   kind: IdentityLifecycleCrds
   chart: identity-lifecycle-crds
   # LOCKSTEP with identity-lifecycle.
-  version: 0.3.0
+  version: 0.4.1
   tier: platform
   feature: identityLifecycle
 - name: identity-lifecycle
@@ -8444,7 +8444,7 @@ components:
   kind: IdentityLifecycle
   # 0.3.0 (AUDIT-4, Diego-approved, live-proven on GKE). Its extraEnv was ALREADY declared in
   # componentValues, so unlike access-review it needs no widening -- checked rather than assumed.
-  version: 0.3.0
+  version: 0.4.1
   deps:
   - identity-lifecycle-crd
   tier: platform
