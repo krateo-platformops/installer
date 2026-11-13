@@ -54,3 +54,17 @@ lines:
     reason: >-
       One release line in the frontend repo: a single tag publishes all three charts. An app pinned
       past its -crd pin prunes fields silently.
+
+  - name: nightly-review
+    members: [nightly-review, nightly-review-crd]
+    # One tag in the nightly-review repo runs release-oci, which publishes BOTH charts at the
+    # tag's version; release-tag builds the one image. Its owner confirms there is no path that
+    # publishes one without the other, so "the versions differ" has no valid reading here either.
+    #
+    # Declared because of what 0.2.3 looked like: the CRDs were byte-identical in content and
+    # bumped ONLY because both charts publish at the tag. That is exactly the case a
+    # hand-maintained pairing gets wrong -- nothing in the diff suggests the -crd pin needs
+    # touching, so a reviewer moving the app alone would see nothing amiss.
+    reason: >-
+      One tag publishes both charts from the nightly-review repo. An app pinned past its -crd pin
+      prunes fields silently.

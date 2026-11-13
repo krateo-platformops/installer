@@ -5827,7 +5827,7 @@ components:
   #   VERIFICATION LIMIT, from the handoff and not re-tested here: the 2.7 and 3.0 line-detection
   #   branches are UNVERIFIED — no cluster on either line was reachable. Only the 4.0 branch is
   #   confirmed. Do not trust a generated plan from an older cluster until a real 3.0 cluster exists.
-  version: 0.3.6
+  version: 0.3.7
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -6202,7 +6202,7 @@ components:
   # alert-provider#107's ApplyActionStale prompt and re-resolves against the served schema. The
   # second half is INERT until acmp's provider-side condition ships. The Agent's system-prompt
   # ConfigMap changes and the agent pod restarts once.
-  version: 0.3.6
+  version: 0.3.7
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -6498,7 +6498,7 @@ components:
   # One pod roll, no window.
   # CONTROLS: 3.1.8 and 3.1.7 and 3.1.6 resolve; 3.1.9 does not. Chart in krateo-agentiko.
   kind: ClickstackAgent
-  version: 3.1.9
+  version: 3.1.10
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -7331,7 +7331,7 @@ components:
   # added structural status fields and had to go first.
   # 0.1.31: co-versioned with nightly-review (lockstep). Packaged trees BYTE-IDENTICAL to 0.1.30 apart
   #   from Chart.yaml's version line. Diffed, not assumed.
-  version: 0.2.2
+  version: 0.2.3
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -7716,7 +7716,7 @@ components:
   #   Chart diff 0.1.30 -> 0.1.31 is Chart.yaml only (version + appVersion); image.tag is "" so appVersion
   #   moves the image. Both chart and image published at 0.1.31 — verified with a NUMERIC tag sort, because
   #   a lexical sort puts 0.1.9 above 0.1.31 and reads as "stuck at 0.1.9".
-  version: 0.2.2
+  version: 0.2.3
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
