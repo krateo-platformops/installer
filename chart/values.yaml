@@ -689,6 +689,20 @@ componentValues:
       webhook:
         enabled: false
     plugin:
+      # PIN THE IMAGE TAG EXPLICITLY. The chart's values.yaml sets plugin.image.tag to the literal
+      # placeholder `CHART_VERSION`, but its values.schema.json declares that same field with
+      # `default: "0.1.0"` -- a tag that WAS NEVER PUBLISHED (the registry holds 0.1.1, 0.2.0,
+      # 0.2.1, 0.2.2, not 0.1.0). crdgen carries a component chart's schema defaults into the
+      # generated Composition CRD, so the CR materializes tag 0.1.0, and an explicit CR value beats
+      # the chart's own values default. Result on 057 at 0.3.618: ImagePullBackOff, NotFound.
+      # Setting it here is what componentValues is for -- the installer stating the image it wants
+      # rather than inheriting a stale default.
+      # COUPLING, deliberately accepted and flagged: this now tracks the PLUGIN version, so the next
+      # zendesk-kog bump must move this line too. acmp is fixing the schema default; once a release
+      # resolves its own tag, DELETE this key and let the chart decide.
+      # Verified present in the registry before setting: 0.2.2 exists, 0.1.0 does not.
+      image:
+        tag: 0.2.2
       # Receives Zendesk webhook events; defaults ON and needs the signing Secret. Off with the
       # webhook kind. NOTE the plugin DEPLOYMENT itself has no guard and always renders -- only the
       # receiver is switched off here.
