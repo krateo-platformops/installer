@@ -3170,7 +3170,35 @@ components:
   # NEW chart value githubBaseUrl (GitHub Enterprise, default "") is deliberately NOT declared in
   # componentValues: unset renders no serverURL at all, so leaving it pruned is identical to
   # leaving it unset. It gets its own widening tag if an Enterprise cluster ever appears.
-  version: 0.10.0
+  # 0.11.0: the ONLY substantive change is `enum: [public, private]` added to UserRepository's
+  #   visibility (assets/userrepository.yaml, +7 lines incl. its comment citing oas-adherence-
+  #   exceptions row 38b and Diego's 2026-11-12 ruling: `internal` exists only in ORGANIZATIONS,
+  #   unlike Repository, so a personal-repo CR holding it could never have worked).
+  #   values.yaml byte-identical; values.schema.json identical (same 4 props, 0 `required` at any
+  #   depth, 3 defaults with none changed and none new) -- so NOTHING to declare. appVersion stays
+  #   0.1.9, so no image moves. x-kubernetes-validations 0 and `required:` 14 in BOTH assets.
+  #
+  #   AN ENUM ADDED TO AN EXISTING FIELD IS A NARROWING, structurally the same hazard as a CEL rule
+  #   in a CRD bump: an object whose value falls outside it can become unupdatable, and the failure
+  #   surfaces later on an unrelated apply rather than at pin time. Settled by MEASUREMENT, not by
+  #   reading the spec -- its owner reproduced it on kind kindest/node v1.36.4 (057 runs
+  #   v1.36.4-gke) with the real oasgen-rendered CRDs: an existing CR holding visibility=internal
+  #   accepted a label add, a spec.description patch, a status write, a finalizer add, a full
+  #   replace with visibility unchanged, and delete -- all rc=0. Only CHANGING it to another invalid
+  #   value is rejected; changing it to `private` succeeds. Controls both ways: a NEW CR with
+  #   internal is rejected under 0.11.0, and visibility=bogus was accepted under 0.10.0. That is
+  #   CRD validation ratcheting, on by default since 1.30. Bound: measured on 1.36.4 only.
+  #
+  #   Exposure on krateo-057 at pin time: ZERO UserRepository objects, and the zero is real rather
+  #   than an empty corpus -- the same group holds 15 Repository and 1 RepositoryConfiguration.
+  #   Those 15 carry `private: false` and NO visibility field at all, so they are untouched either
+  #   way. demo was NOT measured: krateo-demo is not in this machine's kubeconfig.
+  #
+  #   github-provider-kog-config stays at 0.9.0. NO LOCKSTEP: its owner diffed the published config
+  #   charts (4 files each, so not an empty comparison) and they differ only in version metadata;
+  #   config-chart/ has 0 changed lines 0.9.0->0.10.0 and 0.10.0->0.11.0. Record as "config moves
+  #   only when config-chart/ changes".
+  version: 0.11.0
   # 0.7.0 adds two kinds and removes none -- measured on the published chart, not read from the
   # release notes: rendered at --kube-version 1.33.0, rc=0 on both sides, 8104 -> 8882 lines (floor
   # asserted), RestDefinition docs 30 -> 32, ADDED {RepoContent, UserRepository}, REMOVED {} . 0.7.1
