@@ -4118,7 +4118,11 @@ components:
   # silently claiming the route back.
   # 1.8.101: Agentiko entry points (`intent: agentiko`, declared by frontend 1.8.34's Button CRD).
   # 1.8.102: the alerts table and alert page show each alert's description, not its SQL filter.
-  version: 1.8.116
+  # 1.8.117: METADATA-ONLY republish. Every file is byte-identical to 1.8.116 except
+  #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
+  #   publishes every first-class chart on every tag, so this chart's version carries no
+  #   content signal; moved only to keep the page line uniform.
+  version: 1.8.117
   deps:
   - frontend
   - git-provider
@@ -4227,7 +4231,9 @@ components:
   # 470601 BYTES ON BOTH SIDES vs 1.8.72; diff -r reports only Chart.yaml.
   # 1.8.74: lockstep with portal. PURE VERSION MOVE -- 107 files and 470601 BYTES ON BOTH SIDES vs
   # 1.8.73; diff -r reports only Chart.yaml.
-  version: 1.8.116
+  # 1.8.117: CONTENT CHANGE -- 2 template file(s) differ from 1.8.116 (verified by
+  #   sha256 per file, not by diff -rq).
+  version: 1.8.117
   deps: ['portal']
   tier: platform
   feature: portal
@@ -4263,7 +4269,11 @@ components:
   # templates/_builder.tpl, inside `{{/* */}}` blocks. 26 files, 124539 -> 124537 bytes; Chart.yaml
   # and that one template differ, and the template's change cannot reach the render.
   kind: MarketplacePage
-  version: 1.8.116
+  # 1.8.117: METADATA-ONLY republish. Every file is byte-identical to 1.8.116 except
+  #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
+  #   publishes every first-class chart on every tag, so this chart's version carries no
+  #   content signal; moved only to keep the page line uniform.
+  version: 1.8.117
   deps:
   - portal
   tier: platform
@@ -4330,14 +4340,22 @@ components:
   feature: selfservice
 - name: service-desk-page
   kind: ServiceDeskPage
-  version: 1.8.116
+  # 1.8.117: METADATA-ONLY republish. Every file is byte-identical to 1.8.116 except
+  #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
+  #   publishes every first-class chart on every tag, so this chart's version carries no
+  #   content signal; moved only to keep the page line uniform.
+  version: 1.8.117
   deps:
   - portal
   tier: platform
   feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.116
+  # 1.8.117: METADATA-ONLY republish. Every file is byte-identical to 1.8.116 except
+  #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
+  #   publishes every first-class chart on every tag, so this chart's version carries no
+  #   content signal; moved only to keep the page line uniform.
+  version: 1.8.117
   deps:
   - portal
   tier: platform
@@ -4410,7 +4428,11 @@ components:
 #     gateway /content/debug/vars 401. A 200 WITH index.html IS A FALSE PASS (SPA fallback).
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.116
+  # 1.8.117: METADATA-ONLY republish. Every file is byte-identical to 1.8.116 except
+  #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
+  #   publishes every first-class chart on every tag, so this chart's version carries no
+  #   content signal; moved only to keep the page line uniform.
+  version: 1.8.117
   deps:
   - portal
   tier: platform
@@ -4451,7 +4473,11 @@ components:
 - name: dashboard-page
   # Renders into krateo-dashboard, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: DashboardPage
-  version: 1.8.116
+  # 1.8.117: METADATA-ONLY republish. Every file is byte-identical to 1.8.116 except
+  #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
+  #   publishes every first-class chart on every tag, so this chart's version carries no
+  #   content signal; moved only to keep the page line uniform.
+  version: 1.8.117
   deps:
   - portal
   tier: platform
@@ -4490,7 +4516,9 @@ components:
   # original push failure is still UNKNOWN -- it did not recur, which is evidence of a blip and not
   # proof of one. Pinned only after confirming 1.8.89 pulls: version 1.8.89, appVersion 1.8.89.
   kind: CompositionsPage
-  version: 1.8.116
+  # 1.8.117: CONTENT CHANGE -- 5 template file(s) differ from 1.8.116 (verified by
+  #   sha256 per file, not by diff -rq).
+  version: 1.8.117
   deps:
   - portal
   tier: platform
@@ -4498,7 +4526,11 @@ components:
 - name: blueprints-page
   # Renders into krateo-blueprints, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: BlueprintsPage
-  version: 1.8.116
+  # 1.8.117: METADATA-ONLY republish. Every file is byte-identical to 1.8.116 except
+  #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
+  #   publishes every first-class chart on every tag, so this chart's version carries no
+  #   content signal; moved only to keep the page line uniform.
+  version: 1.8.117
   deps:
   - portal
   tier: platform
@@ -4506,7 +4538,11 @@ components:
 - name: resources-page
   # Renders into krateo-resources, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: ResourcesPage
-  version: 1.8.116
+  # 1.8.117: METADATA-ONLY republish. Every file is byte-identical to 1.8.116 except
+  #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
+  #   publishes every first-class chart on every tag, so this chart's version carries no
+  #   content signal; moved only to keep the page line uniform.
+  version: 1.8.117
   deps:
   - portal
   tier: platform
@@ -4514,7 +4550,11 @@ components:
 - name: search-page
   # Renders into krateo-search, which the chart creates. readerGroups admins + devs (chart values.yaml).
   kind: SearchPage
-  version: 1.8.116
+  # 1.8.117: METADATA-ONLY republish. Every file is byte-identical to 1.8.116 except
+  #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
+  #   publishes every first-class chart on every tag, so this chart's version carries no
+  #   content signal; moved only to keep the page line uniform.
+  version: 1.8.117
   deps:
   - portal
   tier: platform
@@ -4522,7 +4562,11 @@ components:
 - name: builders-page
   # Renders into krateo-builders, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: BuildersPage
-  version: 1.8.116
+  # 1.8.117: METADATA-ONLY republish. Every file is byte-identical to 1.8.116 except
+  #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
+  #   publishes every first-class chart on every tag, so this chart's version carries no
+  #   content signal; moved only to keep the page line uniform.
+  version: 1.8.117
   deps:
   - portal
   tier: platform
@@ -4530,7 +4574,11 @@ components:
 - name: clusters-page
   # Renders into krateo-clusters, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ClustersPage
-  version: 1.8.116
+  # 1.8.117: METADATA-ONLY republish. Every file is byte-identical to 1.8.116 except
+  #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
+  #   publishes every first-class chart on every tag, so this chart's version carries no
+  #   content signal; moved only to keep the page line uniform.
+  version: 1.8.117
   deps:
   - portal
   tier: platform
@@ -4538,7 +4586,11 @@ components:
 - name: reviews-page
   # Renders into krateo-reviews, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ReviewsPage
-  version: 1.8.116
+  # 1.8.117: METADATA-ONLY republish. Every file is byte-identical to 1.8.116 except
+  #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
+  #   publishes every first-class chart on every tag, so this chart's version carries no
+  #   content signal; moved only to keep the page line uniform.
+  version: 1.8.117
   deps:
   - portal
   tier: platform
@@ -4546,7 +4598,9 @@ components:
 - name: settings-page
   # Renders into krateo-settings, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: SettingsPage
-  version: 1.8.116
+  # 1.8.117: CONTENT CHANGE -- 6 template file(s) differ from 1.8.116 (verified by
+  #   sha256 per file, not by diff -rq).
+  version: 1.8.117
   deps:
   - portal
   tier: platform
@@ -4554,7 +4608,9 @@ components:
 - name: observability-page
   # Renders into krateo-observability, which the chart creates. readerGroups admins only (chart values.yaml).
   kind: ObservabilityPage
-  version: 1.8.116
+  # 1.8.117: CONTENT CHANGE -- 9 template file(s) differ from 1.8.116 (verified by
+  #   sha256 per file, not by diff -rq).
+  version: 1.8.117
   deps:
   - portal
   tier: platform
@@ -4569,7 +4625,11 @@ components:
   # The chart's page OBJECTS go to krateo-audit, which it creates; that is the
   # componentValues.audit-page.namespace override, a different namespace from this one.
   kind: AuditPage
-  version: 1.8.116
+  # 1.8.117: METADATA-ONLY republish. Every file is byte-identical to 1.8.116 except
+  #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
+  #   publishes every first-class chart on every tag, so this chart's version carries no
+  #   content signal; moved only to keep the page line uniform.
+  version: 1.8.117
   deps:
   - portal
   tier: platform
