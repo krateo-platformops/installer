@@ -339,6 +339,12 @@
           "default": false,
           "title": "Capability roles",
           "description": "Install krateo-capability-roles: the capability catalog's aggregating ClusterRoles, its Capabilities & roles settings page (Form/Table/Flex/PageHeader + a RESTAction), and optionally the tenant-reader Kyverno policies. OFF by default. ADOPTION TARGET: this chart is already hand-installed on krateo-demo at 0.6.2, so enabling it there is a takeover of an existing release, not a fresh install. REQUIRES KYVERNO ONLY IF componentValues['krateo-capability-roles'].tenantReader.enabled is true (the chart default): templates/tenant-reader-policies.yaml renders ValidatingPolicy and GeneratingPolicy on policies.kyverno.io/v1. Measured: enabled=true renders 14 objects with 6 policies.kyverno.io references, enabled=false renders 11 with none. There is deliberately no requiresApiGroups on the pin, because a hard group requirement would block every cluster that does not need the policies \u2014 krateo-057 has 0 kyverno CRDs. Set tenantReader.enabled=false on any cluster without Kyverno; leaving it true there fails loudly at render, which is intended."
+        },
+        "tenantOnboarding": {
+          "type": "boolean",
+          "default": false,
+          "title": "Tenant onboarding",
+          "description": "Opt-in. Installs tenant-onboarding: the v2 Kyverno GeneratingPolicy that provisions a tenant's namespace contents (Role, LimitRange, ResourceQuota) plus the two Kyverno aggregation ClusterRoles. OFF by default, and the chart's OWN `enabled` also defaults false, so the component renders ZERO objects until both are on -- that double gate is deliberate: a key that defaults ON in a pinned chart is briefly LIVE during the roll that introduces it even when the CR carries the key to disable it (measured on krateo-057, 2026-11-13: agentgateway-policies' mcpEntry rendered an internet-facing /mcp route for ~43s across helm revisions 160-161 before the CR's enabled:false arrived in 162). REQUIRES KYVERNO, which is NOT an installer component; there is deliberately no requiresApiGroups on the pin for the same reason as krateo-capability-roles. HAND-OVER ORDER: the chart REFUSES to render while the legacy ClusterPolicy tenant-namespace-on-login still exists (refuseWhileLegacyPolicyExists, default true) -- orphan its generate rules and delete it first, or enabling this fails the render with a named message. That refusal is a feature: it makes the ordering structural instead of procedural."
         }
       }
     },
@@ -20145,6 +20151,160 @@
               }
             }
           }
+        },
+        "tenant-onboarding": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            },
+            "enabled": {
+              "type": "boolean",
+              "description": "Render the policy and its Kyverno grants. Off until the handover in docs/tenant-onboarding.md."
+            },
+            "refuseWhileLegacyPolicyExists": {
+              "type": "boolean",
+              "description": "Fail the render while ClusterPolicy tenant-namespace-on-login exists."
+            },
+            "tenantGroups": {
+              "type": "array",
+              "description": "authn groups whose members are onboarded as tenants.",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\n\"\\\\]+$"
+              }
+            },
+            "role": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "rules": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "apiGroups",
+                      "resources",
+                      "verbs"
+                    ],
+                    "properties": {
+                      "apiGroups": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "resources": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "verbs": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "string",
+                          "not": {
+                            "enum": [
+                              "*",
+                              "escalate",
+                              "bind",
+                              "impersonate"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "limitRange": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "defaultRequest": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "resourceQuota": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "hard": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "kyvernoRbac": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "reportsControllerSecretRead": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "title": "Tenant onboarding",
+          "description": "v2 tenant namespace provisioning: one Kyverno GeneratingPolicy plus two aggregation ClusterRoles. Copied VERBATIM from the chart's own values.schema.json at tag 0.2.65 -- nothing stripped, which is why 0.2.65 was pinned rather than 0.2.64. 0.2.64 still carried a ROOT-level `required` of seven keys that would have aborted the WHOLE umbrella render, since componentValues is a PARTIAL override merged over the chart defaults and a CR carries only the keys a cluster sets. Its author's walker could not see it: enumerating paths never yields a property of the root. The array-item `required` on role.rules[] is retained and is safe -- array items may require their own keys. Missing top-level keys are caught by the chart's own named `fail`s in validate.yaml, which is a better error than a schema path. 0 `default` at any depth, so nothing is materialised into the Installer CR by crdgen."
         },
         "zendesk-organisations": {
           "type": "object",

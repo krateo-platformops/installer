@@ -8727,3 +8727,46 @@ components:
   - zendesk-kog
   tier: platform
   feature: serviceDesk
+
+# v2 tenant namespace provisioning: ONE Kyverno GeneratingPolicy that provisions a tenant's namespace
+# contents (Role, LimitRange, ResourceQuota) plus TWO Kyverno aggregation ClusterRoles. Replaces the
+# legacy ClusterPolicy tenant-namespace-on-login, which is NOT installer-owned (it belongs to the
+# hand-installed kyverno release; grepped: the string appears only in comments in this repo).
+#
+# DOUBLE-GATED ON PURPOSE. features.tenantOnboarding defaults false AND the chart's own `enabled`
+# defaults false, so this renders ZERO objects until both are on. That is not belt-and-braces: a key
+# which defaults ON in a pinned chart is briefly LIVE during the roll that introduces it EVEN WHEN the
+# same roll carries the key to disable it. Measured on krateo-057, 2026-11-13: agentgateway-policies
+# 0.2.32 defaults mcpEntry.enabled true, and helm revisions 160-161 rendered an internet-facing /mcp
+# route for ~43 s before the CR's enabled:false arrived in rev 162 and pruned it. Here the CHART
+# default is off, so no such window exists.
+#
+# NO requiresApiGroups, deliberately, exactly as for krateo-capability-roles: the chart needs Kyverno
+# (policies.kyverno.io), which is NOT an installer component, and a hard group requirement would block
+# every cluster that does not need it -- krateo-057 serves 0 kyverno CRDs.
+#
+# HAND-OVER ORDER IS STRUCTURAL, NOT PROCEDURAL. refuseWhileLegacyPolicyExists defaults true and the
+# chart FAILS the render with a named message while tenant-namespace-on-login still exists. So the
+# enable tag cannot land before the legacy policy is orphaned and deleted. That is the guard; the
+# runbook is the convenience.
+#
+# 0.2.65 (#115): pinned INSTEAD OF 0.2.64, and the reason is the whole point. 0.2.64's schema still
+#   carried a ROOT-level `required` of seven keys (enabled, refuseWhileLegacyPolicyExists,
+#   tenantGroups, role, limitRange, resourceQuota, kyvernoRbac) -- #113 removed the four NESTED object
+#   `required`s and moved them into named fails in validate.yaml, but left the root one byte-identical.
+#   componentValues is a PARTIAL override merged over the chart defaults, so a root `required` there
+#   means every Installer CR must set all seven or the WHOLE umbrella render aborts (it froze
+#   krateo-demo twice). Its author's walker could not see it -- enumerating paths never yields a
+#   property of the ROOT -- and the handover said there was nothing to strip. Verified at pin time by a
+#   root-inclusive, key-membership walk with a planted control: 0.2.65 has ONE `required` site, the
+#   array-item one on role.rules[] (safe: array items may require their own keys), and 0 `default` at
+#   any depth. So the componentValues node is copied VERBATIM with nothing stripped, which keeps our
+#   schema and the chart in agreement instead of silently diverging.
+#   Registry probes: 0.2.65 PULLED, 0.2.64 PULLED as a positive control, 0.2.999 absent as a negative.
+- name: tenant-onboarding
+  kind: TenantOnboarding
+  chart: tenant-onboarding
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.2.65
+  tier: platform
+  feature: tenantOnboarding
