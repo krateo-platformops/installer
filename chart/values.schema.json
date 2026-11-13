@@ -7822,6 +7822,21 @@
                 }
               }
             },
+            "internal": {
+              "type": "object",
+              "title": "Internal listener",
+              "description": "New in authn 0.45.0. A second HTTP listener for in-cluster callers, separate from the public service port, so the session-Secret adoption path introduced in 0.45.0 is not reachable from the edge. No default is declared here on purpose: the chart's own default (port 8090) applies unless this is set explicitly, and a `default` in this schema would be written into EVERY Installer CR by the self-bootstrap.",
+              "additionalProperties": false,
+              "properties": {
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535,
+                  "title": "Internal listener port",
+                  "description": "Port for the internal listener. Chart default is 8090."
+                }
+              }
+            },
             "global": {
               "type": "object",
               "title": "Global values (injected by the Krateo composition engine)",
@@ -8364,6 +8379,11 @@
               "type": "string",
               "title": "snowplow base URL",
               "description": "Chart default is the in-cluster Service http://snowplow.krateo-system.svc:8081, so no override is needed."
+            },
+            "snowplowJqModulesConfigMap": {
+              "type": "string",
+              "title": "Snowplow jq modules ConfigMap",
+              "description": "New in builder-gate 1.8.41. Name of a ConfigMap holding jq modules the gate loads when evaluating Snowplow bodies. Chart default is empty, which disables module loading. Declared because componentValues['builder-gate'] is a closed object."
             },
             "remoteMCPServer": {
               "type": "object",
@@ -10280,6 +10300,49 @@
                 "httpGet": {
                   "path": "/",
                   "port": "http"
+                }
+              }
+            },
+            "login": {
+              "type": "object",
+              "title": "Login page copy and branding",
+              "description": "New across frontend 1.8.35-1.8.41. Customises the sign-in page: installation name, logo, headline, subtitle, the request-account link and the bullet list. Declared here because componentValues.frontend is a CLOSED object, so an undeclared key is PRUNED SILENTLY by the Installer CRD and the chart's own default wins with no error anywhere. No defaults are declared: the chart supplies its own, and a `default` here would reach every CR.",
+              "additionalProperties": false,
+              "properties": {
+                "installationName": {
+                  "type": "string",
+                  "title": "Installation name",
+                  "description": "Shown on the sign-in page to identify this installation."
+                },
+                "headline": {
+                  "type": "string",
+                  "title": "Headline"
+                },
+                "subtitle": {
+                  "type": "string",
+                  "title": "Subtitle"
+                },
+                "logoUrl": {
+                  "type": "string",
+                  "title": "Logo URL"
+                },
+                "logoAlt": {
+                  "type": "string",
+                  "title": "Logo alt text",
+                  "description": "Alternative text for the logo image."
+                },
+                "requestAccountUrl": {
+                  "type": "string",
+                  "title": "Request-account URL",
+                  "description": "Target of the request-an-account link on the sign-in page."
+                },
+                "highlights": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Highlights",
+                  "description": "Bullet list shown beside the sign-in form."
                 }
               }
             },
