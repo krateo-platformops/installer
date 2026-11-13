@@ -6997,7 +6997,7 @@ components:
   # LOCKSTEP with alert-provider. NB the CHART is alert-provider-crdS, plural -- the `chart:` key
   # above carries that. Probing the pin NAME instead of the resolved chart name reported this
   # chart ABSENT once; always resolve `chart:` before concluding a version is unpublished.
-  version: 0.2.79
+  version: 0.2.82
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -7160,7 +7160,7 @@ components:
   # incident-provider's next release: an older CRD drops status.reanalysis.cause harmlessly.
   # Verified at pin time: values.schema.json AND values.yaml byte-identical to 0.2.74, no root or
   # nested `required`, so it is a drop-in with no widening.
-  version: 0.2.79
+  version: 0.2.82
   # 0.2.57 carries alert-provider#76 (provider-runtime v1.7.2) and #77, which adds 'incident-provider' to
   # DEFAULT_ALERTS_JSON's reconcile-error `NOT IN` list. Measured on the published chart here, not taken
   # from the release notes: rendered at --kube-version 1.33.0, rc=0, 294 -> 331 lines (floor asserted, so
@@ -8344,7 +8344,7 @@ components:
   # existing auth/bootstrap componentValues carry over untouched and no widening is needed first.
   # No root or nested `required`, so it cannot wedge the umbrella the way a blueprint root
   # `required` did twice on demo today.
-  version: 0.7.0
+  version: 0.7.3
   requiresApiGroups:
   - ogen.krateo.io
   - external-secrets.io
@@ -8383,7 +8383,7 @@ components:
   # `name` inside groups[] items, and oidcConfig is a CLOSED object whose types match exactly what
   # its owner published. Measured end to end by its owner through a CompositionDefinition on
   # core-provider 2.13.82: a real PKCE sign-in, 200 with groups [tenants], 403 for a non-member.
-  version: 0.2.0
+  version: 0.3.3
   # THE RENDER-TIME GATE THAT MATTERS. Every object this chart emits is a KOG-generated kind in
   # keycloak.ogen.krateo.io, and those CRDs do not exist until keycloak-config-kog's oasgen
   # RestDefinitions have been reconciled. requiresApiGroups is hard-ANDed outside the $exists
