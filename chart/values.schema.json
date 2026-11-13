@@ -8428,7 +8428,7 @@
             "instances": {
               "type": "array",
               "title": "Gate instances (one per authoring agent)",
-              "description": "EVERY object in the chart is inside `range .Values.instances`, so an EMPTY list renders ZERO objects while the release still reports deployed -- a component that cannot be told apart from a working one by checking whether it is installed. builder-gate 1.8.16 does not yet refuse that render (frontend#549 adds the refusal and is unreleased), so this default is LOAD-BEARING, not belt-and-braces: it is what makes enabling the feature produce a working gate. The default is written onto the Installer CR by crdgen, so the leaf is not empty-able by omission -- to turn the gate off, disable the FEATURE rather than setting `instances: []`.",
+              "description": "INSTALLER POLICY, NOT A CHART DEFAULT (frontend, 2026-11-13). builder-gate's chart defaults instances to [] because it is opt-in by design; which builders a platform runs is the installer's composition decision, so we default all three. Recorded because this MATERIALIZES into every Installer CR and beats the chart. Audited against builder-gate 1.8.42. EVERY object in the chart is inside `range .Values.instances`, so an EMPTY list renders ZERO objects while the release still reports deployed -- a component that cannot be told apart from a working one by checking whether it is installed. builder-gate 1.8.16 does not yet refuse that render (frontend#549 adds the refusal and is unreleased), so this default is LOAD-BEARING, not belt-and-braces: it is what makes enabling the feature produce a working gate. The default is written onto the Installer CR by crdgen, so the leaf is not empty-able by omission -- to turn the gate off, disable the FEATURE rather than setting `instances: []`.",
               "default": [
                 {
                   "name": "portal-builder",
@@ -10244,12 +10244,6 @@
                   "title": "Events API base URL",
                   "default": "http://localhost:8083"
                 }
-              },
-              "default": {
-                "SNOWPLOW_API_BASE_URL": "http://localhost:8081",
-                "AUTHN_API_BASE_URL": "http://localhost:8082",
-                "EVENTS_PUSH_API_BASE_URL": "http://localhost:8083",
-                "EVENTS_API_BASE_URL": "http://localhost:8083"
               }
             },
             "env": {
@@ -10423,13 +10417,7 @@
             },
             "livenessProbe": {
               "type": "object",
-              "title": "Liveness probe",
-              "default": {
-                "httpGet": {
-                  "path": "/",
-                  "port": "http"
-                }
-              }
+              "title": "Liveness probe"
             },
             "login": {
               "type": "object",
@@ -10487,8 +10475,7 @@
             },
             "nameOverride": {
               "type": "string",
-              "title": "Name override",
-              "default": ""
+              "title": "Name override"
             },
             "nodeSelector": {
               "type": "object",
@@ -10523,9 +10510,6 @@
               "type": "object",
               "title": "Preview sandbox",
               "description": "Wave-4 live-preview sandbox provisioning (krateo-preview namespace + author RBAC + ResourceQuota + TTL janitor). Passed through to the frontend chart; PREVIEW_SANDBOX_NAMESPACE is auto-forced from previewSandbox.namespace when enabled. The default {enabled:false} keeps the key in the schema-defaulted componentValues so a live-values override (enabled:true) durably merges through the self-bootstrap patch \u2014 matching how the config-object keys propagate. The frontend chart supplies namespace/ttl/quota defaults.",
-              "default": {
-                "enabled": false
-              },
               "additionalProperties": false,
               "properties": {
                 "enabled": {
@@ -10551,13 +10535,7 @@
             },
             "readinessProbe": {
               "type": "object",
-              "title": "Readiness probe",
-              "default": {
-                "httpGet": {
-                  "path": "/",
-                  "port": "http"
-                }
-              }
+              "title": "Readiness probe"
             },
             "replicaCount": {
               "type": "integer",
@@ -17968,7 +17946,7 @@
                   "type": "boolean",
                   "default": true,
                   "title": "enabled",
-                  "description": "Show the Agents sidebar entry. Requires the portal-agents composition."
+                  "description": "INSTALLER POLICY, NOT A CHART DEFAULT (Diego, 2026-11-13). portal's own chart defaults this to FALSE; we default it TRUE because the product ships with Agentiko and its agents on. Recorded because a default here MATERIALIZES into every Installer CR via crdgen and then BEATS the chart's values.yaml -- verified on 057, whose live portal release runs with agents.enabled true. Without this note the override is indistinguishable from drift. Audited against portal 1.8.116. Show the Agents sidebar entry. Requires the portal-agents composition."
                 }
               }
             },
@@ -17979,7 +17957,6 @@
               "type": "boolean"
             },
             "enableCyberjokerUser": {
-              "default": true,
               "description": "Enable cyberjoker user (basic authentication) with namespace-scoped permissions",
               "title": "enableCyberjokerUser",
               "type": "boolean"
