@@ -1,0 +1,80 @@
+# WHAT THIS SUITE DOES AND DOES NOT COVER - read before adding to it.
+#
+# httproutes.yaml has two paths. When the platform Gateway can be READ, each exposed component
+# gets its route pinned to that Gateway's HTTPS listener with X-Forwarded-* headers set, plus a
+# cleartext companion route that 301s to https. When the Gateway canNOT be read, it emits the
+# original single unsectioned route unchanged.
+#
+# ONLY THE SECOND PATH IS TESTED HERE, and that is a limitation of the tool, not a choice.
+# helm-unittest 1.2.1's kubernetesProvider cannot serve a by-name `lookup` of the KIND `Gateway`.
+# Narrowed with probe templates rather than assumed, because the first explanation I wrote down
+# ("it cannot do namespaced custom resources") was WRONG:
+#     lookup composition.krateo.io/v1-8-88 Portal krateo-system portal  -> the full object
+#     lookup foo.example.com/v1            Thing  krateo-system a       -> the full object
+#     lookup foo.example.com/v1            Thing  krateo-system b       -> full, INCLUDING a
+#                                                                          nested spec.listeners list
+#     lookup gateway.networking.k8s.io/v1  Gateway krateo-system krateo-gateway -> "{}"
+#     lookup foo.example.com/v1            Gateway krateo-system krateo-gateway -> "{}"
+# So it is neither the Gateway API group, nor namespacing, nor the nested list: a kind NAMED
+# `Gateway` resolves to an empty dict whatever group it is registered under. An empty dict is falsy,
+# so the template takes the degraded path no matter what the fixture says.
+#
+# The consequence to be honest about: a test asserting "a listener for a DIFFERENT hostname is not
+# used" would PASS VACUOUSLY here, for the same reason - no lookup ever resolves. Such a test
+# asserts nothing and must not be added. The enriched path is verified on a live cluster instead.
+#
+# The degraded-path test below is still worth having. It is the no-regression guarantee: render-only
+# CI, `helm template`, a dry-run, and a BYO Gateway in a namespace the installer cannot read all
+# take this path, and all of them must keep producing exactly the route shape they produce today.
+suite: exposed-component HTTPRoutes - degraded path keeps today's shape
+templates:
+  - templates/httproutes.yaml
+tests:
+  - it: with no readable Gateway, emits ONE unsectioned route with no filters
+    set:
+      exposure.type: Gateway
+      exposure.baseDomain: cmp.krateo.dev
+      exposure.gatewayRef.name: krateo-gateway
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider:
+      scheme:
+        "apiextensions.k8s.io/v1/CustomResourceDefinition":
+          gvr:
+            version: v1
+            group: apiextensions.k8s.io
+            resource: customresourcedefinitions
+        "v1/Service":
+          gvr:
+            version: v1
+            resource: services
+          namespaced: true
+      objects:
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata:
+            name: httproutes.gateway.networking.k8s.io
+        - apiVersion: v1
+          kind: Service
+          metadata:
+            name: frontend
+            namespace: krateo-system
+    asserts:
+      - notFailedTemplate: {}
+      # exactly one document: no cleartext companion route is emitted when the TLS
+      # listener cannot be identified, which is what keeps this path byte-compatible
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: HTTPRoute
+      - equal:
+          path: metadata.name
+          value: frontend
+      - notExists:
+          path: spec.parentRefs[0].sectionName
+      - notExists:
+          path: spec.rules[0].filters
+      # the backend is still wired - a route that renders but forwards nowhere would
+      # satisfy every assertion above
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: frontend
