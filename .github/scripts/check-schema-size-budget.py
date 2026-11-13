@@ -101,17 +101,23 @@ def crd_bytes(per_version: int, n_served: int) -> int:
     return VACUUM_BYTES + per_version * n_served
 
 
-def verdict(disk_bytes: int, minified_bytes: int):
+def verdict(disk_bytes: int, minified_bytes: int, baseline: int = None):
     """(ok, lines) -- pure, so the self-test exercises it without a file."""
     per = projected(minified_bytes)
-    ok_disk = disk_bytes <= BUDGET_BYTES
+    over_hard = disk_bytes > CONFIGMAP_LIMIT
+    if over_hard and baseline is not None and baseline > CONFIGMAP_LIMIT:
+        # main is already over: ratchet, so only growth is refused
+        ok_disk = disk_bytes <= baseline
+    else:
+        ok_disk = disk_bytes <= BUDGET_BYTES
     ok_mini = minified_bytes <= MINIFIED_BUDGET
     ok = ok_disk and ok_mini
     lines = [
         "WALL 1  the per-version schema ConfigMap (the binding one)",
         f"  {SCHEMA} on disk: {disk_bytes:,} bytes",
         f"  hard limit {CONFIGMAP_LIMIT:,}   headroom {CONFIGMAP_LIMIT - disk_bytes:+,}   "
-        f"budget {BUDGET_BYTES:,}",
+        f"budget {BUDGET_BYTES:,}"
+        + ("" if baseline is None else f"   merge target {baseline:,} ({disk_bytes - baseline:+,})"),
         "WALL 2  the CRD object / etcd request",
         f"  minified {minified_bytes:,} -> compiled per served version ~{per:,} (x{COMPILE_RATIO})",
         f"  minified budget {MINIFIED_BUDGET:,} (durable; binds once core-provider #485 ships) "
@@ -124,6 +130,28 @@ def verdict(disk_bytes: int, minified_bytes: int):
     lines.append(f"  hard limit {APISERVER_LIMIT:,}. core-provider ADDS the new version before pruning "
                  f"the old, so a roll transiently needs the n+1 row.")
     return ok, lines
+
+
+def baseline_disk_bytes():
+    """On-disk size of the schema at the merge target, or None if it cannot be read.
+
+    A RATCHET rather than an absolute gate for wall 1, deliberately. main is ALREADY over the 1 MiB
+    ConfigMap limit (1,060,819 against 1,048,576 on 2026-11-13), because the schema crossed it at
+    tag 0.3.634 and nobody had an instrument that would have said so. An absolute check would
+    therefore be red on every pull request from the day it merged, and a permanently red check is one
+    people learn to ignore -- the failure mode every other suite in this directory warns about.
+
+    So while main is over the limit this check refuses a change that makes it WORSE, and reports the
+    absolute overage loudly on every run. The remedy is core-provider #485, which stores the
+    per-version ConfigMap as compact JSON; once a core-provider carrying it is pinned, DELETE the
+    wall 1 check entirely and keep MINIFIED_BUDGET, which is the durable one.
+    """
+    import subprocess
+    for ref in ("origin/main", "main"):
+        out = subprocess.run(["git", "show", f"{ref}:{SCHEMA}"], capture_output=True)
+        if out.returncode == 0 and out.stdout:
+            return len(out.stdout)
+    return None
 
 
 def self_test() -> int:
@@ -152,6 +180,18 @@ def self_test() -> int:
             print(f"  ok  {tag}: {disk:,} vs {CONFIGMAP_LIMIT:,} -> "
                   f"{'fits' if got else 'exceeds'}, matching the cluster")
 
+    # RATCHET: with the merge target already over the hard limit, equal passes and +1 fails
+    for label, disk, baseline, want in (
+            ("ratchet, unchanged size", 1_060_819, 1_060_819, True),
+            ("ratchet, one byte smaller", 1_060_818, 1_060_819, True),
+            ("ratchet, one byte larger", 1_060_820, 1_060_819, False)):
+        got, _ = verdict(disk, 600_000, baseline)
+        if got != want:
+            print(f"  FAIL {label}: ok={got} (wanted {want})")
+            bad += 1
+        else:
+            print(f"  ok  {label}: {disk:,} vs target {baseline:,} -> ok={got}")
+
     two, three = crd_bytes(601_964, 2), crd_bytes(601_964, 3)
     if not (two <= APISERVER_LIMIT < three):
         print(f"  FAIL wall 2 does not reproduce: 2x={two:,} 3x={three:,}")
@@ -159,7 +199,7 @@ def self_test() -> int:
     else:
         print(f"  ok  wall 2 reproduces: 2 served={two:,} fits, 3 served={three:,} does not")
 
-    print(f"  self-test: 9 assertions, {bad} failing")
+    print(f"  self-test: 12 assertions, {bad} failing")
     return 1 if bad else 0
 
 
@@ -188,12 +228,23 @@ def main(argv) -> int:
 
     disk = len(open(SCHEMA, "rb").read())
     mini = len(json.dumps(doc, separators=(",", ":")).encode())
-    ok, lines = verdict(disk, mini)
+    base = baseline_disk_bytes()
+    ok, lines = verdict(disk, mini, base)
+    if base is not None and base > CONFIGMAP_LIMIT:
+        lines.insert(0, "  RATCHET MODE: the merge target is ALREADY over the 1 MiB ConfigMap limit "
+                        f"({base:,}), so this check refuses only an INCREASE. Remedy: core-provider "
+                        "#485 (compact ConfigMap); delete the wall 1 check once it is pinned.")
     print(f"check-schema-size-budget: {len(props)} component nodes examined")
     for line in lines:
         print(f"  {line}")
     if ok:
-        print(f"check-schema-size-budget: OK — on disk {disk:,} <= {BUDGET_BYTES:,}")
+        if base is not None and base > CONFIGMAP_LIMIT:
+            print(f"check-schema-size-budget: OK — RATCHET: on disk {disk:,} did not grow past the "
+                  f"merge target's {base:,}. It is STILL {disk - CONFIGMAP_LIMIT:,} over the hard "
+                  f"ConfigMap limit, so no new installer version can be served until "
+                  f"core-provider #485 ships.")
+        else:
+            print(f"check-schema-size-budget: OK — on disk {disk:,} <= {BUDGET_BYTES:,}")
         return 0
     if not (minified_bytes_ok := mini <= MINIFIED_BUDGET):
         print(f"::error::check-schema-size-budget: {SCHEMA} is {mini:,} bytes MINIFIED, over the "
@@ -203,6 +254,13 @@ def main(argv) -> int:
               f"This one does not go away when #485 ships.")
     if disk <= BUDGET_BYTES:
         return 1 if not minified_bytes_ok else 0
+    if base is not None and base > CONFIGMAP_LIMIT and disk > base:
+        print(f"::error::check-schema-size-budget: {SCHEMA} GREW by {disk - base:,} bytes while the "
+              f"merge target is already {base - CONFIGMAP_LIMIT:,} over the 1 MiB ConfigMap limit. "
+              f"Every installer version since 0.3.634 has been unservable for this reason, so adding "
+              f"to the schema now makes a wedged cluster harder to unwedge. Shrink the addition, or "
+              f"wait for core-provider #485 (compact ConfigMap, frees ~43%).")
+        return 1
     print(f"::error::check-schema-size-budget: {SCHEMA} is {disk:,} bytes ON DISK, over the "
           f"{BUDGET_BYTES:,} budget (hard ConfigMap limit {CONFIGMAP_LIMIT:,}). core-provider writes "
           f"this file PRETTY-PRINTED into installers-<version>-jsonschema-configmap; a ConfigMap over "
