@@ -7834,6 +7834,107 @@
                   "maximum": 65535,
                   "title": "Internal listener port",
                   "description": "Port for the internal listener. Chart default is 8090."
+                },
+                "networkPolicy": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "NEW in authn 0.46.0, ON by default. Restricts who may reach the INTERNAL port; the public port is unaffected. The chart's default admits only identity-lifecycle's controller pods in authn's namespace. It only bites where NetworkPolicy is ENFORCED -- demo (Calico) yes, 057 no. Declared so a deployment can add a peer; no `default:` here, so the chart's default stands unless an operator sets it.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "from": {
+                      "type": "array",
+                      "minItems": 1,
+                      "description": "Ingress peers. The chart REFUSES an empty list, so minItems:1 -- an empty value would fail the component's own render.",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "namespaceSelector": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "description": "A Kubernetes LabelSelector, typed rather than left open: this schema is fed to crdgen, and an open object becomes x-kubernetes-preserve-unknown-fields on the live Installer CRD.",
+                            "properties": {
+                              "matchLabels": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
+                              },
+                              "matchExpressions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "operator": {
+                                      "type": "string",
+                                      "enum": [
+                                        "In",
+                                        "NotIn",
+                                        "Exists",
+                                        "DoesNotExist"
+                                      ]
+                                    },
+                                    "values": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "podSelector": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "description": "A Kubernetes LabelSelector, typed rather than left open: this schema is fed to crdgen, and an open object becomes x-kubernetes-preserve-unknown-fields on the live Installer CRD.",
+                            "properties": {
+                              "matchLabels": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
+                              },
+                              "matchExpressions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "operator": {
+                                      "type": "string",
+                                      "enum": [
+                                        "In",
+                                        "NotIn",
+                                        "Exists",
+                                        "DoesNotExist"
+                                      ]
+                                    },
+                                    "values": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             },
@@ -7879,6 +7980,16 @@
                 },
                 "imageRegistry": {
                   "type": "string"
+                }
+              }
+            },
+            "exactUsernames": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "NEW in authn 0.46.0, default FALSE in the chart. Turn on per cluster ONLY after (a) snowplow's exact-then-legacy reader is rolled there and (b) acmp's tenant handover has deleted the legacy policy -- the delete and this flag are ONE step. NO `default:` precisely so it stays off unless set: a default here materializes into every Installer CR.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
                 }
               }
             }

@@ -50,7 +50,7 @@ components:
   # pinned or rolled anywhere.
   # LOCKSTEP with authn, as its owner required. NB the CHART is authn-crdS, plural; the `chart:`
   # key carries that, and probing the pin NAME instead reports it absent.
-  version: 0.45.0
+  version: 0.46.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -811,7 +811,7 @@ components:
   # AUTHN_SERVICE_CRT_EXPIRES_IN) were already undeclared at 0.41.0, so that is not new.
   # The four preconditions were verified clear on BOTH clusters before the go: 0 identities carry a
   # krateo: group, and the otel agent is Ready on every node with hostPort 4318.
-  version: 0.45.0
+  version: 0.46.0
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
@@ -6331,7 +6331,7 @@ components:
   #   delegates AS WELL, not INSTEAD. So this leaves no gap, and the reverse order would only
   #   double-sort on the same key, which is idempotent. Checked rather than assumed.
   #   MARKER: 'WIDGET-AGNOSTIC -- A RESTACTION IS DATA'   (1.2.3=0, 1.2.4=1)
-  version: 1.2.5
+  version: 1.2.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -8518,7 +8518,7 @@ components:
   kind: ZendeskKog
   chart: zendesk-kog
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.2.2
+  version: 0.2.3
   requiresApiGroups:
   - ogen.krateo.io
   deps:
