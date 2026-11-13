@@ -8171,7 +8171,33 @@ components:
   #   would open an internet-facing /mcp on its own: componentValues.agentgateway-policies.mcpEntry
   #   is declared in the same change as the only lever that can close it, and the roll carries
   #   enabled: false until that surface is approved per cluster.
-  version: 0.2.32
+  # 0.2.33 (#89-#94; #95, the backend switch, merged AFTER the tag and is NOT in it):
+  #   (1) mcpEntry.enabled default TRUE -> FALSE (#93). This is the one that needed a pre-pin guard,
+  #       and it is the opposite direction from the 0.2.32 hazard: there the chart default would have
+  #       OPENED /mcp, here it would CLOSE it. krateo-057's CR and its helm release both carry
+  #       componentValues.agentgateway-policies.mcpEntry: {enabled: true} -- VERIFIED BEFORE PINNING,
+  #       in both places, because the CR is what the composition reads and the release values are
+  #       what a roll actually sends. Had the key ever been absent, /mcp would have closed silently
+  #       and read as an outage rather than a config change.
+  #   (2) NEW KEY networkPolicy.platformGatewayPodLabels (#92), declared in componentValues in THIS
+  #       SAME change as a typed map with no installer default. It fixes a latent containment bug:
+  #       under internalDataPlane the platform routes dial kagent-controller:8083 from the PLATFORM
+  #       proxy pods while the controller policy admitted only the agent Gateway's labels. Inert on
+  #       057, which enforces no NetworkPolicy at all -- which is why it went unnoticed.
+  #   (3) Two schema defaults removed (#90): llm.retry.backoff and llm.turnBudget.nudge. No render
+  #       change (helm reads values.yaml); it stops them being copied into our schema. These are the
+  #       two stale defaults I reported upstream.
+  #   (4) CI (#94) and docs (#89, #91) only.
+  #   DEFAULTS-ON AUDIT, verified rather than taken from the handover: a leaf diff of values.yaml
+  #   0.2.32 -> 0.2.33 finds exactly ONE added leaf (networkPolicy.platformGatewayPodLabels), ONE
+  #   changed leaf (mcpEntry.enabled true -> false), zero removed and ZERO newly-true leaves.
+  #   agentgateway-controller DELIBERATELY STAYS AT 0.2.0. The same tag publishes it at 0.2.33, and
+  #   it is STILL byte-identical to 0.2.0 apart from Chart.yaml and Chart.lock (re-checked at this
+  #   pin). One tag publishing both is NECESSARY BUT NOT SUFFICIENT for a version line: the test is
+  #   whether the versions differing has no valid reading, and here it has one -- the controller has
+  #   not changed. Contrast keycloak/keycloak-operator, declared as a line tonight because that
+  #   repo's release-tag.yaml packages every chart at the tag and refuses a mismatched archive.
+  version: 0.2.33
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller

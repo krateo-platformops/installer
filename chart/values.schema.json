@@ -1933,6 +1933,13 @@
                   },
                   "description": "Pod labels of the agentgateway data plane (gateway.networking.k8s.io/gateway-name=<gateway>), stamped by the Gateway API controller."
                 },
+                "platformGatewayPodLabels": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "The PLATFORM Gateway's proxy pod labels, added as a SECOND peer on the controller NetworkPolicy when gateway.internalDataPlane is on. Empty (the chart default) means derived from the platform Gateway's name. New in agentgateway-policies 0.2.33 (#92), fixing a latent containment bug: under internalDataPlane the platform routes -- -a2a-tls for /api/a2a and /api/sessions, and -mcp-entry for /mcp -- dial kagent-controller:8083 from the PLATFORM proxy pods, while the controller policy admitted only gatewayPodLabels (the agent Gateway). On an enforcing CNI the portal sidebar would break. It is INERT on krateo-057, which enforces no NetworkPolicy at all (kube-system carries only GKE netd; no anetd, Calico or Cilium), so the 9 policies there are declarative only -- which is exactly why nobody had noticed. A typed map, not a bare object: crdgen turns an untyped object into x-kubernetes-preserve-unknown-fields, as unbounded on the live CRD as additionalProperties: true."
+                },
                 "controller": {
                   "description": "Restrict ingress to kagent-controller (port from kagent.controller.port) to the gateway and the agent pods.",
                   "type": "object",
