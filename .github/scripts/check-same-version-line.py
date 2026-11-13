@@ -95,24 +95,57 @@ def evaluate(pins, lines):
 
 def self_test():
     """Run against the state this change fixes. A gate that only ever passes is untested."""
-    import subprocess
     ok = True
     decl = yaml.safe_load(open(DECL, encoding="utf-8"))["lines"]
 
-    # 1. the real pre-change pin set: oasgen 0.61.0 vs controller-render-service 0.48.0
-    base = subprocess.run(["git", "show", f"origin/main:{PINS}"],
-                          capture_output=True, text=True)
-    if base.returncode == 0:
-        p = pins_from(base.stdout)
-        f = evaluate(p, decl)
-        hit = [x for x in f if "oasgen" in x and "disagree" in x]
-        print(f"{'ok  ' if hit else 'FAIL'}  origin/main (renderer 0.48.0 vs controller "
-              f"{p.get('oasgen-provider')}): {len(hit)} skew finding(s) -> "
-              f"{'refused' if hit else 'ACCEPTED, which is wrong'}")
-        if not hit:
-            ok = False
-    else:
-        print("SKIP  origin/main not available in this clone")
+    # 1. the real pre-change pin set, EMBEDDED rather than read from a ref.
+    #
+    #    This case first read `origin/main`, and that was wrong in a way worth recording:
+    #    the fixture was the very state this gate's own change fixed, so the moment 0.3.611
+    #    merged, main no longer contained the skew, case 1 began reporting
+    #    "0 skew finding(s) -> ACCEPTED, which is wrong", and the job failed on EVERY
+    #    subsequent PR. A self-test anchored to a MOVING ref tests a different thing each
+    #    day; anchored to its own fix, it is guaranteed to break. The values below are the
+    #    oasgen line exactly as it stood at e586525 (be0b9d7^, the commit before #855), and
+    #    they can never drift because nothing can edit history into this string.
+    #
+    #    It stays real YAML in the pin file's own shape, so pins_from() is still exercised
+    #    on text of the kind it must parse, rather than on a hand-built dict.
+    INCIDENT = """
+components:
+  - name: oasgen-provider
+    version: 0.61.0
+  - name: oasgen-provider-crd
+    version: 0.61.0
+  - name: controller-render-service
+    version: 0.48.0
+"""
+    p = pins_from(INCIDENT)
+    f = evaluate(p, decl)
+    hit = [x for x in f if "oasgen" in x and "disagree" in x]
+    print(f"{'ok  ' if hit else 'FAIL'}  e586525 oasgen line (renderer "
+          f"{p.get('controller-render-service')} vs controller {p.get('oasgen-provider')}): "
+          f"{len(hit)} skew finding(s) -> "
+          f"{'refused' if hit else 'ACCEPTED, which is wrong'}")
+    if not hit:
+        ok = False
+
+    # 1b. a real IN-STEP line from the same commit must be accepted, so case 1 is not
+    #     passing merely because the gate refuses everything it is shown.
+    AGREED = """
+components:
+  - name: frontend
+    version: 1.8.34
+  - name: frontend-crd
+    version: 1.8.34
+  - name: builder-gate
+    version: 1.8.34
+"""
+    fa = [x for x in evaluate(pins_from(AGREED), decl) if "frontend" in x and "disagree" in x]
+    print(f"{'ok  ' if not fa else 'FAIL'}  e586525 frontend line (all 1.8.34): "
+          f"{len(fa)} finding(s) -> {'accepted' if not fa else fa}")
+    if fa:
+        ok = False
 
     # 2. the worktree, which must be clean
     f = evaluate(pins_from(open(PINS, encoding="utf-8").read()), decl)
