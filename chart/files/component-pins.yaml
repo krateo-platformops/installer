@@ -349,7 +349,21 @@ components:
   # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
   # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
   # holds anyway because none is at the path that matters -- but check the path, not the presence.)
-  version: 1.8.42
+  # 1.8.43: THE ONE THAT CARRIES CONTENT. 12 CRD templates changed (Card, Col, Collapse, Flex, Form,
+  #   Listy, Markdown, Row, Select, Steps, Table, Tabs), all additive optional fields and enum
+  #   ADDITIONS, plus the NEW Collapse CRD (collapses.widgets.templates.krateo.io).
+  #   WIDENING an enum can only accept more; it is a DEFAULT that supplies a value nobody chose, so
+  #   the question asked of this release was "did any new property arrive with a `default:`?" rather
+  #   than "is it additive?". Answer: exactly one, inside the NEW Collapse CRD -- its actions.timeout,
+  #   copied from Listy. A default on a NEW kind cannot change an existing object because there are
+  #   none, and I verified that on krateo-057 rather than assuming it: the Collapse CRD is NOT PRESENT
+  #   there, with cards/listies found as controls so the absence means something. No EXISTING CRD
+  #   gained a default or a `required`.
+  #   Its author's first framing was "a CRD field has no on/off behaviour until a widget CR sets it",
+  #   which is true only without a `default:` -- a CRD property WITH one is applied by the apiserver to
+  #   every existing object on its next read or write. The rule carried forward is "additive AND no
+  #   new `default:`", and applying it is what found the Collapse timeout.
+  version: 1.8.43
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -2792,7 +2806,11 @@ components:
   # GOOD releases. frontend has since corrected that: it also WITHHELD this defect, authored in
   # that same window. Fixing the gate shipped it. A gate failing closed for the wrong reason is
   # indistinguishable from protection while it holds.
-  version: 1.8.42
+  # 1.8.43: THE IMAGE ONLY. `git diff 1.8.42 1.8.43 -- helm/frontend` is empty upstream, and I
+  #   confirmed it by sha256 per file: ONE file differs in the published chart, Chart.yaml. No values
+  #   keys added or changed, no templates touched, no dangerous `required`. Image
+  #   ghcr.io/krateo-platformops/frontend:1.8.43, multi-arch amd64+arm64.
+  version: 1.8.43
   deps:
   - frontend-crd
   - authn
@@ -6190,7 +6208,16 @@ components:
   # No appVersion in this chart, so pin-ci reports n/a (no image, no component CI to resolve).
   kind: BuilderGate
   chart: builder-gate
-  version: 1.8.42
+  # 1.8.43: REPUBLISHED UNCHANGED -- one file differs, Chart.yaml. It moves anyway because it is a
+  #   DECLARED MEMBER of the `frontend` version line, and its author's handover said to leave it,
+  #   which would have failed check-same-version-line.
+  #   WHY THE LINE IS RIGHT EVEN THOUGH THEY ARE RIGHT ABOUT THE CONTENT: the test is whether a skew
+  #   has a valid reading. For agentgateway-controller it does ("the controller has not changed",
+  #   byte-identical across 32 releases) so that one is deliberately NOT chased. Here the line's
+  #   recorded reason is specific -- an app pinned past its -crd pin prunes fields SILENTLY -- and it
+  #   exists because check-no-silent-downgrade caught installer#727 about to revert all three from
+  #   1.8.32 to 1.8.28 together. Moving a republished-identical chart costs a version label.
+  version: 1.8.43
   deps:
     - portal
     - kagent
