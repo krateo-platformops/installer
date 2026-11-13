@@ -101,7 +101,8 @@ components:
   # refuses below 1.36 rather than installing a label-selector mechanism nothing can satisfy.
   # 0.28.1: co-versioned with oasgen-provider. Same k8s >= 1.36 floor; carries no part of the
   # regression fix, which is provider-side only.
-  version: 0.63.1
+  # 0.64.0: moves with the oasgen line (one tag publishes all three charts).
+  version: 0.64.0
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -4698,7 +4699,21 @@ components:
   # shows warnings distinctly from errors and arms publish only on zero problems), so newly visible
   # warnings are the preview finally telling the truth. Enforced by
   # .github/scripts/check-same-version-line.py.
-  version: 0.63.1
+  # 0.64.0: BREAKING for consumers -- `resources.limits.memory` is REMOVED from the chart's schema
+  #   and `limits` is additionalProperties:false, so setting it is REJECTED, not ignored. Measured
+  #   in both versions rather than taken from the release notes: 0.63.1's limits declares cpu AND
+  #   memory; 0.64.0's declares cpu only. requests.memory survives in both. `resources` itself is
+  #   still a declared property, so the removal is of that ONE leaf.
+  #   OUR EXPOSURE IS NIL, and in the strongest form: componentValues.controller-render-service did
+  #   not exist at all before this change, so no values file of ours could set it and no CR can be
+  #   carrying it. 057's user-supplied values have an oasgen-provider block and no
+  #   controller-render-service block.
+  #   Replaced by maxBodyMiB (integer, 1..64), from which the memory limit is DERIVED -- parsing
+  #   holds ~29x the document live at peak, so a cap raised without memory accepted bodies it could
+  #   not render (oasgen#628). Declared in componentValues in THIS SAME CHANGE: the node is closed,
+  #   so a split would prune maxBodyMiB silently while kubectl printed "patched".
+  #   The bounds are mirrored; the chart's `default: 4` deliberately is NOT.
+  version: 0.64.0
   tier: platform
   feature: portal
   chart: controller-render-service
@@ -4812,7 +4827,25 @@ components:
   # needs a human to confirm on the provider's side that the object does not exist. First creates are
   # unaffected either way because Observe is unchanged. github-provider-kog and the oasgen-provider
   # session both confirmed 0.48.0 sits outside that blast radius, each from source.
-  version: 0.63.1
+  # 0.64.0: #640 (>=3 identifiers) and #637 (a findby-only kind now reports Ready=False with reason
+  #   NoCreateVerbDeclared instead of emitting a false CreatedExternalResource event once per poll).
+  #   #637 IS INERT ON krateo-057: measured before the roll with the owner's own predicate --
+  #   34 RestDefinitions, ZERO findby-only (no `create`, no `dispatch`, createApiRef null).
+  #   Controls that make that zero mean something: 33 of 34 HAVE a create verb, and 0 have an empty
+  #   verbsDescription (a predicate matching nothing because the field was absent everywhere would
+  #   print the same 0). The 34th is zendesk-kog-request/ZendeskRequest, dispatch-only, excluded by
+  #   the dispatch clause -- confirmed load-bearing in code, not in a comment: createDispatch
+  #   returns (false, nil) on EXACTLY ONE branch (`verb == nil`), and every other path including
+  #   every error path returns handled=true, so Create returns before the create builder.
+  #   NoCreateVerbDeclared is NOT steady state: Available() upserts the same TypeReady index, so it
+  #   clears on the next reconcile where findby matches. "All CRs Ready=True" stays a valid
+  #   assertion; what changes is that a CR pointing at an absent external resource now says so
+  #   instead of claiming a successful create -- the OLD behaviour was the dangerous one.
+  #   Re-run the predicate on every oasgen roll; if a kind ever LOSES its dispatch verb it becomes
+  #   genuinely create-less and would then report it, correctly.
+  #   github-provider-kog verified its 32+32 CRDs render byte-identically to 0.63.1's, same 5
+  #   warnings, 0 whole-object differences, with a maxLength positive control present in both.
+  version: 0.64.0
   # 0.43.0, NOT the 0.42.0 this PR first proposed. The two extra releases are correctness fixes a
   # consumer feels, both reported by the openstack-nova-operator-kog session and CLOSED upstream:
   #   #322 a populated spec object compared EQUAL to an EMPTY remote object, so
