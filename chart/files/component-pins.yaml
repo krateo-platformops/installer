@@ -8439,7 +8439,14 @@ components:
   # ORDERING, LOAD-BEARING: every cluster MUST run 0.2.6 BEFORE any future 0.3.0, because 0.3.0
   # moves the CRDs into templates/ and that Job is what hands them to Helm first. A 0.3.0 pin that
   # skips 0.2.6 is a refusal, not a judgement call.
-  version: 0.2.6
+  # 0.4.0: released in lockstep with keycloak 0.4.0, with NO operator change of its own. It REMOVES
+  #   two values keys, crdOwnershipBridge.enabled and crdOwnershipBridge.image -- harmless here,
+  #   verified rather than assumed: componentValues.keycloak-operator never declared them, so no CR
+  #   could have been setting them and the new closed schema cannot reject anything we emit.
+  #   NOT declared as a version line with `keycloak`: one tag publishing both is the criterion, and
+  #   that is a question for its author rather than an inference from two matching numbers -- the
+  #   agentgateway-controller case showed a version that tracks a sibling and carries no content.
+  version: 0.4.0
   upstream: true
   tier: platform
   feature: keycloak
@@ -8461,7 +8468,18 @@ components:
   repo: oci://ghcr.io/krateo-blueprints/charts
   # 0.2.6 adds an opt-in serving certificate, off by default -- nothing changes for an install that
   # does not ask for it.
-  version: 0.2.6
+  # 0.4.0: adds keycloak.http.relativePath, rendered as Keycloak's http-relative-path (the operator
+  #   CRD has no native field for it). The render REFUSES unless keycloak.hostname ends with the same
+  #   path. Declared in componentValues in THIS SAME change, with the chart's pattern mirrored
+  #   (^(/[^?#\s]*[^/?#\s])?$ -- verified to accept /keycloak and '' and to reject keycloak,
+  #   /keycloak/, /key?x, /key#x and a bare /) and NO installer default.
+  #   WHY IT IS NEEDED AT ALL: on a gatewayMode=path cluster, exposure.hosts and exposure.baseDomain
+  #   are HOST-MODE ONLY, so Keycloak cannot be given a subdomain -- it must live under a path, and
+  #   the issuer its tokens carry must stay stable whatever path a request arrives on.
+  #   Proven by its author on a disposable GKE: Keycloak CR Ready, discovery under /keycloak returns
+  #   200, root returns 404, issuer exactly <hostname>/realms/<realm>, and the operator moved
+  #   readiness to /keycloak/health/ready on 9000 by itself.
+  version: 0.4.0
   upstream: true
   requiresApiGroups:
   - k8s.keycloak.org
@@ -8506,7 +8524,24 @@ components:
   # existing auth/bootstrap componentValues carry over untouched and no widening is needed first.
   # No root or nested `required`, so it cannot wedge the umbrella the way a blueprint root
   # `required` did twice on demo today.
-  version: 0.7.3
+  # 0.8.1, NOT 0.8.0, and the difference is a drift source removed rather than documented.
+  #   0.8.0 renders auth.externalSecret.tokenEndpoint VERBATIM in both bootstrap and external-secret
+  #   mode, with a hard-coded keycloak-system default independent of keycloak.baseUrl -- so a
+  #   path-prefixed install had to set TWO keys that must agree (baseUrl and tokenEndpoint, both
+  #   carrying /keycloak) with nothing enforcing it. Its author initially told me bootstrap mode
+  #   derived it; they corrected that themselves after reading templates/externalsecret.yaml.
+  #   0.8.1 defaults tokenEndpoint to EMPTY, meaning <keycloak.baseUrl>/realms/master/protocol/
+  #   openid-connect/token with the prefix carried and no double slash; an explicit value still wins,
+  #   the derived default equals the old default byte-for-byte for the default baseUrl so existing
+  #   installs are unchanged, and it is gated by their hack/check-token-endpoint.py. So on 057 we set
+  #   ONLY keycloak.baseUrl and leave tokenEndpoint unset: a key not set cannot drift.
+  # 0.8.0 content, which 0.8.1 carries: restDefinitions.serviceaccountrolemapping, the
+  #   KeycloakServiceAccountRoleMapping RestDefinition. ITS CHART DEFAULT IS enabled: true, so this
+  #   pin emits that RestDefinition and its backing RESTActions wherever features.keycloak is on.
+  #   It REQUIRES the snowplow endpoint Secret and snowplow + authn wired into the rdc deployment.
+  #   Declared in componentValues in this same change, with no installer default. Inert on
+  #   krateo-057 today because features.keycloak is false there.
+  version: 0.8.1
   requiresApiGroups:
   - ogen.krateo.io
   - external-secrets.io
@@ -8545,7 +8580,24 @@ components:
   # `name` inside groups[] items, and oidcConfig is a CLOSED object whose types match exactly what
   # its owner published. Measured end to end by its owner through a CompositionDefinition on
   # core-provider 2.13.82: a real PKCE sign-in, 200 with groups [tenants], 403 for a non-member.
-  version: 0.3.3
+  # 0.5.0: +13 values keys in three groups, all declared in componentValues in this same change with
+  #   NO installer defaults (a default: here is materialised into the Installer CR by crdgen and
+  #   beats the chart):
+  #     ideClient.*          the PUBLIC client IDEs sign in with for /mcp (PKCE S256, loopback
+  #                          redirects). Chart default OFF, so no transient-on window on this roll.
+  #     identityLifecycle.*  identity-lifecycle's confidential client for access requests, service
+  #                          account only, holding EXACTLY roles of roleClientId. Chart default OFF.
+  #                          Needs keycloak-config-kog >= 0.8.0 for the role-mapping RestDefinition.
+  #     clients[]            additional confidential relying parties, one KeycloakClient each.
+  #   The item-level `required` on clients[] and groups[] is retained from the chart and is SAFE:
+  #   array items may require their own keys, because the requirement is only evaluated for items
+  #   somebody wrote. A root or object-level `required` is the fatal kind, and there is none.
+  #   ONE UPSTREAM INCONSISTENCY, reported: ideClient.audience's description says "REQUIRED when
+  #   enabled, no default" while the schema carries default: "". Treated as required-when-enabled.
+  #   Consumer proof from acmp: the full access-request journey passes 263/0 on disposable GKE with
+  #   identityLifecycle.enabled, identity-lifecycle 0.4.1 and authn 0.46.0, with the controller's
+  #   client and roles exactly as this chart defines them.
+  version: 0.5.0
   # THE RENDER-TIME GATE THAT MATTERS. Every object this chart emits is a KOG-generated kind in
   # keycloak.ogen.krateo.io, and those CRDs do not exist until keycloak-config-kog's oasgen
   # RestDefinitions have been reconciled. requiresApiGroups is hard-ANDed outside the $exists
