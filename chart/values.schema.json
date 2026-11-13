@@ -9221,6 +9221,22 @@
                   "title": "Enabled"
                 }
               }
+            },
+            "serviceAccount": {
+              "type": "object",
+              "title": "The Agent's generated ServiceAccount",
+              "description": "kagent creates and OWNS the Agent's ServiceAccount, so a chart cannot annotate it directly -- the annotations travel on the Agent spec as spec.declarative.deployment.serviceAccountConfig.annotations and the controller stamps them. Declared because this componentValues node is CLOSED: an undeclared key is pruned silently by the Installer CRD, kubectl still prints \"patched\", and the value is simply gone. Requires the consuming chart to emit apiVersion kagent.dev/v1alpha2, where the field exists; a v1alpha1 Agent has the whole block pruned by the apiserver with no error.",
+              "additionalProperties": false,
+              "properties": {
+                "annotations": {
+                  "type": "object",
+                  "title": "Annotations for the generated ServiceAccount",
+                  "description": "String-valued map; the chart schema rejects non-strings, so quote \"true\" and numbers. Empty or absent renders nothing. The motivating case is GKE Workload Identity, where the KSA must carry iam.gke.io/gcp-service-account before any workloadIdentityUser binding takes effect.",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
             }
           }
         },
@@ -12044,6 +12060,22 @@
                   }
                 }
               }
+            },
+            "serviceAccount": {
+              "type": "object",
+              "title": "The Agent's generated ServiceAccount",
+              "description": "kagent creates and OWNS the Agent's ServiceAccount, so a chart cannot annotate it directly -- the annotations travel on the Agent spec as spec.declarative.deployment.serviceAccountConfig.annotations and the controller stamps them. Declared because this componentValues node is CLOSED: an undeclared key is pruned silently by the Installer CRD, kubectl still prints \"patched\", and the value is simply gone. Requires the consuming chart to emit apiVersion kagent.dev/v1alpha2, where the field exists; a v1alpha1 Agent has the whole block pruned by the apiserver with no error.",
+              "additionalProperties": false,
+              "properties": {
+                "annotations": {
+                  "type": "object",
+                  "title": "Annotations for the generated ServiceAccount",
+                  "description": "String-valued map; the chart schema rejects non-strings, so quote \"true\" and numbers. Empty or absent renders nothing. The motivating case is GKE Workload Identity, where the KSA must carry iam.gke.io/gcp-service-account before any workloadIdentityUser binding takes effect.",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
             }
           }
         },
@@ -12732,6 +12764,22 @@
                 "enabled": {
                   "type": "boolean",
                   "title": "Enabled"
+                }
+              }
+            },
+            "serviceAccount": {
+              "type": "object",
+              "title": "The Agent's generated ServiceAccount",
+              "description": "kagent creates and OWNS the Agent's ServiceAccount, so a chart cannot annotate it directly -- the annotations travel on the Agent spec as spec.declarative.deployment.serviceAccountConfig.annotations and the controller stamps them. Declared because this componentValues node is CLOSED: an undeclared key is pruned silently by the Installer CRD, kubectl still prints \"patched\", and the value is simply gone. Requires the consuming chart to emit apiVersion kagent.dev/v1alpha2, where the field exists; a v1alpha1 Agent has the whole block pruned by the apiserver with no error.",
+              "additionalProperties": false,
+              "properties": {
+                "annotations": {
+                  "type": "object",
+                  "title": "Annotations for the generated ServiceAccount",
+                  "description": "String-valued map; the chart schema rejects non-strings, so quote \"true\" and numbers. Empty or absent renders nothing. The motivating case is GKE Workload Identity, where the KSA must carry iam.gke.io/gcp-service-account before any workloadIdentityUser binding takes effect.",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -15393,6 +15441,41 @@
             },
             "resources": {
               "type": "object"
+            },
+            "reviewer": {
+              "type": "object",
+              "title": "The reviewer Agent",
+              "description": "Mirrors nightly-review's OWN reviewer node exactly (create/modelConfig/name/serviceAccount), not just the key needed today. Declaring a slice would leave the others PRUNED SILENTLY, so the next person to retarget the reviewer would need a schema PR before their value took effect -- observability's point, and a better design than declaring serviceAccount alone. No defaults: the chart's own apply unless set.",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean",
+                  "title": "Create the reviewer Agent"
+                },
+                "modelConfig": {
+                  "type": "string",
+                  "title": "ModelConfig the reviewer runs on",
+                  "description": "A ModelConfig NAME, i.e. a model-configs slot's `name`. The chart default is gemini-flash."
+                },
+                "name": {
+                  "type": "string",
+                  "title": "Reviewer Agent name"
+                },
+                "serviceAccount": {
+                  "type": "object",
+                  "title": "The reviewer Agent's generated ServiceAccount",
+                  "additionalProperties": false,
+                  "properties": {
+                    "annotations": {
+                      "type": "object",
+                      "title": "Annotations for the generated ServiceAccount",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         },
