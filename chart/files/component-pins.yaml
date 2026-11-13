@@ -8597,7 +8597,22 @@ components:
   #   Consumer proof from acmp: the full access-request journey passes 263/0 on disposable GKE with
   #   identityLifecycle.enabled, identity-lifecycle 0.4.1 and authn 0.46.0, with the controller's
   #   client and roles exactly as this chart defines them.
-  version: 0.5.0
+  # 0.5.1: a DROP-IN for 0.5.0 -- it fixes the self-contradiction I reported, in the words rather
+  #   than the shape. 0.5.0's ideClient.audience said "REQUIRED when enabled, no default" while its
+  #   schema carried default: "". 0.5.1 keeps default: "" and now says what that means: empty IS
+  #   unset, and the REQUIREMENT is enforced at render (the chart refuses an empty value when
+  #   enabled). Both halves are now true, and the enforcement sits in the template with a named
+  #   failure rather than in a schema `required` -- the right layer, since an object-level `required`
+  #   in componentValues would abort the whole umbrella render.
+  #   DROP-IN VERIFIED, and the obvious test for it was VACUOUS: `helm template` renders 0 lines at
+  #   both versions (the chart emits nothing without values), so comparing the two renders compared
+  #   two empty files. The real evidence is that every render INPUT is identical: templates/ is
+  #   byte-identical by sha256; values.yaml and files/values.defaults.yaml (which _helpers.tpl reads
+  #   via .Files.Get, so it IS render-relevant) differ only in a COMMENT and PARSE identical; and
+  #   values.schema.json is identical once description/title are ignored, with a stripper control
+  #   proving a planted type change would still be seen. Only Chart.yaml and
+  #   compositiondefinition.yaml's version line change besides.
+  version: 0.5.1
   # THE RENDER-TIME GATE THAT MATTERS. Every object this chart emits is a KOG-generated kind in
   # keycloak.ogen.krateo.io, and those CRDs do not exist until keycloak-config-kog's oasgen
   # RestDefinitions have been reconciled. requiresApiGroups is hard-ANDed outside the $exists
