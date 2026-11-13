@@ -34,6 +34,47 @@
 {{/* $c.exposePort is the Service port for the backendRef; skip (don't guess :80) if a future
      expose:true pin ever omits it. */}}
 {{- if and $host $svc $c.exposePort }}
+{{/*
+  SCHEME CORRECTNESS (installer#866). agentgateway terminates TLS at the listener and forwards
+  cleartext to the backend Service. Without X-Forwarded-Proto the backend believes it was reached
+  over plain HTTP. Keycloak (proxy.headers=xforwarded, hostname https://...) then rebuilds its
+  request URI as http, so a browser POST carrying an https Origin fails its same-origin check with
+  403 {"error":"Invalid origin"} and logs "Non-secure context detected". Measured on demo: an https
+  Origin got 403, an http Origin got 400 invalid_grant (i.e. it passed the origin check), and the
+  same request made in-cluster WITH X-Forwarded-Proto: https also passed. It affects anything doing
+  a CORS-checked POST from its own origin -- Keycloak's account and admin consoles first.
+
+  WHY THE FILTER CANNOT GO ON ONE UNSECTIONED ROUTE. HTTPRoute filters are per-RULE, but listener
+  attachment is per-parentRef. A route with no sectionName attaches to EVERY listener whose hostname
+  matches -- including the cleartext `http` listener, which has no hostname and therefore matches all
+  of them (measured on demo: attachedRoutes=5 on `http`). A blanket "set X-Forwarded-Proto: https"
+  would then assert https on genuinely plain-HTTP requests, which is worse than the bug.
+
+  So each exposed component emits TWO routes when its HTTPS listener can be identified:
+    <name>        sectionName -> that listener, carrying the forwarded headers
+    <name>-http   sectionName -> the cleartext listener, carrying a 301 to https
+  The listener NAMES are not assumed: they are read from the live Gateway and matched on hostname,
+  because the Gateway's listeners come from values (agentgateway's gateway.yaml renders
+  `.Values.gateway.listeners`), so a convention like `https-<component>` would be wrong -- the
+  frontend's listener is `https-portal`, not `https-frontend`.
+
+  DEGRADES TO TODAY'S BEHAVIOUR. If the Gateway cannot be read (helm template, dry-run, lookup
+  disabled) or no HTTPS listener matches this host, the original single unsectioned route is emitted
+  unchanged. This must stay true: it is what keeps a render-only CI run and a BYO Gateway working.
+*/}}
+{{- $gw := lookup "gateway.networking.k8s.io/v1" "Gateway" $gwNs $gwName }}
+{{- $tlsListener := "" }}
+{{- $plainListener := "" }}
+{{- if $gw }}
+{{- range $l := (($gw.spec | default dict).listeners | default list) }}
+{{- if and (eq ($l.protocol | toString) "HTTPS") (eq ($l.hostname | default "" | toString) $host) }}
+{{- $tlsListener = $l.name }}
+{{- end }}
+{{- if and (eq ($l.protocol | toString) "HTTP") (not $l.hostname) }}
+{{- $plainListener = $l.name }}
+{{- end }}
+{{- end }}
+{{- end }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -48,12 +89,57 @@ spec:
   parentRefs:
     - name: {{ $gwName }}
       namespace: {{ $gwNs }}
+      {{- if $tlsListener }}
+      sectionName: {{ $tlsListener }}
+      {{- end }}
   hostnames:
     - {{ $host | quote }}
   rules:
-    - backendRefs:
+    - {{- if $tlsListener }}
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            {{/* `set`, not `add`: a client-supplied X-Forwarded-Proto must not be able to append a
+                 second value and make the backend read the wrong one. The gateway is the only
+                 authority on the scheme it terminated. */}}
+            set:
+              - name: X-Forwarded-Proto
+                value: https
+              - name: X-Forwarded-Port
+                value: "443"
+              - name: X-Forwarded-Host
+                value: {{ $host | quote }}
+      {{- end }}
+      backendRefs:
         - name: {{ $svc }}
           port: {{ $c.exposePort }}
+{{- if and $tlsListener $plainListener }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $c.name }}-http
+  namespace: {{ $ns }}
+  labels:
+    krateo.io/exposed-component: {{ $c.name }}
+spec:
+  parentRefs:
+    - name: {{ $gwName }}
+      namespace: {{ $gwNs }}
+      sectionName: {{ $plainListener }}
+  hostnames:
+    - {{ $host | quote }}
+  rules:
+    {{/* 301, not a forward. Previously this host was served on :80 by forwarding to the backend with
+         no scheme information at all; that is exactly the bug above. A permanent redirect is the
+         only honest answer on a cleartext listener for a host whose TLS listener exists. */}}
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            port: 443
+            statusCode: 301
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

@@ -1,0 +1,4 @@
+# helm-unittest suites are development-time only. Without this they are packaged into the
+# released chart: `helm package` includes every file under the chart dir that is not ignored,
+# and there was no .helmignore here at all before (verified: the file did not exist).
+tests/
