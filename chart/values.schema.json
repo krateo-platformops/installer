@@ -20127,6 +20127,110 @@
               }
             }
           }
+        },
+        "zendesk-organisations": {
+          "type": "object",
+          "title": "Zendesk organisations",
+          "description": "One ZendeskRequestConfiguration per entry, plus the Role/RoleBinding that let an organisation's requester groups use it. Renders AFTER zendesk-kog, whose RestDefinition generates zendeskrequestconfigurations.zendesk.ogen.krateo.io; the pin expresses that as deps: [zendesk-kog] and requiresApiGroups: [zendesk.ogen.krateo.io]. Copied verbatim from the chart's own values.schema.json at tag 0.2.4, which has 0 `required` and 0 `default` at any depth, so an empty organisations list never blocks an umbrella render and nothing is materialised into the Installer CR. An incomplete entry fails rendering with a message naming it, which is the chart's own guard rather than a schema one. The access token Secret is created by an administrator in the organisation's namespace; the chart only names it.",
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            },
+            "organisations": {
+              "type": "array",
+              "description": "One ZendeskRequestConfiguration per entry. An empty list renders nothing.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "The Configuration's name, a DNS-1123 label."
+                  },
+                  "namespace": {
+                    "type": "string",
+                    "description": "The organisation's namespace, where its requests live."
+                  },
+                  "createNamespace": {
+                    "type": "boolean",
+                    "description": "Render the namespace. KEPT on uninstall (helm.sh/resource-policy: keep), so a reinstall must reuse the same release name and namespace, or set this false the second time."
+                  },
+                  "tokenSecretRef": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "The Secret, in the organisation's namespace, holding its end-user Zendesk access token. Created by an administrator; the chart only names it.",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "key": {
+                        "type": "string",
+                        "description": "The Secret key, access_token in the chart."
+                      }
+                    }
+                  },
+                  "requesterGroups": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Groups granted zendeskrequests get/list/watch/create and zendeskrequestconfigurations get/list in the namespace."
+                  }
+                }
+              }
+            },
+            "resourceGroup": {
+              "type": "string",
+              "description": "zendesk-kog's resourceGroup. The chart ships zendesk.ogen.krateo.io, which is the group 057 serves; no installer default here, so the chart governs."
+            },
+            "configurationVersion": {
+              "type": "string",
+              "description": "The served ZendeskRequestConfiguration version. The chart ships v1alpha1, which is what 057 serves."
+            }
+          }
         }
       }
     },
