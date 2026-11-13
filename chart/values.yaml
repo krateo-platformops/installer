@@ -689,20 +689,20 @@ componentValues:
       webhook:
         enabled: false
     plugin:
-      # PIN THE IMAGE TAG EXPLICITLY. The chart's values.yaml sets plugin.image.tag to the literal
-      # placeholder `CHART_VERSION`, but its values.schema.json declares that same field with
-      # `default: "0.1.0"` -- a tag that WAS NEVER PUBLISHED (the registry holds 0.1.1, 0.2.0,
-      # 0.2.1, 0.2.2, not 0.1.0). crdgen carries a component chart's schema defaults into the
-      # generated Composition CRD, so the CR materializes tag 0.1.0, and an explicit CR value beats
-      # the chart's own values default. Result on 057 at 0.3.618: ImagePullBackOff, NotFound.
-      # Setting it here is what componentValues is for -- the installer stating the image it wants
-      # rather than inheriting a stale default.
-      # COUPLING, deliberately accepted and flagged: this now tracks the PLUGIN version, so the next
-      # zendesk-kog bump must move this line too. acmp is fixing the schema default; once a release
-      # resolves its own tag, DELETE this key and let the chart decide.
-      # Verified present in the registry before setting: 0.2.2 exists, 0.1.0 does not.
-      image:
-        tag: 0.2.2
+      # The plugin image tag is NOT set here any more. 0.2.2 and earlier shipped a stale schema
+      # default (`0.1.0`, an image never published) which crdgen materialized into the Composition
+      # CR, beating the chart's own values and producing ImagePullBackOff -- see 0.3.619. acmp fixed
+      # it at source in 0.2.3: values.yaml now carries `tag: ""`, the template resolves
+      # `tag | default .Chart.AppVersion`, and the SCHEMA CARRIES NO DEFAULT so crdgen cannot
+      # materialize one. VERIFIED by rendering the published 0.2.3 chart: with no override it emits
+      # plugin:0.2.3, an explicit tag still wins (control), and plugin:0.2.3 exists in the registry
+      # while plugin:0.1.0 does not.
+      #
+      # REMOVING THIS KEY HERE IS NOT ENOUGH ON A LIVE CLUSTER. components-patch.json is an
+      # RFC-7386 merge patch, so an OMITTED key is PRESERVED: 057's CR still carries
+      # componentValues.zendesk-kog.plugin.image.tag "0.2.2" and will keep it. The roll that takes
+      # this tag MUST also carry `componentValuesUnset: [zendesk-kog.plugin.image.tag]`, which puts
+      # an explicit null into the patch. Asserted after the roll by reading the pod's image.
       # Receives Zendesk webhook events; defaults ON and needs the signing Secret. Off with the
       # webhook kind. NOTE the plugin DEPLOYMENT itself has no guard and always renders -- only the
       # receiver is switched off here.
