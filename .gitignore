@@ -11,3 +11,9 @@ __pycache__/
 # the only "token" string is the serviceaccounts/token RESOURCE NAME), but it is not
 # ours and a plain `git add .` would commit all of it into a shared repo.
 .kube/
+
+# A stray `config` was committed by `git add -A` on 2026-11-13 (installer#872): a
+# 20k-line copy of chart/values.schema.json left behind by a failed edit attempt.
+# It is not a credential -- it is the schema -- but 1MB of junk reached main and
+# the 0.3.628 tag. Ignored so the same slip cannot repeat.
+/config
