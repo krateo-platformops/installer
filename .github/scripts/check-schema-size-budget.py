@@ -58,71 +58,93 @@ import sys
 
 SCHEMA = "chart/values.schema.json"
 
-# Measured on krateo-057's live Installer CRD, 2026-11-13. See the module docstring.
-COMPILE_RATIO = 0.96
+# WALL 1 -- the one that actually binds. core-provider writes this schema into a per-version
+# ConfigMap, `installers-<version>-jsonschema-configmap`, PRETTY-PRINTED, i.e. essentially this file
+# byte-for-byte. A ConfigMap cannot exceed 1 MiB. Measured on krateo-057, 2026-11-13:
+#     installers-v0-3-633-jsonschema-configmap   1,041,069 bytes
+#     this file at tag 0.3.633                   1,041,058 bytes
+# They agree within 11 bytes, so the ON-DISK size of this file is the quantity to guard. The live
+# history: 0.3.633 fitted with 7,518 to spare; 0.3.634 was 807 OVER and its ConfigMap was REJECTED,
+# which left v0-3-634 wedged in the CRD next to v0-3-633 and only THEN produced the etcd error.
+CONFIGMAP_LIMIT = 1_048_576
+
+# WALL 2 -- etcd/apiserver request size, reached only once wall 1 has already wedged a version. A CRD
+# carries a full copy of the COMPILED schema per SERVED version; `vacuum` is an unserved storage
+# placeholder and cannot absorb the bulk, because a served version must carry its own schema in
+# spec.versions[].schema.
+APISERVER_LIMIT = 1_572_864
 VACUUM_BYTES = 7_947
-APISERVER_LIMIT = 1_572_864          # 1.5 MiB, the etcd/apiserver request ceiling
+COMPILE_RATIO = 0.96        # compiled-per-version / minified; measured 0.96 at both 0.3.633 and 0.3.634
 
-# Headroom budget for ONE compiled served version. 2026-11-13: the live versions were 596,630 and
-# 601,964 bytes and main projected to ~607,500, so 700,000 is about 15% of room — enough for several
-# ordinary component nodes and not enough to hide a large one.
-BUDGET_BYTES = 700_000
+# Budget under wall 1. 0.3.633 fitted with 7,518 bytes spare and 0.3.634 exceeded by 807, so the
+# usable range is narrow; a budget below the hard limit is what turns a wedged cluster into a
+# review-time warning.
+BUDGET_BYTES = 1_030_000
 
-
-def projected(schema_bytes: int) -> int:
-    """Compiled size of ONE served version, from the normalised schema size."""
-    return int(schema_bytes * COMPILE_RATIO)
+def projected(minified_bytes: int) -> int:
+    """Compiled size of ONE served CRD version, from the minified schema size."""
+    return int(minified_bytes * COMPILE_RATIO)
 
 
 def crd_bytes(per_version: int, n_served: int) -> int:
     return VACUUM_BYTES + per_version * n_served
 
 
-def verdict(schema_bytes: int):
-    """(ok, per_version, lines) — pure, so the self-test can exercise it without a file."""
-    per = projected(schema_bytes)
-    ok = per <= BUDGET_BYTES
+def verdict(disk_bytes: int, minified_bytes: int):
+    """(ok, lines) -- pure, so the self-test exercises it without a file."""
+    per = projected(minified_bytes)
+    ok = disk_bytes <= BUDGET_BYTES
     lines = [
-        f"{SCHEMA} normalised: {schema_bytes:,} bytes",
-        f"projected compiled per served version: {per:,} bytes "
-        f"(x{COMPILE_RATIO} measured) against a budget of {BUDGET_BYTES:,}",
+        "WALL 1  the per-version schema ConfigMap (the binding one)",
+        f"  {SCHEMA} on disk: {disk_bytes:,} bytes",
+        f"  hard limit {CONFIGMAP_LIMIT:,}   headroom {CONFIGMAP_LIMIT - disk_bytes:+,}   "
+        f"budget {BUDGET_BYTES:,}",
+        "WALL 2  the CRD object / etcd request",
+        f"  minified {minified_bytes:,} -> compiled per served version ~{per:,} (x{COMPILE_RATIO})",
     ]
     for n in (1, 2, 3):
         tot = crd_bytes(per, n)
-        flag = "" if tot <= APISERVER_LIMIT else "  <-- EXCEEDS the apiserver limit"
-        lines.append(f"  CRD at {n} served version(s): {tot:>9,} bytes{flag}")
-    lines.append(
-        f"apiserver/etcd limit {APISERVER_LIMIT:,}. core-provider ADDS the new version before "
-        f"pruning the old, so a roll transiently needs the n+1 row."
-    )
-    return ok, per, lines
+        lines.append(f"    at {n} served version(s): {tot:>9,}"
+                     + ("" if tot <= APISERVER_LIMIT else "  <-- over the apiserver limit"))
+    lines.append(f"  hard limit {APISERVER_LIMIT:,}. core-provider ADDS the new version before pruning "
+                 f"the old, so a roll transiently needs the n+1 row.")
+    return ok, lines
 
 
 def self_test() -> int:
-    """The instrument must detect something. Both directions, and the boundary."""
-    cases = [
-        ("a schema well under budget", 400_000, True),
-        ("a schema just under budget", int(BUDGET_BYTES / COMPILE_RATIO) - 1_000, True),
-        ("a schema just over budget", int(BUDGET_BYTES / COMPILE_RATIO) + 1_000, False),
-        ("a schema far over budget", 2_000_000, False),
-    ]
+    """The instrument must detect something: both directions, and the measured history."""
     bad = 0
-    for label, size, want in cases:
-        got, per, _ = verdict(size)
-        mark = "ok " if got == want else "FAIL"
+
+    def case(label, disk, want):
+        nonlocal bad
+        got, _ = verdict(disk, 600_000)
         if got != want:
             bad += 1
-        print(f"  {mark} {label}: {size:,} -> per-version {per:,}, ok={got} (wanted {want})")
-    # and the arithmetic that explains the 057 failure must reproduce it
-    per_057 = 601_964
-    three = crd_bytes(per_057, 3)
-    two = crd_bytes(per_057, 2)
+        print(f"  {'ok ' if got == want else 'FAIL'} {label}: {disk:,} ok={got} (wanted {want})")
+
+    case("comfortably under budget", 900_000, True)
+    case("just under budget", BUDGET_BYTES - 1, True)
+    case("just over budget", BUDGET_BYTES + 1, False)
+    case("over the hard ConfigMap limit", CONFIGMAP_LIMIT + 1, False)
+
+    for tag, disk, fits in (("0.3.632", 1_038_979, True), ("0.3.633", 1_041_058, True),
+                            ("0.3.634", 1_049_383, False), ("0.3.637", 1_060_819, False)):
+        got = disk <= CONFIGMAP_LIMIT
+        if got != fits:
+            print(f"  FAIL {tag}: hard-limit verdict {got}, the cluster says {fits}")
+            bad += 1
+        else:
+            print(f"  ok  {tag}: {disk:,} vs {CONFIGMAP_LIMIT:,} -> "
+                  f"{'fits' if got else 'exceeds'}, matching the cluster")
+
+    two, three = crd_bytes(601_964, 2), crd_bytes(601_964, 3)
     if not (two <= APISERVER_LIMIT < three):
-        print(f"  FAIL the 057 arithmetic does not reproduce: 2x={two:,} 3x={three:,}")
+        print(f"  FAIL wall 2 does not reproduce: 2x={two:,} 3x={three:,}")
         bad += 1
     else:
-        print(f"  ok  reproduces the 057 failure: 2 served={two:,} fits, 3 served={three:,} does not")
-    print(f"  self-test: {len(cases) + 1} assertions, {bad} failing")
+        print(f"  ok  wall 2 reproduces: 2 served={two:,} fits, 3 served={three:,} does not")
+
+    print(f"  self-test: 9 assertions, {bad} failing")
     return 1 if bad else 0
 
 
@@ -149,19 +171,23 @@ def main(argv) -> int:
               f"check verified nothing. That is not a pass.")
         return 2
 
-    size = len(json.dumps(doc))
-    ok, per, lines = verdict(size)
+    disk = len(open(SCHEMA, "rb").read())
+    mini = len(json.dumps(doc, separators=(",", ":")).encode())
+    ok, lines = verdict(disk, mini)
     print(f"check-schema-size-budget: {len(props)} component nodes examined")
     for line in lines:
         print(f"  {line}")
     if ok:
-        print(f"check-schema-size-budget: OK — {per:,} <= {BUDGET_BYTES:,}")
+        print(f"check-schema-size-budget: OK — on disk {disk:,} <= {BUDGET_BYTES:,}")
         return 0
-    print(f"::error::check-schema-size-budget: the compiled CRD version would be {per:,} bytes, over "
-          f"the {BUDGET_BYTES:,} budget. Do NOT raise the budget as the first move: drop description "
-          f"text that duplicates the chart's own, check whether every leaf needs declaring (an "
-          f"undeclared leaf is unsettable, not broken), or consider registerOnly for a large "
-          f"component. Raising BUDGET_BYTES spends headroom, so record the reason next to it.")
+    print(f"::error::check-schema-size-budget: {SCHEMA} is {disk:,} bytes ON DISK, over the "
+          f"{BUDGET_BYTES:,} budget (hard ConfigMap limit {CONFIGMAP_LIMIT:,}). core-provider writes "
+          f"this file PRETTY-PRINTED into installers-<version>-jsonschema-configmap; a ConfigMap over "
+          f"1 MiB is REJECTED, which wedges that version in the CRD and only then produces the etcd "
+          f"error. Measured: 0.3.633 fitted, 0.3.634 exceeded by 807 bytes and never became usable. "
+          f"Do NOT raise the budget first: drop description text duplicating the chart's own, check "
+          f"whether every leaf needs declaring (an undeclared leaf is unsettable, not broken), or ask "
+          f"whether the ConfigMap should store the schema MINIFIED, which frees about 43%.")
     return 1
 
 
