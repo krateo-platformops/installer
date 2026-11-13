@@ -1722,6 +1722,16 @@
                 }
               }
             },
+            "mcpEntry": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The MCP entry point for IDEs: /mcp on the portal's TLS listener -> the kagent controller's built-in MCP server. Admits exactly the subjects of the endpointRules entries that grant agents [\"*\"]. The chart renders it only when a platformRoutes listener carries tls. The chart's OWN default is enabled: true, so this node is the only lever that can keep /mcp closed; it deliberately carries no schema default, so leaving the key unset leaves the chart default in force.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                }
+              }
+            },
             "mcpTraffic": {
               "type": "object",
               "additionalProperties": false,

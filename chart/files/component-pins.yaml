@@ -8009,7 +8009,13 @@ components:
   # 0.2.23: the LLM budget alerts carry a description, not message. NEEDS alert-provider-crd 0.2.68.
   # 0.2.31 (#86): llm.toolHistory.truncate.newestMaxChars (default 100000) caps the newest tool result,
   # keeping its first and last 50k characters. A 1000-line pod-log read sent 400k tokens in one call.
-  version: 0.2.31
+  # 0.2.32 (#88): mcpEntry.enabled gates /mcp on the portal's TLS listener -> the kagent
+  #   controller's built-in MCP server (list_agents, invoke_agent), as 4 route-scoped objects
+  #   (HTTPRoute + STRICT JWT + Allow + Require). The CHART DEFAULTS IT TRUE, so this pin
+  #   would open an internet-facing /mcp on its own: componentValues.agentgateway-policies.mcpEntry
+  #   is declared in the same change as the only lever that can close it, and the roll carries
+  #   enabled: false until that surface is approved per cluster.
+  version: 0.2.32
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
