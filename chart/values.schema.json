@@ -16010,6 +16010,24 @@
             }
           }
         },
+        "controller-render-service": {
+          "type": "object",
+          "title": "Controller render service",
+          "description": "The POST /render preview service behind the Controller Builder. It runs the oasgen-provider IMAGE with the /bin/oasgen-render entrypoint, so its version IS oasgen's version -- it is a member of the `oasgen` line in .github/pin-version-lines.yaml, not an independent chart. Only the two keys below are declared: this node did not exist before, so nothing of this chart was ever settable from the installer and no CR can be carrying anything else. Widening later is always possible; narrowing is not.",
+          "additionalProperties": false,
+          "properties": {
+            "maxBodyMiB": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "description": "Largest POST /render body accepted, in MiB. THE CONTAINER'S MEMORY LIMIT IS DERIVED FROM THIS and must not be set independently -- parsing holds roughly 29x the document live at peak, so a cap raised without memory is a service that accepts bodies it cannot render (oasgen#628). At 64 MiB the derived limit is already ~2.4Gi for a SINGLE request. The bounds mirror the chart's own schema; the chart's `default: 4` is deliberately NOT mirrored, because crdgen materialises an installer-schema default into the Installer CR where it beats the chart's values.yaml -- a later change to the chart default would then be silently ignored on every cluster. A mirrored CONSTRAINT can only reject; a mirrored DEFAULT becomes a value."
+            },
+            "memoryLimitOverride": {
+              "type": "string",
+              "description": "Replaces the derived memory limit entirely. Empty, the chart's default, means derive from maxBodyMiB. Setting it reopens the coupling the derivation exists to close, so set it only after measuring the workload; oasgen-render still refuses to start if the cap exceeds what the limit can cover. No installer default, for the same reason as above."
+            }
+          }
+        },
         "oasgen-provider": {
           "type": "object",
           "title": "OasgenProvider",
