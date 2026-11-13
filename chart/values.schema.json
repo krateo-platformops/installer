@@ -10588,6 +10588,10 @@
                 "type": "object"
               },
               "default": []
+            },
+            "publicNamespace": {
+              "type": "string",
+              "description": "NEW in frontend 1.8.42. The namespace the portal serves PUBLIC (token-less, allow-listed) pages from, rendered into its config as PUBLIC_NAMESPACE. The chart's values.yaml defaults it to krateo-public and its own schema carries NO default, so the chart default applies unless an install overrides it here. Declared WITHOUT a `default:` for the usual reason: a default in this schema materializes into every Installer CR. It is declared at all because this node is additionalProperties:false -- without the key an operator simply could not move the public namespace, and the attempt would be PRUNED silently with kubectl still printing \"patched\"."
             }
           }
         },
