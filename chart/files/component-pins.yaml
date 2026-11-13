@@ -7331,7 +7331,7 @@ components:
   # added structural status fields and had to go first.
   # 0.1.31: co-versioned with nightly-review (lockstep). Packaged trees BYTE-IDENTICAL to 0.1.30 apart
   #   from Chart.yaml's version line. Diffed, not assumed.
-  version: 0.2.3
+  version: 0.2.4
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -7716,7 +7716,7 @@ components:
   #   Chart diff 0.1.30 -> 0.1.31 is Chart.yaml only (version + appVersion); image.tag is "" so appVersion
   #   moves the image. Both chart and image published at 0.1.31 — verified with a NUMERIC tag sort, because
   #   a lexical sort puts 0.1.9 above 0.1.31 and reads as "stuck at 0.1.9".
-  version: 0.2.3
+  version: 0.2.4
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
