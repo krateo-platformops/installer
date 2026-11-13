@@ -50,7 +50,7 @@ components:
   # pinned or rolled anywhere.
   # LOCKSTEP with authn, as its owner required. NB the CHART is authn-crdS, plural; the `chart:`
   # key carries that, and probing the pin NAME instead reports it absent.
-  version: 0.43.1
+  version: 0.45.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -348,7 +348,7 @@ components:
   # name, and nothing says why. Portal-first is not a race that heals, it is a quiet no-op.
   # (The handoff said this CRD declares NO preserve-unknown-fields; it declares four. The conclusion
   # holds anyway because none is at the path that matters -- but check the path, not the presence.)
-  version: 1.8.34
+  version: 1.8.41
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -811,7 +811,7 @@ components:
   # AUTHN_SERVICE_CRT_EXPIRES_IN) were already undeclared at 0.41.0, so that is not new.
   # The four preconditions were verified clear on BOTH clusters before the go: 0 identities carry a
   # krateo: group, and the otel agent is Ready on every node with hostPort 4318.
-  version: 0.43.1
+  version: 0.45.0
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
@@ -2782,7 +2782,7 @@ components:
   # GOOD releases. frontend has since corrected that: it also WITHHELD this defect, authored in
   # that same window. Fixing the gate shipped it. A gate failing closed for the wrong reason is
   # indistinguishable from protection while it holds.
-  version: 1.8.34
+  version: 1.8.41
   deps:
   - frontend-crd
   - authn
@@ -5108,7 +5108,7 @@ components:
   #     v1-12-41 4/8 (50%)   v1-12-42 0/8 (0%)   v0-3-413 0/6 (0%)   <- both rolled that morning
   # The 48h AGGREGATE reads a flat ~100% and hides this entirely; only the per-apiVersion split
   # shows it. Read the split, never the rollup, when judging event correlation.
-  version: 0.3.17
+  version: 0.3.18
   deps:
   - krateo-observability
   tier: observability
@@ -6060,7 +6060,7 @@ components:
   # No appVersion in this chart, so pin-ci reports n/a (no image, no component CI to resolve).
   kind: BuilderGate
   chart: builder-gate
-  version: 1.8.34
+  version: 1.8.41
   deps:
     - portal
     - kagent

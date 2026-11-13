@@ -7822,6 +7822,21 @@
                 }
               }
             },
+            "internal": {
+              "type": "object",
+              "title": "Internal listener",
+              "description": "New in authn 0.45.0. A second HTTP listener for in-cluster callers, separate from the public service port, so the session-Secret adoption path introduced in 0.45.0 is not reachable from the edge. No default is declared on purpose: the chart's own default (8090) applies unless set, and a `default` here would be written into EVERY Installer CR by the self-bootstrap.",
+              "additionalProperties": false,
+              "properties": {
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535,
+                  "title": "Internal listener port",
+                  "description": "Port for the internal listener. Chart default is 8090."
+                }
+              }
+            },
             "global": {
               "type": "object",
               "title": "Global values (injected by the Krateo composition engine)",
@@ -8364,6 +8379,12 @@
               "type": "string",
               "title": "snowplow base URL",
               "description": "Chart default is the in-cluster Service http://snowplow.krateo-system.svc:8081, so no override is needed."
+            },
+            "snowplowJqModulesConfigMap": {
+              "type": "string",
+              "description": "The name of snowplow's operator jq-modules ConfigMap (snowplow's chart: <fullname>-jq-custom-modules, snowplow-jq-custom-modules on a standard install), in this release's namespace. Mounted at /jq-modules with JQ_MODULES_PATH set, so the gate resolves `include \"custom\"` as snowplow does. Empty: built-in modules only.",
+              "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$",
+              "maxLength": 253
             },
             "remoteMCPServer": {
               "type": "object",
@@ -10280,6 +10301,60 @@
                 "httpGet": {
                   "path": "/",
                   "port": "http"
+                }
+              }
+            },
+            "login": {
+              "type": "object",
+              "title": "Login screen",
+              "description": "Optional login-screen branding, rendered as the \"login\" object of config.json. Every key is optional and off when unset; config.json carries only the keys that are set, and no \"login\" object at all when none is.",
+              "additionalProperties": false,
+              "properties": {
+                "installationName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "title": "Installation name",
+                  "description": "This installation's name, shown on the login screen as \"to Krateo PlatformOps \u00b7 <name>\"."
+                },
+                "requestAccountUrl": {
+                  "type": "string",
+                  "minLength": 1,
+                  "title": "Request-account URL",
+                  "description": "Target of the login screen's \"Request an account\" link, which is shown only when this is set: an absolute https URL, or a same-origin path starting with '/'.",
+                  "pattern": "^(https://[^/\\\\\\s?#]+([/?#]\\S*)?|/([^/\\\\\\s]\\S*)?)$"
+                },
+                "logoUrl": {
+                  "type": "string",
+                  "minLength": 1,
+                  "title": "Logo URL",
+                  "description": "Login-panel logo: an absolute URL or a path the frontend serves. Unset: the bundled Krateo logo."
+                },
+                "logoAlt": {
+                  "type": "string",
+                  "minLength": 1,
+                  "title": "Logo alt text",
+                  "description": "Alt text for the logo."
+                },
+                "headline": {
+                  "type": "string",
+                  "minLength": 1,
+                  "title": "Headline"
+                },
+                "subtitle": {
+                  "type": "string",
+                  "minLength": 1,
+                  "title": "Subtitle"
+                },
+                "highlights": {
+                  "type": "array",
+                  "title": "Highlights",
+                  "description": "Up to five short lines of copy.",
+                  "maxItems": 5,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  }
                 }
               }
             },
