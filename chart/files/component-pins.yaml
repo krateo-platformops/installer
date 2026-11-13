@@ -7742,6 +7742,32 @@ components:
   feature: specialistAgents
 - name: agentgateway-controller
   kind: AgentgatewayController
+  # DO NOT CHASE THIS VERSION. 0.2.0 is current on purpose, and the gap to agentgateway-policies'
+  # number is NOT drift. This chart lives in the agentgateway-policies repo, and release-oci.yaml --
+  # the org's canonical workflow, byte-identical across all repos -- publishes every first-class
+  # chart in a repo on every tag. So every policies tag re-publishes this chart with only `version`
+  # and `sources` stamped. Its version therefore carries NO content signal.
+  #
+  # Measured 2026-11-13, 0.2.0 vs 0.2.32: Chart.yaml (version + the sources URL) and Chart.lock
+  # (timestamp) differ; EVERYTHING else is byte-identical. Across the 9 CRDs it owns
+  # (AgentgatewayBackend/Model/Parameters/Policy + Gateway API's GRPCRoute, Gateway, GatewayClass,
+  # HTTPRoute, ReferenceGrant): x-kubernetes-validations 737 both, rule 1165 both, required 740
+  # both, enum 307 both (structural walk, scanner checked against planted keywords). appVersion
+  # 1.4.1 both; subchart deps identical both (gateway-api-crds 0.7.0, agentgateway-crds v1.4.1,
+  # agentgateway v1.4.1); values.yaml delta empty. Confirmed by its owner: git log 0.2.0..0.2.32 --
+  # helm/agentgateway-controller is EMPTY across all 33 tags, so no intermediate changed it either.
+  #
+  # Pinning it anyway is not free: a version bump migrates the composition in place and churns the
+  # cdc, across NINE CLUSTER-SCOPED CRDs including Gateway API's own, for zero content change.
+  #
+  # THE SIGNAL that a controller release actually matters, since the version is not one:
+  #   git log <pinned>..<tag> -- helm/agentgateway-controller     (in krateo-agentiko/agentgateway-policies)
+  # or a change to appVersion or to the three subchart pins above. Its last real content change is
+  # #42 (3ddabd4, 2026-09-09), which is BEFORE 0.2.0.
+  #
+  # Giving the controller its own tag line, or an org-wide skip-unchanged rule, is Diego's call --
+  # patching release-oci.yaml in one repo would break its byte-identical property. Documented
+  # upstream in krateo-agentiko/agentgateway-policies#91.
   version: 0.2.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   tier: platform
