@@ -537,13 +537,51 @@ componentValues:
   # The agent charts themselves default to kagent's inert default-model-config, a reference that
   # always resolves — so a slot rename can never leave an agent pointing at nothing.
 
-  # NOTE (2026-09-11): every fleet agent below NAMES the gemini-flash slot. On this project's Vertex
-  # both slots resolve to the SAME model (gemini-flash -> gemini-3.8-flash, gemini-pro -> gemini-3.8-flash;
-  # no current-generation pro is served), so naming `gemini-pro` was a silent lever — a change to
+  # NOTE (2026-11-13): every fleet agent below NAMES the gemini-flash slot. All THREE slots resolve
+  # to the SAME model (gemini-flash, gemini-pro and gemini-flash-low -> gemini-4-hydrogen; no
+  # current-generation pro is served), so naming `gemini-pro` was a silent lever — a change to
   # models.pro.model would have relocated the whole fleet with no signal. The `gemini-pro` slot stays
   # DEFINED but UNREFERENCED (do NOT retire it) — reserved so a real reasoning tier has somewhere to
   # land. The `pro-tier candidate:` lines below record which agents would benefit from that stronger
   # model (reasoning/authoring work) — i.e. the ones to move back when such a tier exists.
+
+  # The model each SLOT resolves to. The agents below name slots (`gemini-flash`); this is the only
+  # place the underlying model id is chosen. Set on 2026-11-13, moving all three slots together from
+  # the chart's default `gemini-3.8-flash` to `gemini-4-hydrogen`.
+  #
+  # ALL THREE, not just `flash`, and deliberately: model-configs 0.1.2 defaults every slot to the
+  # same model, so moving only the referenced one would silently make `pro` and `flash-low` diverge
+  # from it. `pro` is DEFINED but UNREFERENCED (reserved for a real reasoning tier).
+  #
+  # `flashLow` additionally carries `reasoningEffort: low`, which is NOT declarable here (per-slot
+  # properties are name/model/provider only) and does not need to be: setting `model` alone
+  # deep-merges, so the chart's own value is untouched. VERIFIED by rendering model-configs 0.1.2
+  # with these three overrides and with none, both on the ROUTE PATH -- the only path that emits it:
+  #   overrides:  gemini-flash/pro gemini-4-hydrogen  gemini-flash-low gemini-4-hydrogen + effort low
+  #   control:    gemini-flash/pro gemini-3.8-flash   gemini-flash-low gemini-3.8-flash  + effort low
+  # so the model id is the ONLY difference. The control also reproduces krateo-057's live objects
+  # exactly, which is what makes the render trustworthy rather than merely green.
+  #
+  # `reasoningEffort` is emitted only when agentgateway's modelRoute is on, and that same branch is
+  # what forces `provider: "OpenAI"` -- which is why the LIVE objects say OpenAI rather than Gemini.
+  #
+  # `provider` IS NOT TOUCHED. The ModelConfig CRD carries 30 CEL rules, and the ones that bite are
+  # all provider-consistency rules of the form `has(self.<x>) && provider != '<X>'`. There is NO
+  # immutability rule on `spec.model`, so this change is an ordinary update. A provider switch would
+  # be the dangerous edit, not this one.
+  #
+  # UNVERIFIED, AND THE ONE REAL RISK: that `gemini-4-hydrogen` is actually served. The model id is
+  # passed through agentgateway to its upstream, and nothing in this repo or the CRD validates it --
+  # a wrong id is accepted at apply time and fails at CALL time, so every agent breaks on first use
+  # with a green install. Confirm the id against the upstream before rolling anything but 057.
+  model-configs:
+    models:
+      flash:
+        model: gemini-4-hydrogen
+      pro:
+        model: gemini-4-hydrogen
+      flashLow:
+        model: gemini-4-hydrogen
 
   # pro-tier candidate: the heavy/reasoning agent of the fleet — it reads the installer's own values
   # surface and schema and reasons about a multi-component DAG.
