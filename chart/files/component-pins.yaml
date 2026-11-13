@@ -8483,3 +8483,45 @@ components:
   - portal
   tier: platform
   feature: capabilityRoles
+- name: zendesk-kog
+  # NEW COMPONENT, 0.2.1. The KOG that turns Zendesk Support resources into Kubernetes CRs, so a
+  # service-desk ticket actually reaches Zendesk. Before this, 057 had the Ticket CRD and the raise
+  # form from service-desk-page and NOTHING that delivered: a Ticket was written and no controller
+  # ever read it (measured on 057 — one Ticket with generation=1, observedGeneration absent and an
+  # empty status 90 minutes after creation, and no workload anywhere holding a watch on tickets).
+  #
+  # THE CHART DECLARES `required` AND THAT CAN WEDGE THE WHOLE UMBRELLA. Its values.schema.json has
+  # `required: [zendesk]` at the root and `required: [baseUrl]` under it. One unsatisfied `required`
+  # in ANY pinned chart fails the entire umbrella render, so every other component stops reconciling
+  # and the failure does not name this one. chart/values.yaml therefore carries a
+  # componentValues.zendesk-kog.zendesk.baseUrl default; do not remove it while the chart still
+  # declares the requirement. acmp is dropping it in 0.2.2.
+  #
+  # THREE SUB-FEATURES ARE SWITCHED OFF IN values.yaml, and all three DEFAULT ON in the chart:
+  # restDefinitions.ticket, restDefinitions.webhook and plugin.webhookReceiver are the AGENT-API
+  # path and expect credential Secrets (zendesk-api-credentials, a webhook signing Secret) that the
+  # per-customer end-user design never provides. snowplow.restActions is off too: its three
+  # RESTActions back the OLD ticket widgets through the agent API, and frontend's page reads
+  # ZendeskRequests directly. Confirmed with acmp rather than inferred.
+  #
+  # THE PLUGIN IMAGE IS PRIVATE and its Deployment has NO render guard, so it runs on every install
+  # of this component whatever the kinds do. Wired through inst.privateImageComponents
+  # (plugin.imagePullSecrets); without that it is ImagePullBackOff, not a quiet no-op.
+  #
+  # CREDENTIALS ARE NOT DECLARED HERE BY DESIGN: each customer's end-user OAuth token lives in its
+  # own Secret referenced by a per-customer ZendeskRequestConfiguration, so there is no API-token
+  # key for the installer to carry.
+  #
+  # Rendered with our values it emits exactly five objects: the plugin Deployment/Service/
+  # ServiceAccount, one ConfigMap, and ONE RestDefinition (the request kind) in ogen.krateo.io —
+  # verified by rendering the published chart at pin time, not assumed from the values.
+  kind: ZendeskKog
+  chart: zendesk-kog
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.2.2
+  requiresApiGroups:
+  - ogen.krateo.io
+  deps:
+  - oasgen-provider
+  tier: platform
+  feature: serviceDesk
