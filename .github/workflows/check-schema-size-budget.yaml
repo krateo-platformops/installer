@@ -38,6 +38,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 — was v4 (Node 20, deprecated)
+      - name: Fetch the merge target, so the ratchet can be evaluated
+        # actions/checkout does a shallow, single-branch fetch, so `git show origin/main:<path>` is
+        # unavailable and the ratchet cannot read its baseline. Measured on this gate's first CI run:
+        # it silently fell back to the absolute budget with no output saying so. A depth-1 fetch of
+        # main is enough and costs a second; the script now exits 2 (WITHHELD) rather than guessing
+        # if this step is ever removed.
+        run: git fetch --depth=1 origin main
       - name: Self-test the gate before trusting its verdict
         run: python3 .github/scripts/check-schema-size-budget.py --self-test
       - name: Assert the compiled CRD version stays within budget

@@ -229,7 +229,22 @@ def main(argv) -> int:
     disk = len(open(SCHEMA, "rb").read())
     mini = len(json.dumps(doc, separators=(",", ":")).encode())
     base = baseline_disk_bytes()
+    if base is None and disk > CONFIGMAP_LIMIT:
+        # WITHHELD. Without the merge target we cannot tell "this PR grew the schema" from "the
+        # schema was already over", so the ratchet cannot be evaluated. Reporting either verdict
+        # would be a guess, and SILENTLY falling back to the absolute budget is what this check did
+        # on its first CI run: the ratchet degraded to a stricter test with no line of output saying
+        # so, which is the exact instrument failure the rest of this repo's gates warn about.
+        print(f"::error::check-schema-size-budget: could not read {SCHEMA} at the merge target "
+              f"(origin/main or main), so the RATCHET could not be evaluated, and this file is "
+              f"{disk - CONFIGMAP_LIMIT:,} bytes over the hard ConfigMap limit. This is WITHHELD, not "
+              f"a verdict. The workflow must fetch main before running this check — see "
+              f"check-schema-size-budget.yaml.")
+        return 2
     ok, lines = verdict(disk, mini, base)
+    if base is None:
+        lines.insert(0, "  NOTE: merge target unreadable, so wall 1 is the ABSOLUTE budget, not the "
+                        "ratchet. (Only reachable when the file is already within the hard limit.)")
     if base is not None and base > CONFIGMAP_LIMIT:
         lines.insert(0, "  RATCHET MODE: the merge target is ALREADY over the 1 MiB ConfigMap limit "
                         f"({base:,}), so this check refuses only an INCREASE. Remedy: core-provider "
