@@ -123,6 +123,15 @@ components:
 - name: alert-provider
   path:
   - imagePullSecrets
+{{/* zendesk-kog's wrapper plugin runs a PRIVATE krateo-blueprints image. Its Deployment has no
+     render guard, so it runs on every install of the component regardless of which Zendesk kinds
+     are enabled -- the pull secret is mandatory, not conditional. This is the first entry on
+     krateo-blueprints rather than krateo-agentiko; the dockerconfigjson auths map is host-keyed and
+     both are ghcr.io, so they collapse into one host entry. */}}
+- name: zendesk-kog
+  path:
+  - plugin
+  - imagePullSecrets
 {{- end -}}
 
 {{/* inst.imagePullAuths — the image-pull credential REFERENCES for the private-image components, as a JSON

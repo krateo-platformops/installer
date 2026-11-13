@@ -653,6 +653,53 @@ componentValues:
   gcp-configconnector:
     operator:
       image: gcr.io/gke-release/cnrm/operator:1.158.0
+  # zendesk-kog: the end-user request path. Only rendered where features.serviceDesk is true
+  # (default false), so these defaults are inert on an install that does not enable the service desk.
+  #
+  # WHY zendesk.baseUrl IS SET HERE AND NOT LEFT TO THE CR. The chart's OWN values.schema.json
+  # declares `required: [zendesk]` at its root and `required: [baseUrl]` under it. The installer
+  # renders every component through ONE umbrella chart, so a pinned chart with an unsatisfied
+  # `required` fails the WHOLE render -- every other component stops reconciling, and the failure
+  # does not name zendesk-kog. That class of mistake froze the demo cluster twice. A value here
+  # guarantees the key is present at render time for every install that enables the feature.
+  # It is a VALUES default, not a schema `default:`, so it does NOT materialize into any Installer
+  # CR and an operator's CR value still wins. acmp is removing the chart-side `required` in 0.2.2;
+  # this block can stay regardless, but do not remove it before that lands.
+  zendesk-kog:
+    zendesk:
+      baseUrl: https://krateo.zendesk.com
+    restDefinitions:
+      # The END-USER request kind. The chart defaults this to FALSE, so it must be set explicitly.
+      request:
+        enabled: true
+        referenceFieldId: 31750115749148
+        ticketFormId: 31750463383196
+        subjectPrefix: ""
+        listMaxPages: 50
+        requestKind:
+          fieldId: 31750395634972
+          values:
+            bug: request_kind_bug
+            feature: request_kind_feature
+      # The AGENT-API kinds. BOTH default to enabled:true in the chart and expect credential Secrets
+      # that the end-user design never provides (zendesk-api-credentials, a webhook signing Secret).
+      # Left on they would render RestDefinitions whose configuration cannot resolve.
+      ticket:
+        enabled: false
+      webhook:
+        enabled: false
+    plugin:
+      # Receives Zendesk webhook events; defaults ON and needs the signing Secret. Off with the
+      # webhook kind. NOTE the plugin DEPLOYMENT itself has no guard and always renders -- only the
+      # receiver is switched off here.
+      webhookReceiver:
+        enabled: false
+    snowplow:
+      # The three RESTActions (tickets-view, ticket-comments, ticket-route) back the OLD ticket
+      # widgets through the agent API. frontend's service-desk page reads ZendeskRequests directly
+      # and the "Open in Zendesk" link was dropped, so these would reference a kind that is now off.
+      restActions:
+        enabled: false
 
 # ---------------------------------------------------------------------------
 # Component DAG. `deps` = component names whose Compositions must be Ready=True

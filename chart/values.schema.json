@@ -19289,6 +19289,323 @@
               }
             }
           }
+        },
+        "zendesk-kog": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "zendesk-kog: the KOG packaging that turns Zendesk Support resources into Kubernetes CRs. Declared as the UNION of the chart's values.yaml and its own values.schema.json, because the two DRIFT: the chart's schema omits plugin.resources.{limits,requests} while its values.yaml sets them, and this node is additionalProperties:false, so declaring only the chart's schema would leave plugin.resources unexpressible. NO `default:` on any leaf -- a default here materializes into every Installer CR, and these values are per-install (field ids are per-Zendesk-account).",
+          "properties": {
+            "zendesk": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "WARNING, read before changing: the CHART declares `required: [zendesk]` at its root and `required: [baseUrl]` under it. The installer renders every component through ONE umbrella chart, so an unsatisfied `required` fails the WHOLE render and every other component stops reconciling -- not just this one. That is why chart/values.yaml carries a componentValues.zendesk-kog.zendesk.baseUrl default: it guarantees the key is always present at render time. Do not remove it while the chart still declares the requirement. acmp is dropping it in 0.2.2.",
+              "properties": {
+                "baseUrl": {
+                  "type": "string",
+                  "description": "The Zendesk instance, e.g. https://krateo.zendesk.com. Required by the chart's own schema."
+                }
+              }
+            },
+            "resourceGroup": {
+              "type": "string",
+              "description": "API group the generated CRDs land in. Chart default zendesk.ogen.krateo.io."
+            },
+            "verbose": {
+              "type": "boolean"
+            },
+            "restDefinitions": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Which RestDefinitions the KOG emits. oasgen generates the CRDs from these AT RUNTIME, so a change here is a CRD change, not just a values change.",
+              "properties": {
+                "request": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "The END-USER request kind (ZendeskRequest). enabled defaults to FALSE in the chart, so it must be set true explicitly. Its credentials are NOT here: each customer's end-user token lives in its own Secret referenced by a per-customer ZendeskRequestConfiguration.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "listMaxPages": {
+                      "type": "integer"
+                    },
+                    "referenceFieldId": {
+                      "type": "integer"
+                    },
+                    "ticketFormId": {
+                      "type": "integer"
+                    },
+                    "subjectPrefix": {
+                      "type": "string"
+                    },
+                    "requestKind": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "fieldId": {
+                          "type": "integer"
+                        },
+                        "values": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          },
+                          "description": "Open map: Zendesk custom-field option values keyed by our request kind (bug, feature, ...)."
+                        }
+                      }
+                    }
+                  }
+                },
+                "ticket": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "The AGENT-API ticket kind. Defaults to enabled:true in the chart and expects an admin credential Secret (zendesk-api-credentials) that nobody provides on an end-user install, so it is switched OFF in chart/values.yaml.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "kind": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "webhook": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "The AGENT-API webhook kind. Same story as ticket: defaults ON, expects a signing Secret, switched OFF.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "kind": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "plugin": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The wrapper Deployment that normalizes Zendesk's request/response envelopes. Its template has NO top-level guard, so it renders on EVERY install of this component regardless of which kinds are enabled -- which is why the private image pull below is mandatory, not optional.",
+              "properties": {
+                "replicas": {
+                  "type": "integer"
+                },
+                "port": {
+                  "type": "integer"
+                },
+                "imagePullSecrets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "description": "A k8s LocalObjectReference: the name of a dockerconfigjson Secret."
+                  },
+                  "description": "The image is PRIVATE (ghcr.io/krateo-blueprints/krateo-zendesk-kog/plugin). Wired automatically from registryAuth via inst.privateImageComponents; set here only to point at a pre-existing Secret instead."
+                },
+                "image": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "repository": {
+                      "type": "string"
+                    },
+                    "tag": {
+                      "type": "string"
+                    },
+                    "pullPolicy": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "resources": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Present in the chart's values.yaml but ABSENT from the chart's own values.schema.json. Declared here so it stays expressible.",
+                  "properties": {
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "type": "string"
+                        },
+                        "memory": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "requests": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "type": "string"
+                        },
+                        "memory": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "webhookReceiver": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Receives Zendesk webhook events. Defaults ON and expects a signing Secret; switched OFF for the end-user design.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "insecureSkipVerify": {
+                      "type": "boolean"
+                    },
+                    "ticketResource": {
+                      "type": "string"
+                    },
+                    "signingSecretRef": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "key": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "auth": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The AGENT-API admin credential, used only by the ticket/webhook kinds. Both are off, so no Secret is needed.",
+              "properties": {
+                "secretName": {
+                  "type": "string"
+                },
+                "usernameKey": {
+                  "type": "string"
+                },
+                "passwordKey": {
+                  "type": "string"
+                }
+              }
+            },
+            "requestAuth": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Present in the chart's values.yaml but referenced by NO template -- verified by grepping the packaged templates at pin time. Declared only so it stays expressible if the chart starts using it. acmp is deleting it in 0.2.2.",
+              "properties": {
+                "secretName": {
+                  "type": "string"
+                },
+                "tokenKey": {
+                  "type": "string"
+                }
+              }
+            },
+            "routing": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "jq": {
+                  "type": "string"
+                }
+              }
+            },
+            "snowplow": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The RESTActions backing the OLD ticket widgets, which read through the agent API. frontend's new service-desk page reads ZendeskRequests directly and Diego dropped the Open-in-Zendesk link, so restActions is switched OFF alongside the ticket kind.",
+              "properties": {
+                "restActions": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "endpointSecretName": {
+                  "type": "string"
+                },
+                "createEndpoint": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "username": {
+                      "type": "string"
+                    },
+                    "password": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            }
+          }
         }
       }
     },
