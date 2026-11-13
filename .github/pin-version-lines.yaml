@@ -68,3 +68,22 @@ lines:
     reason: >-
       One tag publishes both charts from the nightly-review repo. An app pinned past its -crd pin
       prunes fields silently.
+
+  - name: snowplow
+    members: [snowplow, snowplow-crd]
+    # Declared at snowplow's own request, and it closed a live skew to get here: the app chart was
+    # pinned 1.12.67 while snowplow-crd sat at 1.12.65. That skew was ACCIDENTALLY HARMLESS rather
+    # than safe -- the CRD templates (helm/snowplow-crds/templates/templates.krateo.io_restactions.yaml)
+    # last changed in snowplow#1136, first released in 1.12.65, and nothing has touched them since,
+    # which I verified independently by sha256 per file: 1.12.65 and 1.12.67 differ ONLY in
+    # Chart.yaml, 4 files each. So nothing was broken, and nothing would have warned when the next
+    # CRD change landed either.
+    #
+    # snowplow-agent is NOT a member: its own repo, its own version line (1.2.6), and 1.12.71 does
+    # not require it. Asserting otherwise would make this entry a claim the gate would then enforce
+    # against an unrelated artifact.
+    reason: >-
+      One snowplow tag publishes the image AND both charts at the same version -- release-oci
+      substitutes the tag into both Chart.yamls, and helm/snowplow-crds/Chart.yaml says "the
+      installer pins both at one version". An app pinned past its -crd pin prunes fields silently,
+      and this pair had already drifted two patch versions without anything noticing.

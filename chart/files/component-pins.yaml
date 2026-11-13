@@ -509,7 +509,16 @@ components:
   # no CRD in it to move. MIND THE NAME: this chart publishes as `snowplow-crds` (PLURAL, see
   # chart:) -- probing `snowplow-crd` reports a vacuous NOT PUBLISHED at EVERY version, including
   # ones that are live and Ready on the cluster.
-  version: 1.12.65
+  # 1.12.67: CLOSES A PRE-EXISTING SKEW, content-identical. The app chart was at 1.12.67 while this
+  #   one sat at 1.12.65 -- a drift that was accidentally harmless rather than safe: verified by
+  #   sha256 per file that snowplow-crds 1.12.65 and 1.12.67 differ ONLY in Chart.yaml (4 files
+  #   each), because the CRD templates last changed in snowplow#1136, first released in 1.12.65,
+  #   and nothing has touched them since. One snowplow tag publishes the image AND both charts at
+  #   the same version (release-oci substitutes the tag into both Chart.yamls), so the versions
+  #   differing has no valid reading -- which is why the pairing is now a DECLARED version line in
+  #   .github/pin-version-lines.yaml rather than a convention. Minimum for 1.12.71: CRD content
+  #   >= 1.12.65; pin 1.12.71/1.12.71 together.
+  version: 1.12.67
   tier: platform
   feature: portal
 # 0.35.4 (2026-11-05, authn main 75aedb1): owner re-diffed both charts against 0.34.0 and
