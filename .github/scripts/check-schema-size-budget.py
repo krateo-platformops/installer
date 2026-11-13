@@ -81,6 +81,17 @@ COMPILE_RATIO = 0.96        # compiled-per-version / minified; measured 0.96 at 
 # review-time warning.
 BUDGET_BYTES = 1_030_000
 
+# THE DURABLE BUDGET, on the MINIFIED size. core-provider #485 will store the ConfigMap as compact
+# JSON (same key, same document, whitespace removed), which retires the on-disk check above: wall 1
+# then reads minified-vs-1MiB and 609 KB is comfortable. What remains binding afterwards is wall 2
+# under #484, which caps the CRD at "current + one transitional version":
+#     minified x COMPILE_RATIO x 2 + VACUUM_BYTES <= APISERVER_LIMIT
+#  => minified <= (1_572_864 - 7_947) / (0.96 x 2) ~= 814,000
+# so 780,000 keeps ~4% under that with room for an ordinary component node. This check is correct
+# both before and after #485; the on-disk one above should be DELETED once a core-provider carrying
+# #485 is pinned, and until then it is the one that actually binds.
+MINIFIED_BUDGET = 780_000
+
 def projected(minified_bytes: int) -> int:
     """Compiled size of ONE served CRD version, from the minified schema size."""
     return int(minified_bytes * COMPILE_RATIO)
@@ -93,7 +104,9 @@ def crd_bytes(per_version: int, n_served: int) -> int:
 def verdict(disk_bytes: int, minified_bytes: int):
     """(ok, lines) -- pure, so the self-test exercises it without a file."""
     per = projected(minified_bytes)
-    ok = disk_bytes <= BUDGET_BYTES
+    ok_disk = disk_bytes <= BUDGET_BYTES
+    ok_mini = minified_bytes <= MINIFIED_BUDGET
+    ok = ok_disk and ok_mini
     lines = [
         "WALL 1  the per-version schema ConfigMap (the binding one)",
         f"  {SCHEMA} on disk: {disk_bytes:,} bytes",
@@ -101,6 +114,8 @@ def verdict(disk_bytes: int, minified_bytes: int):
         f"budget {BUDGET_BYTES:,}",
         "WALL 2  the CRD object / etcd request",
         f"  minified {minified_bytes:,} -> compiled per served version ~{per:,} (x{COMPILE_RATIO})",
+        f"  minified budget {MINIFIED_BUDGET:,} (durable; binds once core-provider #485 ships) "
+        f"headroom {MINIFIED_BUDGET - minified_bytes:+,}",
     ]
     for n in (1, 2, 3):
         tot = crd_bytes(per, n)
@@ -180,6 +195,14 @@ def main(argv) -> int:
     if ok:
         print(f"check-schema-size-budget: OK — on disk {disk:,} <= {BUDGET_BYTES:,}")
         return 0
+    if not (minified_bytes_ok := mini <= MINIFIED_BUDGET):
+        print(f"::error::check-schema-size-budget: {SCHEMA} is {mini:,} bytes MINIFIED, over the "
+              f"durable budget of {MINIFIED_BUDGET:,}. That budget comes from wall 2 under "
+              f"core-provider #484, which caps the CRD at current + one transitional version: "
+              f"minified x {COMPILE_RATIO} x 2 + {VACUUM_BYTES:,} must stay under {APISERVER_LIMIT:,}. "
+              f"This one does not go away when #485 ships.")
+    if disk <= BUDGET_BYTES:
+        return 1 if not minified_bytes_ok else 0
     print(f"::error::check-schema-size-budget: {SCHEMA} is {disk:,} bytes ON DISK, over the "
           f"{BUDGET_BYTES:,} budget (hard ConfigMap limit {CONFIGMAP_LIMIT:,}). core-provider writes "
           f"this file PRETTY-PRINTED into installers-<version>-jsonschema-configmap; a ConfigMap over "
