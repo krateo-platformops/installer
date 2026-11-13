@@ -101,7 +101,7 @@ components:
   # refuses below 1.36 rather than installing a label-selector mechanism nothing can satisfy.
   # 0.28.1: co-versioned with oasgen-provider. Same k8s >= 1.36 floor; carries no part of the
   # regression fix, which is provider-side only.
-  version: 0.61.0
+  version: 0.62.0
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -4610,7 +4610,7 @@ components:
   # shows warnings distinctly from errors and arms publish only on zero problems), so newly visible
   # warnings are the preview finally telling the truth. Enforced by
   # .github/scripts/check-same-version-line.py.
-  version: 0.61.0
+  version: 0.62.0
   tier: platform
   feature: portal
   chart: controller-render-service
@@ -4724,7 +4724,7 @@ components:
   # needs a human to confirm on the provider's side that the object does not exist. First creates are
   # unaffected either way because Observe is unchanged. github-provider-kog and the oasgen-provider
   # session both confirmed 0.48.0 sits outside that blast radius, each from source.
-  version: 0.61.0
+  version: 0.62.0
   # 0.43.0, NOT the 0.42.0 this PR first proposed. The two extra releases are correctness fixes a
   # consumer feels, both reported by the openstack-nova-operator-kog session and CLOSED upstream:
   #   #322 a populated spec object compared EQUAL to an EMPTY remote object, so
