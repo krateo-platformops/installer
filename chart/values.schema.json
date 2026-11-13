@@ -15393,6 +15393,42 @@
             },
             "resources": {
               "type": "object"
+            },
+            "reviewer": {
+              "type": "object",
+              "title": "The reviewer Agent",
+              "description": "Mirrors nightly-review's own `reviewer` node exactly (create/modelConfig/name/serviceAccount), not just the keys needed today. Declaring only a slice would leave the others PRUNED SILENTLY by the Installer CRD, so the next person to retarget the reviewer would need a schema PR first. No defaults: the chart's own apply unless set.",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean",
+                  "title": "Create the reviewer Agent"
+                },
+                "modelConfig": {
+                  "type": "string",
+                  "title": "ModelConfig the reviewer runs on",
+                  "description": "A ModelConfig NAME, i.e. a model-configs slot's `name`. The chart default is gemini-flash."
+                },
+                "name": {
+                  "type": "string",
+                  "title": "Reviewer Agent name"
+                },
+                "serviceAccount": {
+                  "type": "object",
+                  "title": "The reviewer Agent's generated ServiceAccount",
+                  "additionalProperties": false,
+                  "properties": {
+                    "annotations": {
+                      "type": "object",
+                      "title": "Annotations for the generated ServiceAccount",
+                      "description": "Travels on the Agent spec as spec.declarative.deployment.serviceAccountConfig.annotations; kagent owns the ServiceAccount, so a chart cannot annotate it directly.",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         },

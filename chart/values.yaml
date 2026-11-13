@@ -582,6 +582,38 @@ componentValues:
         model: gemini-4-hydrogen
       flashLow:
         model: gemini-4-hydrogen
+      # A FOURTH SLOT, kept on the previous model, for consumers that need a STRICT output format.
+      # `models` is an open map in both this schema and the chart, so adding an alias renders one
+      # more ModelConfig and touches none of the three above (verified by render: 4 objects out,
+      # gemini-flash/pro/flash-low on gemini-4-hydrogen, gemini-flash-stable on gemini-3.8-flash).
+      #
+      # WHY IT EXISTS: gemini-4-hydrogen is SERVED and works -- observability ran one real Job from
+      # the nightly-review CronJob at 09:11:43Z and all 4 model calls completed, 77,437 input /
+      # 53,091 output tokens, no 404. But it does NOT hold a strict output contract that
+      # gemini-3.8-flash held: ReviewRun rr-20261113-0911 failed validation with "response has no
+      # `proposals` array", the reply opening with prose that restates the evidence header instead
+      # of the single JSON object the system message requires. 27,666 output tokens against 16,548
+      # on the old model, consistent with echoing a 17.7k-token input. Same chart (0.2.2) and same
+      # image as the 02:00Z run that passed, so the model is the only variable.
+      #
+      # NOT FIXED BY LOOSENING THE VALIDATOR. observability refused that and they are right: a
+      # validator that accepts prose-wrapped JSON hides exactly this class of regression.
+      # NOT FIXABLE AT THE MODEL LAYER EITHER, checked: the ModelConfig CRD has no response-format
+      # or JSON-mode field, and while spec.openAI does carry `temperature`, the model-configs chart
+      # accepts only {model,name,provider,reasoningEffort} per slot -- a per-slot `temperature` is
+      # refused by this schema (asserted as a negative control).
+      flashStable:
+        name: gemini-flash-stable
+        model: gemini-3.8-flash
+
+  # The reviewer is the one consumer with a STRICT output contract: its validator refuses a reply
+  # that is not a single JSON object with a `proposals` array, and gemini-4-hydrogen returns prose.
+  # So it stays on the previous model via the flashStable slot while the fleet moves forward.
+  # Revisit when the reviewer's prompt or the model's format adherence changes -- this is an
+  # isolation, not a fix for hydrogen's behaviour.
+  nightly-review:
+    reviewer:
+      modelConfig: gemini-flash-stable
 
   # pro-tier candidate: the heavy/reasoning agent of the fleet — it reads the installer's own values
   # surface and schema and reasons about a multi-component DAG.
