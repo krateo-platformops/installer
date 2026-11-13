@@ -11843,6 +11843,434 @@
                   }
                 }
               }
+            },
+            "accessRequest": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "VERBATIM COPY of identity-lifecycle 0.4.1's own values.schema.json properties.accessRequest, taken from the published chart. Copied rather than hand-listed because the subtree has 84 leaves and a hand list would drift from the chart silently -- componentValues.identity-lifecycle is additionalProperties:false, so a leaf we miss is PRUNED with kubectl still printing \"patched\". Checked before copying: the subtree is additionalProperties:false throughout, declares NO `required` (so it cannot wedge the umbrella render) and carries NO `default:` (so nothing materializes into every Installer CR). Re-copy it from the chart on the next identity-lifecycle bump rather than editing it here. The AccessRequest controller, the decided-by policy and the public intake. Off by default.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "namespace": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+                  "maxLength": 63
+                },
+                "createNamespace": {
+                  "type": "boolean"
+                },
+                "keycloak": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    },
+                    "realm": {
+                      "type": "string"
+                    },
+                    "issuer": {
+                      "type": "string"
+                    },
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "clientSecretRef": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "key": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "insecure": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "group": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "email": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "lifespan": {
+                      "type": "string",
+                      "pattern": "^([0-9]+(\\.[0-9]+)?(h|m|s))+$"
+                    },
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "redirectUri": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "maxStoredRequests": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "deciders": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Who may change spec.decision: members of groups, or users. Never a ServiceAccount.",
+                  "properties": {
+                    "groups": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "not": {
+                          "pattern": "^system:serviceaccount:"
+                        }
+                      }
+                    }
+                  }
+                },
+                "hubspot": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "portalId": {
+                      "type": "string",
+                      "pattern": "^[0-9]*$"
+                    },
+                    "formGuid": {
+                      "type": "string"
+                    },
+                    "formsUrl": {
+                      "type": "string",
+                      "pattern": "^https://"
+                    },
+                    "apiUrl": {
+                      "type": "string",
+                      "pattern": "^https://"
+                    },
+                    "processingConsentText": {
+                      "type": "string"
+                    },
+                    "newsletterSubscriptionTypeId": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "newsletterConsentText": {
+                      "type": "string"
+                    },
+                    "pageUri": {
+                      "type": "string"
+                    },
+                    "pageName": {
+                      "type": "string"
+                    },
+                    "tokenSecretRef": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "key": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "intake": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "route": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "hostname": {
+                          "type": "string"
+                        },
+                        "parentRef": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "type": "string"
+                            },
+                            "sectionName": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "replicas": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "serviceAccountName": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+                      "maxLength": 63
+                    },
+                    "publicBaseUrl": {
+                      "type": "string",
+                      "pattern": "^(https://[^/]+)?$"
+                    },
+                    "trustedProxies": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[0-9a-fA-F:.]+/[0-9]+$"
+                      }
+                    },
+                    "globalRatePerMinute": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "globalBurst": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "pageRatePerMinute": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "pageBurst": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "pageGlobalRatePerMinute": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "pageGlobalBurst": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "tokenChecksPerMinute": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "tokenBurst": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "holdTimeout": {
+                      "type": "string",
+                      "pattern": "^([0-9]+(\\.[0-9]+)?(ms|s))+$"
+                    },
+                    "expiredFloor": {
+                      "type": "string",
+                      "pattern": "^([0-9]+(\\.[0-9]+)?(ms|s))+$"
+                    },
+                    "maxHolds": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1024
+                    },
+                    "ratePerMinute": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "burst": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxBodyBytes": {
+                      "type": "integer",
+                      "minimum": 1024,
+                      "maximum": 1048576
+                    },
+                    "hubspotWebhook": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "secretName": {
+                          "type": "string"
+                        },
+                        "secretKey": {
+                          "type": "string"
+                        },
+                        "allowV2": {
+                          "type": "boolean"
+                        },
+                        "v2TimestampField": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "v2MaxSkew": {
+                          "type": "string",
+                          "pattern": "^([0-9]+(\\.[0-9]+)?(h|m|s))+$"
+                        },
+                        "ratePerMinute": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "burst": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      }
+                    },
+                    "resources": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "limits": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "cpu": {
+                              "type": "string"
+                            },
+                            "memory": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "requests": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "cpu": {
+                              "type": "string"
+                            },
+                            "memory": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "authn": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "pattern": "^https?://"
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+                      "maxLength": 63
+                    },
+                    "usernameCheckCRDVerified": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "confirmation": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "linkBaseUrl": {
+                      "type": "string",
+                      "pattern": "^(https://[^#]+)?$"
+                    },
+                    "ttl": {
+                      "type": "string",
+                      "pattern": "^([0-9]+(\\.[0-9]+)?(h|m|s))+$"
+                    },
+                    "maxNameChecks": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 50
+                    },
+                    "maxFinalSubmits": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 50
+                    },
+                    "resultTtl": {
+                      "type": "string",
+                      "pattern": "^([0-9]+(\\.[0-9]+)?(h|m|s))+$"
+                    },
+                    "maxStoredSubmissions": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "maxStoredConfirmations": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                },
+                "smtp": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "xoauth2",
+                        "plain"
+                      ]
+                    },
+                    "host": {
+                      "type": "string"
+                    },
+                    "port": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535
+                    },
+                    "mailbox": {
+                      "type": "string"
+                    },
+                    "fromName": {
+                      "type": "string"
+                    },
+                    "tenantId": {
+                      "type": "string"
+                    },
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "secretRef": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "key": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         },
