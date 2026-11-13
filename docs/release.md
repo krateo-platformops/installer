@@ -43,6 +43,49 @@ Component version bumps are **not** releases of those components — they are ed
 installer tag; the pins are chart content, so the new installer version carries them
 ([api](./api.md#component-pinsyaml--the-version-source-of-truth)).
 
+### Before you merge a pin: run the root-schema gate on the component you touched
+
+```sh
+python3 hack/chart-root-schema-gate.py --pins chart/files/component-pins.yaml --only <component>
+```
+
+**This step is operator-side on purpose, and nothing in a pull request does it for you.**
+`check-chart-root-schema-gate` (which does run on every PR) is the gate's OFFLINE FIXTURE SUITE:
+it guards the gate's RULES and never pulls a chart. The only check that examines the PINS
+themselves is `hack/chart-root-schema-gate.py --all`, and that runs **nightly**, because the
+pull_request token carries `contents:read` + `checks:read` and not the `packages:read` a `helm
+pull` needs — and because making every unrelated PR depend on GHCR being reachable produces a gate
+people re-run until it passes. Both reasons are recorded in
+[`nightly-chart-root-schema-all.yaml`](../.github/workflows/nightly-chart-root-schema-all.yaml).
+
+So between a pin landing and 03:00 the next morning, **nothing has checked the real chart's root
+schema**. Three charts — `agentgateway`, `cert-manager-issuers` and `external-dns` — sat latent
+until 2026-10-31 and were found only because someone ran `--all` by hand. All three were behind
+features defaulting false, which is exactly why nobody noticed: the latent cases are the ones
+nobody has installed yet.
+
+**What it catches.** core-provider injects values a composition chart's own CR does not declare —
+`global` is the observed one — so a chart whose `values.schema.json` constrains its ROOT rejects
+values nobody wrote, chart-inspector returns 500 while templating, and the composition can NEVER
+deploy. Two root keys, one class: `additionalProperties: false` without declaring `global`, and a
+root `required:` the installer's `componentValues` cannot satisfy.
+
+**Exit 2 is WITHHELD, not a pass** — nothing was examined, or a chart could not be pulled. Read it
+as a failure to measure, never as a clean result.
+
+**Two instrument traps, if you check a schema by hand instead.** Both were hit on 2026-11-13:
+
+- a walker that **enumerates paths** can never see a property of the ROOT, because the root has no
+  path — so a root `required:` is invisible to it (this is how a root `required` reached a released
+  chart with its author reporting the schema clean);
+- a walker that treats any key named `required` as the KEYWORD reports a false positive on a schema
+  that declares a PROPERTY named `required` — `krateo-keycloak-realm` 0.5.0 has both at
+  `userProfile.attributes.items`, the keyword `['name']` and a field called `required`.
+
+A `required` reachable only inside an array item is safe: it is evaluated only for items somebody
+wrote. The dangerous one is reachable without supplying an array item. Prefer the gate above to a
+hand-rolled walk; it has a validated predicate and a test suite asserting both directions.
+
 > **The chart pin is the lever only when the cluster has not overridden it.** On an install whose
 > live `Installer` CR carries its own `spec.components` list — a hand-managed or long-lived cluster
 > where that list was frozen at some earlier version — **the CR wins and the chart pin is inert.**
