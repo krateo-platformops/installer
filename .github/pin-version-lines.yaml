@@ -87,3 +87,25 @@ lines:
       substitutes the tag into both Chart.yamls, and helm/snowplow-crds/Chart.yaml says "the
       installer pins both at one version". An app pinned past its -crd pin prunes fields silently,
       and this pair had already drifted two patch versions without anything noticing.
+
+  - name: keycloak
+    members: [keycloak, keycloak-operator]
+    # Declared on EVIDENCE, not on two matching version numbers -- and the distinction matters,
+    # because agentgateway-controller is the counter-example: 0.2.0..0.2.32 is thirty-two releases
+    # whose chart is byte-identical apart from Chart.yaml, its version merely tracking a sibling in
+    # the same repo. Matching numbers prove nothing on their own.
+    #
+    # The evidence, from krateo-keycloak-blueprint's .github/workflows/release-tag.yaml rather than
+    # from its author's summary: a step named "Package every chart once" stamps and packages EVERY
+    # Chart.yaml in the repo at the tag version (`helm package --version ${VERSION}`), and a gate
+    # refuses any archive whose Chart.yaml version differs from the tag. So the operator chart CANNOT
+    # move without the keycloak chart moving, and the versions differing has no valid reading.
+    #
+    # Recorded precisely, because the first wording was looser: the operator chart has had NO change
+    # since 0.3.0 (`git log 0.3.0..0.4.0 -- helm/keycloak-operator` is empty). 0.3.0 is what REMOVED
+    # crdOwnershipBridge.enabled/.image, which is why they appeared to vanish relative to our 0.2.6
+    # pin. Harmless here: componentValues.keycloak-operator never declared them.
+    reason: >-
+      One release line in krateo-keycloak-blueprint: a single tag packages every chart in the repo at
+      the tag version, and a gate refuses an archive whose Chart.yaml version differs. The operator
+      cannot move without the keycloak chart, so a skew has no valid reading.
