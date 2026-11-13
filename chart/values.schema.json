@@ -11337,6 +11337,24 @@
                     }
                   }
                 },
+                "serviceaccountrolemapping": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "Service account role mapping",
+                  "description": "KeycloakServiceAccountRoleMapping RestDefinition: the exact set of one client's roles held by another client's service-account user. Lifecycle verbs are delegated to Snowplow RESTActions because Keycloak has no set-replace call for role mappings and addresses both the service-account user and the role-owning client only by UUID. REQUIRES the snowplow endpoint Secret (snowplow.endpointSecretName) and snowplow + authn wired into the rdc deployment -- so do not enable it on a cluster whose rdc block is not wired. New in keycloak-config-kog 0.8.0.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakServiceAccountRoleMapping RestDefinition plus its backing RESTActions. THE CHART DEFAULTS THIS TRUE, so pinning 0.8.1 emits it unless this key is set false -- and per the mcpEntry finding of 2026-11-13 a chart default is briefly in force during the roll that introduces it even when the CR carries the key, so a cluster that must never have it should get the key BEFORE the version bump, not in the same roll. No installer default here: a default: in this schema is materialised into the Installer CR by crdgen and would beat the chart."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD (chart default KeycloakServiceAccountRoleMapping)."
+                    }
+                  }
+                },
                 "user": {
                   "type": "object",
                   "additionalProperties": false,
@@ -11538,6 +11556,11 @@
                     "tlsSecretName": {
                       "type": "string",
                       "description": "Names a Secret the installer does NOT create. On krateo-demo the TLS edge is hand-installed, so this points at an object whose lifecycle is outside this chart."
+                    },
+                    "relativePath": {
+                      "type": "string",
+                      "pattern": "^(/[^?#\\s]*[^/?#\\s])?$",
+                      "description": "Serve Keycloak under a path prefix (Keycloak's http-relative-path), e.g. /keycloak: starts with /, no trailing slash; keycloak.hostname must then END with it or the chart refuses to render. Empty is the chart default and means the root. NEW IN keycloak 0.4.0 -- the operator CRD has no native field for it, so the chart renders it as a Keycloak option. REQUIRED on a gatewayMode=path cluster: exposure.hosts and exposure.baseDomain are HOST-MODE ONLY, so Keycloak cannot be given a subdomain while gatewayMode is path, and the issuer its tokens carry must stay stable whatever path a request arrives on. On krateo-057 that means hostname https://portal.krateo.dev/keycloak with relativePath /keycloak."
                     }
                   }
                 },
@@ -13814,6 +13837,165 @@
                   "description": "A STRING, unlike redirectUris and webOrigins which are arrays. The chart default is \"+\", meaning the redirect URIs are reused."
                 },
                 "groupsClaim": {"type": "string"}
+              }
+            },
+            "ideClient": {
+              "type": "object",
+              "additionalProperties": false,
+              "title": "IDE client",
+              "description": "The PUBLIC client IDEs (Claude Code, Cursor) sign in with to reach the platform's MCP endpoint: authorization code + PKCE S256, loopback redirects, preferred_username, the portal's groups claim, and `audience` in the access token's aud. New in krateo-keycloak-realm 0.5.0. Chart defaults it OFF, so there is no transient-on window on the roll that introduces it.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enabled",
+                  "description": "Render the IDE client. Chart default false."
+                },
+                "clientId": {
+                  "type": "string",
+                  "title": "Client ID",
+                  "description": "The IDE's --client-id and the MCP gateway's clientId. Chart default krateo-ide."
+                },
+                "name": {
+                  "type": "string",
+                  "title": "Display name",
+                  "description": "Shown on the consent and login pages. Chart default \"Krateo IDE (MCP)\"."
+                },
+                "audience": {
+                  "type": "string",
+                  "title": "MCP audience",
+                  "description": "The MCP resource the gateway expects in the access token's aud, BYTE-FOR-BYTE, e.g. https://portal.krateo.dev/mcp (https, lowercase host, path /mcp, no trailing slash). The chart's description calls it \"REQUIRED when enabled, no default\" while its schema carries default: \"\" -- reported upstream; treat it as required-when-enabled and set it explicitly."
+                },
+                "redirectUris": {
+                  "type": "array",
+                  "title": "Redirect URIs",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Loopback redirects; the IDE opens the port (RFC 8252 7.3). Chart default [http://localhost:*, http://127.0.0.1:*]."
+                },
+                "groupsClaim": {
+                  "type": "string",
+                  "title": "Groups claim",
+                  "description": "Token claim carrying bare group names, as for the portal client. Chart default groups."
+                }
+              }
+            },
+            "identityLifecycle": {
+              "type": "object",
+              "additionalProperties": false,
+              "title": "identity-lifecycle client",
+              "description": "identity-lifecycle's own client for access requests: confidential, service account only, secret generated once into a Secret it mounts, and its service account holding EXACTLY `roles` of `roleClientId`. Needs keycloak-config-kog >= 0.8.0 for the role-mapping RestDefinition. Chart defaults it OFF.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enabled",
+                  "description": "Render the client, its secret and the role mapping. Chart default false."
+                },
+                "clientId": {
+                  "type": "string",
+                  "title": "Client ID",
+                  "description": "identity-lifecycle's accessRequest.keycloak.clientId. Chart default identity-lifecycle."
+                },
+                "secret": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "title": "Client secret",
+                  "description": "The Secret the client secret is generated into, in the release namespace (identity-lifecycle's accessRequest.keycloak.clientSecretRef).",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "title": "Secret name",
+                      "description": "Name of the generated Secret. Chart default identity-lifecycle-idp."
+                    },
+                    "key": {
+                      "type": "string",
+                      "title": "Secret key",
+                      "description": "Key of the client secret in it. Chart default clientSecret."
+                    }
+                  }
+                },
+                "roleClientId": {
+                  "type": "string",
+                  "title": "Role client",
+                  "description": "clientId of the client that owns the roles. Chart default realm-management."
+                },
+                "roles": {
+                  "type": "array",
+                  "title": "Roles",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "EXACTLY the roles of roleClientId the service account holds; a role added by hand is removed. Chart default [manage-users, view-users, query-groups]."
+                }
+              }
+            },
+            "clients": {
+              "type": "array",
+              "title": "Additional confidential clients",
+              "description": "Confidential relying parties (e.g. Keystone), one KeycloakClient each, with a generated client secret. New in krateo-keycloak-realm 0.5.0. The item-level `required` is retained from the chart and is safe: array items may require their own keys, because the requirement is only evaluated for items somebody wrote.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "clientId",
+                  "redirectUris"
+                ],
+                "properties": {
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "redirectUris": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "webOrigins": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "postLogoutRedirectUris": {
+                    "type": "string"
+                  },
+                  "groupsClaim": {
+                    "type": "string"
+                  },
+                  "backchannelLogout": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "url": {
+                        "type": "string"
+                      },
+                      "sessionRequired": {
+                        "type": "boolean"
+                      }
+                    }
+                  },
+                  "secret": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "key": {
+                        "type": "string"
+                      },
+                      "length": {
+                        "type": "integer",
+                        "minimum": 32
+                      }
+                    }
+                  }
+                }
               }
             }
           }
