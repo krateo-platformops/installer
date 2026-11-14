@@ -119,9 +119,14 @@ TIGHTENING = ("required", "cel", "minItems", "minLength", "minimum")
 LOOSENING = ("maxItems", "maxLength", "maximum")
 
 
+def _cel_near(facts, path):
+    """Does a CEL rule sit on this node or on its array items, in this version of the schema?"""
+    return bool((facts.get(path) or {}).get("cel") or (facts.get(path + "[]") or {}).get("cel"))
+
+
 def compare(old, new):
     """[(severity, path, keyword, before, after, parent_existed)] -- severity in
-    REACHES-EXISTING / NEW-SHAPE / RELAXED / DEFAULT."""
+    REACHES-EXISTING / COST-RECHECK / NEW-SHAPE / RELAXED / DEFAULT."""
     findings = []
     for path in sorted(set(old) | set(new)):
         o, n = old.get(path) or {}, new.get(path) or {}
@@ -130,10 +135,40 @@ def compare(old, new):
             if o.get(k) == n.get(k):
                 continue
             if k == "default":
+                # DEFAULT outranks even a new path: a default on a NEW optional field is still
+                # applied to objects, so it is a VALUE arriving, not merely a shape.
                 sev = "DEFAULT"
+            elif not parent_existed:
+                # The path did not exist, so NOTHING about it can affect a stored object --
+                # whatever the keyword. The first draft only reached NEW-SHAPE through the
+                # tightening branch, so a bound on a new path fell through to RELAXED: nothing
+                # had been relaxed, and the label was simply untrue. It sat in the safe bucket
+                # either way, which is why it survived -- a wrong label that happens not to
+                # change the verdict is still a wrong label, and this tool's whole job is to
+                # say which bucket a change is in.
+                sev = "NEW-SHAPE"
             elif k in TIGHTENING or (k in LOOSENING and n.get(k) is not None and
                                      o.get(k) is not None and n[k] < o[k]):
-                sev = "REACHES-EXISTING" if parent_existed else "NEW-SHAPE"
+                sev = "REACHES-EXISTING"
+            elif (k in LOOSENING and o.get(k) is None and n.get(k) is not None
+                  and (_cel_near(new, path) or _cel_near(old, path))):
+                # A BOUND NEWLY APPEARING ON A PRE-EXISTING NODE THAT CARRIES A CEL RULE.
+                # Reported by oasgen-provider 2026-11-14 from a MEASURED case, and my first
+                # draft called this RELAXED -- the exact wrong answer. Adding maxItems to a
+                # previously unbounded array can make the apiserver's cost estimator START
+                # costing a rule it had SKIPPED, turning an O(n^2) rule into a CRD GENERATION
+                # failure. The bound looks like a tightening of the array; the breakage lands
+                # on the rule, and the CRD then does not exist at all rather than merely
+                # rejecting writes.
+                # Restricted to parent_existed: a BRAND-NEW array arriving with both a bound
+                # and a rule is costed correctly from the start -- there is no previously
+                # skipped rule to enable. Without that restriction this would fire on every
+                # ordinary additive release (authn 0.47.0's new audiences[] carries both).
+                # This tool CANNOT decide it -- cost estimation is the apiserver's. So it
+                # reports that the check is REQUIRED and exits non-zero, rather than printing
+                # a note nobody has to act on. A condition only a reader can evaluate, with
+                # nothing forcing them to, is a check that cannot fail.
+                sev = "COST-RECHECK"
             else:
                 sev = "RELAXED"
             findings.append((sev, path, k, o.get(k), n.get(k), parent_existed))
@@ -141,7 +176,8 @@ def compare(old, new):
 
 
 def report(findings, old, new):
-    order = {"REACHES-EXISTING": 0, "DEFAULT": 1, "NEW-SHAPE": 2, "RELAXED": 3}
+    order = {"REACHES-EXISTING": 0, "COST-RECHECK": 1, "DEFAULT": 2, "NEW-SHAPE": 3,
+             "RELAXED": 4}
     findings = sorted(findings, key=lambda f: (order.get(f[0], 9), f[1], f[2]))
     co = sum(1 for v in old.values() if v)
     cn = sum(1 for v in new.values() if v)
@@ -152,6 +188,14 @@ def report(findings, old, new):
         print("  %-17s %s" % (sev, bare))
         print("      crd=%s  keyword=%s" % (crd, k))
         print("      %r -> %r   parent path existed before: %s" % (before, after, existed))
+    cost = [f for f in findings if f[0] == "COST-RECHECK"]
+    if cost:
+        print()
+        print("  %d bound(s) newly added to a PRE-EXISTING node that carries a CEL rule." % len(cost))
+        print("  That can make the apiserver START costing a rule it previously SKIPPED, so an")
+        print("  O(n^2) rule becomes a CRD GENERATION failure and the CRD does not exist at all.")
+        print("  THIS TOOL CANNOT DECIDE IT -- cost estimation is the apiserver's. Render the CRD at")
+        print("  the new version and confirm generation succeeds, then record that in the pin comment.")
     worst = [f for f in findings if f[0] == "REACHES-EXISTING"]
     print()
     if worst:
@@ -161,7 +205,7 @@ def report(findings, old, new):
         print("  That is a REFUSAL unless you have counted the existing objects on every cluster.")
     else:
         print("  no tightening reaches a pre-existing shape.")
-    return 1 if worst else 0
+    return 1 if (worst or cost) else 0
 
 
 # ---------------------------------------------------------------------------------------------
@@ -276,6 +320,26 @@ def self_test():
           % ("ok  " if good else "FAIL", got7, got7b))
     if not good:
         ok = False
+
+    # ---- COST-RECHECK: oasgen-provider's measured case, which my first draft called RELAXED ----
+    RULE = [{"rule": "self.all(x, self.exists_one(y, y == x))"}]
+    arr = {"type": "array", "items": {"type": "string"}}
+    withrule = dict(arr, **{"x-kubernetes-validations": RULE})
+    cases = (
+        ("an EXISTING array WITH a CEL rule gains maxItems", _crd({"arr": withrule}),
+         _crd({"arr": dict(withrule, maxItems=64)}), "COST-RECHECK"),
+        ("an EXISTING array with NO rule gains maxItems", _crd({"arr": arr}),
+         _crd({"arr": dict(arr, maxItems=64)}), "RELAXED"),
+        ("a NEW array arriving with a rule AND a bound", _crd({"other": {"type": "string"}}),
+         _crd({"other": {"type": "string"}, "arr": dict(withrule, maxItems=64)}), "NEW-SHAPE"),
+    )
+    for label, a, b, want in cases:
+        f, _, _ = run(a, b)
+        got = sev_at(f, ".spec.arr", "maxItems")
+        good = got == want
+        print("%s  %s -> %s (want %s)" % ("ok  " if good else "FAIL", label, got, want))
+        if not good:
+            ok = False
 
     print("\nself-test: %s" % ("PASS" if ok else "FAIL"))
     return ok
