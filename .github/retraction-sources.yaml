@@ -30,3 +30,24 @@ sources:
       - frontend
       - frontend-crds
       - builder-gate
+  - repo: krateo-platformops/oasgen-provider
+    # Added 2026-11-14, AFTER their retracted-versions.yaml went live at their origin/main and not
+    # before: a listed repo whose list 404s fails closed and blocks every PR here, so the order was
+    # merge-then-list. Verified by fetching the file from their main in the same change.
+    #
+    # THE CHART NAMES ARE THEIRS, enumerated from their repo, not from my memory. I first told them
+    # "oasgen-provider and oasgen-provider-crd" and they corrected both halves: the chart is
+    # oasgen-provider-crd**s** (component `oasgen-provider-crd` maps to it), and I had omitted
+    # controller-render-service entirely. Twelve components in component-pins.yaml have a chart
+    # name differing from their component name, and `charts` here names the CHART. An entry naming
+    # a component is scoped out by this gate and retracts NOTHING, silently -- worse than absent.
+    #
+    # WHY ALL THREE when the defect is in the provider: all three are declared members of the
+    # `oasgen` version line, and check-same-version-line refuses a pin where they are not in step.
+    # Retracting only the provider would leave controller-render-service pinnable at the same bad
+    # version with the line gate confirming they are "in step" -- a gate saying "consistent" where
+    # a reader hears "safe".
+    charts:
+      - oasgen-provider
+      - oasgen-provider-crds
+      - controller-render-service
