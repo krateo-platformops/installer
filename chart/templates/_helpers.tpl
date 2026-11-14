@@ -1288,7 +1288,11 @@ every pin that does not set it renders byte-identically. With TWO orchestrators 
 (krateo-autopilot frozen at 0.7.3 and agentiko 0.8.0 during the rename) a literal emitted the SAME
 name twice: one duplicate entry and NO route for the second agent.
 
-A non-orchestrator agent is routed by its chart name, falling back to the component name.
+A non-orchestrator agent is routed by its `agentName` when set, else its chart name, else
+the component name. agentName was previously read for ORCHESTRATORS ONLY, so a non-orchestrator
+that sets it was silently routed under the wrong name -- nightly-review's Agent object is
+`nightly-review-agent` while its component and chart are both `nightly-review`, so its route
+would have pointed at a Service that does not exist.
 */}}
 {{- define "inst.subAgents" -}}
 {{- $top := index . 0 -}}
@@ -1307,7 +1311,7 @@ A non-orchestrator agent is routed by its chart name, falling back to the compon
 {{- if and (dig "agents" "k8s" "enabled" false $ap) (ne (dig "agents" "k8s" "owned" true $ap) false) }}{{- $subAgents = append $subAgents (dict "name" "k8s-agent" "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}{{- end }}
 {{- if and (dig "agents" "helm" "enabled" false $ap) (ne (dig "agents" "helm" "owned" true $ap) false) }}{{- $subAgents = append $subAgents (dict "name" "helm-agent" "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}{{- end }}
 {{- else }}
-{{- $subAgents = append $subAgents (dict "name" (default $comp.name $comp.chart) "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}
+{{- $subAgents = append $subAgents (dict "name" (default (default $comp.name $comp.chart) $comp.agentName) "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}
 {{- end }}
 {{- end }}
 {{- end }}

@@ -19,6 +19,10 @@ THE TWO BUGS THIS FOUND, both invisible until the logic became testable:
   2. k8s-agent and helm-agent were appended by EVERY orchestrator, so two orchestrators emitted
      each of those names twice as well. The agentName fix alone does not address this. The route is
      now contributed only by the orchestrator that OWNS the Agent (`owned` not false).
+  3. (2026-11-14) `agentName` was read in the ORCHESTRATOR branch only. A non-orchestrator that set
+     it was routed by chart-or-name instead -- silently, because a route IS emitted, just under a
+     name no Service answers. Found while registering nightly-review, whose component and chart are
+     both `nightly-review` while its Agent object is `nightly-review-agent`.
 """
 import os
 import shutil
@@ -95,6 +99,35 @@ CHART_NAME_WINS = {
     "componentValues": {},
     "components": [{"name": "frontend-agent", "chart": "frontend-agent-chart", "agent": True,
                     "feature": "coreAgents"}],
+}
+# agentName on a NON-orchestrator. Until 2026-11-14 the else-branch read only chart-or-name, so a
+# non-orchestrator setting agentName was routed under the WRONG name -- silently, because a route
+# IS emitted, just pointing at a Service that does not exist. CHART_NAME_WINS above is this case's
+# mirror: same shape without agentName, still routing by chart name, which is what proves agentName
+# is what changes the answer rather than something incidental to the fixture.
+AGENTNAME_WINS_OVER_CHART = {
+    "features": {"coreAgents": True},
+    "componentValues": {},
+    "components": [{"name": "frontend-agent", "chart": "frontend-agent-chart", "agent": True,
+                    "feature": "coreAgents", "agentName": "frontend-agent-routed"}],
+}
+# nightly-review's REAL pin shape: component and chart are both `nightly-review` while the chart's
+# Agent object is `nightly-review-agent` (observability confirmed metadata.name is
+# .Values.reviewer.name, default nightly-review-agent). Without agentName the route name would be
+# `nightly-review` and the HTTPRoute would resolve to nothing.
+AGENTNAME_NO_CHART_FIELD = {
+    "features": {"specialistAgents": True},
+    "componentValues": {},
+    "components": [{"name": "nightly-review", "agent": True, "feature": "specialistAgents",
+                    "agentName": "nightly-review-agent"}],
+}
+# An orchestrator's agentName must keep behaving EXACTLY as before: the change is in the else-branch
+# only, and this asserts the if-branch was not touched by accident.
+ORCH_AGENTNAME_UNCHANGED = {
+    "features": {"coreAgents": True},
+    "componentValues": {},
+    "components": [{"name": "agentiko", "agent": True, "orchestrator": True,
+                    "feature": "coreAgents", "agentName": "agentiko"}],
 }
 
 def _two_orch(ap_owned, ag_owned):
@@ -287,6 +320,12 @@ def main() -> int:
         (FEATURE_OFF, [], "the feature off -> nothing derived"),
         (NON_AGENT_ONLY, [], "a non-agent component contributes nothing"),
         (CHART_NAME_WINS, ["frontend-agent-chart"], "a non-orchestrator agent routes by CHART name"),
+        (AGENTNAME_WINS_OVER_CHART, ["frontend-agent-routed"],
+         "a non-orchestrator's agentName WINS over its chart name"),
+        (AGENTNAME_NO_CHART_FIELD, ["nightly-review-agent"],
+         "nightly-review's real shape: agentName with no chart: field"),
+        (ORCH_AGENTNAME_UNCHANGED, ["agentiko"],
+         "an ORCHESTRATOR's agentName is unchanged by the else-branch fix"),
         (HANDOVER, ["autopilot", "agentiko", "k8s-agent", "helm-agent"],
          "THE HANDOVER in ONE release: autopilot owned:false + agentiko owned:true"),
     ]
