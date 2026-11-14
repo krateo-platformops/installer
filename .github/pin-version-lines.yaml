@@ -183,3 +183,50 @@ lines:
       happens to leave the CRDs byte-identical, which the versions don't reveal; otherwise an older
       authn-crds silently prunes fields the newer app reads (0.47.0's spec.delegation.subjectTokens)
       while the write reports success.
+
+  # ---------------------------------------------------------------------------------------------
+  # The portal page line. DECLARED 2026-11-14 at frontend's request, reason quoted verbatim below.
+  # The largest line in this repo at 17 members, 18 once public-pages is pinned.
+  #
+  # I VERIFIED FRONTEND'S REASON RATHER THAN QUOTING IT. They said the portal charts share helpers
+  # by byte-identical copy and named four. Pulled all 17 charts at 1.8.118 and hashed every .tpl
+  # appearing in more than one chart -- 9 of 11 basenames are shared:
+  #
+  #   _agents-gateway.tpl   x2  BYTE-IDENTICAL   dashboard-page, portal-agents
+  #   _audit.tpl            x2  BYTE-IDENTICAL   audit-page, dashboard-page
+  #   _duration.tpl         x3  BYTE-IDENTICAL   compositions-page, observability-page, portal-agents
+  #   _facets.tpl           x3  BYTE-IDENTICAL   dashboard-page, incidents-page, reviews-page
+  #   _zendesk.tpl          x2  BYTE-IDENTICAL   incidents-page, service-desk-page
+  #   _builder.tpl          x3  DIFFER (3 hashes)  builders-page, marketplace-page, portal
+  #   _catalog.tpl          x5  DIFFER (4 hashes)  blueprints-page, builders-page, marketplace-page,
+  #                                                portal, search-page
+  #   _fetchable.tpl        x4  DIFFER (3 hashes)  compositions-page, portal, resources-page,
+  #                                                reviews-page
+  #   _review.tpl           x2  DIFFER (2 hashes)  portal, reviews-page
+  #
+  # All four of their named helpers check out exactly, _duration.tpl x3 included. Control: Chart.yaml
+  # across three page charts yields 3 distinct hashes, so the comparison can detect difference.
+  #
+  # Scope note, because I got it wrong first: with only 5 of the 17 charts pulled, _duration.tpl read
+  # as "found in 1 chart" -- that was my SAMPLE, not the line. Widened to all 17 before concluding.
+  #
+  # The four DIFFERING helpers are NOT claimed as drift: a shared basename does not imply shared
+  # code, and five independently written files may legitimately share a name. Asked frontend whether
+  # a test-facets-style drift guard covers _builder/_catalog/_fetchable/_review or only the ones they
+  # named. Either answer STRENGTHENS this line: with 9 shared-name helpers of which 4 already differ,
+  # a mixed set is even less likely to be a combination any portal CI ran.
+  #
+  # public-pages ships at the same tag and becomes an 18th member WHEN IT IS PINNED -- not before.
+  # It needs a components entry plus a features.publicPages key, both of which grow
+  # chart/values.schema.json, which check-schema-size-budget refuses outright until core-provider
+  # 2.13.95 is pinned. Listing it here now would make the line reference a component that does not
+  # exist, and a typo'd member makes the whole line vacuous.
+  - name: portal-pages
+    members: [portal, portal-agents, marketplace-page, service-desk-page, incidents-page,
+              alerts-page, dashboard-page, compositions-page, blueprints-page, resources-page,
+              search-page, builders-page, clusters-page, reviews-page, settings-page,
+              observability-page, audit-page]
+    reason: >-
+      Portal's charts are released and tested together at one tag and share helpers by
+      byte-identical copy (_facets.tpl, _agents-gateway.tpl, _duration.tpl, _zendesk.tpl) and
+      RESTActions across charts, so a mixed set is a combination no portal CI ever ran.
