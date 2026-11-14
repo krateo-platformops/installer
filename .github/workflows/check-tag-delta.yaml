@@ -48,6 +48,27 @@ jobs:
           # annotated tag OBJECT, which a shallow fetch does not bring.
           fetch-depth: 0
           fetch-tags: true
+      - name: Force-fetch the ANNOTATED tag object, not just a ref to its commit
+        # THIS STEP IS THE FIX FOR THIS GATE'S FIRST REAL FAILURE. On tag 0.3.641 the gate passed
+        # locally and failed in CI with "declares no PINS-CHANGED block" — while the tag's message
+        # carried a correct generated block, 3,308 characters of it.
+        #
+        # actions/checkout leaves the tag as a LIGHTWEIGHT ref pointing at the commit, even with
+        # fetch-depth: 0 and fetch-tags: true. The message lives on the annotated tag OBJECT, so
+        # `git tag -l --format=%(contents)` returns NOTHING and the gate read an absent message as a
+        # missing block. Fetching the tag ref explicitly and with --force replaces the lightweight
+        # ref with the real object.
+        #
+        # The gate now also WITHHOLDS (exit 2) rather than refusing (exit 1) when the message reads
+        # empty, and says to fix the fetch rather than the tag — so if this step is ever removed the
+        # failure names itself instead of sending someone to rewrite a correct tag message.
+        if: github.ref_type == 'tag' || github.event.inputs.tag != ''
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ]; then TAG="${GITHUB_REF_NAME}"; fi
+          git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          echo "tag object type: $(git cat-file -t "${TAG}")"
+          echo "message length: $(git tag -l "${TAG}" --format='%(contents)' | wc -c) chars"
       - name: Install PyYAML
         run: pip install --quiet pyyaml
       - name: The generator's own rules hold

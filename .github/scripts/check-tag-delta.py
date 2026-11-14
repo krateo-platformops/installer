@@ -47,9 +47,26 @@ def tag_message(tag):
     return r.stdout if r.returncode == 0 else None
 
 
+WITHHELD = "WITHHELD"
+
+
 def errors(tag, msg, pin_delta, dep_delta):
-    """Broken-rule sentences; [] when the tag's claim matches what it carries."""
+    """Broken-rule sentences, or the string WITHHELD; [] when the claim matches what it carries.
+
+    AN EMPTY MESSAGE IS WITHHELD, NOT A REFUSAL, and that distinction cost this gate its first real
+    run. On tag 0.3.641 it passed locally and failed in CI with "declares no PINS-CHANGED block" --
+    but the tag's message DID carry a correct generated block. actions/checkout leaves a tag as a
+    lightweight ref pointing at the commit, so `git tag -l --format=%(contents)` returns NOTHING and
+    the gate read an absent message as a missing block. Same shape as the sibling failure an hour
+    earlier: a correct measurement of the wrong object -- there, the working tree instead of the
+    commit; here, a lightweight ref instead of the annotated tag.
+    So: an empty message means the gate could not READ the claim, which is a different fact from the
+    claim being absent, and reporting the second when the first is true sends the reader to rewrite
+    a tag message that is already right.
+    """
     bad = []
+    if not (msg or "").strip():
+        return WITHHELD
     parsed = td.parse_block(msg)
     if parsed is None:
         bad.append("tag %s declares no PINS-CHANGED block. Generate one with "
@@ -124,11 +141,22 @@ def self_test():
     else:
         print("ok    falsifier: 0.3.638's REAL message is refused -- %s" % bad[0][:64])
 
-    # and a tag with no message at all
-    if not errors("T", "", pd, dd):
-        print("FAIL  falsifier: an empty tag message was accepted"); fails += 1
+    # and a tag with no message at all -> WITHHELD, which is neither a pass nor a refusal
+    got = errors("T", "", pd, dd)
+    if got != WITHHELD:
+        print("FAIL  falsifier: an empty message gave %r, wanted WITHHELD" % (got,)); fails += 1
     else:
-        print("ok    falsifier: an empty tag message is refused")
+        print("ok    falsifier: an EMPTY message is WITHHELD, not refused (it is unreadable, not absent)")
+    for blank in ("   ", "\n\n", None):
+        if errors("T", blank, pd, dd) != WITHHELD:
+            print("FAIL  falsifier: %r was not WITHHELD" % (blank,)); fails += 1
+    else:
+        print("ok    falsifier: whitespace-only and None are WITHHELD too")
+    # ...but PROSE is a refusal, because the message WAS readable and carries no block
+    if errors("0.3.638", REAL_0_3_638, ACTUAL_0_3_638, []) == WITHHELD:
+        print("FAIL  falsifier: readable prose was WITHHELD instead of refused"); fails += 1
+    else:
+        print("ok    falsifier: readable PROSE is refused, not withheld — the two are distinct")
 
     print("check-tag-delta: %s" % ("OK -- %d cases + 2 falsifiers" % len(cases) if not fails
                                    else "%d FAILURE(S)" % fails))
@@ -160,6 +188,17 @@ def main(argv):
     dd = td.delta(td.deps_at(prev), td.deps_at(tag)) or []
     msg = tag_message(tag)
     bad = errors(tag, msg, pd, dd)
+    if bad == WITHHELD:
+        print("::error::check-tag-delta: the message of tag %s is EMPTY as read by "
+              "`git tag -l --format=%%(contents)`, so the claim could not be READ. This is WITHHELD, "
+              "not a refusal: the tag may well declare its delta correctly. The usual cause is that "
+              "the checkout holds a LIGHTWEIGHT ref for the tag rather than the annotated tag "
+              "object, which carries the message. Fix the fetch, not the tag:\n"
+              "    git fetch --force origin refs/tags/%s:refs/tags/%s\n"
+              "then re-run. The delta this tag should declare is printed below." % (tag, tag, tag))
+        print("")
+        print(td.block(pd, dd))
+        return 2
     for b in bad:
         print("::error::check-tag-delta: %s" % b)
     if bad:
@@ -168,7 +207,8 @@ def main(argv):
         print(td.block(pd, dd))
         return 1
     print("check-tag-delta: OK — %s declares exactly what it carries against %s "
-          "(%d pin field change(s), %d chart dependency change(s))" % (tag, prev, len(pd), len(dd)))
+          "(%d pin field change(s), %d chart dependency change(s); message %d chars)"
+          % (tag, prev, len(pd), len(dd), len(msg or "")))
     return 0
 
 
