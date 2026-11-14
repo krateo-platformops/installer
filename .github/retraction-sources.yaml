@@ -51,3 +51,41 @@ sources:
       - oasgen-provider
       - oasgen-provider-crds
       - controller-render-service
+  - repo: krateo-platformops/portal
+    # Added 2026-11-14 AFTER this repo's pins moved off 1.8.119, and that order is the whole
+    # constraint: a listed retraction against a version main still pins fails CI CLOSED and blocks
+    # EVERY pull request here, not just a portal one. So the sequence was pin 1.8.120 (#924), then
+    # this line. frontend and I agreed it explicitly before either side moved.
+    #
+    # WHY PORTAL AND NOT frontend. I asked frontend to carry the alerts-page entry and that was
+    # wrong: their retracted-versions.yaml lists only frontend's own charts and their
+    # crdgen/retracted_test.go would refuse an alerts-page entry, rightly. The publisher of a
+    # version is the one who retracts it -- an entry's value IS its authority, which is the
+    # principle this whole per-publisher file exists to encode, and I still asked the wrong team.
+    #
+    # THEIR FIRST ENTRY IS 1.8.119 FOR alerts-page ALONE, not the line. Only alerts-page has the
+    # defect (an invalid metadata.name, so the composition cannot render); the other 16 render with
+    # 0 invalid names. Naming all 17 would assert a defect in 16 charts that are fine. It still
+    # makes "the line at 1.8.119" unpinnable, because check-same-version-line refuses a pin whose
+    # line members are out of step -- so the true defect alone is sufficient.
+    #
+    # The charts list is theirs, enumerated from their repo. portal publishes the shell, the agents
+    # chart and the 15 page charts; `charts` here names the CHART.
+    charts:
+      - portal
+      - portal-agents
+      - alerts-page
+      - audit-page
+      - blueprints-page
+      - builders-page
+      - clusters-page
+      - compositions-page
+      - dashboard-page
+      - incidents-page
+      - marketplace-page
+      - observability-page
+      - resources-page
+      - reviews-page
+      - search-page
+      - service-desk-page
+      - settings-page
