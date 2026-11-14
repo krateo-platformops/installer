@@ -62,7 +62,12 @@ def errors(annotated, generated, helpers, helmignore):
         where = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
         bad.append("%s is STALE or hand-edited: it differs from the strip of %s at line %d "
                    "(%d lines vs %d). Regenerate: python3 hack/strip-pin-comments.py %s -o %s"
-                   % (GENERATED, ANNOTATED, where + 1, len(a), len(b), ANNOTATED, GENERATED))
+                   "  ||  IF THIS PASSES LOCALLY AND FAILS IN CI, you regenerated the file but "
+                   "COMMITTED ONLY THE ANNOTATED ONE. This check reads the working tree; CI reads "
+                   "what you committed, so `git add %s` is the fix. That is how it failed on the "
+                   "first pin after it was introduced — the author's own, on installer#917."
+                   % (GENERATED, ANNOTATED, where + 1, len(a), len(b), ANNOTATED, GENERATED,
+                      GENERATED))
 
     # 2. and it is SEMANTICALLY the same document -- byte equality above could in principle be met
     #    by a stripper bug that mangles both sides identically, so parse both independently.
