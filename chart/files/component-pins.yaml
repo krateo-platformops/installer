@@ -6414,14 +6414,22 @@ components:
   # so TODAY it reports those two reasons as "unknown reason" and compiles jq with the older fork.
   # That is a real correctness gap on 057 right now, not a precaution: 1.12.69 INTRODUCED those two
   # refusals and the gate that explains them to a builder is a minor behind.
-  # THE LEG I DID NOT VERIFY, named rather than glossed: SNOWPLOW_REF, the jq modules and the gojq
-  # fork are properties of the builder-gate IMAGE, not of the chart. `helm show values` across
-  # 1.8.44 -> 1.8.45 reports ZERO path changes for all three line members, and the only
-  # snowplow-ish values are snowplowUrl and snowplowJqModulesConfigMap, neither of which carries a
-  # version. So "1.8.45 matches 1.12.70" is frontend's measurement on their artifact, not mine on
-  # ours. I am taking it because they also published the image digest
-  # (builder-gate sha256:7d39a0c0..., linux/amd64 + linux/arm64) and because the failure mode of
-  # being wrong is a gate that mislabels a reason -- not a cluster that breaks.
+  # THE SNOWPLOW ALIGNMENT IS NOT IN THE CHART, so it was read from the PUBLISHED IMAGE. `helm show
+  # values` across 1.8.44 -> 1.8.45 reports ZERO path changes for all three line members, and the
+  # only snowplow-ish values are snowplowUrl and snowplowJqModulesConfigMap, neither of which
+  # carries a version. There is therefore nothing in the chart to check it against. frontend
+  # exported the published image (sha256:7d39a0c0..., linux/amd64) -- not their build -- and read:
+  #   /app/server.cjs   SNOWPLOW_REF baked in as "1.12.70", and it is the ONLY 1.12.x string in
+  #                     the bundle, so there is no second candidate to confuse it with
+  #   /app/server.cjs   contains BOTH UserAccessFilterOnNonReadVerb and WriteRefused, the two
+  #                     stage reasons 1.12.69 introduced and that 1.8.44 reports as "unknown"
+  #   go version -m /usr/local/bin/jqcheck
+  #                     github.com/itchyny/gojq v0.12.17 => github.com/krateo-platformops/gojq
+  #                     v0.13.1, which is snowplow 1.12.70's own replace directive
+  # That is a reading of the shipped artifact rather than a claim about it, which is why this entry
+  # no longer says "frontend measured it". THE ONE STEP STILL OPEN is image-to-pod: after this
+  # rolls, the running builder-gate pod's imageID must equal that digest. frontend is reading it and
+  # will send it; until then the chain is proven from chart to image but not from image to pod.
   # frontend states the UI and the CRDs are UNCHANGED from 1.8.44: no CRD diff, no ui/ diff, and
   # nothing that changes what snowplow measures -- no new page, no new outbound call. That is why
   # this is its OWN tag rather than riding 0.3.642: that tag moved the 17 page charts and ADDS
