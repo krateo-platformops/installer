@@ -1,0 +1,51 @@
+name: check-schema-size-budget
+
+# Installer-specific guard: chart/values.schema.json is compiled by core-provider's crdgen into the
+# Installer CRD's structural schema, and a CRD carries a FULL COPY OF THAT SCHEMA PER SERVED VERSION.
+# This gate refuses a schema whose compiled version would leave no headroom under the apiserver's
+# 1.5 MiB object limit.
+#
+# WHAT PROMPTED IT, AND WHAT IT DOES NOT CATCH. On 2026-11-13 the installer release on krateo-057
+# went `failed`: "error applying CRD update: etcdserver: request is too large". The proximate cause
+# was NOT schema size — core-provider's served-version prune had stopped, so the CRD carried two
+# served versions (596,630 + 601,964 bytes) and adding a third exceeded the limit. This gate would
+# not have prevented that. It guards the half we control: schema growth. The script prints the
+# multi-version arithmetic on every run so the distance to the cliff is visible rather than inferred.
+#
+# NOT A REQUIRED CHECK on main, unlike no-unknowns. It is new, its budget is a judgement, and a gate
+# should earn required status by being right for a while first.
+
+on:
+  pull_request:
+      # NO `branches:` filter, deliberately — the same reason as check-no-unknowns.yaml records: a
+      # `branches: [main]` here means the gate does not run on a STACKED pull request, one whose base
+      # is another PR's branch. Such a PR then shows "all checks passed" while every gate was skipped,
+      # and the green tick is read as a verdict. Measured 2026-11-03 on the #623->#624->#625 stack.
+    # NO `paths:` filter, deliberately. Even though this context is not required today, a path filter
+    # means the workflow never STARTS on a PR that misses its paths — so a pins-only PR would report
+    # nothing here, and if the context is ever made required it would hang on "Expected - waiting for
+    # status to be reported". The script is a few milliseconds of python; run it on everything.
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  schema-size-budget:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 — was v4 (Node 20, deprecated)
+      - name: Fetch the merge target, so the ratchet can be evaluated
+        # actions/checkout does a shallow, single-branch fetch, so `git show origin/main:<path>` is
+        # unavailable and the ratchet cannot read its baseline. Measured on this gate's first CI run:
+        # it silently fell back to the absolute budget with no output saying so. A depth-1 fetch of
+        # main is enough and costs a second; the script now exits 2 (WITHHELD) rather than guessing
+        # if this step is ever removed.
+        run: git fetch --depth=1 origin main
+      - name: Self-test the gate before trusting its verdict
+        run: python3 .github/scripts/check-schema-size-budget.py --self-test
+      - name: Assert the compiled CRD version stays within budget
+        run: python3 .github/scripts/check-schema-size-budget.py
