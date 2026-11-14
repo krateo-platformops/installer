@@ -3226,7 +3226,29 @@ components:
   #   charts (4 files each, so not an empty comparison) and they differ only in version metadata;
   #   config-chart/ has 0 changed lines 0.9.0->0.10.0 and 0.10.0->0.11.0. Record as "config moves
   #   only when config-chart/ changes".
-  version: 0.11.0
+  # 0.12.0, additive only. github-provider-kog measured it from the tags rather than the diff,
+  # which is the distinction that makes it safe: 0 x-kubernetes-validations nodes at BOTH 0.11.0
+  # and 0.12.0 across all 64 rendered CRDs (32 kinds + 32 Configuration CRDs), and 30 default
+  # nodes at both. "No CEL rules in the diff" and "no CEL rules" are different claims and only
+  # the second one licenses this pin.
+  # Exactly 2 CRDs differ, orgrulesets and reporulesets: removed=0, changed=0, added=27 leaf
+  # paths, all under spec.rules[].parameters.{dismissal_restriction, required_reviewers}. The new
+  # `required` lists sit INSIDE the new optional objects, so no existing object shape gains a
+  # required field -- which is what keeps this out of the CEL-rule-in-a-crd-bump refusal class.
+  # In helm template output only 2 of 64 objects differ: the ConfigMaps for those two assets.
+  # The RepoRuleset RestDefinition object is IDENTICAL (its template diff is YAML comments only).
+  # No new values key: values.yaml, values.schema.json and Chart.yaml all have 0 diff lines, so
+  # the installer schema needs no widening -- which matters because it could not grow today
+  # anyway (check-schema-size-budget refuses all growth until core-provider 2.13.95 is pinned).
+  # Live exposure measured on 057: 0 RepoRuleset and 0 OrgRuleset CRs, so the new ruleset surface
+  # has no existing objects to migrate. That zero was scoped to those two kinds, and it covers
+  # the whole change because those are the only two kinds whose CRDs move.
+  # github-provider-kog-config STAYS AT 0.9.0 on their instruction: no paired-version
+  # requirement. UNVERIFIED PREMISE, named rather than hidden: their "0 diff lines" for the
+  # config chart was measured 0.11.0 -> 0.12.0, while this repo pins it at 0.9.0, so it does NOT
+  # cover 0.9.0 -> 0.12.0. Nothing here moves the config chart, so the gap is not load-bearing
+  # for this pin; it would be for any later bump of it.
+  version: 0.12.0
   # 0.7.0 adds two kinds and removes none -- measured on the published chart, not read from the
   # release notes: rendered at --kube-version 1.33.0, rc=0 on both sides, 8104 -> 8882 lines (floor
   # asserted), RestDefinition docs 30 -> 32, ADDED {RepoContent, UserRepository}, REMOVED {} . 0.7.1
