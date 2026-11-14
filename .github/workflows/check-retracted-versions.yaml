@@ -43,7 +43,14 @@ jobs:
           # the gate diffs the pin file against the PR's merge base, so it needs more than
           # the default depth-1 checkout
           fetch-depth: 0
-      - name: Assert no pin points at a retracted version
+      - name: Self-test the gate (offline -- no network, no list)
+        # Runs BEFORE the live check, deliberately. The live check reads a list that today
+        # retracts only frontend charts, so it cannot demonstrate that a Chart.yaml DEPENDENCY
+        # would be matched at all -- it passes either way. The self-test is the only thing that
+        # proves that scope is real, and it asserts both files yield members before asserting
+        # anything about them.
+        run: python3 .github/scripts/check-retracted-versions.py --self-test
+      - name: Assert no pin or Chart.yaml dependency points at a retracted version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 .github/scripts/check-retracted-versions.py

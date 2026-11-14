@@ -60,6 +60,7 @@ from pathlib import Path
 import yaml
 
 PINS = Path("chart/files/component-pins.yaml")
+CHART = Path("chart/Chart.yaml")
 OWNER_REPO = "krateo-platformops/frontend"
 RAW = "https://raw.githubusercontent.com/%s/%s/retracted-versions.yaml"
 API_REF = "https://api.github.com/repos/%s/commits/main" % OWNER_REPO
@@ -96,27 +97,96 @@ def resolve_main(token):
         return None
 
 
-def changed_pins():
-    """The pins this PR changes, against the merge base. Empty on a push to main."""
+def _merge_base():
+    """The PR's merge base, or None when this is not a pull request."""
     base = os.environ.get("GITHUB_BASE_REF")
     if not base:
-        return None  # not a PR: check every pin instead
+        return None  # not a PR: check everything instead
     r = subprocess.run(["git", "merge-base", "origin/%s" % base, "HEAD"],
                        capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def _at(ref, path):
+    """`path` as of `ref`, parsed, or None when it cannot be read."""
+    r = subprocess.run(["git", "show", "%s:%s" % (ref, path)], capture_output=True, text=True)
     if r.returncode != 0:
         return None
-    mb = r.stdout.strip()
-    old = subprocess.run(["git", "show", "%s:%s" % (mb, PINS)], capture_output=True, text=True)
-    if old.returncode != 0:
-        return None
     try:
-        od = yaml.safe_load(old.stdout) or {}
+        return yaml.safe_load(r.stdout) or {}
     except Exception:
+        return None
+
+
+def changed_pins():
+    """The pins this PR changes, against the merge base. Empty on a push to main."""
+    mb = _merge_base()
+    if mb is None:
+        return None
+    od = _at(mb, PINS)
+    if od is None:
         return None
     oc = od.get("components") if isinstance(od, dict) else od
     before = {c["name"]: c.get("version") for c in (oc or [])}
     now = load_pins()
     return {n: v for n, v in now.items() if before.get(n) != v}
+
+
+def load_deps():
+    """Chart.yaml dependency name -> version.
+
+    The bootstrap subcharts live HERE and never in the pin file, so a gate reading only the pins
+    cannot see them. core-provider and core-provider-crds are the live example: core-provider
+    asked that 2.13.85-2.13.94 never be pinned, and before this change a retraction entry for
+    them would have matched nothing and the gate would have passed -- silently, which for a guard
+    is the worst outcome there is.
+    """
+    if not CHART.is_file():
+        return {}
+    d = yaml.safe_load(CHART.read_text()) or {}
+    deps = d.get("dependencies") if isinstance(d, dict) else None
+    out = {}
+    for c in (deps or []):
+        if isinstance(c, dict) and c.get("name"):
+            out[str(c["name"])] = c.get("version")
+    return out
+
+
+def changed_deps():
+    """The Chart.yaml dependencies this PR changes, against the merge base."""
+    mb = _merge_base()
+    if mb is None:
+        return None
+    od = _at(mb, CHART)
+    if od is None:
+        return None
+    before = {}
+    for c in ((od.get("dependencies") or []) if isinstance(od, dict) else []):
+        if isinstance(c, dict) and c.get("name"):
+            before[str(c["name"])] = c.get("version")
+    now = load_deps()
+    return {n: v for n, v in now.items() if before.get(n) != v}
+
+
+def index_entries(entries):
+    """(chart, version) -> entry. A retraction is per CHART, never a bare version."""
+    index = {}
+    for e in (entries or []):
+        ver = str(e.get("version") or "")
+        for ch in (e.get("charts") or []):
+            index[(str(ch), ver)] = e
+    return index
+
+
+def evaluate(scope, charts, index):
+    """[(name, chart, version, entry)] for each member of `scope` pointing at a retracted version."""
+    bad = []
+    for name, ver in sorted((scope or {}).items()):
+        chart = charts.get(name, name)
+        hit = index.get((chart, str(ver)))
+        if hit:
+            bad.append((name, chart, ver, hit))
+    return bad
 
 
 def load_pins():
@@ -167,33 +237,41 @@ def main() -> int:
         return 1
     entries = doc.get("retracted") or []
     print("  entries: %d" % len(entries))
+    index = index_entries(entries)
 
-    # (chart, version) -> entry. A retraction is per CHART, never a bare version.
-    index = {}
-    for e in entries:
-        ver = str(e.get("version") or "")
-        for ch in (e.get("charts") or []):
-            index[(str(ch), ver)] = e
+    pins, deps = load_pins(), load_deps()
+    charts = dict(pin_charts())
+    for n in deps:
+        charts.setdefault(n, n)  # a Chart.yaml dependency's chart IS its name
+    collisions = sorted(set(pins) & set(deps))
+    if collisions:
+        print("::error::%s appear in BOTH %s and %s. A retraction would be checked against one "
+              "file's version and fixed in the other's, so this is an error rather than a "
+              "precedence rule." % (collisions, PINS, CHART))
+        return 1
 
-    charts = pin_charts()
-    scope = changed_pins()
-    if scope is None:
-        scope = load_pins()
-        print("  scope: EVERY pin (not a pull request, or the base could not be read)")
+    cp, cd = changed_pins(), changed_deps()
+    if cp is None or cd is None:
+        scope = dict(pins)
+        scope.update(deps)
+        origin = {n: str(PINS) for n in pins}
+        origin.update({n: str(CHART) for n in deps})
+        print("  scope: EVERY pin and Chart.yaml dependency (%d + %d) -- not a pull request, or "
+              "a base file could not be read" % (len(pins), len(deps)))
     else:
-        print("  scope: %d pin(s) changed by this PR%s"
-              % (len(scope), (" -- " + ", ".join(sorted(scope))) if scope else ""))
+        scope = dict(cp)
+        scope.update(cd)
+        origin = {n: str(PINS) for n in cp}
+        origin.update({n: str(CHART) for n in cd})
+        print("  scope: %d changed by this PR -- %d pin(s), %d Chart.yaml dependency(ies)%s"
+              % (len(scope), len(cp), len(cd),
+                 (" -- " + ", ".join(sorted(scope))) if scope else ""))
 
-    bad = []
-    for name, ver in sorted(scope.items()):
-        chart = charts.get(name, name)
-        hit = index.get((chart, str(ver)))
-        if hit:
-            bad.append((name, chart, ver, hit))
+    bad = evaluate(scope, charts, index)
 
     for name, chart, ver, hit in bad:
-        print("  FAIL  %s pins chart %s at %s, which its own repo has RETRACTED"
-              % (name, chart, ver))
+        print("  FAIL  %s points chart %s at %s, which its own repo has RETRACTED "
+              "(declared in %s)" % (name, chart, ver, origin.get(name, PINS)))
         print("          use instead: %s" % (hit.get("use") or "<not stated>"))
         print("          reason: %s" % (hit.get("reason") or "<not stated>"))
 
@@ -204,12 +282,89 @@ def main() -> int:
               "only by someone reading main's pins before a tag. Bump to the `use` version.")
         return 1
 
-    print("\nretracted-versions: OK -- %d pin(s) checked against %d retraction entry(ies), "
-          "matched on the chart field rather than the component name." % (len(scope), len(entries)))
+    print("\nretracted-versions: OK -- %d pin(s)/dependency(ies) checked against %d retraction "
+          "entry(ies), matched on the chart field rather than the component name."
+          % (len(scope), len(entries)))
     print("WHAT THIS DOES NOT COVER: only %s publishes a list today, so a retraction by any "
-          "other component repo is invisible here." % OWNER_REPO)
+          "other component repo is invisible here. And an entry is keyed on an EXACT version, so "
+          "a retracted RANGE needs one entry per version in it -- core-provider 2.13.85-2.13.94 "
+          "is ten entries, not one." % OWNER_REPO)
     return 0
 
 
+def self_test():
+    """Offline. Proves the Chart.yaml scope is real and that the matcher can still fail."""
+    ok = True
+
+    # 1. The real worktree, through the readers main() uses. Non-vacuity: if either file stops
+    #    yielding members, every case below passes while measuring nothing.
+    pins, deps = load_pins(), load_deps()
+    good = bool(pins) and bool(deps)
+    print("%s  worktree: %d pin(s) from %s, %d dependency(ies) from %s"
+          % ("ok  " if good else "FAIL", len(pins), PINS, len(deps), CHART))
+    if not good:
+        return False
+    for n in ("core-provider", "core-provider-crds"):
+        present = n in deps
+        print("%s  %s reachable via %s: %s" % ("ok  " if present else "FAIL", n, CHART, present))
+        if not present:
+            ok = False
+    both = sorted(set(pins) & set(deps))
+    print("%s  no name in both files: %s" % ("ok  " if not both else "FAIL", both or "none"))
+    if both:
+        ok = False
+
+    charts = dict(pin_charts())
+    for n in deps:
+        charts.setdefault(n, n)
+    everything = dict(pins)
+    everything.update(deps)
+
+    # 2. A retraction of a Chart.yaml DEPENDENCY must be caught. Structurally impossible before
+    #    this change: core-provider is not a pin, so nothing matched it.
+    hit = evaluate(everything, charts, index_entries(
+        [{"version": deps["core-provider"], "charts": ["core-provider"], "use": "2.13.95",
+          "reason": "synthetic"}]))
+    print("%s  synthetic retraction of a Chart.yaml dependency caught: %d (want 1)"
+          % ("ok  " if len(hit) == 1 else "FAIL", len(hit)))
+    if len(hit) != 1:
+        ok = False
+
+    # 3. The SAME chart at a version nothing points at must NOT match, or case 2 only proves the
+    #    matcher keys on the chart name.
+    miss = evaluate(everything, charts,
+                    index_entries([{"version": "0.0.0-nonexistent", "charts": ["core-provider"]}]))
+    print("%s  same chart at an unused version not matched: %d (want 0)"
+          % ("ok  " if not miss else "FAIL", len(miss)))
+    if miss:
+        ok = False
+
+    # 4. frontend's chart-vs-component subtlety, still enforced after the refactor.
+    if "frontend-crd" in pins:
+        v = pins["frontend-crd"]
+        by_chart = evaluate(pins, charts, index_entries([{"version": v, "charts": ["frontend-crds"]}]))
+        by_comp = evaluate(pins, charts, index_entries([{"version": v, "charts": ["frontend-crd"]}]))
+        good = len(by_chart) == 1 and not by_comp
+        print("%s  frontend-crd matched by CHART, not component: chart=%d comp=%d (want 1, 0)"
+              % ("ok  " if good else "FAIL", len(by_chart), len(by_comp)))
+        if not good:
+            ok = False
+    else:
+        print("FAIL  frontend-crd is not pinned -- case 4 cannot run")
+        ok = False
+
+    # 5. An empty list must match nothing, and must not throw.
+    none = evaluate(everything, charts, index_entries([]))
+    print("%s  empty retraction list matches nothing: %d (want 0)"
+          % ("ok  " if not none else "FAIL", len(none)))
+    if none:
+        ok = False
+
+    print("\nself-test: %s" % ("PASS" if ok else "FAIL"))
+    return ok
+
+
 if __name__ == "__main__":
+    if "--self-test" in sys.argv[1:]:
+        sys.exit(0 if self_test() else 1)
     sys.exit(main())
