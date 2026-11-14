@@ -144,3 +144,42 @@ lines:
       core-provider-crds 2.13.85. A newer core-provider binary running against an older CRDs chart
       has that record pruned by the apiserver on every write, so the grace never comes due and
       nothing is ever pruned -- silently, with every write reporting success.
+
+  # ---------------------------------------------------------------------------------------------
+  # authn / authn-crds. DECLARED 2026-11-14 at authn's own request, with their reason quoted below.
+  #
+  # WHY THIS IS NOT REDUNDANT WITH check-pin-crd-lockstep, which is the question this file's header
+  # tells you to ask of any <x>/<x>-crd pair. Measured both directions on this pair rather than
+  # reasoned about:
+  #
+  #   authn 0.47.0 vs authn-crd 0.46.0  (app AHEAD)   pin-crd-lockstep exit 1  -> already covered
+  #   authn 0.45.0 vs authn-crd 0.46.0  (CRDs AHEAD)  pin-crd-lockstep exit 0  -> NOT covered
+  #       it printed "CHECKED authn 0.45.0 vs authn-crd 0.46.0 (5 CRD(s) compared)" and ALLOWED it,
+  #       correctly by its own contract: nothing is lost when the CRDs are the newer side.
+  #
+  # So pin-crd-lockstep guards data LOSS and this file guards EQUALITY, and only the second closes
+  # the reverse direction. authn describes that direction as an access-token exchange answering
+  # 400 UnsupportedSubjectToken -- confusing rather than silent, but not a state anyone should pin.
+  # Precedent: snowplow and nightly-review are <x>/<x>-crd pairs already declared here.
+  #
+  # EVIDENCE, from authn across their last 8 tags, and it is the opposite of what a naive reading
+  # would predict: authn-crds changed in only 2 releases (0.43.1->0.44.0 +13 lines, 0.46.0->0.47.0
+  # +65 lines) and was byte-identical in the other 5. A skew is therefore HARMLESS BY COINCIDENCE
+  # most of the time -- which is the argument FOR declaring the line, not against it: the version
+  # numbers never reveal which of the two kinds of skew you have, only a diff does. That is also
+  # what separates this from agentgateway-controller, whose two charts are byte-identical across 32
+  # releases by design, where the skew genuinely reads "the controller has not changed".
+  #
+  # Registry evidence gathered here: authn and authn-crds both pull at 0.46.0, 0.45.0 and 0.44.0,
+  # and NEITHER exists at 0.47.0 yet (the release workflows were still publishing when this was
+  # written). So this declaration is made while the pair is IN STEP, not to repair a live skew, and
+  # the 0.47.0 pin waits for authn to confirm both charts are out.
+  - name: authn
+    members: [authn, authn-crd]
+    reason: >-
+      authn and authn-crds are one monorepo's single version line: every plain-semver tag publishes
+      both charts, the CRDs are generated from the app's own API types and drift-guarded in CI, and
+      authn's release runbook pins them at one version. A skew is harmless only when a release
+      happens to leave the CRDs byte-identical, which the versions don't reveal; otherwise an older
+      authn-crds silently prunes fields the newer app reads (0.47.0's spec.delegation.subjectTokens)
+      while the write reports success.
