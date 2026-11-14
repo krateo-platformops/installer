@@ -1317,3 +1317,88 @@ would have pointed at a Service that does not exist.
 {{- end }}
 {{- if gt (len $subAgents) 0 }}{{- toYaml $subAgents -}}{{- end }}
 {{- end -}}
+
+{{/*
+inst.platformRoutes — the portal stack's path-mode routing, one entry per component with a
+`gatewayPath`, for agentgateway-policies' spec.platformRoutes.
+
+Args: (list $top $components $gwPlatformPort $gwTLS $gwCertRef)
+Returns: `routes: <yaml list>`, so the caller does (include ... | fromYaml).routes.
+
+EXTRACTED FROM compositions.yaml 2026-11-14, for the same reason inst.subAgents was: that file
+LISTs every CRD with `lookup` at its head, `helm template` DISABLES lookup, so it renders ZERO
+composition objects and nothing inline in it can be exercised by any render. As a named helper it
+is reachable from a probe chart with synthetic components and no cluster.
+
+WHY NOW. Diego approved moving authn's path-mode prefix from /auth to /authn, because /auth in path
+mode routes to authn (PathPrefix, rewrite on) and SWALLOWS the frontend's OIDC callback — the SPA
+route /auth?kind=oidc, which authn answers with a 404 and the authorization code is lost. The claim
+that moving the prefix fixes it rested on READING this code, and he approved it on condition the
+render is PROVEN first. frontend asked for the sharper assertion: that /auth EXACT, WITH A QUERY,
+is matched by NO authn route afterwards — not merely that /authn exists, which would pass while
+leaving the bug.
+
+The $gwPathMode gate stays at the CALL SITE. This helper answers "what routes do these components
+imply"; whether path mode is on is the caller's question, and keeping it out means the helper can
+be tested without faking that flag.
+*/}}
+{{- define "inst.platformRoutes" -}}
+{{- $top := index . 0 -}}
+{{- $components := index . 1 -}}
+{{- $gwPlatformPort := index . 2 -}}
+{{- $gwTLS := index . 3 -}}
+{{- $gwCertRef := index . 4 -}}
+{{- $routes := list }}
+{{- range $d := $components }}
+{{- if and $d.gatewayPath (eq (include "inst.compEnabled" (list $top $d)) "true") }}
+{{- $backendName := include "inst.svcname" (list $top $d.svcMatch) }}
+{{- if not $backendName }}{{- $backendName = $d.name }}{{- end }}
+{{/* Listener + ports: default to the shared platform-http:$gwPlatformPort listener and the peer's
+     exposePort backend — the four portal pins (authn/snowplow/frontend/sse-proxy) carry NO
+     gatewayListener/gatewayPort so these fallbacks reproduce today's route byte-identically. A
+     component that needs its OWN listener (HyperDX: platform-hdx:3000, a Next.js root-asset app that
+     can't be path-prefixed) sets gatewayListener + gatewayPort, and gatewayPort also becomes its
+     backend port (it has no exposePort pin). */}}
+{{/* Listener spec — normally the shared platform-http:$gwPlatformPort (or the component's own, e.g.
+     HyperDX's platform-hdx:3000). Under path-mode TLS the DEFAULT (platform-http) routes move to the
+     platform-https:443 HTTPS listener (protocol + Terminate tls → exposure.tls.certificateRef), so the
+     whole single-origin portal is served over TLS.
+
+     EVERY platform listener follows, not just the shared one. They all land on the platform Gateway,
+     which the agentgateway controller gives ONE LoadBalancer Service — so they share a single public
+     IP. Leaving a component with its OWN listener on plaintext while the portal moved to :443 served
+     that component in the clear on the same public address as the HTTPS portal, and every template
+     still rendered correctly because each listener was individually valid. That is how HyperDX ended
+     up reachable over public HTTP on :3000: a Next.js root-asset app can't be path-prefixed, so it
+     gets its own listener, and only the shared listener was being upgraded. A component listener
+     keeps its own NAME and PORT and gains the same protocol + certificateRef — the certificate is
+     for exposure.tls.host, which is valid on any port. agentgateway-policies now refuses a mixed
+     posture outright, so this and that guard have to agree.
+
+     Off (no exposure.tls) => byte-identical: every listener stays plaintext, the documented HTTP
+     mode. */}}
+{{- $lname := default "platform-http" $d.gatewayListener }}
+{{- $lspec := dict "name" $lname "port" (int (default $gwPlatformPort $d.gatewayPort)) }}
+{{- if $gwTLS }}
+{{- if eq $lname "platform-http" }}
+{{- $lspec = dict "name" "platform-https" "port" 443 "protocol" "HTTPS" "tls" (dict "certificateRef" $gwCertRef) }}
+{{- else }}
+{{- $lspec = dict "name" $lname "port" (int (default $gwPlatformPort $d.gatewayPort)) "protocol" "HTTPS" "tls" (dict "certificateRef" $gwCertRef) }}
+{{- end }}
+{{- end }}
+{{- $route := dict
+     "name" $d.name
+     "listener" $lspec
+     "pathPrefix" $d.gatewayPath
+     "rewrite" (default false $d.gatewayRewrite)
+     "backend" (dict "name" $backendName "port" (int (default $d.exposePort $d.gatewayPort)))
+     "auth" (dict "mode" (default "public" $d.gatewayAuth)) }}
+{{- $routes = append $routes $route }}
+{{- end }}
+{{- end }}
+routes:
+{{- if gt (len $routes) 0 }}
+{{ toYaml $routes | indent 2 }}
+{{- else }} []
+{{- end }}
+{{- end -}}
