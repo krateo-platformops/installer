@@ -7217,7 +7217,9 @@ components:
   # LOCKSTEP with alert-provider. NB the CHART is alert-provider-crdS, plural -- the `chart:` key
   # above carries that. Probing the pin NAME instead of the resolved chart name reported this
   # chart ABSENT once; always resolve `chart:` before concluding a version is unpublished.
-  version: 0.2.82
+  # 0.2.83: carries status.stateSince. Pinned WITH alert-provider, never behind it -- an older
+  # -crds prunes the field the newer controller writes, silently. Analysis on the app entry.
+  version: 0.2.83
   tier: observability
   # feature: portal, NOT specialistAgents (installer#482). This chart contains exactly ONE resource --
   # crd/alerts.observability.krateo.io -- and its consumer is krateo-observability, which is gated on
@@ -7380,7 +7382,19 @@ components:
   # incident-provider's next release: an older CRD drops status.reanalysis.cause harmlessly.
   # Verified at pin time: values.schema.json AND values.yaml byte-identical to 0.2.74, no root or
   # nested `required`, so it is a drop-in with no widening.
-  version: 0.2.82
+  # 0.2.83 (main f56b3ce, checks green). ONE new CRD status field: Alert status.stateSince, the
+  # transition time of `state`. otel trace/sdk to 1.47.0. No values changes, no new or removed keys.
+  # -crds MUST be pinned with or before the controller: an older CRD PRUNES stateSince while the
+  # write reports success, so the field would silently never appear. Both move here together.
+  # Verified with hack/crd-tightening-diff.py (0.2.82 -> 0.2.83), its first use on a real pin:
+  #   schema paths 50 -> 51, constrained 18 -> 18, NO tightening reaches a pre-existing shape.
+  # The +1 is accounted for rather than left as a delta: exactly ONE path added,
+  # alerts.observability.krateo.io/v1alpha1.status.stateSince, with NO constraints, and zero
+  # paths removed. So no CEL rule, no new `required`, no `default`, nothing narrowed -- the three
+  # things that would make existing Alert objects unupdatable at their next write.
+  # Consumer: frontend's /alerts overview (portal #432) reads stateSince and DEGRADES to
+  # "since: unknown" without it, so this is not blocking for them.
+  version: 0.2.83
   # 0.2.57 carries alert-provider#76 (provider-runtime v1.7.2) and #77, which adds 'incident-provider' to
   # DEFAULT_ALERTS_JSON's reconcile-error `NOT IN` list. Measured on the published chart here, not taken
   # from the release notes: rendered at --kube-version 1.33.0, rc=0, 294 -> 331 lines (floor asserted, so
