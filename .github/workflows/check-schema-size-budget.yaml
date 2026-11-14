@@ -14,6 +14,18 @@ name: check-schema-size-budget
 #
 # NOT A REQUIRED CHECK on main, unlike no-unknowns. It is new, its budget is a judgement, and a gate
 # should earn required status by being right for a while first.
+#
+# THREE WALLS as of 2026-11-14, because krateo-057 hit all three in one day and only one was ours:
+#   WALL 1  the per-version schema ConfigMap, 1 MiB. Its binding quantity depends on the PINNED
+#           core-provider: >= 2.13.95 stores it COMPACT (#485), so the minified size binds; below
+#           that it is stored pretty-printed and the ON-DISK size binds. The gate reads the pin and
+#           says which mode it is in, so a downgrade re-raises the wall by itself instead of
+#           silently invalidating ~170 KB of budget. The RATCHET that used to tolerate the overage
+#           is RETIRED: it existed because no remedy existed, and the remedy has shipped.
+#   WALL 2  the CRD object / etcd request, 1.5 MiB, on the minified size. Unchanged and durable.
+#   WALL 3  HELM'S OWN RELEASE SECRET, 1 MiB DECODED, which nothing guarded until today. Revision
+#           546 on 057 sat 884 bytes from that ceiling and 547 was REFUSED outright. Measured via
+#           the dependency-free packaged archive, which is why this job now needs helm.
 
 on:
   pull_request:
@@ -45,6 +57,19 @@ jobs:
         # main is enough and costs a second; the script now exits 2 (WITHHELD) rather than guessing
         # if this step is ever removed.
         run: git fetch --depth=1 origin main
+      - name: Set up Helm
+        # WALL 3 measures the DEPENDENCY-FREE packaged archive with `helm package`. Dep-free is
+        # deliberate: a checkout has no chart/charts/ (the release workflow resolves dependencies at
+        # package time), so the dep-free size is the quantity CI can measure EXACTLY with no registry
+        # access. The published archive is that plus a measured offset, recorded next to the anchors
+        # in the script. If helm is missing the script REFUSES rather than skipping — an unmeasured
+        # wall reads exactly like a safe one.
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: v3.19.0
+      - name: Install PyYAML
+        # core_provider_version() reads chart/Chart.yaml to decide which mode WALL 1 is in.
+        run: pip install --quiet pyyaml
       - name: Self-test the gate before trusting its verdict
         run: python3 .github/scripts/check-schema-size-budget.py --self-test
       - name: Assert the compiled CRD version stays within budget
