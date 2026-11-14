@@ -327,7 +327,7 @@ components:
   feature: portal
 - name: otel-collector-daemonset
   kind: OtelCollectorDaemonset
-  version: 0.1.29
+  version: 0.1.30
   deps:
   - otel-collector-deployment
   tier: observability
