@@ -1305,6 +1305,56 @@ that sets it was silently routed under the wrong name -- nightly-review's Agent 
 `nightly-review-agent` while its component and chart are both `nightly-review`, so its route
 would have pointed at a Service that does not exist.
 */}}
+{{/*
+inst.agentObjectName — the ONE derivation of the kagent Agent OBJECT name a component produces.
+Args: (list $comp). Returns the bare name.
+
+WHY THIS IS A HELPER AND NOT AN EXPRESSION. It was an expression, written out twice: once in
+inst.subAgents (the agentgateway route) and once inline in compositions.yaml (the orchestrator's
+auto-derived A2A fleet). #893 fixed ONE of them to read `agentName` and left the other, and the
+divergence took 057's whole umbrella to Ready=False for over three hours: the route pointed at
+`nightly-review-agent` while the fleet entry said `nightly-review`, so kagent refused to compile
+the orchestrator with `Agent.kagent.dev "nightly-review" not found`. Every other fleet member
+carries the `-agent` suffix; nightly-review is the only component whose Agent object name differs
+from both its component name and its chart name, so it is the only one that could expose this.
+
+The precedence is agentName, then chart, then component name. `default` is
+`default <fallback> <value>`, so the nesting reads inside-out.
+*/}}
+{{- define "inst.agentObjectName" -}}
+{{- $comp := index . 0 -}}
+{{- default (default $comp.name $comp.chart) $comp.agentName -}}
+{{- end -}}
+
+{{/*
+inst.fleetAgents — an orchestrator's AUTO-DERIVED A2A sub-agent fleet: every feature-enabled
+non-orchestrator `agent` component, under the name its Agent object actually has.
+Args: (list $top $components). Returns `agents: <yaml list of {name}>`, so the caller does
+(include "inst.fleetAgents" (list $top $components) | fromYaml).agents.
+
+EXTRACTED FROM compositions.yaml 2026-11-14, for the same reason inst.subAgents and
+inst.platformRoutes were: that file LISTs every CRD with `lookup` at its head, `helm template`
+DISABLES lookup, so it renders ZERO composition objects and nothing in it can be exercised by a
+plain render. The derivation was therefore untestable where it lived.
+
+AND IT WAS WORSE THAN UNTESTABLE. check-subagents could not reach it, so the gate carried its own
+INLINE COPY of the derivation to test instead. That copy drifted in two ways at once: it kept the
+old name expression, and it gated on inst.featureEnabled where the chart gates on
+inst.compEnabled, which also honours alsoFeatures. So the gate was green on a component the chart
+would have included and a name the chart would not have produced. A test that restates the rule
+agrees with itself and proves nothing about the shipped code.
+*/}}
+{{- define "inst.fleetAgents" -}}
+{{- $top := index . 0 -}}
+{{- $components := index . 1 -}}
+agents:
+{{- range $comp := $components }}
+{{- if and $comp.agent (not $comp.orchestrator) (eq (include "inst.compEnabled" (list $top $comp)) "true") }}
+  - name: {{ include "inst.agentObjectName" (list $comp) }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
 {{- define "inst.subAgents" -}}
 {{- $top := index . 0 -}}
 {{- $components := index . 1 -}}
@@ -1322,7 +1372,7 @@ would have pointed at a Service that does not exist.
 {{- if and (dig "agents" "k8s" "enabled" false $ap) (ne (dig "agents" "k8s" "owned" true $ap) false) }}{{- $subAgents = append $subAgents (dict "name" "k8s-agent" "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}{{- end }}
 {{- if and (dig "agents" "helm" "enabled" false $ap) (ne (dig "agents" "helm" "owned" true $ap) false) }}{{- $subAgents = append $subAgents (dict "name" "helm-agent" "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}{{- end }}
 {{- else }}
-{{- $subAgents = append $subAgents (dict "name" (default (default $comp.name $comp.chart) $comp.agentName) "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}
+{{- $subAgents = append $subAgents (dict "name" (include "inst.agentObjectName" (list $comp)) "port" 8080 "subjects" (dict "anyAuthenticated" true)) }}
 {{- end }}
 {{- end }}
 {{- end }}

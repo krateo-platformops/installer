@@ -677,7 +677,6 @@
 {{- if hasKey $enabled $ea.name }}{{- $fleet = append $fleet $ea }}{{- end }}
 {{- end }}
 {{- else }}
-{{- range $comp := $components }}
 {{- /* EXCLUDE EVERY ORCHESTRATOR, not just this one. `ne $comp.name $c.name` excluded only
        SELF, which was sufficient while exactly one component carried orchestrator: true. With
        TWO pinned side by side (the autopilot->agentiko rename) each one listed the OTHER as a
@@ -685,11 +684,13 @@
          autopilot: Agent.kagent.dev "agentiko" not found
          agentiko:  Agent.kagent.dev "krateo-autopilot" not found
        Measured live on 057 at 0.3.540. An orchestrator routes the fleet; it is not a member of
-       it. `not $comp.orchestrator` also excludes self, so the old self-check is redundant. */ -}}
-{{- if and $comp.agent (not $comp.orchestrator) (hasKey $enabled $comp.name) }}
-{{- $fleet = append $fleet (dict "name" (default $comp.name $comp.chart)) }}
-{{- end }}
-{{- end }}
+       it. `not $comp.orchestrator` also excludes self, so the old self-check is redundant.
+
+       THE DERIVATION ITSELF IS inst.fleetAgents, not inline here. It was inline, and because this
+       file is lookup-gated and renders nothing under `helm template`, check-subagents tested its
+       own COPY of it. The copy and this file then disagreed about a component's Agent name and
+       about which enable check to use, and 057's umbrella sat at Ready=False for hours. */ -}}
+{{- $fleet = concat $fleet (default list (include "inst.fleetAgents" (list $top $components) | fromYaml).agents) }}
 {{- end }}
 {{- $_ := set $spec "extraAgents" $fleet }}
 {{- end }}
