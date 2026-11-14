@@ -135,8 +135,14 @@ def compare(old, new):
             if o.get(k) == n.get(k):
                 continue
             if k == "default":
-                # DEFAULT outranks even a new path: a default on a NEW optional field is still
-                # applied to objects, so it is a VALUE arriving, not merely a shape.
+                # DEFAULT OUTRANKS EVEN A NEW PATH, and the reason is stronger than "it is
+                # applied to objects" -- oasgen-provider's: a `default` on a new optional field
+                # is MATERIALISED INTO STORED OBJECTS and is IRREVERSIBLE once CRs exist
+                # (oasgen-provider#562; the installer-schema equivalent caused a real outage,
+                # which is why the rule here is mirror a CONSTRAINT, never a DEFAULT).
+                # So `default` is not a louder NEW-SHAPE. It is the one keyword for which "the
+                # path did not exist" does NOT make the change inert, which is exactly why it
+                # has to be tested before the parent_existed arm rather than after it.
                 sev = "DEFAULT"
             elif not parent_existed:
                 # The path did not exist, so NOTHING about it can affect a stored object --
@@ -160,10 +166,21 @@ def compare(old, new):
                 # failure. The bound looks like a tightening of the array; the breakage lands
                 # on the rule, and the CRD then does not exist at all rather than merely
                 # rejecting writes.
-                # Restricted to parent_existed: a BRAND-NEW array arriving with both a bound
-                # and a rule is costed correctly from the start -- there is no previously
-                # skipped rule to enable. Without that restriction this would fire on every
-                # ordinary additive release (authn 0.47.0's new audiences[] carries both).
+                # RESTRICTED TO A PRE-EXISTING NODE -- AND THE TEST IS NOT IN THIS BRANCH.
+                # It is the `elif not parent_existed: sev = "NEW-SHAPE"` arm ABOVE, which a new
+                # path hits first, so it never reaches here. oasgen-provider read this comment,
+                # looked for a parent_existed test in THIS condition, did not find one, and
+                # nearly reported it as "a comment asserting a restriction the code does not
+                # implement" -- their fourth instance of that defect class today, and the
+                # pattern was primed enough that they almost skipped verifying it. The
+                # restriction was real; my comment described it from the wrong place. A comment
+                # that names an invariant enforced elsewhere must say WHERE, or the next reader
+                # checks the obvious spot, finds nothing, and either files a false bug or
+                # "fixes" it by adding a redundant test.
+                # WHY the restriction: a BRAND-NEW array arriving with both a bound and a rule
+                # is costed correctly from the start -- there is no previously skipped rule to
+                # enable. Without it this fires on every additive release (authn 0.47.0's new
+                # audiences[] carries both a rule and maxLength).
                 # This tool CANNOT decide it -- cost estimation is the apiserver's. So it
                 # reports that the check is REQUIRED and exits non-zero, rather than printing
                 # a note nobody has to act on. A condition only a reader can evaluate, with
