@@ -365,7 +365,7 @@ components:
   #   which is true only without a `default:` -- a CRD property WITH one is applied by the apiserver to
   #   every existing object on its next read or write. The rule carried forward is "additive AND no
   #   new `default:`", and applying it is what found the Collapse timeout.
-  version: 1.8.44
+  version: 1.8.45
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -2943,7 +2943,7 @@ components:
   #   confirmed it by sha256 per file: ONE file differs in the published chart, Chart.yaml. No values
   #   keys added or changed, no templates touched, no dangerous `required`. Image
   #   ghcr.io/krateo-platformops/frontend:1.8.43, multi-arch amd64+arm64.
-  version: 1.8.44
+  version: 1.8.45
   deps:
   - frontend-crd
   - authn
@@ -6407,6 +6407,43 @@ components:
 # 1.8.31 differing from 1.8.28 in Chart.yaml ONLY (so the CRDs are unchanged since my census), and
 # the pulled chart's configmap.yaml emitting the AGENTIKO_* names in 8 places.
 - name: builder-gate
+  # 1.8.45: THE ONLY CONTENT CHANGE IN THIS LINE. builder-gate catches up with the snowplow
+  # 1.12.70 that 057 has run since 0.3.638: it now knows the stage reasons
+  # UserAccessFilterOnNonReadVerb and WriteRefused, and per frontend its SNOWPLOW_REF, jq modules
+  # and jqcheck's gojq fork (v0.13.1) all match 1.12.70. The 1.8.44 gate on 057 matches 1.12.67,
+  # so TODAY it reports those two reasons as "unknown reason" and compiles jq with the older fork.
+  # That is a real correctness gap on 057 right now, not a precaution: 1.12.69 INTRODUCED those two
+  # refusals and the gate that explains them to a builder is a minor behind.
+  # THE SNOWPLOW ALIGNMENT IS NOT IN THE CHART, so it was read from the PUBLISHED IMAGE. `helm show
+  # values` across 1.8.44 -> 1.8.45 reports ZERO path changes for all three line members, and the
+  # only snowplow-ish values are snowplowUrl and snowplowJqModulesConfigMap, neither of which
+  # carries a version. There is therefore nothing in the chart to check it against. frontend
+  # exported the published image (sha256:7d39a0c0..., linux/amd64) -- not their build -- and read:
+  #   /app/server.cjs   SNOWPLOW_REF baked in as "1.12.70", and it is the ONLY 1.12.x string in
+  #                     the bundle, so there is no second candidate to confuse it with
+  #   /app/server.cjs   contains BOTH UserAccessFilterOnNonReadVerb and WriteRefused, the two
+  #                     stage reasons 1.12.69 introduced and that 1.8.44 reports as "unknown"
+  #   go version -m /usr/local/bin/jqcheck
+  #                     github.com/itchyny/gojq v0.12.17 => github.com/krateo-platformops/gojq
+  #                     v0.13.1, which is snowplow 1.12.70's own replace directive
+  # That is a reading of the shipped artifact rather than a claim about it, which is why this entry
+  # no longer says "frontend measured it". THE ONE STEP STILL OPEN is image-to-pod: after this
+  # rolls, the running builder-gate pod's imageID must equal that digest. frontend is reading it and
+  # will send it; until then the chain is proven from chart to image but not from image to pod.
+  # frontend states the UI and the CRDs are UNCHANGED from 1.8.44: no CRD diff, no ui/ diff, and
+  # nothing that changes what snowplow measures -- no new page, no new outbound call. That is why
+  # this is its OWN tag rather than riding 0.3.642: that tag moved the 17 page charts and ADDS
+  # load (/alerts gains a ~6 MB incidents read per obs-alerts resolve), and mixing a load change
+  # with a gate-behaviour change in one window would make either one unattributable.
+  # CHECKED BEFORE PINNING, all three members:
+  #   registry  1.8.45 FOUND for frontend, frontend-crds and builder-gate; 1.8.44 FOUND as a
+  #             POSITIVE CONTROL; 9.9.9 absent -- so the probe discriminates, not merely finds.
+  #   values    ZERO value-path changes on all three. No new key to express, and no RENAME -- the
+  #             check that caught otel-collector-daemonset 0.1.30 renaming a processor while its
+  #             path COUNT stayed at 156.
+  # frontend's tag 1.8.45 at b77f66e, tag object b6f0c0d; release-tag, release-oci and
+  # release-notes green, main green on all 12 workflows at that commit. frontend image
+  # sha256:a2bac1c4..., both arches.
   # THE GATE THAT HAS NEVER RUN. builder-gate exposes ONE MCP tool, `validate_draft`, which an
   # authoring agent is supposed to call before handing a Builder draft back. The chart has been
   # published since at least 1.8.15 and is installed NOWHERE -- measured on 057: 0 builder-gate
@@ -6464,7 +6501,7 @@ components:
   #   recorded reason is specific -- an app pinned past its -crd pin prunes fields SILENTLY -- and it
   #   exists because check-no-silent-downgrade caught installer#727 about to revert all three from
   #   1.8.32 to 1.8.28 together. Moving a republished-identical chart costs a version label.
-  version: 1.8.44
+  version: 1.8.45
   deps:
     - portal
     - kagent
