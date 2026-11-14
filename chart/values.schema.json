@@ -7958,6 +7958,32 @@
                       }
                     }
                   }
+                },
+                "tls": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "TLS on authn's internal listener (authn#145). Set issuerRef to a cert-manager CA Issuer or ClusterIssuer and authn serves the internal port over TLS only, with a certificate for <release>-internal.<namespace>.svc that cert-manager rotates. Unset: plain HTTP. Callers trust the issuer's CA through a trust-manager Bundle, NEVER by reading authn's Secret, which holds the private key. BOUNDS MIRROR authn 0.52.0's OWN values.schema.json exactly, read from the pinned chart: `internal` and `tls` are additionalProperties:false on both sides, so a key this schema does not declare is PRUNED BY THE APISERVER while the write reports success. The key arrived in authn 0.49.0 and this node ships in the same change as the 0.52.0 pin, because declaring it earlier -- while 0.47.0 was pinned -- would have let someone set a value the pinned chart's own closed schema then refuses, and a chart render failure aborts the WHOLE umbrella render.",
+                  "properties": {
+                    "issuerRef": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "",
+                            "Issuer",
+                            "ClusterIssuer"
+                          ],
+                          "description": "cert-manager issuer kind. The enum is the chart's own."
+                        },
+                        "name": {
+                          "type": "string",
+                          "description": "The Issuer or ClusterIssuer name. Empty leaves TLS off."
+                        }
+                      }
+                    }
+                  }
                 }
               }
             },
