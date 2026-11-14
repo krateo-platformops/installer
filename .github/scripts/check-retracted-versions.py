@@ -61,20 +61,18 @@ import yaml
 
 PINS = Path("chart/files/component-pins.yaml")
 CHART = Path("chart/Chart.yaml")
-OWNER_REPO = "krateo-platformops/frontend"
+SOURCES = Path(".github/retraction-sources.yaml")
 RAW = "https://raw.githubusercontent.com/%s/%s/retracted-versions.yaml"
-API_REF = "https://api.github.com/repos/%s/commits/main" % OWNER_REPO
+API_REF = "https://api.github.com/repos/%s/commits/main"
 
-# ENABLED 2026-11-05, in the same change that confirmed the file is live. frontend#628 merged and
-# https://raw.githubusercontent.com/krateo-platformops/frontend/<sha>/retracted-versions.yaml
-# returns 200 with one entry (frontend-crds 1.8.24 -> use 1.8.26). A 404 now FAILS, which is the
-# point: the list disappearing is indistinguishable from every pin being clean, and the second is
-# what a tolerated 404 would silently report. Historical note on the pre-enable state:
-# A gate that fails closed on a file that does not exist yet would block every PR in this repo
-# for a reason unrelated to the PR. So while ENFORCE is false a 404 is reported and tolerated;
-# every OTHER failure (bad YAML, a reachable-but-broken file, a retracted pin) still fails.
-# Flip this to True in the same commit that frontend#628 merges, and the 404 tolerance is gone.
-ENFORCE = True
+# The ENFORCE flag is GONE as of 2026-11-14. It existed because a gate that fails closed on a
+# file not yet published would block every PR here for a reason unrelated to the PR -- true while
+# frontend#628 was open, and it was flipped to True on 2026-11-05 when their list went live. With
+# per-publisher sources that tolerance has a better home: a repo is only listed in SOURCES once
+# its list exists, and an unlisted repo is simply not read. So a 404 on a LISTED repo now always
+# fails closed, and the flag is one fewer thing that can be left in the wrong position. The
+# reason a 404 must fail has not changed: a list that disappears is indistinguishable from every
+# pin being clean, and the second is what a tolerated 404 would silently report.
 
 
 def _get(url, token=None, accept=None):
@@ -88,13 +86,50 @@ def _get(url, token=None, accept=None):
         return r.read().decode("utf-8")
 
 
-def resolve_main(token):
-    """Resolve main to a commit SHA so the output names the ref it actually read."""
+def resolve_sha(repo, token):
+    """Resolve a repo's main to a commit SHA so the output names the ref it actually read."""
     try:
-        return json.loads(_get(API_REF, token, "application/vnd.github+json"))["sha"]
+        return json.loads(_get(API_REF % repo, token, "application/vnd.github+json"))["sha"]
     except Exception as e:
-        print("  could not resolve %s main to a commit: %s" % (OWNER_REPO, e))
+        print("  could not resolve %s main to a commit: %s" % (repo, e))
         return None
+
+
+def load_sources():
+    """[(repo, {charts})] -- who publishes a list, and what each may speak for. None if broken."""
+    if not SOURCES.is_file():
+        return None
+    try:
+        d = yaml.safe_load(SOURCES.read_text()) or {}
+    except Exception:
+        return None
+    out = []
+    for src in (d.get("sources") or []):
+        if not isinstance(src, dict) or not src.get("repo"):
+            return None
+        out.append((str(src["repo"]), {str(c) for c in (src.get("charts") or [])}))
+    return out
+
+
+def entry_versions(entry):
+    """The versions an entry retracts, or None when its shape is invalid.
+
+    `version: X` for one, or `versions: [X, Y, ...]` for several. A retracted RANGE is written
+    as the explicit list of versions in it, NOT as bounds: comparing semver would add a way to
+    be wrong (2.13.9 vs 2.13.90) to a file whose whole job is to be exact.
+
+    Both keys at once is ambiguous and neither is empty. Either is an ERROR, never a skipped
+    entry -- an entry this gate quietly ignores is an entry nobody is enforcing, which is the
+    failure mode the list exists to remove.
+    """
+    one, many = entry.get("version"), entry.get("versions")
+    if one is not None and many is not None:
+        return None
+    if one is not None:
+        return [str(one)]
+    if isinstance(many, list) and many:
+        return [str(v) for v in many]
+    return None
 
 
 def _merge_base():
@@ -168,24 +203,46 @@ def changed_deps():
     return {n: v for n, v in now.items() if before.get(n) != v}
 
 
-def index_entries(entries):
-    """(chart, version) -> entry. A retraction is per CHART, never a bare version."""
-    index = {}
+def index_entries(entries, repo=None, allowed=None):
+    """((chart, version) -> (entry, repo)), and a list of shape/authority errors.
+
+    `allowed` is the chart set this publisher may retract. An entry outside it is an error here,
+    on the CONSUMER side, as well as in the publisher's own guard test -- a list that can retract
+    anything is a list anyone can use to block anyone.
+    """
+    index, errs = {}, []
     for e in (entries or []):
-        ver = str(e.get("version") or "")
-        for ch in (e.get("charts") or []):
-            index[(str(ch), ver)] = e
-    return index
+        if not isinstance(e, dict):
+            errs.append("%s: an entry is not a mapping" % repo)
+            continue
+        vers = entry_versions(e)
+        if vers is None:
+            errs.append("%s: entry for charts %s must carry exactly one of `version:` or a "
+                        "non-empty `versions:`" % (repo, e.get("charts") or "(none)"))
+            continue
+        charts = [str(c) for c in (e.get("charts") or [])]
+        if not charts:
+            errs.append("%s: entry for %s names no charts" % (repo, vers))
+            continue
+        for ch in charts:
+            if allowed is not None and ch not in allowed:
+                errs.append("%s retracts chart %r, which it is NOT declared to publish "
+                            "(declared: %s)" % (repo, ch, ", ".join(sorted(allowed)) or "none"))
+                continue
+            for v in vers:
+                index[(ch, v)] = (e, repo)
+    return index, errs
 
 
 def evaluate(scope, charts, index):
-    """[(name, chart, version, entry)] for each member of `scope` pointing at a retracted version."""
+    """[(name, chart, version, entry, repo)] for each `scope` member at a retracted version."""
     bad = []
     for name, ver in sorted((scope or {}).items()):
         chart = charts.get(name, name)
         hit = index.get((chart, str(ver)))
         if hit:
-            bad.append((name, chart, ver, hit))
+            entry, repo = hit
+            bad.append((name, chart, ver, entry, repo))
     return bad
 
 
@@ -208,36 +265,60 @@ def main() -> int:
         return 1
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
 
-    sha = resolve_main(token)
-    url = RAW % (OWNER_REPO, sha or "main")
-    print("  retraction list: %s" % url)
-    print("  ref: %s" % (("%s main @ %s" % (OWNER_REPO, sha[:7])) if sha
-                         else "%s main (UNRESOLVED -- provenance not checkable)" % OWNER_REPO))
-
-    try:
-        body = _get(url, token)
-    except urllib.error.HTTPError as e:
-        if e.code == 404 and not ENFORCE:
-            print("  retraction list is 404 and ENFORCE is False -- frontend#628 has not merged "
-                  "yet. TOLERATED by design; flip ENFORCE in the same commit it lands.")
-            print("\nretracted-versions: SKIPPED (list not published yet). This gate is INERT "
-                  "until ENFORCE=True -- it is not evidence that any pin is unretracted.")
-            return 0
-        print("::error::retraction list unreadable (HTTP %s) -- FAILING CLOSED. A list that "
-              "silently reads as empty reports a safety it never checked." % e.code)
+    sources = load_sources()
+    if sources is None:
+        print("::error::%s is missing or malformed -- FAILING CLOSED. Without it this gate does "
+              "not know whose retraction lists to read." % SOURCES)
         return 1
-    except Exception as e:
-        print("::error::retraction list unreadable (%s) -- FAILING CLOSED." % e)
+    if not sources:
+        print("::error::%s declares no sources -- FAILING CLOSED. An empty source list reads "
+              "exactly like every pin being clean." % SOURCES)
         return 1
 
-    try:
-        doc = yaml.safe_load(body) or {}
-    except Exception as e:
-        print("::error::retraction list is not valid YAML (%s) -- FAILING CLOSED." % e)
+    index, n_entries, shape_errors = {}, 0, []
+    for repo, allowed in sources:
+        sha = resolve_sha(repo, token)
+        print("  %s -> %s" % (repo, RAW % (repo, sha or "main")))
+        print("    ref: %s" % (("main @ %s" % sha[:7]) if sha
+                               else "main (UNRESOLVED -- provenance not checkable)"))
+        try:
+            body = _get(RAW % (repo, sha or "main"), token)
+        except urllib.error.HTTPError as e:
+            print("::error::%s's retraction list is unreadable (HTTP %s) -- FAILING CLOSED. A "
+                  "list that silently reads as empty reports a safety it never checked. If this "
+                  "repo has not published one yet, remove it from %s rather than tolerating the "
+                  "404." % (repo, e.code, SOURCES))
+            return 1
+        except Exception as e:
+            print("::error::%s's retraction list is unreadable (%s) -- FAILING CLOSED."
+                  % (repo, e))
+            return 1
+        try:
+            doc = yaml.safe_load(body) or {}
+        except Exception as e:
+            print("::error::%s's retraction list is not valid YAML (%s) -- FAILING CLOSED."
+                  % (repo, e))
+            return 1
+        entries = doc.get("retracted") or []
+        idx, errs = index_entries(entries, repo, allowed)
+        n_versions = len({v for _, v in idx})
+        print("    entries: %d covering %d version(s); may retract: %s"
+              % (len(entries), n_versions, ", ".join(sorted(allowed)) or "NOTHING"))
+        shape_errors.extend(errs)
+        clash = sorted(set(idx) & set(index))
+        if clash:
+            shape_errors.append("%s retracts %s, which another declared publisher already "
+                                "retracts -- two publishers claim the same chart" % (repo, clash))
+        index.update(idx)
+        n_entries += len(entries)
+
+    if shape_errors:
+        for e in shape_errors:
+            print("  SHAPE  %s" % e)
+        print("::error::a retraction list is malformed, or retracts a chart its publisher is not "
+              "declared to own -- FAILING CLOSED. An entry this gate skips is an entry nobody is "
+              "enforcing, which is the failure the list exists to remove.")
         return 1
-    entries = doc.get("retracted") or []
-    print("  entries: %d" % len(entries))
-    index = index_entries(entries)
 
     pins, deps = load_pins(), load_deps()
     charts = dict(pin_charts())
@@ -269,9 +350,9 @@ def main() -> int:
 
     bad = evaluate(scope, charts, index)
 
-    for name, chart, ver, hit in bad:
-        print("  FAIL  %s points chart %s at %s, which its own repo has RETRACTED "
-              "(declared in %s)" % (name, chart, ver, origin.get(name, PINS)))
+    for name, chart, ver, hit, repo in bad:
+        print("  FAIL  %s points chart %s at %s, RETRACTED by its publisher %s "
+              "(this repo declares it in %s)" % (name, chart, ver, repo, origin.get(name, PINS)))
         print("          use instead: %s" % (hit.get("use") or "<not stated>"))
         print("          reason: %s" % (hit.get("reason") or "<not stated>"))
 
@@ -283,12 +364,11 @@ def main() -> int:
         return 1
 
     print("\nretracted-versions: OK -- %d pin(s)/dependency(ies) checked against %d retraction "
-          "entry(ies), matched on the chart field rather than the component name."
-          % (len(scope), len(entries)))
-    print("WHAT THIS DOES NOT COVER: only %s publishes a list today, so a retraction by any "
-          "other component repo is invisible here. And an entry is keyed on an EXACT version, so "
-          "a retracted RANGE needs one entry per version in it -- core-provider 2.13.85-2.13.94 "
-          "is ten entries, not one." % OWNER_REPO)
+          "entry(ies) from %d publisher(s), matched on the chart field rather than the component "
+          "name." % (len(scope), n_entries, len(sources)))
+    print("WHAT THIS DOES NOT COVER: a repo absent from %s is not read at all, so its "
+          "retractions are invisible here. Declared today: %s."
+          % (SOURCES, ", ".join(r for r, _ in sources)))
     return 0
 
 
@@ -320,45 +400,116 @@ def self_test():
     everything = dict(pins)
     everything.update(deps)
 
+    def idx(entries, repo="krateo-platformops/x", allowed=None):
+        i, e = index_entries(entries, repo, allowed)
+        return i, e
+
     # 2. A retraction of a Chart.yaml DEPENDENCY must be caught. Structurally impossible before
-    #    this change: core-provider is not a pin, so nothing matched it.
-    hit = evaluate(everything, charts, index_entries(
-        [{"version": deps["core-provider"], "charts": ["core-provider"], "use": "2.13.95",
-          "reason": "synthetic"}]))
-    print("%s  synthetic retraction of a Chart.yaml dependency caught: %d (want 1)"
-          % ("ok  " if len(hit) == 1 else "FAIL", len(hit)))
-    if len(hit) != 1:
+    #    2026-11-14: core-provider is not a pin, so nothing matched it.
+    i, e = idx([{"version": deps["core-provider"], "charts": ["core-provider"],
+                 "use": "2.13.95", "reason": "synthetic"}])
+    hit = evaluate(everything, charts, i)
+    good = len(hit) == 1 and not e
+    print("%s  synthetic retraction of a Chart.yaml dependency caught: %d (want 1), %d error(s)"
+          % ("ok  " if good else "FAIL", len(hit), len(e)))
+    if not good:
         ok = False
 
     # 3. The SAME chart at a version nothing points at must NOT match, or case 2 only proves the
     #    matcher keys on the chart name.
-    miss = evaluate(everything, charts,
-                    index_entries([{"version": "0.0.0-nonexistent", "charts": ["core-provider"]}]))
+    i, _ = idx([{"version": "0.0.0-nonexistent", "charts": ["core-provider"]}])
+    miss = evaluate(everything, charts, i)
     print("%s  same chart at an unused version not matched: %d (want 0)"
           % ("ok  " if not miss else "FAIL", len(miss)))
     if miss:
         ok = False
 
-    # 4. frontend's chart-vs-component subtlety, still enforced after the refactor.
+    # 4. `versions:` -- a retracted RANGE as the explicit list of versions in it. This is the
+    #    shape core-provider needs for 2.13.85-2.13.94, ten versions in one entry. Both the
+    #    pinned version and a version NOT in the list are checked, so a list that matched
+    #    everything would fail here.
+    live = deps["core-provider"]
+    i, e = idx([{"versions": ["2.13.85", "2.13.86", live], "charts": ["core-provider"],
+                 "use": "2.13.95", "reason": "synthetic range"}])
+    hit = evaluate(everything, charts, i)
+    i2, _ = idx([{"versions": ["2.13.85", "2.13.86"], "charts": ["core-provider"]}])
+    miss2 = evaluate(everything, charts, i2)
+    good = len(hit) == 1 and not miss2 and not e
+    print("%s  `versions:` list: pinned version caught %d (want 1), unpinned-only list "
+          "matched %d (want 0)" % ("ok  " if good else "FAIL", len(hit), len(miss2)))
+    if not good:
+        ok = False
+
+    # 5. An entry's SHAPE must be an error, never a silent skip: both keys, or neither.
+    _, e_both = idx([{"version": "1.0.0", "versions": ["1.0.0"], "charts": ["core-provider"]}])
+    _, e_none = idx([{"charts": ["core-provider"]}])
+    _, e_empty = idx([{"versions": [], "charts": ["core-provider"]}])
+    _, e_nochart = idx([{"version": "1.0.0"}])
+    good = all(len(x) == 1 for x in (e_both, e_none, e_empty, e_nochart))
+    print("%s  invalid entry shapes are errors, not skips: both=%d neither=%d empty=%d "
+          "nocharts=%d (want 1 each)" % ("ok  " if good else "FAIL", len(e_both), len(e_none),
+                                         len(e_empty), len(e_nochart)))
+    if not good:
+        ok = False
+
+    # 6. A publisher may only retract charts it is declared to publish -- enforced HERE, not
+    #    only in the publisher's own test. And the error must not quietly index the entry anyway.
+    i, e_auth = idx([{"version": live, "charts": ["core-provider"]}],
+                    repo="krateo-platformops/frontend", allowed={"frontend", "frontend-crds"})
+    leaked = evaluate(everything, charts, i)
+    good = len(e_auth) == 1 and not leaked
+    print("%s  a publisher retracting a chart it does not own: %d error(s) (want 1), %d "
+          "match(es) leaked (want 0)" % ("ok  " if good else "FAIL", len(e_auth), len(leaked)))
+    if not good:
+        ok = False
+    i, e_okauth = idx([{"version": pins["frontend-crd"], "charts": ["frontend-crds"]}],
+                      repo="krateo-platformops/frontend",
+                      allowed={"frontend", "frontend-crds", "builder-gate"})
+    good = not e_okauth and len(evaluate(pins, charts, i)) == 1
+    print("%s  the same publisher retracting a chart it DOES own is accepted: %s"
+          % ("ok  " if good else "FAIL", good))
+    if not good:
+        ok = False
+
+    # 7. frontend's chart-vs-component subtlety, still enforced after the refactor.
     if "frontend-crd" in pins:
         v = pins["frontend-crd"]
-        by_chart = evaluate(pins, charts, index_entries([{"version": v, "charts": ["frontend-crds"]}]))
-        by_comp = evaluate(pins, charts, index_entries([{"version": v, "charts": ["frontend-crd"]}]))
+        i1, _ = idx([{"version": v, "charts": ["frontend-crds"]}])
+        i2, _ = idx([{"version": v, "charts": ["frontend-crd"]}])
+        by_chart, by_comp = evaluate(pins, charts, i1), evaluate(pins, charts, i2)
         good = len(by_chart) == 1 and not by_comp
         print("%s  frontend-crd matched by CHART, not component: chart=%d comp=%d (want 1, 0)"
               % ("ok  " if good else "FAIL", len(by_chart), len(by_comp)))
         if not good:
             ok = False
     else:
-        print("FAIL  frontend-crd is not pinned -- case 4 cannot run")
+        print("FAIL  frontend-crd is not pinned -- case 7 cannot run")
         ok = False
 
-    # 5. An empty list must match nothing, and must not throw.
-    none = evaluate(everything, charts, index_entries([]))
-    print("%s  empty retraction list matches nothing: %d (want 0)"
-          % ("ok  " if not none else "FAIL", len(none)))
-    if none:
+    # 8. An empty list matches nothing and does not throw.
+    i, e = idx([])
+    none = evaluate(everything, charts, i)
+    print("%s  empty retraction list matches nothing: %d (want 0), %d error(s)"
+          % ("ok  " if (not none and not e) else "FAIL", len(none), len(e)))
+    if none or e:
         ok = False
+
+    # 9. SOURCES itself: it is an input to this gate, and a malformed one must fail rather than
+    #    read as "no publishers". The declared chart set is frontend's own, confirmed by them.
+    src = load_sources()
+    good = src is not None and len(src) >= 1
+    print("%s  %s parses: %s" % ("ok  " if good else "FAIL", SOURCES,
+                                 [(r, len(c)) for r, c in (src or [])]))
+    if not good:
+        ok = False
+    else:
+        fe = [c for r, c in src if r == "krateo-platformops/frontend"]
+        want = {"frontend", "frontend-crds", "builder-gate"}
+        good = len(fe) == 1 and fe[0] == want
+        print("%s  frontend declared for exactly %s: %s"
+              % ("ok  " if good else "FAIL", sorted(want), sorted(fe[0]) if fe else None))
+        if not good:
+            ok = False
 
     print("\nself-test: %s" % ("PASS" if ok else "FAIL"))
     return ok

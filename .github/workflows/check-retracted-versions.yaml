@@ -50,7 +50,7 @@ jobs:
         # proves that scope is real, and it asserts both files yield members before asserting
         # anything about them.
         run: python3 .github/scripts/check-retracted-versions.py --self-test
-      - name: Assert no pin or Chart.yaml dependency points at a retracted version
+      - name: Assert no pin or Chart.yaml dependency points at a version its PUBLISHER retracted
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 .github/scripts/check-retracted-versions.py
