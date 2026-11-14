@@ -1,0 +1,59 @@
+name: check-rendered-names
+
+# Every metadata.name a CHANGED pinned chart renders must be a valid Kubernetes name.
+#
+# WHY, with a date and a cost. Tag 0.3.642 moved the 17-member portal-pages line to 1.8.119 on
+# 2026-11-14. Sixteen converged. alerts-page could not, and never would: it renders a widget named
+# `alerts-hasIncidents` — a capital I — and the apiserver REFUSES an object whose metadata.name is
+# not an RFC 1123 subdomain. The composition sat at Ready=Unknown/ObserveFailed with
+# status.helmChartVersion stuck on the PREVIOUS chart while the cdc retried observe -> helm -> fail
+# about every three seconds, indefinitely.
+#
+# NOTHING WE OWNED WOULD HAVE CAUGHT IT, and that is the point of this gate:
+#   check-pin-ci               confirmed the source repo was green
+#   check-same-version-line    confirmed the 17 pins AGREE — and it reads the REPO, so it could not
+#                              see the live cluster then holding 16 at the new version and one stuck
+#   the registry probe         confirmed the chart EXISTS
+#   the values-path diff       confirmed no new key and no rename
+# All four passed. None renders the chart and looks at what it would create.
+#
+# This needs no cluster: `helm template` plus a regex. On the real case it finds exactly one bad
+# name among 46 rendered documents, and its predecessor 1.8.118 renders 36 that are all valid —
+# both directions are asserted as fixtures, so the gate is shown to discriminate.
+#
+# frontend added the mirror of this at the PRODUCER end (scripts/lint-k8s-names.py in portal #437),
+# which is the right shape: a name is checked where it is written and again where it is pinned.
+
+on:
+  pull_request:
+      # NO `branches:` filter: a branches: [main] here means the gate does not run on a STACKED
+      # pull request, which then shows "all checks passed" with every gate skipped.
+    # NO `paths:` filter: a path-filtered workflow never STARTS on a PR that misses its paths, so
+    # a required context would wait forever on "Expected".
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  rendered-names:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Fetch the merge target, so "which pins changed" can be computed
+        # The gate renders only the charts whose pin version MOVED. Without main it cannot tell,
+        # and it exits 2 (refusal) rather than rendering nothing and reporting clean.
+        run: git fetch --depth=1 origin main
+      - name: Set up Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: v3.19.0
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: The name rules hold, and the gate discriminates on the real case
+        run: python3 .github/scripts/check-rendered-names.py --self-test
+      - name: Every name a changed chart renders is a valid Kubernetes name
+        run: python3 .github/scripts/check-rendered-names.py
