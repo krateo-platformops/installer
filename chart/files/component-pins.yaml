@@ -50,7 +50,9 @@ components:
   # pinned or rolled anywhere.
   # LOCKSTEP with authn, as its owner required. NB the CHART is authn-crdS, plural; the `chart:`
   # key carries that, and probing the pin NAME instead reports it absent.
-  version: 0.46.0
+  # 0.47.0: moves with authn as a declared version line (installer#896). Carries #156's two
+  # new optional fields and the CEL rule on audiences[] items analysed on the authn entry.
+  version: 0.47.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -835,7 +837,31 @@ components:
   # AUTHN_SERVICE_CRT_EXPIRES_IN) were already undeclared at 0.41.0, so that is not new.
   # The four preconditions were verified clear on BOTH clusters before the go: 0 identities carry a
   # krateo: group, and the otel agent is Ready on every node with hostPort 4318.
-  version: 0.46.0
+  # 0.47.0 (annotated tag 534b499, main's check-runs green incl. checks/test, which pin-ci reads).
+  # Contains #156 AND #154 -- authn corrected an earlier message that said #156 only.
+  # #154 changes audit RECORD CONTENTS only: a refusal names the username's own Secret, or the
+  # Secret resource without a name when the username is not its own Secret name. No chart, no values.
+  # #156 adds optional spec.delegation.subjectTokens[] and spec.delegation.audiences[] to
+  # authn-crds. Access-token exchange is INERT until a mapping lists subjectTokens.
+  #
+  # A CEL RULE IS ADDED AND IT IS NOT A REFUSAL -- measured, because authn did not mention it and
+  # a CEL rule in a -crd bump is normally where I stop. Rendered all 5 CRDs from each tag:
+  #   x-kubernetes-validations   0.46.0: 0   ->   0.47.0: 1
+  #   default nodes              0.46.0: 1   ->   0.47.0: 1   (unchanged)
+  # The rule is on serviceaccounts.serviceaccount.authn.krateo.io, v1alpha1, at
+  # spec.delegation.audiences[] ITEMS: an audience must be a DNS-1123 subdomain, or an https URI
+  # with a DNS-1123 host, optional port and a path of unreserved characters.
+  # WHY IT IS SAFE: spec.delegation existed at 0.46.0 with required: [allowed], and that required
+  # list is IDENTICAL at 0.47.0. `audiences` and `subjectTokens` are both ABSENT at 0.46.0. So no
+  # existing ServiceAccount CR can carry an audiences entry, and the rule cannot reject an existing
+  # object on its next write. That is the whole test: a rule added to an EXISTING shape makes
+  # stored objects unupdatable; a rule on a NEW optional field cannot.
+  # Two of my own first-pass findings were instrument artifacts, re-measured away: a 'new required
+  # (audiences, oidcConfig)' that does not exist (oidcConfig is absent in BOTH versions), and a
+  # 'shallowest new ancestor spec.versions[0]' produced by a walker that never emits list-element
+  # paths. The precise walker descends properties/items by name instead of string-matching paths.
+  # authn + authn-crd are a DECLARED version line (installer#896), so these two cannot separate.
+  version: 0.47.0
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
