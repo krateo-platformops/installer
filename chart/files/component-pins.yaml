@@ -5598,6 +5598,34 @@ components:
   tier: observability
   feature: portal
 - name: otel-collector-daemonset
+  # 0.1.30: the logs/gateway pipeline keeps ONLY the agent gateway's access log -- scope `request`
+  # with a `gateway` field -- where it previously kept every non-audit OTLP log. observability#171
+  # ec3b2e9, their tag 3.1.93. Audit routing (logs/audit -> krateo_audit) is unchanged, and the
+  # image does not move: this chart version ships config only.
+  # WHY NOW: at core-provider 2.13.95, OTEL_LOGS_ENABLED would export the whole slog stream of
+  # core-provider and all 76 cdcs, which would duplicate their pod logs into otel_logs. This filter
+  # is what contains that. Note it is a PRECAUTION rather than a fix today -- observability measured
+  # OTEL_LOGS_ENABLED as "false" on installer-core-provider and in all 76 cdc ConfigMaps, and Diego
+  # decided controller audit arrives via a future core-provider otel.auditLogs switch, NOT via
+  # core-provider.otel.logs. DO NOT SET core-provider.otel.logs.
+  # ROLL EFFECT: the collector config changes, so the daemonset agent pods restart on every node
+  # with a brief per-node log gap. Same shape as any daemonset config bump. No data change expected
+  # today: the gateway is the only non-audit OTLP log producer on 057 (otel_logs, 7 days).
+  #
+  # A VALUES PATH IS RENAMED, which observability's "no values or schema change" did not capture --
+  # and the path COUNT is identical at 156, which is exactly why it reads as no change:
+  #   REMOVED  ...config/processors/filter/not-audit/{error_mode, logs/log_record[]}
+  #   ADDED    ...config/processors/filter/gateway-access-log/{error_mode, logs/log_record[]}
+  # CHECKED BEFORE PINNING, because a renamed mapping is the class that silently drops a setting:
+  # our values schema declares componentValues.otel-collector-daemonset...config.processors with
+  # additionalProperties FALSE and only three names -- batch, memory_limiter, transform. `filter` is
+  # NOT DECLARED AT ALL, so neither the old nor the new processor name is settable through the
+  # installer, and 057's CR carries no componentValues.otel-collector-daemonset at all. So the
+  # rename lives entirely inside the chart's own defaults and cannot strand an override we hold.
+  # IF ANYONE EVER NEEDS TO OVERRIDE THAT FILTER, it needs a new schema node, and it must use the
+  # NEW name. The sibling `exporters` node is one of the six paths in installer#910 where the
+  # generated CRD accepts values the schema rejects (patternProperties, unsupported by crdgen), so
+  # read that issue first.
   # 0.1.24 is the PREVENTION half of Diego's S1 decision; krateo-observability 0.1.38's
   # sre-credential-header-in-traces, already live, is the DETECTION half.
   # WHAT S1 IS: upstream kagent tools copy the raw Authorization header into span attributes
@@ -5748,7 +5776,7 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.29
+  version: 0.1.30
   deps:
   - otel-collector-deployment
   tier: observability
