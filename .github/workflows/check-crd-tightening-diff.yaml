@@ -1,0 +1,29 @@
+name: check-crd-tightening-diff
+
+# Runs hack/crd-tightening-diff.py's OFFLINE fixture suite, so the instrument that decides whether
+# a -crd bump can break stored objects cannot rot between pins. Its first draft inverted exactly
+# that verdict and three fixtures caught it; see the script's docstring.
+
+on:
+  pull_request:
+      # NO `branches:` filter, deliberately: a `branches: [main]` here means the gate does not run
+      # on a STACKED pull request, which then shows "all checks passed" with every gate skipped.
+    # NO `paths:` filter, deliberately: a path-filtered workflow never STARTS on a PR that misses
+    # its paths, so a required context would wait forever on "Expected".
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  crd-tightening-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Exercise the CRD-tightening decision against offline fixtures
+        run: python3 .github/scripts/check-crd-tightening-diff.py

@@ -45,6 +45,43 @@ installer tag; the pins are chart content, so the new installer version carries 
 
 ### Before you merge a pin: run the root-schema gate on the component you touched
 
+### A `-crd` bump: run `hack/crd-tightening-diff.py` before you pin it
+
+A CEL rule or a `required` added to an **existing** shape makes stored objects **unupdatable at
+their next write**. It bites at the next WRITE and not at the CRD apply, so the symptom appears
+long after the roll, as a failed helm release for whatever component next writes that kind. The
+same rule or `required` **inside a new optional field** cannot do that: no stored object carries
+the field. The entire decision is which of the two it is.
+
+```
+python3 hack/crd-tightening-diff.py --chart <name>-crds --old <cur> --new <next>
+python3 hack/crd-tightening-diff.py --self-test        # 8 offline cases
+```
+
+Exit 1 means at least one tightening **reaches a pre-existing shape**: refuse the pin unless you
+have counted the existing objects on every cluster that could receive it.
+
+**Do not do this by reading the chart diff, and do not do it with an ad-hoc walker.** On authn
+0.47.0 I got it wrong in both directions in one sitting. A first script reported a real new
+`required ('audiences','oidcConfig')` alongside a fabricated "new ancestor spec.versions[0]" --
+it built paths by string concatenation and never emitted list-element paths. A second, more
+careful script then "corrected" the real finding to an artifact: it descended properties/items by
+name along paths I named, I asked for `spec.delegation.oidcConfig`, got ABSENT, and concluded
+`oidcConfig` was absent from both versions. It exists, at
+`spec.delegation.subjectTokens[].oidcConfig` -- absence scoped to my query, reported as a fact
+about the schema. authn caught it and asked for the fixture that is now case 1 of the self-test.
+
+The tool's own first draft had the inverse bug and the self-test caught it: it recorded only paths
+that ALREADY had a constraint, so "did the parent exist before?" was silently answered by "did it
+already have a constraint?", and a rule added to a previously unconstrained existing field read as
+NEW-SHAPE -- safe. Three cases failed on that before it ever touched a real chart.
+
+**Also ask the publisher to name every CEL rule, `required` and bound with its path and whether
+that path existed before.** authn has made that a standing part of their release notices. A values
+summary -- "optional fields only, no values changed" -- can be entirely true while a CEL rule is
+added, because the rule is in the CRD and not in the values.
+
+
 ```sh
 python3 hack/chart-root-schema-gate.py --pins chart/files/component-pins.yaml --only <component>
 ```
