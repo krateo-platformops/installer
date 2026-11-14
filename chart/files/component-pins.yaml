@@ -922,6 +922,38 @@ components:
   # spec.platformRoutes). gatewayRewrite strips the path prefix before forwarding to the backend
   # (authn serves at /, so the /auth prefix must be rewritten away). gatewayAuth is the listener-route
   # auth posture: public = no token required (login endpoints must be reachable unauthenticated).
+  # /auth IN PATH MODE COLLIDES WITH THE FRONTEND'S OIDC CALLBACK. Recorded 2026-11-14 because
+  # nothing anywhere said so, and it is why features.keycloak was PULLED from the 057 roll window.
+  # The OIDC redirect URI is the PORTAL FRONTEND'S callback, not authn's: authn never receives the
+  # browser redirect at all -- /oidc/login reads the code from an X-Auth-Code header
+  # (oidc/login.go:131 at 0.47.0) and only echoes spec.redirectURI into the authorization URL and
+  # the token exchange. The frontend's callback is the SPA route /auth with ?kind=oidc REQUIRED
+  # (RoutesProvider.tsx:49; without the kind, Auth.tsx refuses with CALLBACK_NO_STRATEGY).
+  # On demo this is fine because demo is HOST mode: cmp.krateo.dev is the frontend's host and authn
+  # lives on authn.cmp.krateo.dev, so nothing overlaps. In 057's PATH mode this component's
+  # PathPrefix /auth matches /auth itself by Gateway API path-element matching, and gatewayRewrite
+  # strips it -- so a successful Keycloak login arrives at authn as /?kind=oidc, matches none of its
+  # ELEVEN exact-match routes, and returns 404 with the authorization code lost.
+  # AGREED FIX (authn + frontend + me, 2026-11-14): move this field to /authn. It is a ONE-FIELD
+  # change because AUTHN_API_BASE_URL is DERIVED, not configured -- compositions.yaml builds a
+  # path-mode peer URL as the portal host plus this component's gatewayPath, and this pin's
+  # configKeys already names AUTHN_API_BASE_URL -- and because the platformRoutes entry comes from
+  # the same field. The redirect URI then stays https://<portal>/auth?kind=oidc byte for byte, and
+  # /auth falls through to the frontend's own `gatewayPath: /` prefix.
+  # NOT YET DONE, and not to be done casually: it needs Diego's direct word, and the fall-through
+  # plus the derivation are READ FROM SOURCE rather than rendered. The platformRoutes derivation is
+  # inline in compositions.yaml, which is lookup-gated, so no test can reach it and .Values.components
+  # cannot override gatewayPath (only version/registerOnly/tier/repo/chart). The honest proof is to
+  # extract it into a named helper the way inst.subAgents was -- that docstring says it was pulled
+  # out "SO IT CAN BE TESTED AT ALL" -- and assert that /auth EXACT, WITH A QUERY, matches no authn
+  # route. frontend asked for that negative assertion specifically; "/authn exists" is weaker.
+  # MEASURED on 057 before proposing the move, so the blast radius is known rather than assumed:
+  # exactly ONE consumer of the portal host's /auth prefix exists (frontend-config-vars/config.json,
+  # out of 2334 ConfigMap data keys), ZERO portal-host URLs appear in 1005 container env values, and
+  # /auth occurs exactly once in this repo -- this line. Every other authn caller (the agentiko
+  # bridge's /delegate, nightly-review's AUTHN_URL, snowplow, the gateway's remote JWKS) reaches
+  # authn IN-CLUSTER, which that zero is the evidence for. authn also swept their own docs, charts
+  # and examples and found no /auth assumption, with a control on the search itself.
   gatewayPath: /auth
   gatewayRewrite: true
   gatewayAuth: public
@@ -8780,6 +8812,22 @@ components:
   #   values.schema.json is identical once description/title are ignored, with a stripper control
   #   proving a planted type change would still be seen. Only Chart.yaml and
   #   compositiondefinition.yaml's version line change besides.
+  # THREE VALUES COUPLED ACROSS CHARTS, with NOTHING enforcing that they move together. Recorded
+  # 2026-11-14 at agentiko-mcp-server's request, in their words, because each is a value restated
+  # in two or three places and a mismatch is a silent failure rather than a render error:
+  #   (a) this chart's oidcConfig.name  <->  agentiko-mcp-server auth.mapping.oidcConfig
+  #   (b) this chart's ideClient.audience  <->  agentiko-mcp-server auth.mapping.subjectAudiences[0]
+  #       <->  agentgateway-policies mcpEntry.oauth.audience
+  #   (c) the keycloak chart's hostname + /realms/krateo  <->  mcpEntry.oauth.issuer, BYTE FOR BYTE
+  # (a) is live rather than theoretical: componentValues.krateo-keycloak-realm.oidcConfig.name IS
+  # declarable here, and the OIDCConfig it creates is named from it (default "keycloak", which is
+  # the ?name= of authn's /oidc/login). Measured: the NAME is independent of the namespace, while
+  # the OIDCConfig's NAMESPACE follows the release namespace -- checked by rendering into a second
+  # namespace rather than reading the one render I happened to do. chart/values.yaml sets nothing
+  # under this component today, so the chart default stands on every cluster.
+  # Same shape as the nightly-review caveat observability raised: a static reference to a SETTABLE
+  # name. agentiko-mcp-server's side is a value defaulting to "" that refuses to render in exchange
+  # mode, so their half fails loudly at install; this half is the one that can drift quietly.
   version: 0.5.1
   # THE RENDER-TIME GATE THAT MATTERS. Every object this chart emits is a KOG-generated kind in
   # keycloak.ogen.krateo.io, and those CRDs do not exist until keycloak-config-kog's oasgen
