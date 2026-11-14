@@ -1,0 +1,32 @@
+# The repos that publish a retracted-versions.yaml, and the charts each may speak for.
+#
+# WHY THIS FILE EXISTS. This gate read ONE hardcoded list, in krateo-platformops/frontend.
+# core-provider then asked that core-provider 2.13.85-2.13.94 never be pinned, and the obvious
+# move -- add the entries to frontend's file -- is wrong, as frontend pointed out: their list is
+# the publisher vouching for its OWN releases, and their crdgen/retracted_test.go refuses any
+# chart the repo does not publish. Adding another team's versions would mean loosening that
+# check, leaving frontend asserting facts about releases it cannot verify. An entry's value IS
+# its authority. So retraction lists are per publisher, and this file says whose we read.
+#
+# `charts` is the set that publisher may retract, BY CHART NAME, as in the `chart:` field of
+# component-pins.yaml or the dependency name in chart/Chart.yaml. It is enforced here, on the
+# consumer side, as well as in the publisher's own test: an entry naming a chart outside its
+# set FAILS this gate rather than being obeyed. That is deliberate -- a list that can retract
+# anything is a list anyone can use to block anyone.
+#
+# ADDING A REPO: its retracted-versions.yaml must already exist. A listed repo whose list is a
+# 404 FAILS CLOSED and blocks every PR here, by design: a tolerated 404 reads exactly like
+# every pin being clean, which is the one thing a guard must never report by accident.
+#
+# NOT YET LISTED, and deliberately: krateo-platformops/core-provider. They have no
+# retracted-versions.yaml at their repo root today. Listing them before they publish one would
+# block this repo's CI for a reason unrelated to any PR. Add the line in the same change that
+# their list goes live -- their charts are core-provider and core-provider-crds.
+sources:
+  - repo: krateo-platformops/frontend
+    # Confirmed by frontend 2026-11-14: exactly the set crdgen/retracted_test.go enforces on
+    # their side, so the two cannot disagree.
+    charts:
+      - frontend
+      - frontend-crds
+      - builder-gate
