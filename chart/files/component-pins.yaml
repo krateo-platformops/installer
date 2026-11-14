@@ -944,13 +944,28 @@ components:
   # configKeys already names AUTHN_API_BASE_URL -- and because the platformRoutes entry comes from
   # the same field. The redirect URI then stays https://<portal>/auth?kind=oidc byte for byte, and
   # /auth falls through to the frontend's own `gatewayPath: /` prefix.
-  # NOT YET DONE, and not to be done casually: it needs Diego's direct word, and the fall-through
-  # plus the derivation are READ FROM SOURCE rather than rendered. The platformRoutes derivation is
-  # inline in compositions.yaml, which is lookup-gated, so no test can reach it and .Values.components
-  # cannot override gatewayPath (only version/registerOnly/tier/repo/chart). The honest proof is to
-  # extract it into a named helper the way inst.subAgents was -- that docstring says it was pulled
-  # out "SO IT CAN BE TESTED AT ALL" -- and assert that /auth EXACT, WITH A QUERY, matches no authn
-  # route. frontend asked for that negative assertion specifically; "/authn exists" is weaker.
+  # DONE 2026-11-14, on Diego's direct in-session word, after the render proof he required.
+  # The precondition this note demanded has been met rather than waived: the derivation was
+  # extracted into inst.platformRoutes (#906, merged) precisely so it could be rendered, and
+  # .github/scripts/check-platform-routes.py asserts BOTH directions against synthetic components,
+  # with frontend's negative assertion in the strong form they asked for:
+  #   BUG PRESENT at /auth   authn prefix '/auth' matches '/auth?kind=oidc&code=..&state=..' (rewrite=True)
+  #   FIX at /authn          that same callback matches NO authn route
+  #   frontend's assertion   routes matching the callback = ['frontend'] -- authn absent
+  #   fall-through           the frontend's '/' prefix claims the callback
+  #   only-one-change        differing routes between the two renders = ['authn']
+  #   TLS                    the shared listener stays platform-https:443
+  # plus 8 Gateway API PathPrefix matcher cases, including that '/authn' does NOT match '/auth'
+  # (a naive startswith() would, and that is the whole mechanism).
+  # WHY THE DERIVED CONSUMER FOLLOWS, verified on 057 rather than reasoned:
+  # frontend-config-vars/config.json held AUTHN_API_BASE_URL = https://portal.krateo.dev/auth, which
+  # compositions.yaml:244 builds as $gwPortalHost + trimSuffix "/" $d.gatewayPath and writes per this
+  # pin's configKeys at :265. The CR DOES carry a static componentValues.frontend.config
+  # .AUTHN_API_BASE_URL = http://localhost:8082 -- the schema's own default -- but it is a LOOPBACK,
+  # and the #203 fix treats a loopback as "not a real override" and auto-computes anyway. The live
+  # ConfigMap proved that empirically: it showed the portal URL, not the loopback. So the derived
+  # value moves to https://<portal>/authn by itself, and a REAL operator override would still win.
+  # The redirect URI stays https://<portal>/auth?kind=oidc byte for byte -- it was never authn's.
   # MEASURED on 057 before proposing the move, so the blast radius is known rather than assumed:
   # exactly ONE consumer of the portal host's /auth prefix exists (frontend-config-vars/config.json,
   # out of 2334 ConfigMap data keys), ZERO portal-host URLs appear in 1005 container env values, and
@@ -958,7 +973,7 @@ components:
   # bridge's /delegate, nightly-review's AUTHN_URL, snowplow, the gateway's remote JWKS) reaches
   # authn IN-CLUSTER, which that zero is the evidence for. authn also swept their own docs, charts
   # and examples and found no /auth assumption, with a control on the search itself.
-  gatewayPath: /auth
+  gatewayPath: /authn
   gatewayRewrite: true
   gatewayAuth: public
   # 1.12.15: A SECURITY FIX — cross-user identity leaks on the SA-serve path. #268 (branch-E SA-endpoint
