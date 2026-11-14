@@ -2,3 +2,12 @@
 # released chart: `helm package` includes every file under the chart dir that is not ignored,
 # and there was no .helmignore here at all before (verified: the file did not exist).
 tests/
+
+# The ANNOTATED pins file is development-time only; the chart reads the generated data-only
+# files/component-pins.min.yaml instead (see _helpers.tpl). helm embeds the entire chart in its
+# release record, and a release Secret's data may not exceed 1 MiB DECODED. krateo-057 proved it:
+# revision 546 reached 1,047,684 bytes with 892 to spare and revision 547 was refused outright
+# ("data: Too long"). This file is 740,859 bytes, 97.6% of it comment prose; excluding it takes the
+# packaged archive from 519,968 to 246,583 bytes. The comments stay in git, beside the pins they
+# explain, which is where they get read at pin time.
+files/component-pins.yaml

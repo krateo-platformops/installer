@@ -1,0 +1,41 @@
+name: check-pins-min-in-sync
+
+# The chart reads a GENERATED data-only copy of the pins file, because helm embeds the whole chart
+# in its release record and a release Secret's data may not exceed 1 MiB DECODED. krateo-057 hit
+# that wall on 2026-11-14: revision 546 sat at 1,047,684 bytes, 892 from the ceiling, and 547 was
+# refused with `Secret "sh.helm.release.v1.installer.v547" is invalid: data: Too long`.
+#
+# THIS GATE EXISTS FOR THE TRAP THAT CREATES, which is worse than the problem if unguarded: edit a
+# pin in the annotated file, forget to regenerate the min file, and the chart renders the OLD pin
+# while the repo and every other pin gate show the NEW one. Nothing else would be red.
+#
+# It also asserts its own premise -- that _helpers.tpl reads the min file and .helmignore excludes
+# the annotated one -- because the saving silently disappears if either is reverted.
+
+on:
+  pull_request:
+      # NO `branches:` filter: a branches: [main] here means the gate does not run on a STACKED
+      # pull request, which then shows "all checks passed" with every gate skipped.
+    # NO `paths:` filter: a path-filtered workflow never STARTS on a PR that misses its paths, so
+    # a required context would wait forever on "Expected".
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  pins-min-in-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: The stripper's own rules hold
+        run: python3 hack/strip-pin-comments.py --self-test
+      - name: This gate detects a stale or hand-edited generated file
+        run: python3 .github/scripts/check-pins-min-in-sync.py --self-test
+      - name: The generated pins file is in sync and the chart reads it
+        run: python3 .github/scripts/check-pins-min-in-sync.py
