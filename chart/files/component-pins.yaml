@@ -7488,7 +7488,10 @@ components:
   # added structural status fields and had to go first.
   # 0.1.31: co-versioned with nightly-review (lockstep). Packaged trees BYTE-IDENTICAL to 0.1.30 apart
   #   from Chart.yaml's version line. Diffed, not assumed.
-  version: 0.2.4
+  # 0.2.6 (annotated tag on 5931f8d, PR #61; every check passed, one skipped). Contains all of
+  # 0.2.6: version-only change from 0.2.5 apart from the version itself (observability).
+  # Moves with nightly-review as a declared version line.
+  version: 0.2.6
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -7873,7 +7876,42 @@ components:
   #   Chart diff 0.1.30 -> 0.1.31 is Chart.yaml only (version + appVersion); image.tag is "" so appVersion
   #   moves the image. Both chart and image published at 0.1.31 — verified with a NUMERIC tag sort, because
   #   a lexical sort puts 0.1.9 above 0.1.31 and reads as "stuck at 0.1.9".
-  version: 0.2.4
+  # 0.2.6 (annotated tag on 5931f8d, PR #61; every check passed, one skipped). Contains all of
+  # 0.2.5's three config.destinations.components entries PLUS the gateway hop: the CronJob now
+  # reaches the reviewer THROUGH krateo-agent-gateway instead of dialling the Service, sending
+  # AUTOPILOT_A2A_URL=http://krateo-agent-gateway.krateo-system.svc:8080/ and
+  # AUTOPILOT_A2A_HOST=nightly-review-agent.krateo-system as x-kagent-host, carrying the authn
+  # /serviceaccount/login JWT. With no JWT the run fails naming config.authnUrl rather than
+  # calling the gateway unauthenticated.
+  # THIS PIN AND THE REGISTRATION BELOW MUST SHIP IN THE SAME TAG. 0.2.6 without the
+  # registration means the x-kagent-host header hits no route and the 02:00Z run fails. The
+  # registration without 0.2.6 is harmless -- the route simply goes unused.
+  # New chart key reviewer.gateway {service,namespace,port}. DELIBERATELY NOT DECLARED in
+  # values.schema.json yet, and this is the one thing to come back for. I wrote the node, and
+  # check-schema-size-budget REFUSED it: chart/values.schema.json is already 12,243 bytes over
+  # the 1,048,576 ConfigMap limit on main, and the node added 1,383 more. Growing the schema now
+  # makes the cluster that is wedged for exactly that reason harder to unwedge, so the ratchet is
+  # right to refuse.
+  # Safe to defer ONLY because observability measured that the chart defaults
+  # (krateo-agent-gateway, the release namespace, 8080) are already correct for every cluster and
+  # nothing needs to set it. It is NOT safe to forget: reviewer is additionalProperties:false, so
+  # until the node exists an override is PRUNED by the apiserver while the write reports success
+  # and the chart default silently wins.
+  # DO IT IN THE FIRST PR AFTER core-provider 2.13.95 IS PINNED -- #485's compact ConfigMap frees
+  # ~43%, after which the budget gate accepts the node. The 21 lines are in this PR's description.
+  # REGISTERED AS A SUB-AGENT (Diego, 2026-11-14). agentName is REQUIRED here and is not
+  # cosmetic: the component and the chart are both `nightly-review` while the chart's Agent
+  # object is `nightly-review-agent` (metadata.name = .Values.reviewer.name). Without it the
+  # derived route is `nightly-review` and the HTTPRoute resolves to a Service that does not
+  # exist. inst.subAgents read agentName for ORCHESTRATORS ONLY until 2026-11-14; the
+  # else-branch fix ships in this same change, proven by check-subagents.
+  # CAVEAT from observability, recorded because nothing enforces it: 
+  # componentValues.nightly-review.reviewer.name is settable, so a cluster overriding it would
+  # rename the Agent while this static agentName stays put, and the route would again point at
+  # nothing. The two must move together. No cluster sets reviewer.* today.
+  agent: true
+  agentName: nightly-review-agent
+  version: 0.2.6
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the
