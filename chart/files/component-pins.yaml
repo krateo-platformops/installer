@@ -4900,6 +4900,38 @@ components:
   feature: portal
   chart: controller-render-service
 - name: oasgen-provider
+  # DO NOT PIN 0.66.0. A HOT LOOP, reported by its own author unprompted 2026-11-14, with the CR's
+  # conditions CORRECT throughout -- so nothing in status shows it and no readiness gate of ours
+  # would catch it.
+  # THE MECHANISM, in oasgen-provider's words after they corrected their own first two filings:
+  # a kind declaring NO `create` verb writes krateo.io/external-create-pending about FIVE TIMES A
+  # SECOND, forever. Their #664 made that path return a non-error result, which lost the
+  # workqueue's exponential backoff, and provider-runtime's recovery registration turns DELETING
+  # that annotation into an immediate Create event -- so each pass scheduled the next.
+  # IT IS NOT A CORNER CASE. Two consumers hit it independently. The one that reaches us: a
+  # per-realm singleton (get + update, no create) whose chart creates it alongside the realm it
+  # reads, so the first observe 404s. EVERY FRESH INSTALL of krateo-keycloak-realm lands here.
+  # AND THAT CONSUMER CANNOT DOWNGRADE: keycloak-config-kog 0.9.0's keyed protocol-mapper
+  # comparison requires oasgen >= 0.66.0. So the answer is forward, not back.
+  # FIXED IN 0.67.0 = unstructured-runtime v1.17.1 and nothing else (one go.mod line, two go.sum).
+  # oasgen #674, fix PR #677 merged; #678 (the log section) is the last thing before the tag.
+  # WE ARE NOT EXPOSED TODAY: this pin is 0.64.0 and 057 runs 0.64.0 (verified on the live
+  # Deployment). The exposure begins the moment anyone pins 0.66.0 for a cluster that will install
+  # a fresh realm.
+  # 0.67.0 ALSO CHANGES AN ANNOTATION SHAPE, recorded because a future gate might key on it:
+  # external-create-pending becomes RETAINED rather than deleted, and a new
+  # krateo.io/external-create-not-requested (RFC3339) appears on affected CRs. Checked
+  # 2026-11-14: NO gate, template or helper of ours keys on either -- the five hits for the
+  # former in this file are all comments, and the latter appears nowhere. If that changes, this
+  # is the note to come back to.
+  # WHY THIS IS A COMMENT AND NOT AN ENFORCED EXCLUSION, which is the honest limitation: our rule
+  # is that an exclusion lives in the retracted list, because "do not pin X" in prose is not a
+  # control -- nothing evaluates it. oasgen-provider publishes no retracted-versions.yaml, so
+  # they are not in .github/retraction-sources.yaml and this cannot be enforced yet. I have asked
+  # them to publish one; when they do, 0.66.0 goes in it and this comment stops being the only
+  # thing standing between us and the loop. Until then, a reader of this line is the control.
+  # THE PAIR TO TAKE, when it exists: oasgen-provider + oasgen-provider-crd 0.67.0,
+  # keycloak-config-kog 0.9.1 (floor >= 0.67.0), krateo-keycloak-realm 0.5.2.
   # 0.26.0 is a BREAKING CHART CHANGE (oasgen-provider#165): `render.*` is gone from this chart's
   # values and `render.enabled=true` is now REJECTED rather than ignored. The oasgen-render service it
   # used to deploy conditionally now ships as its own chart, controller-render-service, pinned below.
