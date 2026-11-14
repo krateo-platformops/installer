@@ -1,0 +1,37 @@
+name: check-platform-routes
+
+# Exercises inst.platformRoutes, extracted from compositions.yaml so it could be tested at all --
+# that file LISTs every CRD with `lookup` at its head, which `helm template` disables, so it
+# renders ZERO composition objects and nothing inline in it is reachable by any render.
+#
+# It exists to PROVE the property Diego approved the /auth -> /authn move on: that /auth EXACT,
+# WITH A QUERY, is matched by no authn route afterwards. frontend asked for that negative
+# assertion; "/authn exists" would pass while leaving the bug.
+
+on:
+  pull_request:
+      # NO `branches:` filter: a branches: [main] here means the gate does not run on a STACKED
+      # pull request, which then shows "all checks passed" with every gate skipped.
+    # NO `paths:` filter: a path-filtered workflow never STARTS on a PR that misses its paths, so
+    # a required context would wait forever on "Expected".
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  platform-routes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Set up Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: v3.19.0
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Prove the path-mode routing property
+        run: python3 .github/scripts/check-platform-routes.py
