@@ -1,0 +1,820 @@
+components:
+- name: authn-crd
+  kind: AuthnCrds
+  chart: authn-crds
+  version: 0.47.0
+  tier: platform
+  feature: portal
+- name: oasgen-provider-crd
+  kind: OasgenProviderCrds
+  chart: oasgen-provider-crds
+  version: 0.64.0
+  tier: platform
+  feature: oasgenProvider
+- name: frontend-crd
+  kind: FrontendCrds
+  chart: frontend-crds
+  version: 1.8.44
+  tier: platform
+  feature: portal
+- name: showback
+  deps:
+  - krateo-observability
+  feature: showback
+  kind: Showback
+  tier: observability
+  version: 0.1.3
+- name: snowplow-crd
+  kind: SnowplowCrds
+  chart: snowplow-crds
+  version: 1.12.70
+  tier: platform
+  feature: portal
+- name: authn
+  kind: Authn
+  chart: authn
+  version: 0.47.0
+  deps:
+  - authn-crd
+  tier: platform
+  feature: portal
+  expose: true
+  exposePort: 8082
+  nodePort: 31001   # pinned deterministic NodePort (host-mappable) for exposure.type=NodePort
+  svcMatch: authn
+  configKeys:
+  - AUTHN_API_BASE_URL
+  gatewayPath: /authn
+  gatewayRewrite: true
+  gatewayAuth: public
+- name: snowplow
+  kind: Snowplow
+  chart: snowplow
+  version: 1.12.70
+  deps:
+  - snowplow-crd
+  - authn
+  tier: platform
+  feature: portal
+  expose: true
+  exposePort: 8081
+  nodePort: 31002   # pinned deterministic NodePort (host-mappable) for exposure.type=NodePort
+  svcMatch: snowplow
+  configKeys:
+  - SNOWPLOW_API_BASE_URL
+  gatewayPath: /content
+  gatewayRewrite: true
+  gatewayAuth: optional
+  frontendConfigEnv: FRONTEND_CONFIG_CONFIGMAP
+  internalUrls:
+  - path: env.URL_SELF
+    peer: snowplow
+  - path: env.URL_AUTHN
+    peer: authn
+- name: frontend
+  kind: Frontend
+  chart: frontend
+  version: 1.8.44
+  deps:
+  - frontend-crd
+  - authn
+  - snowplow
+  tier: platform
+  feature: portal
+  expose: true
+  exposePort: 8080
+  nodePort: 31000   # pinned deterministic NodePort (host-mappable) for exposure.type=NodePort
+  svcMatch: frontend
+  consumer: true
+  gatewayPath: /
+  gatewayRewrite: false
+  gatewayAuth: public
+- name: krateo-marketplace-catalog
+  kind: KrateoMarketplaceCatalog
+  version: 0.1.2
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  tier: platform
+  feature: portal
+- name: git-provider-crd
+  kind: GitProviderCrds
+  chart: git-provider-crds
+  version: 0.17.0
+  tier: platform
+  feature: portal
+- name: git-provider
+  kind: GitProvider
+  chart: git-provider
+  version: 0.17.0
+  deps:
+  - git-provider-crd
+  tier: platform
+  feature: portal
+- name: github-provider-kog-config
+  deps:
+  - github-provider-kog
+  feature: githubProviderKogConfig
+  kind: GithubProviderKogConfig
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  requiresApiGroups:
+  - github.krateo.io
+  tier: platform
+  version: 0.9.0
+- name: github-provider-kog
+  kind: GithubProviderKog
+  version: 0.12.0
+  requiresApiGroups:
+  - ogen.krateo.io
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  tier: platform
+  feature: portal
+- name: portal
+  kind: Portal
+  version: 1.8.118
+  deps:
+  - frontend
+  - git-provider
+  tier: platform
+  feature: portal
+  chart: portal
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+- name: portal-agents
+  kind: PortalAgents
+  version: 1.8.118
+  deps: ['portal']
+  tier: platform
+  feature: portal
+  chart: portal-agents
+- name: marketplace-page
+  kind: MarketplacePage
+  version: 1.8.118
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: selfservice-status
+  kind: SelfserviceStatus
+  version: 0.2.56
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  deps:
+    - snowplow
+    - authn
+  tier: platform
+  feature: selfservice
+- name: service-desk-page
+  kind: ServiceDeskPage
+  version: 1.8.118
+  deps:
+  - portal
+  tier: platform
+  feature: serviceDesk
+- name: incidents-page
+  kind: IncidentsPage
+  version: 1.8.118
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: alerts-page
+  kind: AlertsPage
+  version: 1.8.118
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: dashboard-page
+  kind: DashboardPage
+  version: 1.8.118
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: compositions-page
+  kind: CompositionsPage
+  version: 1.8.118
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: blueprints-page
+  kind: BlueprintsPage
+  version: 1.8.118
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: resources-page
+  kind: ResourcesPage
+  version: 1.8.118
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: search-page
+  kind: SearchPage
+  version: 1.8.118
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: builders-page
+  kind: BuildersPage
+  version: 1.8.118
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: clusters-page
+  kind: ClustersPage
+  version: 1.8.118
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: reviews-page
+  kind: ReviewsPage
+  version: 1.8.118
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: settings-page
+  kind: SettingsPage
+  version: 1.8.118
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: observability-page
+  kind: ObservabilityPage
+  version: 1.8.118
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: audit-page
+  kind: AuditPage
+  version: 1.8.118
+  deps:
+  - portal
+  tier: platform
+  feature: portal
+- name: blueprint-render-service
+  kind: BlueprintRenderService
+  version: 0.5.0
+  tier: platform
+  feature: portal
+  chart: blueprint-render-service
+- name: controller-render-service
+  kind: ControllerRenderService
+  version: 0.64.0
+  tier: platform
+  feature: portal
+  chart: controller-render-service
+- name: oasgen-provider
+  kind: OasgenProvider
+  chart: oasgen-provider
+  version: 0.64.0
+  deps:
+  - oasgen-provider-crd
+  tier: platform
+  feature: oasgenProvider
+- name: clickhouse-operator
+  kind: ClickhouseOperator
+  version: 0.1.2
+  tier: observability
+  feature: portal
+- name: mongodb-operator
+  kind: MongodbOperator
+  version: 0.2.0
+  tier: observability
+  feature: portal
+- name: krateo-observability
+  kind: KrateoObservability
+  version: 0.1.45
+  deps:
+  - clickhouse-operator
+  - mongodb-operator
+  - alert-provider-crd
+  tier: observability
+  feature: portal
+  svcMatch: krateo-clickstack
+- name: otel-collector-deployment
+  kind: OtelCollectorDeployment
+  version: 0.3.18
+  deps:
+  - krateo-observability
+  tier: observability
+  feature: portal
+- name: krateo-slo-rollup
+  kind: KrateoSloRollup
+  version: 0.1.1
+  deps:
+  - otel-collector-daemonset
+  tier: observability
+  feature: sloRollup
+- name: otel-collector-tailsampling
+  kind: OtelCollectorTailsampling
+  version: 0.1.12
+  deps:
+    - otel-collector-deployment
+  tier: observability
+  feature: portal
+- name: otel-collector-daemonset
+  kind: OtelCollectorDaemonset
+  version: 0.1.29
+  deps:
+  - otel-collector-deployment
+  tier: observability
+  feature: portal
+- name: krateo-audit-worm
+  kind: KrateoAuditWorm
+  version: 0.1.8
+  deps:
+  - otel-collector-daemonset
+  - alert-provider-crd
+  tier: observability
+  feature: auditWorm
+  requiresApiGroups:
+  - observability.krateo.io
+- name: krateo-sse-proxy
+  kind: KrateoSseProxy
+  version: 0.1.26
+  deps:
+  - krateo-observability
+  tier: observability
+  feature: portal
+  expose: true
+  exposePort: 8080
+  nodePort: 31003   # pinned deterministic NodePort (host-mappable) for exposure.type=NodePort
+  svcMatch: sse-proxy
+  configKeys:
+  - EVENTS_API_BASE_URL
+  - EVENTS_PUSH_API_BASE_URL
+  gatewayPath: /events
+  gatewayRewrite: true
+  gatewayAuth: optional
+  internalUrls:
+  - path: auth.urlAuthn
+    peer: authn
+- name: gateway-api-crds
+  kind: GatewayAPICrds
+  version: 0.10.0
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  tier: platform
+  feature: ingress
+- name: agentgateway
+  kind: Agentgateway
+  version: 0.10.0
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  deps:
+  - gateway-api-crds
+  tier: platform
+  feature: ingress
+- name: cert-manager
+  kind: CertManager
+  version: 0.10.0
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  deps:
+  - agentgateway
+  tier: platform
+  feature: ingress
+- name: cert-manager-issuers
+  kind: CertManagerIssuers
+  version: 0.10.0
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  deps:
+  - cert-manager
+  tier: platform
+  feature: ingress
+- name: external-dns
+  kind: ExternalDNS
+  version: 0.10.0
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  tier: platform
+  feature: externalDns
+- name: kagent-crds
+  kind: KagentCrds
+  version: 0.1.6
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  tier: observability
+  feature: coreAgents
+- name: kagent
+  kind: Kagent
+  version: 0.1.22
+  mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent-crds
+  tier: observability
+  feature: coreAgents
+- name: model-configs
+  kind: ModelConfigs
+  version: 0.1.2
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: coreAgents
+  modelOwner: true
+- name: installer-agent
+  kind: InstallerAgent
+  version: 0.3.7
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - repo-mcp-server
+  - kagent
+  - model-configs
+  tier: observability
+  feature: coreAgents
+  agent: true
+- name: repo-mcp-server
+  kind: RepoMcpServer
+  version: 0.1.6
+  mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: coreAgents
+  graphToggle: graph.enabled
+- name: structure-graph-mcp-server
+  kind: StructureGraphMcpServer
+  version: 0.1.2
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  requiresApiGroups:
+  - kagent.dev
+  tier: observability
+  feature: structureGraph
+- name: config-refs-mcp-server
+  kind: ConfigRefsMcpServer
+  version: 0.3.0
+  mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - kagent
+  tier: observability
+  feature: coreAgents
+- name: builder-gate
+  kind: BuilderGate
+  chart: builder-gate
+  version: 1.8.44
+  deps:
+    - portal
+    - kagent
+  tier: observability
+  feature: coreAgents
+- name: agentiko
+  kind: Agentiko
+  agentName: agentiko
+  version: 0.8.3
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+    - repo-mcp-server
+    - config-refs-mcp-server
+    - kagent
+    - model-configs
+    - installer-agent
+    - incident-agent
+    - authn-agent
+    - snowplow-agent
+    - frontend-agent
+    - clickstack-agent
+    - core-provider-agent
+  tier: observability
+  feature: coreAgents
+  agent: true
+  orchestrator: true
+- name: incident-agent
+  kind: IncidentAgent
+  version: 0.3.7
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - repo-mcp-server
+  - kagent
+  - model-configs
+  - clickhouse-mcp-server
+  tier: observability
+  feature: coreAgents
+  agent: true
+  graphToggle: repoSearch.graph.enabled
+- name: clickhouse-mcp-server
+  kind: ClickhouseMcpServer
+  version: 0.1.15
+  mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - krateo-observability
+  tier: observability
+  feature: specialistAgents
+- name: authn-agent
+  kind: AuthnAgent
+  version: 0.24.2
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - repo-mcp-server
+  - kagent
+  - model-configs
+  requiresApiGroups:
+  - kagent.dev
+  tier: observability
+  feature: specialistAgents
+  agent: true
+- name: snowplow-agent
+  kind: SnowplowAgent
+  version: 1.2.6
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - repo-mcp-server
+  - kagent
+  - model-configs
+  requiresApiGroups:
+  - kagent.dev
+  tier: observability
+  feature: specialistAgents
+  agent: true
+- name: frontend-agent
+  kind: FrontendAgent
+  version: 1.5.9
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - repo-mcp-server
+  - kagent
+  - model-configs
+  - snowplow-agent
+  requiresApiGroups:
+  - kagent.dev
+  tier: observability
+  feature: specialistAgents
+  agent: true
+  requireApproval: []
+- name: clickstack-agent
+  kind: ClickstackAgent
+  version: 3.1.10
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - repo-mcp-server
+  - kagent
+  - model-configs
+  - clickhouse-mcp-server
+  requiresApiGroups:
+  - kagent.dev
+  tier: observability
+  feature: specialistAgents
+  agent: true
+- name: core-provider-agent
+  kind: CoreProviderAgent
+  version: 0.62.1
+  mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - repo-mcp-server
+  - kagent
+  - model-configs
+  tier: observability
+  feature: coreAgents
+  agent: true
+- name: incident-provider
+  kind: IncidentProvider
+  version: 0.11.0
+  deps:
+  - incident-provider-crd
+  tier: observability
+  feature: portal
+  requiresApiGroups:
+  - observability.krateo.io
+- name: incident-provider-crd
+  kind: IncidentProviderCrds
+  chart: incident-provider-crds
+  version: 0.11.0
+  tier: observability
+  feature: portal
+- name: alert-provider-crd
+  kind: AlertProviderCrds
+  chart: alert-provider-crds
+  version: 0.2.83
+  tier: observability
+  feature: portal
+- name: alert-provider
+  kind: AlertProvider
+  version: 0.2.83
+  requiresApiGroups:
+  - observability.krateo.io
+  deps:
+  - alert-provider-crd
+  - incident-provider-crd
+  - krateo-observability
+  tier: observability
+  feature: portal
+- name: nightly-review-crd
+  kind: NightlyReviewCrds
+  chart: nightly-review-crds
+  version: 0.2.6
+  tier: observability
+  feature: specialistAgents
+- name: nightly-review
+  kind: NightlyReview
+  agent: true
+  agentName: nightly-review-agent
+  version: 0.2.6
+  deps:
+  - nightly-review-crd
+  - kagent
+  - krateo-observability
+  requiresApiGroups:
+  - kagent.dev
+  - serviceaccount.authn.krateo.io
+  tier: observability
+  feature: specialistAgents
+- name: agentgateway-controller
+  kind: AgentgatewayController
+  version: 0.2.0
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  tier: platform
+  feature: agentGateway
+- name: agentgateway-policies
+  kind: AgentgatewayPolicies
+  version: 0.2.33
+  repo: oci://ghcr.io/krateo-agentiko/charts
+  deps:
+  - agentgateway-controller
+  requiresApiGroups:
+  - agentgateway.dev
+  - serviceaccount.authn.krateo.io
+  - observability.krateo.io
+  tier: platform
+  feature: agentGateway
+  expose: true
+  exposePort: 8080
+  svcMatch: krateo-agent-gateway
+  configKeys:
+  - AUTOPILOT_API_BASE_URL
+  internalPorts:
+  - path: jwt.jwks.port
+- name: access-review-crd
+  kind: AccessReviewCrds
+  chart: access-review-crds
+  version: 0.2.0
+  tier: platform
+  feature: accessReview
+- name: access-review
+  kind: AccessReview
+  version: 0.2.0
+  deps:
+  - access-review-crd
+  tier: platform
+  feature: accessReview
+- name: gcp-configconnector-crd
+  kind: KrateoGcpConfigconnectorCrds
+  chart: krateo-gcp-configconnector-crds
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.1.5
+  tier: platform
+  feature: configConnector
+- name: gcp-configconnector
+  kind: KrateoGcpConfigconnector
+  chart: krateo-gcp-configconnector
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.1.5
+  deps:
+    - gcp-configconnector-crd
+  tier: platform
+  feature: configConnector
+- name: cloudnative-pg
+  kind: CloudnativePg
+  chart: cloudnative-pg
+  repo: oci://ghcr.io/cloudnative-pg/charts
+  version: 0.29.1
+  upstream: true
+  tier: platform
+  feature: keycloak
+  alsoFeatures:
+  - cloudnativePg
+- name: external-secrets
+  kind: ExternalSecrets
+  chart: external-secrets
+  repo: oci://ghcr.io/external-secrets/charts
+  version: 2.14.0
+  upstream: true
+  tier: platform
+  feature: keycloak
+- name: openstack-capabilities
+  kind: OpenstackCapabilities
+  version: 0.3.48
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  tier: platform
+  feature: openstack
+- name: keycloak-operator
+  kind: KeycloakOperator
+  chart: keycloak-operator
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.4.0
+  upstream: true
+  tier: platform
+  feature: keycloak
+- name: keycloak
+  kind: Keycloak
+  chart: keycloak
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.4.0
+  upstream: true
+  requiresApiGroups:
+  - k8s.keycloak.org
+  deps:
+  - keycloak-operator
+  - cloudnative-pg
+  tier: platform
+  expose: true
+  svcMatch: keycloak-service
+  exposePort: 8080
+  feature: keycloak
+- name: keycloak-config-kog
+  kind: KeycloakConfigKog
+  chart: keycloak-config-kog
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.8.1
+  requiresApiGroups:
+  - ogen.krateo.io
+  - external-secrets.io
+  - generators.external-secrets.io
+  - templates.krateo.io
+  - serviceaccount.authn.krateo.io
+  deps:
+  - oasgen-provider
+  - keycloak
+  - external-secrets
+  - snowplow
+  - snowplow-crd
+  - authn
+  tier: platform
+  feature: keycloak
+- name: krateo-keycloak-realm
+  kind: KrateoKeycloakRealm
+  chart: krateo-keycloak-realm
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.5.1
+  requiresApiGroups:
+  - keycloak.ogen.krateo.io
+  deps:
+  - keycloak-config-kog
+  - keycloak
+  tier: platform
+  feature: keycloak
+- name: identity-lifecycle-crd
+  kind: IdentityLifecycleCrds
+  chart: identity-lifecycle-crds
+  version: 0.4.1
+  tier: platform
+  feature: identityLifecycle
+- name: identity-lifecycle
+  kind: IdentityLifecycle
+  version: 0.4.1
+  deps:
+  - identity-lifecycle-crd
+  tier: platform
+  feature: identityLifecycle
+- name: krateo-capability-roles
+  kind: KrateoCapabilityRoles
+  chart: krateo-capability-roles
+  repo: oci://ghcr.io/krateo-platformops/krateo-saas
+  version: 0.6.2
+  deps:
+  - portal
+  tier: platform
+  feature: capabilityRoles
+- name: zendesk-kog
+  kind: ZendeskKog
+  chart: zendesk-kog
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.2.3
+  requiresApiGroups:
+  - ogen.krateo.io
+  deps:
+  - oasgen-provider
+  tier: platform
+  feature: serviceDesk
+- name: zendesk-organisations
+  kind: ZendeskOrganisations
+  chart: zendesk-organisations
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.2.4
+  requiresApiGroups:
+  - zendesk.ogen.krateo.io
+  deps:
+  - zendesk-kog
+  tier: platform
+  feature: serviceDesk
+- name: tenant-onboarding
+  kind: TenantOnboarding
+  chart: tenant-onboarding
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.2.65
+  tier: platform
+  feature: tenantOnboarding

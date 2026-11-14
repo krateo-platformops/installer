@@ -704,7 +704,18 @@ bump still propagates its pins and the set stays immune to `--reuse-values`. Onl
 overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain chart content.
 */}}
 {{- define "inst.componentsYaml" -}}
-{{- $file := .Files.Get "files/component-pins.yaml" | fromYaml -}}
+{{/* READS THE GENERATED DATA-ONLY COPY, NOT THE ANNOTATED ONE. files/component-pins.yaml is
+     97.6% comment prose (722,800 of 740,859 bytes) and is .helmignore'd, because helm embeds the
+     whole chart in its release record and a release Secret's data may not exceed 1 MiB DECODED.
+     krateo-057 hit that: revision 546 sat at 1,047,684 bytes, 892 from the ceiling, and 547 was
+     refused with `Secret "sh.helm.release.v1.installer.v547" is invalid: data: Too long`.
+     Excluding the annotated file takes the archive from 519,968 to 246,583 bytes (-52.6%).
+     THE TRAP THIS CREATES, and why check-pins-min-in-sync exists: edit a pin in the annotated
+     file, forget to regenerate this one, and the chart silently renders the OLD pin while the
+     repo shows the new one. That gate is a hard failure for exactly that case.
+     Regenerate with: python3 hack/strip-pin-comments.py chart/files/component-pins.yaml \
+                        -o chart/files/component-pins.min.yaml */}}
+{{- $file := .Files.Get "files/component-pins.min.yaml" | fromYaml -}}
 {{- $components := ($file.components | default list) -}}
 {{/* Index the chart-pinned component names. */}}
 {{- $known := dict -}}
