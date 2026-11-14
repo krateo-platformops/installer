@@ -99,6 +99,47 @@ def crds_of(docs):
     return {d["metadata"]["name"]: d for d in docs
             if isinstance(d, dict) and d.get("kind") == "CustomResourceDefinition"}
 
+def prop_paths(crd):
+    """{version_name: set(full nested property paths)}.
+
+    spec_props() below reads only TOP-LEVEL spec properties, which its own docstring is honest
+    about. That is enough for the app-ahead direction it was written for, but it cannot see a
+    NESTED addition -- authn 0.47.0 adds spec.delegation.subjectTokens and
+    spec.delegation.audiences while `delegation` itself already existed, so the top-level set is
+    unchanged and the pair reads identical. This walks properties by NAME and array items as `[]`,
+    the same shape as hack/crd-tightening-diff.py.
+    """
+    out = {}
+    for v in crd["spec"]["versions"]:
+        root = (v.get("schema") or {}).get("openAPIV3Schema") or {}
+        acc = set()
+
+        def walk(node, path):
+            if not isinstance(node, dict):
+                return
+            for k, child in (node.get("properties") or {}).items():
+                acc.add("%s.%s" % (path, k))
+                walk(child, "%s.%s" % (path, k))
+            if isinstance(node.get("items"), dict):
+                walk(node["items"], path + "[]")
+
+        walk((root.get("properties") or {}).get("spec") or {}, "spec")
+        out[v["name"]] = acc
+    return out
+
+
+def vorder(v):
+    """A comparable tuple for a plain-semver version. None when it is not plain semver.
+
+    Returns None rather than guessing: the reverse-direction check below runs only when the
+    direction is KNOWN, and an undetermined direction is REPORTED rather than silently skipped.
+    """
+    parts = str(v).split(".")
+    if len(parts) != 3 or not all(p.isdigit() for p in parts):
+        return None
+    return tuple(int(p) for p in parts)
+
+
 def spec_props(crd):
     """{version_name: sorted(spec.properties)} for every version the CRD declares."""
     out = {}
@@ -281,6 +322,11 @@ for app_name, crd_name, app, crd in pairs:
         continue
 
     ca, cp = crds_of(at_app), crds_of(at_pin)
+    vo_app, vo_pin = vorder(av), vorder(cv)
+    if vo_app is None or vo_pin is None:
+        print("  NOTE    %s: %r / %r is not plain semver, so the REVERSE direction (CRDs ahead of "
+              "the app) was NOT evaluated for this pair. Reported rather than skipped silently."
+              % (app_name, av, cv))
 
     # --- STANDALONE: is the CRD this pin would INSTALL even satisfiable?
     # Needs no pair, no baseline, no cluster. Runs on the PINNED side, because that is what the
@@ -325,6 +371,37 @@ for app_name, crd_name, app, crd in pairs:
                     "%s is pinned at %s but %s is held at %s. %s/%s declares spec properties the "
                     "pinned CRD lacks: %s. An object written with them would be %s."
                     % (app_name, av, crd_name, cv, cname, vn, missing, how))
+        # --- REVERSE DIRECTION: the PINNED CRD is NEWER than the app.
+        # Added 2026-11-14 at acmp's request after they described the harm precisely: a newer CRD
+        # admits Alert/Metric SPEC fields that the older controller accepts and then silently never
+        # acts on -- a write that succeeds with no effect. Their CRDs carry spec fields, not only
+        # status, and the controller has no unknown-field rejection, so nothing surfaces.
+        # Measured on authn's pair the same morning: this direction passed this gate
+        # unconditionally, correctly by its old contract, because nothing is LOST when the CRDs are
+        # the newer side. Nothing is lost; something is INERT, which is a different harm.
+        # BY CONTENT and only when the direction is KNOWN, so an app-only release whose CRD content
+        # is byte-identical still passes -- acmp's -crds chart exists to decouple the CRD lifecycle
+        # from app-only bumps (its Chart.yaml cites core-provider#89), and holding -crds at the
+        # older version in that case is the INTENDED state. A version-equality rule would forbid it,
+        # which is why alert-provider is deliberately NOT a declared version line.
+        if vo_app is not None and vo_pin is not None and vo_pin > vo_app:
+            qa, qp = prop_paths(ca[cname]), prop_paths(cp[cname])
+            for vn in sorted(set(qa) & set(qp)):
+                inert = sorted(qp[vn] - qa[vn])
+                if inert:
+                    failures.append(
+                        "%s is pinned at %s but %s is AHEAD at %s. %s/%s declares %d spec "
+                        "propert(ies) the app's own version does not implement: %s%s. An object "
+                        "written with them is ACCEPTED and then silently never acted on -- a write "
+                        "that succeeds with no effect."
+                        % (app_name, av, crd_name, cv, cname, vn, len(inert),
+                           inert[:6], " (+%d more)" % (len(inert) - 6) if len(inert) > 6 else ""))
+            extra_crds = sorted(set(cp) - set(ca))
+            if extra_crds:
+                failures.append(
+                    "%s is pinned at %s but %s is AHEAD at %s and ships CRD(s) the app's version "
+                    "does not know: %s. Those kinds would be installed and never reconciled."
+                    % (app_name, av, crd_name, cv, extra_crds))
         sa, sb = ca[cname]["spec"], cp[cname]["spec"]
         for f in IMMUTABLE:
             if sa.get(f) != sb.get(f):
@@ -337,6 +414,7 @@ for app_name, crd_name, app, crd in pairs:
           % (app_name, av, crd_name, cv, len(set(ca) & set(cp))))
 
 print()
+print("both directions compared by CONTENT: app-ahead (fields PRUNED) and crds-ahead (fields INERT)")
 print("pairs: %d    compared or equal: %d    skipped as independent lines: %d"
       % (len(pairs), checked, len(skips)))
 if checked == 0:
