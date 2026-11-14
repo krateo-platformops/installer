@@ -247,6 +247,34 @@ dependencies:
 #
 # My controls: 2.13.75 and -crds both resolve; 2.13.74 (outgoing) resolves; 9.9.9 not found -- so a
 # not-found would have meant absent rather than an unreachable registry.
+#
+# TWO CONSTRAINTS ON BUMPING THESE TWO, recorded here 2026-11-14 because this is the file someone
+# edits to bump them and neither constraint was written down anywhere in this repo.
+#
+# 1. NEVER PIN core-provider 2.13.85-2.13.94. In that window the fixed prune path waits and then
+#    drops a stale served version in ONE write, and real etcd refuses a CRD carrying a third
+#    ~560 KB version -- core-provider measured the mechanism in envtest, and says the end-to-end
+#    wedge on a cluster remains an INFERENCE rather than a measurement. Going 2.13.82 -> 2.13.95
+#    directly never enters the window, which is why the planned bump is safe.
+#    THIS COMMENT IS NOT A CONTROL. Nothing fails if you pin 2.13.90. The control belongs in a
+#    retracted-versions.yaml published by core-provider's own repo, which check-retracted-versions
+#    reads per publisher since installer#891; core-provider has none yet, and Diego's decision is
+#    that they publish one only once #484's fix ships, so that its first entry describes a settled
+#    picture. Until then this is a sentence a reader has to notice.
+#
+# 2. snowplow MUST be at >= 1.12.70 BEFORE OR WITH any core-provider >= 2.13.83. snowplow#1324:
+#    a tab's /refreshes stream gets no catch-up on re-arm, so a change published during the SPA's
+#    ~200 ms reconnect is never announced and the widget stays stale until reload. It was MASKED
+#    by the ~60 s status churn older core-providers produced, and 2.13.83+ REMOVES that churn --
+#    so bumping core-provider EXPOSES a pre-existing snowplow bug. The coupling is one-directional
+#    and nothing in either chart's metadata says so. Full note on the snowplow pin entry in
+#    files/component-pins.yaml; repeated here because this is where the core-provider version is
+#    changed and a reader of this file would otherwise never see it.
+#
+# The two charts below MOVE TOGETHER and that IS enforced: check-same-version-line declares
+# core-provider + core-provider-crds as a line (installer#889), because the grace record
+# status.servedVersionsPendingPrune first exists in core-provider-crds 2.13.85 and an older CRDs
+# chart has it pruned by the apiserver on every write while the write reports success.
 - condition: bootstrap.coreProvider.enabled
   name: core-provider
   repository: oci://ghcr.io/krateo-platformops/charts
