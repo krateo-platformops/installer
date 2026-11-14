@@ -275,6 +275,45 @@ dependencies:
 # core-provider + core-provider-crds as a line (installer#889), because the grace record
 # status.servedVersionsPendingPrune first exists in core-provider-crds 2.13.85 and an older CRDs
 # chart has it pruned by the apiserver on every write while the write reports success.
+# 2.13.98 (2026-11-14): core-provider #505 + #506, pinned WITH core-provider-crds because #506
+# adds KubernetesTarget.spec.authnUrl -- a CRD field, so an app pinned past its -crd pin would
+# prune it silently. One cdc roll for both: the cdc ConfigMap gains URL_AUTHN from a derived
+# default equal to the URL every cdc already uses, so no URL changes on 057.
+#
+# #505 IS THE OWNERSHIP LEASE. WITNESS, agreed with core-provider: after the roll each cdc's Lease
+# `<version>.<plural>.<group>` exists in namespaces.krateo with spec.holderIdentity equal to the
+# NEW pod's name. A missing Lease, or one held by a terminated pod name, is the failure to report.
+# The Lease name is outside check-rendered-names' reach but is safe BY CONSTRUCTION, which is the
+# stronger argument: its three parts are a CRD version (a DNS-1035 label the apiserver already
+# validated), a CRD plural and a group, so an invalid input could never have become a CRD; past
+# 253 characters the code switches to a hashed form.
+#
+# NO INSTALLER SCHEMA NODE FOR #578's authnUrl, BY DESIGN. core-provider asked for
+# `componentValues.core-provider.apiRefRBAC.authnUrl`. That path is REFUSED here and would be
+# INERT if declared: core-provider is THIS vendored subchart, not a component in
+# component-pins.yaml, and it has no CompositionDefinition (057 serves 73; the only match is
+# core-provider-agent). componentValues exists to be threaded onto a component's CD spec, so there
+# would be nothing to thread onto. The subchart's values live at top-level `core-provider:`, where
+# otel.endpoint already sits, and the key works there today. My earlier +625-byte measurement for
+# that node was the cost of the wrong thing.
+#
+# core-provider's OWN values.schema.json validates that block, typos included, because Helm applies
+# a dependency's schema. So closing it here would buy nothing and cost the coupling that blocked
+# seven schema items for a week. MEASURED with the subchart vendored AND
+# bootstrap.coreProvider.enabled=true:
+#
+#     core-provider.apiRefRBAC.authnUrl   exit 0  ACCEPTED   (control)
+#     core-provider.apiRefRBAC.authnURL   exit 1  REFUSED at '/apiRefRBAC'
+#     core-provider.apiRefRbac.authnUrl   exit 1  REFUSED at ''
+#     core-provider.totalNonsense         exit 1  REFUSED at ''
+#
+# THE TRAP THAT NEARLY MADE ME CONCLUDE THE OPPOSITE, and why both conditions are spelled out
+# above: with bootstrap.coreProvider.enabled FALSE, or with charts/ not vendored, the subchart is
+# NEVER LOADED and `core-provider.totalNonsense` renders exit 0. My first probe ran that way and I
+# told core-provider this block had no validation at all. They proposed the re-run that falsified
+# it. A probe of a dependency's schema measures nothing unless the dependency is ENABLED and
+# PRESENT -- and the ACCEPTING result is the vacuous one, which is the direction that reads like a
+# finding rather than like a broken instrument.
 - condition: bootstrap.coreProvider.enabled
   name: core-provider
   repository: oci://ghcr.io/krateo-platformops/charts
