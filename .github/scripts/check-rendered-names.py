@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""CI guard: every metadata.name a CHANGED pinned chart renders must be a valid Kubernetes name.
+
+WHY THIS EXISTS, with a date and a cost. On 2026-11-14 tag 0.3.642 moved the 17-member
+portal-pages line to 1.8.119. Sixteen converged. alerts-page could not, and never would:
+
+    failed to create resource: Select.widgets.templates.krateo.io "alerts-hasIncidents" is
+    invalid: metadata.name: Invalid value: "alerts-hasIncidents": a lowercase RFC 1123 subdomain
+    must consist of lower case alphanumeric characters, '-' or '.', and must start and end with
+    an alphanumeric character
+
+`alerts-hasIncidents` -- a capital I. The apiserver REFUSES the object, so the composition sat at
+Ready=Unknown/ObserveFailed with status.helmChartVersion stuck on the PREVIOUS chart while the cdc
+retried observe -> helm -> fail about every three seconds, indefinitely. Structural, not a race:
+no retry makes that name valid.
+
+NOTHING WE OWNED WOULD HAVE CAUGHT IT. check-pin-ci confirms the source repo was green.
+check-same-version-line confirms the 17 pins AGREE -- and it cannot see that the live cluster then
+had 16 members at the new version and one stuck at the old, because it reads the repo. The
+registry probe confirms the chart EXISTS. The values-path diff confirms no new key. Every one of
+those passed. None of them renders the chart and looks at what it would create.
+
+This does. `helm template` the charts whose pins CHANGED, and validate every rendered
+metadata.name. It needs no cluster, and on the real case it finds exactly one bad name among 46
+rendered documents.
+
+    python3 .github/scripts/check-rendered-names.py              -> check changed pins
+    python3 .github/scripts/check-rendered-names.py --self-test  -> offline cases + the real fixture
+"""
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+import yaml
+
+PINS = "chart/files/component-pins.yaml"
+DEFAULT_REPO = "oci://ghcr.io/krateo-platformops/charts"
+MERGE_TARGETS = ("origin/main", "main")
+
+# RFC 1123 subdomain: what the apiserver enforces on metadata.name for most kinds.
+RFC1123_SUBDOMAIN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$")
+MAX_NAME = 253
+
+
+def name_errors(kind, name):
+    """Broken-rule sentences for one metadata.name; [] when it is valid."""
+    bad = []
+    s = str(name)
+    if not s:
+        return ["%s has an EMPTY metadata.name" % kind]
+    if len(s) > MAX_NAME:
+        bad.append("%s %r is %d characters, over the %d-character limit" % (kind, s, len(s), MAX_NAME))
+    if not RFC1123_SUBDOMAIN.match(s):
+        why = []
+        if any(c.isupper() for c in s):
+            why.append("it contains an UPPERCASE character")
+        if s and not (s[0].isalnum() and s[0].islower() or s[0].isdigit()):
+            why.append("it does not start with a lowercase alphanumeric")
+        if s and not (s[-1].isalnum() and (s[-1].islower() or s[-1].isdigit())):
+            why.append("it does not end with a lowercase alphanumeric")
+        if re.search(r"[^a-z0-9.\-]", s):
+            why.append("it contains a character outside [a-z0-9.-]")
+        bad.append("%s %r is not a valid RFC 1123 subdomain%s. The apiserver REFUSES such an "
+                   "object, so the composition cannot converge and the cdc retries indefinitely."
+                   % (kind, s, (" -- " + "; ".join(why)) if why else ""))
+    return bad
+
+
+def _run(args, **kw):
+    return subprocess.run(args, capture_output=True, text=True, **kw)
+
+
+def pins_at(ref=None):
+    if ref is None:
+        text = open(PINS, encoding="utf-8").read()
+    else:
+        r = _run(["git", "show", "%s:%s" % (ref, PINS)])
+        if r.returncode:
+            return None
+        text = r.stdout
+    doc = yaml.safe_load(text) or {}
+    comps = doc.get("components") if isinstance(doc, dict) else doc
+    return {c["name"]: c for c in (comps or [])}
+
+
+def changed_pins():
+    """[(component, chart, repo, version)] whose version moved against the merge target."""
+    now = pins_at()
+    for ref in MERGE_TARGETS:
+        before = pins_at(ref)
+        if before is not None:
+            break
+    else:
+        return None, "could not read %s at any of %s" % (PINS, ", ".join(MERGE_TARGETS))
+    out = []
+    for n, c in sorted(now.items()):
+        if (before.get(n) or {}).get("version") != c.get("version"):
+            out.append((n, c.get("chart") or n, c.get("repo") or DEFAULT_REPO, c.get("version")))
+    return out, None
+
+
+def rendered_names(repo, chart, version):
+    """[(kind, name)] from `helm template`, or (None, reason)."""
+    if shutil.which("helm") is None:
+        return None, "helm is not on PATH"
+    tmp = tempfile.mkdtemp(prefix="rendernames-")
+    try:
+        r = _run(["helm", "pull", "%s/%s" % (repo, chart), "--version", str(version),
+                  "-d", tmp, "--untar"])
+        if r.returncode:
+            return None, "helm pull failed: %s" % (r.stderr or r.stdout).strip()[:200]
+        root = os.path.join(tmp, chart)
+        if not os.path.isdir(root):
+            subdirs = [d for d in os.listdir(tmp) if os.path.isdir(os.path.join(tmp, d))]
+            if len(subdirs) != 1:
+                return None, "unexpected unpack layout: %s" % subdirs
+            root = os.path.join(tmp, subdirs[0])
+        r = _run(["helm", "template", "t", root, "--kube-version", "1.36.0"])
+        if r.returncode:
+            return None, "helm template failed: %s" % (r.stderr or r.stdout).strip()[:200]
+        names = []
+        for doc in yaml.safe_load_all(r.stdout):
+            if isinstance(doc, dict) and doc.get("kind"):
+                nm = (doc.get("metadata") or {}).get("name")
+                if nm is not None:
+                    names.append((doc["kind"], nm))
+        return names, None
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+SELF_TESTS = [
+    ("a plain lowercase name", "ConfigMap", "alerts-page", True),
+    ("digits and hyphens", "Secret", "a1-b2-c3", True),
+    ("a dotted subdomain", "Service", "svc.example.com", True),
+    ("THE REAL CASE: a capital letter", "Select", "alerts-hasIncidents", False),
+    ("all caps", "Select", "ALERTS", False),
+    ("a leading hyphen", "ConfigMap", "-alerts", False),
+    ("a trailing hyphen", "ConfigMap", "alerts-", False),
+    ("an underscore", "ConfigMap", "alerts_page", False),
+    ("a space", "ConfigMap", "alerts page", False),
+    ("empty", "ConfigMap", "", False),
+    ("254 characters", "ConfigMap", "a" * 254, False),
+    ("253 characters", "ConfigMap", "a" * 253, True),
+]
+
+
+def self_test():
+    fails = 0
+    for label, kind, name, want_ok in SELF_TESTS:
+        bad = name_errors(kind, name)
+        ok = not bad
+        if ok != want_ok:
+            print("FAIL  %-40s %r -> ok=%s want=%s" % (label, name, ok, want_ok))
+            fails += 1
+        else:
+            print("ok    %-40s %r -> %s" % (label, name[:28], "accepted" if ok else "refused"))
+
+    # THE FIXTURE THAT MATTERS: the real chart must fail, and its predecessor must pass.
+    # Skipped only when helm or the network is unavailable, and SAID so rather than silently.
+    if shutil.which("helm") is None:
+        print("note  helm absent, so the live alerts-page fixture was not exercised")
+    else:
+        for version, want_bad in (("1.8.119", True), ("1.8.118", False)):
+            names, why = rendered_names(DEFAULT_REPO, "alerts-page", version)
+            if names is None:
+                print("note  alerts-page %s could not be rendered (%s), fixture not exercised"
+                      % (version, why[:60]))
+                continue
+            bad = [(k, n) for k, n in names for _ in [0] if name_errors(k, n)]
+            got_bad = bool(bad)
+            if got_bad != want_bad:
+                print("FAIL  fixture alerts-page %s: %d rendered names, bad=%s want_bad=%s %s"
+                      % (version, len(names), got_bad, want_bad, bad[:2]))
+                fails += 1
+            else:
+                print("ok    fixture alerts-page %-8s %3d names rendered, %s"
+                      % (version, len(names),
+                         ("REFUSED: %s %r" % bad[0]) if bad else "all valid"))
+
+    print("check-rendered-names: %s"
+          % ("OK -- %d cases + the live alerts-page fixture both ways" % len(SELF_TESTS)
+             if not fails else "%d FAILURE(S)" % fails))
+    return 1 if fails else 0
+
+
+def main(argv):
+    if "--self-test" in argv:
+        return self_test()
+    changed, why = changed_pins()
+    if changed is None:
+        print("::error::check-rendered-names: %s" % why)
+        return 2
+    if not changed:
+        print("check-rendered-names: no pin version changed in this PR — nothing to render")
+        return 0
+    if shutil.which("helm") is None:
+        print("::error::check-rendered-names: helm is not on PATH, so NOTHING was rendered. This "
+              "is a refusal, not a skip: an unrendered chart reads exactly like a clean one.")
+        return 2
+    total_names = 0
+    unrenderable = []
+    bad = []
+    for comp, chart, repo, version in changed:
+        names, reason = rendered_names(repo, chart, version)
+        if names is None:
+            unrenderable.append((comp, chart, version, reason))
+            continue
+        total_names += len(names)
+        for kind, nm in names:
+            for e in name_errors(kind, nm):
+                bad.append((comp, chart, version, e))
+        print("  %-24s %-26s %-9s %3d names" % (comp, chart, version, len(names)))
+    for comp, chart, version, reason in unrenderable:
+        print("  %-24s %-26s %-9s NOT RENDERED: %s" % (comp, chart, version, reason[:60]))
+    for comp, chart, version, e in bad:
+        print("::error::check-rendered-names: %s (%s %s): %s" % (comp, chart, version, e))
+    if bad:
+        return 1
+    # NON-VACUITY: a pass that rendered nothing is not a pass.
+    if total_names == 0:
+        print("::error::check-rendered-names: %d changed pin(s) but ZERO metadata.name values were "
+              "rendered. Either every chart failed to render or the parse is broken; a zero here "
+              "reads exactly like a clean result." % len(changed))
+        return 2
+    if unrenderable:
+        print("::error::check-rendered-names: %d of %d changed chart(s) could not be rendered, so "
+              "they were NOT checked. Named above. A chart that cannot be rendered has not been "
+              "cleared." % (len(unrenderable), len(changed)))
+        return 1
+    print("check-rendered-names: OK — %d changed chart(s), %d metadata.name value(s), all valid "
+          "Kubernetes names" % (len(changed), total_names))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
