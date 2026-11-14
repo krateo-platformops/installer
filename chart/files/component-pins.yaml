@@ -1740,6 +1740,21 @@ components:
   # ROLLBACK: re-upgrade the installer to 0.3.429, which pins 1.12.49. Do NOT roll back via
   # componentValues.snowplow.image.tag -- an image-tag override on THIS component takes effect and
   # then PERMANENTLY MASKS every future chart bump (the krateo-sse-proxy 0.1.15 trap).
+  # snowplow#1324, RECORDED HERE 2026-11-14 BECAUSE IT EXISTED NOWHERE IN THIS REPO. snowplow
+  # asked for it; I claimed it was done before it was, and a grep found 0 files mentioning 1324.
+  # Their description, attributed to them rather than measured here: a tab's /refreshes stream
+  # gets NO CATCH-UP when it re-arms, so a change published during the SPA's ~200 ms reconnect
+  # window is never announced -- the widget stays stale until the page is reloaded.
+  # WHY IT MATTERS TO A PIN AND NOT ONLY TO SNOWPLOW: it was MASKED by the ~60 s status churn
+  # that older core-providers produced, and core-provider 2.13.83+ REMOVES that churn. So
+  # bumping core-provider past 2.13.82 EXPOSES a pre-existing snowplow bug. The two are coupled
+  # in one direction only, and nothing in either chart's metadata says so.
+  # CONSEQUENCE FOR THE 2.13.95 PIN, which is the one that unwedges 057: snowplow must be at
+  # >= 1.12.70 BEFORE or WITH any core-provider >= 2.13.83. 057 runs 1.12.67 as of this writing,
+  # which is why the snowplow pin leads the core-provider pin rather than following it.
+  # Also needs frontend >= 1.8.37 for the fix to be complete; this repo pins the frontend line at
+  # 1.8.44, so that half is already satisfied -- asserted here so the next reader does not have to
+  # re-derive it.
   version: 1.12.67
   deps:
   - snowplow-crd
