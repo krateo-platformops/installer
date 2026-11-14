@@ -198,12 +198,42 @@ components:
     if fa:
         ok = False
 
-    # 2. the worktree, which must be clean
-    f = evaluate(pins_from(open(PINS, encoding="utf-8").read()), decl)
-    print(f"{'ok  ' if not f else 'FAIL'}  worktree: {len(f)} finding(s) -> "
-          f"{'accepted' if not f else f}")
-    if f:
+    # 2. the worktree, which must be clean -- through the SAME path main() uses.
+    #    This case read only PINS until 2026-11-14 and passed for five releases because every
+    #    declared line's members happened to live in the pin file. Declaring core-provider, whose
+    #    members are Chart.yaml dependencies, made it report them missing -- in CI, not here,
+    #    because after declaring the line I re-ran main() and every other gate but not --self-test.
+    #    So it is not enough to merge the two files here: the case must also prove it SAW them,
+    #    or a chart_text that silently fails to load returns it to passing vacuously.
+    wt_pins, wt_origin, wt_coll = versions_from(
+        open(PINS, encoding="utf-8").read(), open(CHART, encoding="utf-8").read())
+    if wt_pins is None:
+        print(f"FAIL  worktree: could not parse {PINS} or {CHART}")
         ok = False
+    else:
+        members = [m for l in decl for m in (l.get("members") or [])]
+        unresolved = sorted({m for m in members if m not in wt_pins})
+        from_chart = sorted({m for m in members if wt_origin.get(m) == CHART})
+        from_pins = sorted({m for m in members if wt_origin.get(m) == PINS})
+        f = evaluate(wt_pins, decl, wt_origin)
+        print(f"{'ok  ' if not f else 'FAIL'}  worktree: {len(f)} finding(s) -> "
+              f"{'accepted' if not f else f}")
+        if f:
+            ok = False
+        # Non-vacuity: every declared member resolves, and the two files each supplied some.
+        print(f"{'ok  ' if not unresolved else 'FAIL'}  worktree members all resolve: "
+              f"{len(members)} declared, {len(from_pins)} from {PINS}, "
+              f"{len(from_chart)} from {CHART}"
+              f"{'' if not unresolved else f' -- UNRESOLVED {unresolved}'}")
+        if unresolved:
+            ok = False
+        if not from_chart:
+            print(f"FAIL  worktree saw no member from {CHART}: this case cannot detect a "
+                  f"Chart.yaml dependency skew, which is what it exists for")
+            ok = False
+        if wt_coll:
+            print(f"FAIL  worktree: {wt_coll} appear in both {PINS} and {CHART}")
+            ok = False
 
     # 3. a synthetic skew must be caught, and a synthetic agreement must not be
     synth = {"a": "1.0.0", "b": "1.0.0", "c": "2.0.0"}
