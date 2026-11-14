@@ -3543,6 +3543,38 @@ components:
 # a zero on ONE arm while the other arm's control fires is a HALF-broken probe, which is worse,
 # because the working control certifies the instrument that is failing.
 - name: portal
+  # 1.8.119: the WHOLE portal-pages line moves together (17 members). frontend's tag 1.8.119 at
+  # ee29b1b, tag object 1df9267, release-oci and release-notes green.
+  # CARRIES: #432 slice 3a (the /compositions, /alerts and /agents overviews, a paused composition
+  # shown as "paused", the Alerts Firing card); #434 the blueprint header pill reads Degraded only
+  # on Ready=False, so core-provider's new informational AuthnMappingApplied does not trip it;
+  # #436 Dashboard "Recent changes" shows only successful writes, without AuditRecord bookkeeping
+  # rows or "/-"; #435 the CRD-tightening gate now reads our .min pins; #433 a test-only guard.
+  # builder-publish IS NOT PINNED AND MUST NOT BE. The portal chart itself registers it
+  # (helm/portal/templates/compositiondefinition.builder-publish.yaml) at
+  # version: {{ .Chart.Version }}, so bumping portal moves it to 1.8.119 automatically. A pin here
+  # would let the two disagree. I had this wrong first -- I read frontend's 19-chart release list
+  # as 19 pins and told them this bump "adds two new components". It does not: builder-publish
+  # follows portal, and public-pages is a separate queued item (component + features.publicPages).
+  # CHECKED BEFORE PINNING, all 17:
+  #   registry   1.8.119 FOUND, 1.8.118 FOUND (positive control), 9.9.9 absent -> the probe
+  #              discriminates for every member
+  #   values     ZERO value-path changes across all 17, so no new key to express and no RENAME.
+  #              The rename check is not theatre: otel-collector-daemonset 0.1.30 renamed a
+  #              processor while the path COUNT stayed at 156, which is why a count is not a diff.
+  #   userAccessFilter  94 real keys, ALL on verb: GET. This is no longer hypothetical -- snowplow
+  #              1.12.70 is LIVE on 057 since 0.3.638 and REFUSES a filter on a write verb at
+  #              runtime (500 before anything is sent). 68 further mentions are Helm comments.
+  # LOAD TO WATCH AFTER THE ROLL, measured by frontend: /alerts now adds an incidents read to each
+  # obs-alerts resolve, about 6 MB with the stage filter keeping only label and state; jq cost
+  # obs-alerts 5 ms plus 34 ms for the incidents stage. snowplow and apiserver load on 057 are
+  # worth a look afterwards -- and snowplow has measured that the PLATFORM version moves their
+  # numbers a lot (the same image was about twice as fresh under installer 0.3.545 as under
+  # 0.3.616, driven by a newer portal page making roughly eight times more uncached outbound
+  # calls). They were told before this tag was cut, as promised.
+  # THE FIRING CARD WILL WORK: it needs alert-provider stateSince, and 057 has run 0.2.83 since
+  # 0.3.638 (verified on the live release and the CR). frontend expected 0.2.82 and "since:
+  # unknown"; that expectation was stale.
   # 1.8.100 fixes the Traces list showing 'No rows' (portal#388): in 1.8.99 the span-list
   # query had its filter part URL-encoded TWICE, so ClickHouse rejected it with SYNTAX_ERROR.
   # Only helm/observability-page changes, plus repo-only test scripts. No CRD change in
@@ -4305,7 +4337,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - frontend
   - git-provider
@@ -4416,7 +4448,7 @@ components:
   # 1.8.73; diff -r reports only Chart.yaml.
   # 1.8.117: CONTENT CHANGE -- 2 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.118
+  version: 1.8.119
   deps: ['portal']
   tier: platform
   feature: portal
@@ -4456,7 +4488,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - portal
   tier: platform
@@ -4527,7 +4559,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - portal
   tier: platform
@@ -4538,7 +4570,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - portal
   tier: platform
@@ -4615,7 +4647,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - portal
   tier: platform
@@ -4660,7 +4692,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - portal
   tier: platform
@@ -4701,7 +4733,7 @@ components:
   kind: CompositionsPage
   # 1.8.117: CONTENT CHANGE -- 5 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - portal
   tier: platform
@@ -4713,7 +4745,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - portal
   tier: platform
@@ -4725,7 +4757,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - portal
   tier: platform
@@ -4737,7 +4769,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - portal
   tier: platform
@@ -4749,7 +4781,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - portal
   tier: platform
@@ -4761,7 +4793,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - portal
   tier: platform
@@ -4773,7 +4805,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - portal
   tier: platform
@@ -4783,7 +4815,7 @@ components:
   kind: SettingsPage
   # 1.8.117: CONTENT CHANGE -- 6 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - portal
   tier: platform
@@ -4793,7 +4825,7 @@ components:
   kind: ObservabilityPage
   # 1.8.117: CONTENT CHANGE -- 9 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - portal
   tier: platform
@@ -4812,7 +4844,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.118
+  version: 1.8.119
   deps:
   - portal
   tier: platform
