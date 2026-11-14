@@ -24,7 +24,7 @@ import sys
 
 TOOL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
                     "hack", "crd-tightening-diff.py")
-MIN_CASES = 8
+MIN_CASES = 11   # 8 original + the 3 COST-RECHECK cases oasgen-provider asked for
 
 
 def main() -> int:
