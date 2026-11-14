@@ -1,0 +1,47 @@
+name: check-chart-unittests
+
+# Runs the chart's helm-unittest suites. NOTHING RAN THEM until 2026-11-14:
+# chart/tests/httproutes_test.yaml had been in the repo since the Gateway work and no workflow,
+# Makefile target or gate script executed it. A test nobody runs reads as coverage while providing
+# none.
+#
+# helm-unittest and not `helm template`, deliberately: compositions.yaml LISTs every CRD with
+# `lookup` at its head, `helm template` DISABLES lookup, so that file renders ZERO composition
+# objects and no plain render can exercise anything in it. This plugin serves both the LIST and the
+# per-dep by-name lookups, so it is the only way to assert what those templates produce.
+#
+# It earned itself on the first run: the snowplow seedAuthn derivation it was written for was INERT
+# (the block sat inside `if features.agentGateway`), and all 31 other gates passed with it inert --
+# including check-fill-defaults, which reads compositions.yaml as TEXT and so saw the call and
+# approved it.
+
+on:
+  pull_request:
+      # NO `branches:` filter, deliberately. A `branches: [main]` here means the gate does not run
+      # on a STACKED pull request, which then shows "all checks passed" with every gate skipped.
+      # Measured on the #623->#624->#625 stack: 25 checks vs 2.
+    # NO `paths:` filter, deliberately: a path-filtered workflow never STARTS on a PR that misses
+    # its paths, so a required context would wait forever on "Expected".
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  chart-unittests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Set up Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: v3.19.0
+      - name: Install helm-unittest
+        # REQUIRED, not optional. The gate FAILS rather than skips when it is absent -- a guard that
+        # skips when its tool is missing reports success for a thing it did not do.
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version 1.2.1
+      - name: Run the chart's unittest suites
+        run: python3 .github/scripts/check-chart-unittests.py

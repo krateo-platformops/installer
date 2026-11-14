@@ -627,6 +627,30 @@
 {{- end -}}
 {{- end -}}
 {{- end -}}
+{{- /* snowplow's seed identity: the chart defaults seedAuthn.authnNamespace to the LITERAL
+     "krateo-system", but this installer has exactly ONE namespace knob — namespaces.krateo
+     (additionalProperties:false, one property, default krateo-system) — and authn always lives in
+     it: its URL is derived from it in the alert-provider block just above. So the chart default is
+     correct only while namespaces.krateo is unchanged, and a cluster that moved it would get a seed
+     pointing at a namespace authn does not occupy — a seed failure that reads as an authn problem.
+     DERIVED, deliberately NOT exposed as an operator knob. componentValues.snowplow declares 30
+     keys with additionalProperties:false and does not declare seedAuthn, and that stays true: this
+     value is not a choice, it is a consequence of namespaces.krateo, and a settable copy of a
+     derived value is only a way to set it wrong while the derivation says otherwise.
+     inst.fillPath needs no componentValues declaration to write it. Measured, not assumed: five
+     kagent targets (kagentapp.controller.auth.mode/userIdClaim, kagentapp.proxy.url,
+     agentgateway.modelRoute.url/enabled) already write paths this schema does not declare and ship
+     today. fillPath writes into the COMPOSITION spec, which is governed by snowplow's own CRD —
+     crdgen'd from its values.schema.json, which does declare seedAuthn.authnNamespace.
+     Agreed with snowplow on one condition, which is verified: at namespaces.krateo=krateo-system the
+     snowplow 1.12.70 render is byte-identical with and without this value (25,500 bytes, 11 objects,
+     Deployment 1 / ClusterRole 2 / ClusterRoleBinding 2 both ways), and a control confirms a
+     DIFFERENT namespace DOES change the render, so "identical" is not vacuous. The roll's only
+     behavioural diff is therefore the version, keeping their pre/post measurement attributable to
+     1.12.70 alone. */ -}}
+{{- if eq $c.name "snowplow" -}}
+{{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "seedAuthn" "authnNamespace") "value" $top.Values.namespaces.krateo) -}}
+{{- end -}}
 {{- /* Auto-orchestration: the ORCHESTRATOR (autopilot, `orchestrator: true`) attaches EVERY deployed
        agent as an A2A
        sub-agent. When extraAgents is NOT explicitly set, the installer AUTO-DERIVES it from the

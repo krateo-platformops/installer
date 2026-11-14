@@ -1,0 +1,169 @@
+# snowplow's seed identity namespace is DERIVED from namespaces.krateo, not a literal.
+#
+# WHY THIS SUITE EXISTS. compositions.yaml is lookup-GATED at line 37 (it LISTs every CRD and
+# threads the slice into inst.crdExists / inst.servedTags), so `helm template` renders ZERO
+# composition objects and no plain render can exercise anything in this file. helm-unittest's
+# kubernetesProvider CAN serve that LIST and the per-dep by-name lookups, which is what makes the
+# file testable at all -- the same property the httproutes suite documents, used in the opposite
+# direction. Before this, five fillPath call sites in compositions.yaml had no render-level test of
+# any kind.
+#
+# WHAT THE FIXTURE HAS TO SATISFY, learned by running it rather than by reading ahead:
+#   1. the CRD must exist at a SERVED tag matching the pinned version (inst.crdExists);
+#   2. every dep must be READY, which is a by-name lookup of the dep's composition object in
+#      namespaces.krateo, and inst.readyFromConditions requires Ready=True AND Synced=True -- a
+#      PAUSED composition reports Ready=True with Synced=False and must not satisfy a dep gate;
+#   3. snowplow's deps are snowplow-crd and authn, so both objects must be present and healthy.
+# With only the CRDs faked, exactly ONE document rendered (SnowplowCrds/snowplow-crd) and the
+# Snowplow document was absent -- which is how the dep gate announced itself.
+#
+# THE TWO CASES ARE A PAIR AND NEITHER IS SUFFICIENT ALONE. The first asserts krateo-system at the
+# default, which would pass just as well if the template hardcoded that string -- precisely the bug
+# being prevented. The second moves namespaces.krateo to a different value and asserts the written
+# value FOLLOWS. Only the pair distinguishes "derived" from "happens to match today".
+suite: snowplow seedAuthn.authnNamespace follows namespaces.krateo
+templates:
+  - templates/compositions.yaml
+tests:
+  - it: at the default namespace, writes seedAuthn.authnNamespace = krateo-system
+    set:
+      features.portal: true
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider:
+      scheme:
+        "apiextensions.k8s.io/v1/CustomResourceDefinition":
+          gvr:
+            version: v1
+            group: apiextensions.k8s.io
+            resource: customresourcedefinitions
+        "composition.krateo.io/v1-12-67/SnowplowCrds":
+          gvr:
+            group: composition.krateo.io
+            version: v1-12-67
+            resource: snowplowcrdses
+          namespaced: true
+        "composition.krateo.io/v0-46-0/Authn":
+          gvr:
+            group: composition.krateo.io
+            version: v0-46-0
+            resource: authns
+          namespaced: true
+      objects:
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: snowplows.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: Snowplow}
+            versions: [{name: v1-12-67, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: snowplowcrdses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: SnowplowCrds}
+            versions: [{name: v1-12-67, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: authns.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: Authn}
+            versions: [{name: v0-46-0, served: true}]
+        - apiVersion: composition.krateo.io/v1-12-67
+          kind: SnowplowCrds
+          metadata: {name: snowplow-crd, namespace: krateo-system}
+          status:
+            conditions:
+              - {type: Ready, status: "True"}
+              - {type: Synced, status: "True"}
+        - apiVersion: composition.krateo.io/v0-46-0
+          kind: Authn
+          metadata: {name: authn, namespace: krateo-system}
+          status:
+            conditions:
+              - {type: Ready, status: "True"}
+              - {type: Synced, status: "True"}
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.seedAuthn.authnNamespace
+          value: krateo-system
+        documentSelector:
+          path: kind
+          value: Snowplow
+
+  # THE CASE THAT PROVES IT IS DERIVED. Case 1 above would pass identically if the template wrote
+  # the literal "krateo-system", which is the bug this guards. Here namespaces.krateo is moved and
+  # the written value must FOLLOW it. The dep objects move to the same namespace, because
+  # inst.ready looks them up IN namespaces.krateo -- so this case also covers that, and if the
+  # lookup namespace were hardcoded the Snowplow document would not render at all and the
+  # documentSelector would fail with "document not found" rather than a wrong value.
+  - it: with namespaces.krateo moved, the written value FOLLOWS it
+    set:
+      features.portal: true
+      bootstrap.coreProvider.enabled: false
+      namespaces.krateo: krateo-elsewhere
+    kubernetesProvider:
+      scheme:
+        "apiextensions.k8s.io/v1/CustomResourceDefinition":
+          gvr:
+            version: v1
+            group: apiextensions.k8s.io
+            resource: customresourcedefinitions
+        "composition.krateo.io/v1-12-67/SnowplowCrds":
+          gvr:
+            group: composition.krateo.io
+            version: v1-12-67
+            resource: snowplowcrdses
+          namespaced: true
+        "composition.krateo.io/v0-46-0/Authn":
+          gvr:
+            group: composition.krateo.io
+            version: v0-46-0
+            resource: authns
+          namespaced: true
+      objects:
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: snowplows.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: Snowplow}
+            versions: [{name: v1-12-67, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: snowplowcrdses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: SnowplowCrds}
+            versions: [{name: v1-12-67, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: authns.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: Authn}
+            versions: [{name: v0-46-0, served: true}]
+        - apiVersion: composition.krateo.io/v1-12-67
+          kind: SnowplowCrds
+          metadata: {name: snowplow-crd, namespace: krateo-elsewhere}
+          status:
+            conditions:
+              - {type: Ready, status: "True"}
+              - {type: Synced, status: "True"}
+        - apiVersion: composition.krateo.io/v0-46-0
+          kind: Authn
+          metadata: {name: authn, namespace: krateo-elsewhere}
+          status:
+            conditions:
+              - {type: Ready, status: "True"}
+              - {type: Synced, status: "True"}
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.seedAuthn.authnNamespace
+          value: krateo-elsewhere
+        documentSelector:
+          path: kind
+          value: Snowplow
