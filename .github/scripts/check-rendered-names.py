@@ -38,6 +38,7 @@ import tempfile
 import yaml
 
 PINS = "chart/files/component-pins.yaml"
+CHART_YAML = "chart/Chart.yaml"
 DEFAULT_REPO = "oci://ghcr.io/krateo-platformops/charts"
 MERGE_TARGETS = ("origin/main", "main")
 
@@ -87,19 +88,60 @@ def pins_at(ref=None):
     return {c["name"]: c for c in (comps or [])}
 
 
-def changed_pins():
-    """[(component, chart, repo, version)] whose version moved against the merge target."""
-    now = pins_at()
-    for ref in MERGE_TARGETS:
-        before = pins_at(ref)
-        if before is not None:
-            break
+def deps_at(ref=None):
+    """{name: {chart, repo, version}} from chart/Chart.yaml's dependencies, or None."""
+    if ref is None:
+        try:
+            text = open(CHART_YAML, encoding="utf-8").read()
+        except OSError:
+            return None
     else:
+        r = _run(["git", "show", "%s:%s" % (ref, CHART_YAML)])
+        if r.returncode:
+            return None
+        text = r.stdout
+    doc = yaml.safe_load(text) or {}
+    return {d["name"]: {"chart": d["name"],
+                        "repo": d.get("repository") or DEFAULT_REPO,
+                        "version": d.get("version")}
+            for d in (doc.get("dependencies") or []) if d.get("name")}
+
+
+def changed_charts():
+    """[(label, chart, repo, version, origin)] whose version moved against the merge target.
+
+    BOTH SOURCES, and that is not an embellishment. The installer pins charts in TWO places:
+    chart/files/component-pins.yaml, and chart/Chart.yaml's `dependencies` (core-provider and
+    core-provider-crds live only there). The first version of this gate read the pins file alone,
+    so a core-provider bump would have rendered NOTHING and the gate would have reported "no pin
+    version changed" — a clean result from an empty check.
+
+    That is the same blind spot check-same-version-line had and that was closed earlier the SAME
+    DAY, rebuilt here by accident hours later. Which is the argument for reading both sources in
+    every gate that asks "what moved": the answer is never one file.
+    """
+    now_p = pins_at()
+    now_d = deps_at()
+    before_p = before_d = None
+    for ref in MERGE_TARGETS:
+        if before_p is None:
+            before_p = pins_at(ref)
+        if before_d is None:
+            before_d = deps_at(ref)
+        if before_p is not None and before_d is not None:
+            break
+    if before_p is None:
         return None, "could not read %s at any of %s" % (PINS, ", ".join(MERGE_TARGETS))
+    if before_d is None:
+        return None, "could not read %s at any of %s" % (CHART_YAML, ", ".join(MERGE_TARGETS))
     out = []
-    for n, c in sorted(now.items()):
-        if (before.get(n) or {}).get("version") != c.get("version"):
-            out.append((n, c.get("chart") or n, c.get("repo") or DEFAULT_REPO, c.get("version")))
+    for n, c in sorted((now_p or {}).items()):
+        if (before_p.get(n) or {}).get("version") != c.get("version"):
+            out.append((n, c.get("chart") or n, c.get("repo") or DEFAULT_REPO, c.get("version"),
+                        PINS))
+    for n, c in sorted((now_d or {}).items()):
+        if (before_d.get(n) or {}).get("version") != c.get("version"):
+            out.append((n, c["chart"], c["repo"], c.get("version"), CHART_YAML))
     return out, None
 
 
@@ -191,7 +233,7 @@ def self_test():
 def main(argv):
     if "--self-test" in argv:
         return self_test()
-    changed, why = changed_pins()
+    changed, why = changed_charts()
     if changed is None:
         print("::error::check-rendered-names: %s" % why)
         return 2
@@ -205,7 +247,7 @@ def main(argv):
     total_names = 0
     unrenderable = []
     bad = []
-    for comp, chart, repo, version in changed:
+    for comp, chart, repo, version, origin in changed:
         names, reason = rendered_names(repo, chart, version)
         if names is None:
             unrenderable.append((comp, chart, version, reason))
@@ -214,7 +256,8 @@ def main(argv):
         for kind, nm in names:
             for e in name_errors(kind, nm):
                 bad.append((comp, chart, version, e))
-        print("  %-24s %-26s %-9s %3d names" % (comp, chart, version, len(names)))
+        print("  %-24s %-26s %-9s %3d names   from %s"
+              % (comp, chart, version, len(names), os.path.basename(origin)))
     for comp, chart, version, reason in unrenderable:
         print("  %-24s %-26s %-9s NOT RENDERED: %s" % (comp, chart, version, reason[:60]))
     for comp, chart, version, e in bad:
@@ -232,8 +275,9 @@ def main(argv):
               "they were NOT checked. Named above. A chart that cannot be rendered has not been "
               "cleared." % (len(unrenderable), len(changed)))
         return 1
-    print("check-rendered-names: OK — %d changed chart(s), %d metadata.name value(s), all valid "
-          "Kubernetes names" % (len(changed), total_names))
+    srcs = sorted({os.path.basename(o) for *_, o in changed})
+    print("check-rendered-names: OK — %d changed chart(s) from %s, %d metadata.name value(s), all "
+          "valid Kubernetes names" % (len(changed), " + ".join(srcs), total_names))
     return 0
 
 
