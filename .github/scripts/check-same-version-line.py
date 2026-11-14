@@ -49,6 +49,7 @@ import sys
 import yaml
 
 PINS = os.environ.get("PINS", "chart/files/component-pins.yaml")
+CHART = os.environ.get("CHART", "chart/Chart.yaml")
 DECL = os.environ.get("DECL", ".github/pin-version-lines.yaml")
 
 
@@ -64,7 +65,53 @@ def pins_from(text):
     return out or None
 
 
-def evaluate(pins, lines):
+def deps_from(text):
+    """name -> version for chart/Chart.yaml's dependencies.
+
+    WHY THIS FILE TOO. Not every component this installer ships is a PIN. core-provider and
+    core-provider-crds are bootstrap SUBCHARTS, declared in chart/Chart.yaml's `dependencies`, and
+    they never appear in component-pins.yaml. So a gate that reads only the pins file cannot see
+    them -- and their pairing is MANDATORY in a way that fails silently:
+
+        The grace record is `status.servedVersionsPendingPrune` on the CompositionDefinition CRD,
+        first present in core-provider-crds 2.13.85. A newer core-provider binary running against an
+        older CRDs chart has that record PRUNED BY THE APISERVER on every write, so the grace never
+        comes due and nothing is ever pruned.
+
+    That is the same shape as our own componentValues pruning: an undeclared field vanishes while
+    the write reports success. A skew here is therefore invisible at the moment it is introduced and
+    surfaces later as "the prune stopped working" -- which is exactly how krateo-057 was diagnosed
+    wrongly on 2026-11-13 before core-provider measured it.
+    """
+    doc = yaml.safe_load(text)
+    if not isinstance(doc, dict):
+        return None
+    out = {}
+    for d in (doc.get("dependencies") or []):
+        if isinstance(d, dict) and d.get("name"):
+            out[str(d["name"])] = d.get("version")
+    return out
+
+
+def versions_from(pins_text, chart_text):
+    """(name -> version, name -> origin, collisions). Origin is for the failure message: a reader
+    needs to know WHICH FILE to edit, and the two are edited differently."""
+    pins = pins_from(pins_text)
+    if pins is None:
+        return None, None, None
+    deps = deps_from(chart_text) if chart_text is not None else {}
+    if deps is None:
+        return None, None, None
+    collisions = sorted(set(pins) & set(deps))
+    merged = dict(pins)
+    origin = {k: PINS for k in pins}
+    for k, v in deps.items():
+        merged[k] = v
+        origin[k] = CHART
+    return merged, origin, collisions
+
+
+def evaluate(pins, lines, origin=None):
     """Pure function of (name->version, declared lines) so the self-test can feed it history."""
     findings = []
     for line in lines:
@@ -85,9 +132,13 @@ def evaluate(pins, lines):
             continue
         seen = {m: pins[m] for m in members}
         if len(set(seen.values())) > 1:
+            where = ""
+            if origin:
+                files = sorted({origin.get(m, "?") for m in members})
+                where = f" [declared in {', '.join(files)}]"
             findings.append(
                 f"line {name!r}: members disagree -- " +
-                ", ".join(f"{m}={v}" for m, v in seen.items()) +
+                ", ".join(f"{m}={v}" for m, v in seen.items()) + where +
                 f". {line.get('reason', '').strip() or 'These must carry the same version.'}"
             )
     return findings
@@ -161,6 +212,53 @@ components:
     good = evaluate({"a": "1.0.0", "b": "1.0.0", "c": "1.0.0"}, line)
     print(f"{'ok  ' if len(bad)==1 else 'FAIL'}  synthetic skew detected: {len(bad)} (want 1)")
     print(f"{'ok  ' if not good else 'FAIL'}  synthetic agreement accepted: {len(good)} (want 0)")
+    # 3b. a Chart.yaml DEPENDENCY skew must be caught, and agreement accepted. This is the case
+    #     the gate was blind to before 2026-11-14: core-provider lives in Chart.yaml, not the pins.
+    CHART_SKEW = """
+dependencies:
+  - name: core-provider
+    version: 2.13.95
+  - name: core-provider-crds
+    version: 2.13.82
+"""
+    CHART_OK = """
+dependencies:
+  - name: core-provider
+    version: 2.13.95
+  - name: core-provider-crds
+    version: 2.13.95
+"""
+    cpline = [{"name": "core-provider", "members": ["core-provider", "core-provider-crds"],
+               "reason": "synthetic"}]
+    # NOTE: pins_from returns None for an EMPTY components list, so these fixtures carry one
+    # unrelated pin. The first draft used "components: []", versions_from returned None, and the
+    # guard below emitted a placeholder finding -- which made the SKEW case pass for the wrong
+    # reason (one placeholder == one expected finding) while the agreement case failed. The
+    # "failure names Chart.yaml" assertion is what exposed it; without that third check the false
+    # pass would have shipped.
+    SOME_PINS = "components:\n  - name: unrelated\n    version: 1.0.0\n"
+    v_bad, o_bad, c_bad = versions_from(SOME_PINS, CHART_SKEW)
+    v_ok, o_ok, c_ok = versions_from(SOME_PINS, CHART_OK)
+    assert v_bad is not None and v_ok is not None, "fixture parse failed; the cases below are vacuous"
+    fb = evaluate(v_bad, cpline, o_bad)
+    fo = evaluate(v_ok, cpline, o_ok)
+    print(f"{'ok  ' if len(fb)==1 else 'FAIL'}  Chart.yaml dep skew detected "
+          f"(2.13.95 vs 2.13.82): {len(fb)} (want 1)")
+    print(f"{'ok  ' if not fo else 'FAIL'}  Chart.yaml dep agreement accepted: {len(fo)} (want 0)")
+    if len(fb) != 1 or fo:
+        ok = False
+    # the failure message must name Chart.yaml, so a reader edits the right file
+    named = fb and CHART in fb[0]
+    print(f"{'ok  ' if named else 'FAIL'}  failure names {CHART}: {named}")
+    if not named:
+        ok = False
+    # 3c. a name in BOTH sources is ambiguous and must be reported
+    _, _, coll = versions_from("components:\n  - name: core-provider\n    version: 1.0.0\n"
+                               "  - name: unrelated\n    version: 1.0.0\n", CHART_OK)
+    print(f"{'ok  ' if coll==['core-provider'] else 'FAIL'}  pins/Chart.yaml collision reported: {coll}")
+    if coll != ["core-provider"]:
+        ok = False
+
     # 4. a typo'd member must not pass silently
     typo = evaluate(synth, [{"name": "t", "members": ["a", "nosuch"], "reason": "x"}])
     print(f"{'ok  ' if len(typo)==1 else 'FAIL'}  typo'd member refused: {len(typo)} (want 1)")
@@ -182,14 +280,29 @@ def main():
         print(f"{DECL} declares no lines -- nothing to check, which is probably a mistake",
               file=sys.stderr)
         return 1
-    pins = pins_from(open(PINS, encoding="utf-8").read())
-    if pins is None:
-        print(f"could not parse {PINS}", file=sys.stderr)
+    try:
+        chart_text = open(CHART, encoding="utf-8").read()
+    except FileNotFoundError:
+        print(f"{CHART} is missing -- a line may declare a Chart.yaml dependency, so this gate "
+              f"cannot run without it", file=sys.stderr)
         return 1
-    findings = evaluate(pins, lines)
+    pins, origin, collisions = versions_from(open(PINS, encoding="utf-8").read(), chart_text)
+    if pins is None:
+        print(f"could not parse {PINS} or {CHART}", file=sys.stderr)
+        return 1
+    if collisions:
+        # A name in BOTH files is ambiguous: the gate would silently prefer one, and a reader
+        # fixing the other file would see no change in the verdict.
+        print(f"::error::check-same-version-line: {collisions} appear in BOTH {PINS} and {CHART}. "
+              f"A line member must have ONE source of truth; resolve the duplicate before this "
+              f"gate can give a meaningful verdict.", file=sys.stderr)
+        return 1
+    findings = evaluate(pins, lines, origin)
     if not findings:
+        n_pins = sum(1 for l in lines for m in (l.get("members") or []) if origin.get(m) == PINS)
+        n_deps = sum(1 for l in lines for m in (l.get("members") or []) if origin.get(m) == CHART)
         print(f"ok: {len(lines)} release line(s), all members in step "
-              f"({sum(len(l.get('members') or []) for l in lines)} pins checked)")
+              f"({n_pins} pins + {n_deps} Chart.yaml dependencies checked)")
         return 0
     print(f"REFUSED: {len(findings)} release line(s) out of step\n")
     for f in findings:

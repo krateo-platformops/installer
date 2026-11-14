@@ -109,3 +109,38 @@ lines:
       One release line in krateo-keycloak-blueprint: a single tag packages every chart in the repo at
       the tag version, and a gate refuses an archive whose Chart.yaml version differs. The operator
       cannot move without the keycloak chart, so a skew has no valid reading.
+
+  - name: core-provider
+    members: [core-provider, core-provider-crds]
+    # THE FIRST LINE WHOSE MEMBERS ARE NOT PINS. Both are bootstrap SUBCHARTS declared in
+    # chart/Chart.yaml's `dependencies`, and neither appears in component-pins.yaml -- so until
+    # 2026-11-14 this gate was structurally blind to them, and their mandatory pairing was enforced
+    # by nothing at all.
+    #
+    # WHY A SKEW HERE IS SILENT, which is what makes it dangerous. Confirmed against the tags by
+    # core-provider: helm/core-provider-crds/.../core.krateo.io_compositiondefinitions.yaml mentions
+    # servedVersionsPendingPrune 0 times at 2.13.84 and once at 2.13.85. At 2.13.84 the CD status
+    # schema is STRUCTURAL -- the three x-kubernetes-preserve-unknown-fields hits in that file are
+    # under the RESTAction ref and statusDataTemplate, not under status. So a newer binary writing
+    # the grace record has it PRUNED BY THE APISERVER while the write still reports success: the
+    # record is never read back, its clock restarts on every write, nothing ever comes due, and
+    # nothing is ever pruned.
+    #
+    # That is the same shape as our own componentValues pruning -- an undeclared field vanishes while
+    # kubectl prints success -- and it is how krateo-057 came to be diagnosed as "the prune has
+    # stopped" on 2026-11-13 when the prune was in fact running 36 times in the log window.
+    #
+    # EVIDENCE that one tag publishes both, applying the same test used for keycloak rather than
+    # inferring it from matching numbers: for 2.13.95 the only release run was release-tag, and it
+    # published three images and three charts all at 2.13.95, with 2.13.94 beside each. Verified
+    # independently here: core-provider and core-provider-crds both pull at 2.13.95, with 2.13.82 as
+    # positive controls and 2.13.99999 absent as a negative. core-provider-target is published too
+    # and is NOT consumed by this chart, so it is deliberately not a member.
+    # (core-provider withdrew an earlier claim that release-oci publishes them on the same tag push;
+    # it has not since 2.13.67. The corrected fact is the one recorded above.)
+    reason: >-
+      Bootstrap subcharts in chart/Chart.yaml, not pins. The grace record is
+      status.servedVersionsPendingPrune on the CompositionDefinition CRD, first present in
+      core-provider-crds 2.13.85. A newer core-provider binary running against an older CRDs chart
+      has that record pruned by the apiserver on every write, so the grace never comes due and
+      nothing is ever pruned -- silently, with every write reporting success.
