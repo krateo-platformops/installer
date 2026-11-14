@@ -363,7 +363,7 @@ components:
   #   which is true only without a `default:` -- a CRD property WITH one is applied by the apiserver to
   #   every existing object on its next read or write. The rule carried forward is "additive AND no
   #   new `default:`", and applying it is what found the Collapse timeout.
-  version: 1.8.43
+  version: 1.8.44
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -2810,7 +2810,7 @@ components:
   #   confirmed it by sha256 per file: ONE file differs in the published chart, Chart.yaml. No values
   #   keys added or changed, no templates touched, no dangerous `required`. Image
   #   ghcr.io/krateo-platformops/frontend:1.8.43, multi-arch amd64+arm64.
-  version: 1.8.43
+  version: 1.8.44
   deps:
   - frontend-crd
   - authn
@@ -6217,7 +6217,7 @@ components:
   #   recorded reason is specific -- an app pinned past its -crd pin prunes fields SILENTLY -- and it
   #   exists because check-no-silent-downgrade caught installer#727 about to revert all three from
   #   1.8.32 to 1.8.28 together. Moving a republished-identical chart costs a version label.
-  version: 1.8.43
+  version: 1.8.44
   deps:
     - portal
     - kagent
