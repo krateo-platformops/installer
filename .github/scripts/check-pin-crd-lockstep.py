@@ -383,7 +383,16 @@ for app_name, crd_name, app, crd in pairs:
         # is byte-identical still passes -- acmp's -crds chart exists to decouple the CRD lifecycle
         # from app-only bumps (its Chart.yaml cites core-provider#89), and holding -crds at the
         # older version in that case is the INTENDED state. A version-equality rule would forbid it,
-        # which is why alert-provider is deliberately NOT a declared version line.
+        # which is why alert-provider is deliberately NOT a declared version line. acmp agreed and
+        # withdrew the request -- "my yes was the wrong tool for the harm I described" -- and their
+        # verdict, verbatim: "holding alert-provider-crds behind the app when the CRD content is
+        # unchanged is an intended state. A CRD ahead of the app is harmful only when it adds SPEC
+        # paths the app's own version lacks. Status-only additions ahead of the app, like 0.2.83's
+        # stateSince, are fine."
+        # WHY THE NESTED WALK IS THE LOAD-BEARING PART, in their words: Alert's spec is deeply
+        # nested (howToFix.applyAction, groupBy, threshold forms), so a top-level-only compare
+        # "would have missed exactly the additions I'd make". The live proof is authn's pair, where
+        # delegation already existed and all four new paths sit under it.
         if vo_app is not None and vo_pin is not None and vo_pin > vo_app:
             qa, qp = prop_paths(ca[cname]), prop_paths(cp[cname])
             for vn in sorted(set(qa) & set(qp)):
