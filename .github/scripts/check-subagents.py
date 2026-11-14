@@ -121,6 +121,30 @@ AGENTNAME_NO_CHART_FIELD = {
     "components": [{"name": "nightly-review", "agent": True, "feature": "specialistAgents",
                     "agentName": "nightly-review-agent"}],
 }
+# THE FLEET must resolve the Agent OBJECT name too. This is the case that was MISSING, and its
+# absence is what took 057's umbrella to Ready=False for over three hours on 2026-11-14.
+#
+# The gate already had agentName cases and already had extraAgents cases. It never had one that was
+# BOTH, so the two derivations of the same name could disagree with every case green: the route said
+# `nightly-review-agent` and the fleet entry said `nightly-review`, and kagent refused to compile
+# the orchestrator with `Agent.kagent.dev "nightly-review" not found`. Accepted=False on the Agent,
+# which the Agentiko composition rolled up as a not-ready child, which the umbrella rolled up as
+# Ready=False/Creating. The Agent's own Ready stayed True the whole time -- the pod kept serving its
+# last good compile -- so only `Accepted` showed it.
+#
+# There is now ONE derivation (inst.agentObjectName), so the route cases above already constrain
+# this. The case stays anyway: it is what fails if anyone re-inlines the fleet derivation, which is
+# exactly what had happened here.
+FLEET_AGENTNAME = {
+    "features": {"coreAgents": True, "specialistAgents": True},
+    "componentValues": {},
+    "components": [
+        {"name": "krateo-autopilot", "agent": True, "orchestrator": True,
+         "feature": "coreAgents", "agentName": "agentiko"},
+        {"name": "nightly-review", "agent": True, "feature": "specialistAgents",
+         "agentName": "nightly-review-agent"},
+    ],
+}
 # An orchestrator's agentName must keep behaving EXACTLY as before: the change is in the else-branch
 # only, and this asserts the if-branch was not touched by accident.
 ORCH_AGENTNAME_UNCHANGED = {
@@ -246,10 +270,8 @@ data:
 {{- end }}
 {{- end }}
 {{- $fleet := list }}
-{{- range $comp := $.Values.components }}
-{{- if and $comp.agent (not $comp.orchestrator) (hasKey $enabled $comp.name) }}
-{{- $fleet = append $fleet (default $comp.name $comp.chart) }}
-{{- end }}
+{{- range $a := (default list (include "inst.fleetAgents" (list $ $.Values.components) | fromYaml).agents) }}
+{{- $fleet = append $fleet $a.name }}
 {{- end }}
   {{ $c.name }}: {{ $fleet | join "," | quote }}
 {{- end }}
@@ -419,10 +441,26 @@ def main() -> int:
         print("  %s %-62s %s" % ("ok  " if ok else "FAIL",
                                  "ONE orchestrator: its fleet is the non-orchestrator agents", ea1))
 
+    eaf, err = extra_agents(FLEET_AGENTNAME)
+    if eaf is None:
+        fails.append("extraAgents agentName probe")
+        print("  FAIL extraAgents agentName probe failed: %s" % err)
+    else:
+        want = {"krateo-autopilot": ["nightly-review-agent"]}
+        ok = eaf == want
+        if not ok:
+            fails.append("extraAgents honours agentName")
+        print("  %s %-62s %s" % ("ok  " if ok else "FAIL",
+                                 "THE FLEET uses the Agent OBJECT name, not the component name", eaf))
+        if not ok:
+            print("       wanted %s. A fleet entry naming an Agent that does not exist makes kagent "
+                  "REFUSE TO COMPILE the orchestrator, and the Agent's Ready stays True while it "
+                  "serves its last good compile -- only Accepted shows it." % want)
+
     if fails:
         print("::error::check-subagents: %d case(s) failed: %s" % (len(fails), fails))
         return 1
-    print("check-subagents: OK — 1 control + %d cases + 1 falsifier + 1 must-never-ship + 2 extraAgents + 1 falsifier" % len(cases))
+    print("check-subagents: OK — 1 control + %d cases + 1 falsifier + 1 must-never-ship + 4 extraAgents (incl. agentName) + 1 falsifier" % len(cases))
     return 0
 
 
