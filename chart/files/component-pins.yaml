@@ -431,6 +431,10 @@ components:
   tier: observability
   version: 0.1.3
 - name: snowplow-crd
+  # 1.12.70: lockstep with snowplow 1.12.70. CRD payload UNCHANGED -- verified by unpacking all
+  # four of .67/.68/.69/.70: 3 files, 19,885 bytes, sha256 4d7c4d5c683fdc95 on every one,
+  # excluding Chart.yaml. Negative control: the app chart over the same range DOES differ, so the
+  # comparison is not blind. Moves solely to keep the pair equal; never move one without the other.
   # 1.12.56: carried in lockstep with snowplow 1.12.56. CRD payload UNCHANGED -- verified by
   # unpacking: 4 files / 19,855 bytes on BOTH sides, identical outside Chart.yaml. Lockstep is
   # the rule for this pair; never move one without the other.
@@ -534,7 +538,7 @@ components:
   #   differing has no valid reading -- which is why the pairing is now a DECLARED version line in
   #   .github/pin-version-lines.yaml rather than a convention. Minimum for 1.12.71: CRD content
   #   >= 1.12.65; pin 1.12.71/1.12.71 together.
-  version: 1.12.67
+  version: 1.12.70
   tier: platform
   feature: portal
 # 0.35.4 (2026-11-05, authn main 75aedb1): owner re-diffed both charts against 0.34.0 and
@@ -994,6 +998,47 @@ components:
 #   sha256:c8011bf5480e09261beec473a3514b8e73062780715863bc40647c4061761947 (tag commit 5659877d).
 #   Pre-roll live digest was sha256:91c6e6e80a2df4716205a86f44bb3046fa49790b600a8ccd56036fcde3b429e7.
 - name: snowplow
+  # 1.12.70 -- PAIRED WITH snowplow-crd 1.12.70. Run 26i's paired verdict is FAIL BY THE GATE AS
+  # WRITTEN (1 of 9 comparisons), ACCEPTED by Diego for this release, on snowplow's condition --
+  # not mine -- that the cause is found before 1.12.71 is cut (snowplow #1430).
+  # The one failure: steady-state call p95 114.71 ms on 1.12.70 vs 110.65 ms on 1.12.69, ratio
+  # 1.0367 against a 1.0229 bar taken from the baseline's OWN spread (the two identical 1.12.69
+  # arms differed by 1.012). Storm and churn p95/p99/throughput all pass; steady p99 passes at
+  # 1.0491 against 1.0512; steady throughput 0.9995. Zero errors, no restart, all three arms
+  # measured the full 4 h 34 min. Image digest the run measured:
+  #   sha256:7312557e1013eb2a88a65951eacad22df3dae91bff9bff60920889f77fa5b715
+  # Read the image from the RUNNING POD after the roll, not from this pin.
+  #
+  # BOTH ARMS RAN AT GOGC=50 AND GOMEMLIMIT=7GiB: the bench installs installer 0.3.616, whose
+  # snowplow chart still sets both, and swaps only the IMAGE. So 26i measures the image, NOT the
+  # new chart's GC defaults. That is why componentValues.snowplow.env.GOGC is pinned to "50" in
+  # values.yaml in this same tag -- a repair roll must carry only what was measured. Taking Go's
+  # default is a later, separately observed step. NOTE: it cannot be reverted by DELETING the
+  # values key (that is inert); it needs componentValuesUnset.
+  #
+  # WHY THE PAIR IS SAFE TO MOVE, verified by me rather than taken on its owner's word:
+  #   snowplow-crds 1.12.67 / .68 / .69 / .70 -> 3 files, 19,885 bytes,
+  #   sha256 4d7c4d5c683fdc95 on ALL FOUR, excluding Chart.yaml.
+  #   NEGATIVE CONTROL: the APP chart over the same range DOES differ (93,128 -> 94,335 bytes,
+  #   215e3b87 -> ab999589), so the comparison is not blind.
+  #
+  # 1.12.69 carries three breaking changes. Each checked against THIS repo:
+  #   - userAccessFilter on a non-GET/HEAD api verb is refused at runtime (500 before anything is
+  #     sent). I checked all 27 charts changed in this catch-up at their NEW versions: 94 real
+  #     filter keys, ALL on `verb: GET`. No exposure. 68 further mentions of the word are inside
+  #     {{/* Helm comments */}}; my first check matched those and reported 64 false failures, so
+  #     the rule is: match the KEY, and note the api entry's verb is the OUTER one -- the filter
+  #     carries its own nested RBAC verb (list/get), which is NOT what the refusal is about.
+  #   - the chart no longer sets GOGC/GOMEMLIMIT. GOMEMLIMIT is derived as 7/8 of the container
+  #     limit; 057's container limit is 8Gi, so the 7GiB ceiling does not move. GOGC alone would
+  #     go 50 -> 100. Hence the values.yaml pin above.
+  #   - a malformed delegation (act) claim is 401 TokenInvalid, and a retired signing key is 401
+  #     KeyNotPublished instead of 503. A well-formed token is unaffected; no ordering needed
+  #     against authn 0.47.0, which rides this same catch-up.
+  #
+  # ORDER, LOAD-BEARING: snowplow 1.12.70 lands BEFORE OR WITH core-provider >= 2.13.83, NEVER
+  # after. 1.12.70's #1325 is the catch-up frame that makes it safe. Chart.yaml moves
+  # core-provider to 2.13.95 in this same tag, which satisfies "with".
   # 1.12.67 -- snowplow ALONE; snowplow-crd deliberately STAYS at 1.12.65.
   # Its owner said the CRD does not change. I VERIFIED THAT MYSELF rather than take it, by
   # rendering the crds chart at all three versions:
@@ -1813,7 +1858,7 @@ components:
   # Also needs frontend >= 1.8.37 for the fix to be complete; this repo pins the frontend line at
   # 1.8.44, so that half is already satisfied -- asserted here so the next reader does not have to
   # re-derive it.
-  version: 1.12.67
+  version: 1.12.70
   deps:
   - snowplow-crd
   - authn

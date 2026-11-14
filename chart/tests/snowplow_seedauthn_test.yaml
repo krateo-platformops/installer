@@ -21,6 +21,17 @@
 # default, which would pass just as well if the template hardcoded that string -- precisely the bug
 # being prevented. The second moves namespaces.krateo to a different value and asserts the written
 # value FOLLOWS. Only the pair distinguishes "derived" from "happens to match today".
+# THIS FIXTURE IS COUPLED TO snowplow's PIN, AND ONLY TO ITS OWN. Measured 2026-11-14 while
+# moving snowplow 1.12.67 -> 1.12.70: inst.crdExists compares the served tags of the
+# COMPONENT-UNDER-TEST's own CRD against its PINNED version, so `snowplows.composition.krateo.io`
+# must declare `served: true` at the new tag or NO Snowplow document renders and both cases fail
+# with "document not found" -- which is exactly how this failure announced itself. Changing those
+# two lines to v1-12-70 was sufficient and nothing else had to move.
+# THE DEPS ARE NOT COUPLED THE SAME WAY, and that is load-bearing for whoever edits this next:
+# authn's fixture entries still say v0-46-0 while the pin is 0.47.0, and the suite passes, because
+# a dep is resolved by ITS OWN served tag, not by the dependent's pin. So on a snowplow pin bump,
+# change the snowplows CRD tag only; do NOT sweep every v1-12-xx / v0-xx-x string in this file, or
+# you will silently stop testing what the dep gate actually does.
 suite: snowplow seedAuthn.authnNamespace follows namespaces.krateo
 templates:
   - templates/compositions.yaml
@@ -55,7 +66,7 @@ tests:
           spec:
             group: composition.krateo.io
             names: {kind: Snowplow}
-            versions: [{name: v1-12-67, served: true}]
+            versions: [{name: v1-12-70, served: true}]
         - apiVersion: apiextensions.k8s.io/v1
           kind: CustomResourceDefinition
           metadata: {name: snowplowcrdses.composition.krateo.io}
@@ -130,7 +141,7 @@ tests:
           spec:
             group: composition.krateo.io
             names: {kind: Snowplow}
-            versions: [{name: v1-12-67, served: true}]
+            versions: [{name: v1-12-70, served: true}]
         - apiVersion: apiextensions.k8s.io/v1
           kind: CustomResourceDefinition
           metadata: {name: snowplowcrdses.composition.krateo.io}

@@ -736,6 +736,16 @@ componentValues:
 # nothing here deletes key material. A bump signs out every session, because the key that
 # signed every outstanding token stops being served; that is the point of the lever, and the
 # reason it is not driven by anything automatic.
+  snowplow:
+    env:
+      # HELD at 50 deliberately. snowplow >=1.12.69 no longer sets GOGC in its chart, so
+      # without this the 057 repair roll would change the IMAGE (which run 26i measured at
+      # GOGC=50) AND the GC target (which no paired run has measured) at the same time, making
+      # any post-roll latency or memory change unattributable. Taking Go's default 100 is a
+      # later, separately observed step -- and DELETING this key will not do it (inert); that
+      # needs componentValuesUnset. GOMEMLIMIT is deliberately NOT set: snowplow derives it as
+      # 7/8 of the container memory limit, which on 057 (8Gi) reproduces the previous 7GiB.
+      GOGC: "50"
 authn:
   jwt:
     keyGeneration: 1
