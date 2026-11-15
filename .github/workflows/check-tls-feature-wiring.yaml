@@ -1,0 +1,54 @@
+name: check-tls-feature-wiring
+
+# features.internalTls (authn#145) decouples the CA issuer from the ingress edge, so that an
+# agentGateway cluster can obtain a CA ClusterIssuer at all -- 057 had 0 ClusterIssuer objects
+# because cert-manager-issuers sat behind cert-manager, behind agentgateway, behind gateway-api-crds,
+# which is mutually exclusive with agentGateway (#557) for reasons unrelated to TLS.
+#
+# The gate renders the chart in COMPOSITION mode for four feature combinations and asserts which
+# CompositionDefinitions appear AND which do not. Half the assertions are absence, which is why this
+# is a script and not a helm-unittest suite: documentSelector can only select a document that
+# exists, so a selector matching nothing fails the test rather than satisfying it.
+#
+# It runs on EVERY push to these paths rather than only on pin changes, because the regression this
+# guards is a values/helper change silently removing cert-manager-issuers from existing
+# features.ingress installs -- which would touch _helpers.tpl or values.yaml, not the pins.
+
+on:
+  pull_request:
+    paths:
+      - chart/files/component-pins.yaml
+      - chart/files/component-pins.min.yaml
+      - chart/values.yaml
+      - chart/values.schema.json
+      - chart/templates/_helpers.tpl
+      - chart/templates/definitions.yaml
+      - .github/scripts/check-tls-feature-wiring.py
+      - .github/workflows/check-tls-feature-wiring.yaml
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  tls-feature-wiring:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Set up Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: v3.19.0
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+      - name: Falsifiers first
+        # If the two falsifiers do not hold, every other assertion in the gate is vacuous: a chart
+        # that rendered everything unconditionally, or a schema that accepted any key, would satisfy
+        # all the positive rules. Running them as their own step means a falsifier regression is
+        # named in the log rather than buried among 21 passing lines.
+        run: python3 .github/scripts/check-tls-feature-wiring.py --self-test
+      - name: Check the TLS feature wiring
+        run: python3 .github/scripts/check-tls-feature-wiring.py

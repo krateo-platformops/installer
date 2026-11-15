@@ -219,25 +219,84 @@
       "title": "Feature flags",
       "additionalProperties": false,
       "properties": {
+        "accessReview": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in. Periodic access-review campaigns over the roles Krateo binds (component access-review, with access-review-crd for its AccessReviewCampaign CRD). Defaults false because it is a new component and `features.*` is inert on an upgrade, so enabling it is a deliberate CR edit. The CRD carries helm.sh/resource-policy: keep, so disabling the feature drains the component without deleting any campaign."
+        },
+        "agentGateway": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in agent gateway: an agentgateway data plane in front of the kagent fleet (components agentgateway-controller + agentgateway-policies, from oci://ghcr.io/krateo-agentiko/charts), giving JWT authentication and per-user RBAC over which agent a caller may reach, which MCP tools it may run and which sub-agents it may delegate to. A valid token becomes mandatory on every agent endpoint, so it never turns on through an upgrade. Needs coreAgents and an issuer whose JWKS the gateway trusts (authn, via portal, by default). Every setting is the policies chart's own: componentValues.agentgateway-policies."
+        },
         "auditWorm": {
           "type": "boolean",
           "default": false,
           "description": "Opt-in tamper-EVIDENT mirror of the krateo_audit table (component krateo-audit-worm). The audit table is ordinary ClickHouse, so anyone who can write it can rewrite it; this maintains a separate WORM copy plus a hash-chained seal, and a verifier that reports RED when the chain breaks or the materialized view is dropped. A reset chain stays tampered permanently rather than re-sealing clean. Default false: it needs the krateo_audit table, which only exists once the daemonset collector's clickhouse/audit exporter has created it, and the seal Job fails loudly and retries on its next schedule until then."
         },
-        "coreProvider": {
+        "capabilityRoles": {
           "type": "boolean",
-          "default": true,
-          "description": "Engine-present marker (core-provider is always-on via bootstrap). Gates no component."
+          "default": false,
+          "title": "Capability roles",
+          "description": "Install krateo-capability-roles: the capability catalog's aggregating ClusterRoles, its Capabilities & roles settings page (Form/Table/Flex/PageHeader + a RESTAction), and optionally the tenant-reader Kyverno policies. OFF by default. ADOPTION TARGET: this chart is already hand-installed on krateo-demo at 0.6.2, so enabling it there is a takeover of an existing release, not a fresh install. REQUIRES KYVERNO ONLY IF componentValues['krateo-capability-roles'].tenantReader.enabled is true (the chart default): templates/tenant-reader-policies.yaml renders ValidatingPolicy and GeneratingPolicy on policies.kyverno.io/v1. Measured: enabled=true renders 14 objects with 6 policies.kyverno.io references, enabled=false renders 11 with none. There is deliberately no requiresApiGroups on the pin, because a hard group requirement would block every cluster that does not need the policies — krateo-057 has 0 kyverno CRDs. Set tenantReader.enabled=false on any cluster without Kyverno; leaving it true there fails loudly at render, which is intended."
+        },
+        "cloudnativePg": {
+          "type": "boolean",
+          "description": "The CloudNativePG operator for consumers other than Keycloak (kagent's Postgres). cloudnative-pg names `keycloak` as its feature and `cloudnativePg` in alsoFeatures, so either flag turns it on and neither forces the other. Leaving this false while keycloak is true is demo's current state and changes nothing there."
+        },
+        "codegenAgents": {
+          "type": "boolean",
+          "description": "LEGACY — keep false. The codegen/conversion specialists (code-analysis, ansible-to-operator, tf-provider-to-operator, tf-to-helm) were retired in #144, and krateo-blueprint-agent is DRAINING behind this flag on its way out: core-provider-agent is the sole blueprint author. Enabling it redeploys a retired agent that nothing routes to. Default false."
+        },
+        "configConnector": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in Google Config Connector: the operator and its two CRDs (components gcp-configconnector-crd + gcp-configconnector, from oci://ghcr.io/krateo-blueprints/charts), letting Compositions provision real Google Cloud resources. Runs in CLUSTER mode by default, which means ONE Google service account for the entire cluster and a controller that watches every namespace -- namespaced mode exists but requires Workload Identity and cannot use a key Secret. Needs a Google service-account key in the Secret named by componentValues.gcp-configconnector.configConnector.credentialSecretName, created in cnrm-system after the operator first runs. Applying the ConfigConnector CR makes the operator install ~635 further CRDs, so this measurably grows the cluster's API surface."
         },
         "coreAgents": {
           "type": "boolean",
           "default": false,
           "description": "Deploy the base agent layer: kagent-crds -> kagent -> model-configs (the kagent ModelConfigs the whole fleet references by name) + installer-agent + krateo-autopilot (which also brings up repo-mcp-server, the fleet's grounding server) + incident-agent (alert root-cause analysis) + core-provider-agent, the sole blueprint author (promoted here 2026-09-25 as krateo-blueprint-agent began draining; krateo-autopilot already depended on it). Default false."
         },
-        "portal": {
+        "coreProvider": {
           "type": "boolean",
           "default": true,
-          "description": "The non-agent platform: authn/snowplow/frontend/portal + portal-starter + the observability stack (operators, krateo-observability, otel collectors, sse-proxy the portal's events bell consumes)."
+          "description": "Engine-present marker (core-provider is always-on via bootstrap). Gates no component."
+        },
+        "externalDns": {
+          "type": "boolean",
+          "default": false,
+          "description": "#115: opt-in external-dns (DNS record publication) STANDALONE — does NOT require features.ingress, so it works with the agentgateway-controller path. Configure the top-level `externalDns` block (provider + credentials env + domainFilters). Pairs with exposure.tls.host: the platform gateway is annotated with that host so external-dns publishes/updates the portal's DNS record following the LoadBalancer IP (DNS-follows-LB, no static IP, no manual record). Default false."
+        },
+        "githubProviderKogConfig": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in. Installs the two install-level Configurations that BUILDER PUBLISHING needs (RepositoryConfiguration and PullRequestConfiguration, both named github-blueprints-config) into the release namespace. OFF BY DEFAULT and it must stay off on any cluster where those Configurations were applied by hand -- enabling it there TAKES THEM OVER, which is untested; krateo-057 is exactly that case. Needs github-provider-kog, and that component's `kinds` must include Repository and PullRequest: neither deps nor requiresApiGroups can see that, so a render guard in definitions.yaml refuses the combination."
+        },
+        "identityLifecycle": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in. Reconciles downstream identity CRs for a user's lifecycle (component identity-lifecycle, with identity-lifecycle-crd for its UserLifecycle CRD). Defaults false because it is a new component and `features.*` is inert on an upgrade, so enabling it is a deliberate CR edit rather than something a version bump can switch on. The CRD carries helm.sh/resource-policy: keep, so disabling the feature drains the component without deleting any UserLifecycle object."
+        },
+        "ingress": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in edge layer: gateway-api-crds + agentgateway + cert-manager + cert-manager-issuers (ACME certificate issuance) from oci://ghcr.io/krateo-blueprints/charts. Default false — the base install is unchanged and pulls nothing from krateo-blueprints unless enabled. Turn off if you run behind your own ingress controller / cloud LB / mesh, or manage DNS+certs yourself. Precondition when enabled: cert-manager-issuers' ACME HTTP-01 solver assumes the Gateway API edge is present. NOTE: external-dns moved to its own `externalDns` feature (#115); a host-mode ingress install that also wants DNS enables BOTH ingress and externalDns."
+        },
+        "internalTls": {
+          "type": "boolean",
+          "default": false,
+          "description": "authn#145: opt-in internal TLS. Enables cert-manager-issuers (the CA ClusterIssuer) and trust-manager (CA distribution as a Bundle). Deliberately SEPARATE from `ingress`, which also brings gateway-api-crds and is therefore mutually exclusive with agentGateway (#557) for reasons unrelated to TLS; before this flag an agentGateway cluster could not obtain a CA issuer at all. cert-manager-issuers is reached through alsoFeatures, so either flag enables it and no existing ingress install is changed. cert-manager is NOT included: issuers and trust-manager declare requiresApiGroups [cert-manager.io] so a hand-installed cert-manager satisfies them and our blueprint is never rendered over it (the cdc sets TakeOwnership unconditionally since core-provider 2.13.82). INCOMPLETE: the Bundle object needs a template in the cert-manager-issuers chart, which lives in krateo-blueprints and is not written yet."
+        },
+        "keycloak": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in. Installs the Keycloak realm stack that fronts Krateo sign-in. SIX components, all gated on this one flag: keycloak-operator (provides k8s.keycloak.org), cloudnative-pg (provides postgresql.cnpg.io for the embedded database), external-secrets (provides external-secrets.io and generators.external-secrets.io), keycloak itself, keycloak-config-kog (turns realm configuration -- identity provider, authentication flows, required actions, mappers -- into CRs) and krateo-keycloak-realm. OFF by default because it creates a realm and an identity broker, which is a policy decision rather than a default; and `features.*` is inert on an upgrade, so enabling it is a deliberate CR edit. It does NOT create authn's OIDCConfig OBJECT: the CRD (oidcconfigs.oidc.authn.krateo.io) is owned by the authn-crd release, and the realm stack creates the object. HISTORY, kept because the correction matters: this text used to say the flag did NOT install keycloak-config-kog, because the floor was >= 0.5.1 -- that version renders the execution controller's authn ServiceAccount allowlist CR plus its two Roles, and at 0.5.0 authn refuses the execution controller with 403 'not in the exchange allowlist', so the locked first-broker-login flow and the browser-flow redirector never reconcile. The pin has been at or above 0.5.1 since, so the note became false while still being read as current. BEFORE ENABLING ON A GATEWAY/PATH-MODE CLUSTER: exposure.hosts and exposure.baseDomain are HOST-MODE ONLY, so Keycloak cannot be given a subdomain while gatewayMode=path -- it needs a path entry in the generated platformRoutes table AND Keycloak's http-relative-path, so that the issuer its tokens carry is stable. Check also for pre-existing UNOWNED keycloak.ogen.krateo.io CRDs: a CRD with a dangling owner blocks oasgen regeneration, so a RestDefinition can report Ready while the CRD keeps its OLD schema (krateo-057 has six such CRDs from 2026-09-09)."
+        },
+        "oasgenProvider": {
+          "type": "boolean",
+          "default": true,
+          "description": "Deploy oasgen-provider (generates operators from OpenAPI specs)."
         },
         "openstack": {
           "type": "boolean",
@@ -245,57 +304,14 @@
           "title": "OpenStack capabilities",
           "description": "Install openstack-capabilities: the openstack-view, -provision, -decommission and -compute-tier-guard ClusterRoles plus the compute-tier ValidatingAdmissionPolicy (failurePolicy Fail, one validation, no matchConditions). Per-cluster and only where OpenStack is offered, so OFF by default. Install it BEFORE the first Openstack instance: openstack-provision is what lets a non-admin create one, and the compute-tier guard matches CREATE, so a guard installed by that create's own release never sees the create that matters. On a cluster that previously ran the 0.3.46/0.3.47 openstack umbrella the six objects are owned by that release; the cdc sets TakeOwnership unconditionally (core-provider 2.13.82, composition.go) so adoption needs no knob, and the blueprint stops rendering an object once another release owns it. NO componentValues entry exists by design: the chart's serviceContract default is the canonical contract and a per-instance Composition override is not knowable from here, so overrides are deliberately not expressible (openstack-as-a-service's decision, so their schema stays the single source)."
         },
-        "oasgenProvider": {
+        "portal": {
           "type": "boolean",
           "default": true,
-          "description": "Deploy oasgen-provider (generates operators from OpenAPI specs)."
-        },
-        "specialistAgents": {
-          "type": "boolean",
-          "description": "Deploy the 4 component specialist agents (authn/snowplow/frontend/clickstack) + clickhouse-mcp (needs coreAgents)."
-        },
-        "ingress": {
-          "type": "boolean",
-          "default": false,
-          "description": "Opt-in edge layer: gateway-api-crds + agentgateway + cert-manager + cert-manager-issuers (ACME certificate issuance) from oci://ghcr.io/krateo-blueprints/charts. Default false — the base install is unchanged and pulls nothing from krateo-blueprints unless enabled. Turn off if you run behind your own ingress controller / cloud LB / mesh, or manage DNS+certs yourself. Precondition when enabled: cert-manager-issuers' ACME HTTP-01 solver assumes the Gateway API edge is present. NOTE: external-dns moved to its own `externalDns` feature (#115); a host-mode ingress install that also wants DNS enables BOTH ingress and externalDns."
-        },
-        "externalDns": {
-          "type": "boolean",
-          "default": false,
-          "description": "#115: opt-in external-dns (DNS record publication) STANDALONE — does NOT require features.ingress, so it works with the agentgateway-controller path. Configure the top-level `externalDns` block (provider + credentials env + domainFilters). Pairs with exposure.tls.host: the platform gateway is annotated with that host so external-dns publishes/updates the portal's DNS record following the LoadBalancer IP (DNS-follows-LB, no static IP, no manual record). Default false."
-        },
-        "codegenAgents": {
-          "type": "boolean",
-          "description": "LEGACY — keep false. The codegen/conversion specialists (code-analysis, ansible-to-operator, tf-provider-to-operator, tf-to-helm) were retired in #144, and krateo-blueprint-agent is DRAINING behind this flag on its way out: core-provider-agent is the sole blueprint author. Enabling it redeploys a retired agent that nothing routes to. Default false."
-        },
-        "agentGateway": {
-          "type": "boolean",
-          "default": false,
-          "description": "Opt-in agent gateway: an agentgateway data plane in front of the kagent fleet (components agentgateway-controller + agentgateway-policies, from oci://ghcr.io/krateo-agentiko/charts), giving JWT authentication and per-user RBAC over which agent a caller may reach, which MCP tools it may run and which sub-agents it may delegate to. A valid token becomes mandatory on every agent endpoint, so it never turns on through an upgrade. Needs coreAgents and an issuer whose JWKS the gateway trusts (authn, via portal, by default). Every setting is the policies chart's own: componentValues.agentgateway-policies."
-        },
-        "structureGraph": {
-          "type": "boolean",
-          "description": "Deploy structure-graph-mcp-server, the code-STRUCTURE grounding layer (a Graphify tree-sitter AST graph of the engine repos: query_graph/shortest_path/get_neighbors/graph_stats). Both consumers — krateo-autopilot and core-provider-agent — reference it off by default, so turning this on without also setting their mcpServers.structureGraph.enabled deploys a server nothing names. Needs coreAgents. Default false."
+          "description": "The non-agent platform: authn/snowplow/frontend/portal + portal-starter + the observability stack (operators, krateo-observability, otel collectors, sse-proxy the portal's events bell consumes)."
         },
         "repoGraph": {
           "type": "boolean",
           "description": "Opt-in the repo-mcp-server DOMAIN-graph / OKF tools (graph_find, graph_map, graph_neighbors, graph_path, knowledge_lookup) — multi-hop structural, reverse-impact and curated-provenance answers grep cannot give. Unlike structureGraph this deploys NO new component: it flips a config layer on three EXISTING coreAgents components in LOCKSTEP — the server (repo-mcp-server graph.enabled) and its consumers' toolNames (krateo-autopilot, incident-agent, via each pin's graphToggle) — so it can never half-enable into the silent Accepted-but-empty server/agent mismatch the repo-mcp-server chart warns about. Distinct from structureGraph (the separate code-STRUCTURE AST server). Needs coreAgents. Default false: more grounding tools is not always better — measure (the repo-mcp-server grounding eval harnesses / a bench A/B) before defaulting on."
-        },
-        "cloudnativePg": {
-          "type": "boolean",
-          "description": "The CloudNativePG operator for consumers other than Keycloak (kagent's Postgres). cloudnative-pg names `keycloak` as its feature and `cloudnativePg` in alsoFeatures, so either flag turns it on and neither forces the other. Leaving this false while keycloak is true is demo's current state and changes nothing there."
-        },
-        "configConnector": {
-          "type": "boolean",
-          "default": false,
-          "description": "Opt-in Google Config Connector: the operator and its two CRDs (components gcp-configconnector-crd + gcp-configconnector, from oci://ghcr.io/krateo-blueprints/charts), letting Compositions provision real Google Cloud resources. Runs in CLUSTER mode by default, which means ONE Google service account for the entire cluster and a controller that watches every namespace -- namespaced mode exists but requires Workload Identity and cannot use a key Secret. Needs a Google service-account key in the Secret named by componentValues.gcp-configconnector.configConnector.credentialSecretName, created in cnrm-system after the operator first runs. Applying the ConfigConnector CR makes the operator install ~635 further CRDs, so this measurably grows the cluster's API surface."
-        },
-        "sloRollup": {
-          "type": "boolean",
-          "default": false,
-          "title": "SLO rollup",
-          "description": "Install krateo-slo-rollup: a CronJob that applies a ClickHouse daily rollup table (krateo_slo_daily) and a refreshable view, so a rolling 28-day SLO can be computed although every otel_* table keeps only 7 days. OFF by default. It adds no ingest path and nothing to the insert path of the otel_metrics tables. Requires the observability stack and the collector's source tables: installed before them the Job fails with a clear message, and with the tables present but empty it succeeds with zero rows. Changing rollup.ttlDays on a LIVE cluster later needs an ALTER TTL grant the shipped otelcollector grants do not include -- the Job then fails and logs the exact statement to run.",
-          "x-krateo-owner": "acmp"
         },
         "selfservice": {
           "type": "boolean",
@@ -314,31 +330,20 @@
           "default": false,
           "description": "Opt-in showback (usage/cost records). Default false because it is only useful once its ClickHouse target exists: the chart's migration creates the `showback` database and its tables on first start, against the clickstack ClickHouse that features.portal brings up via krateo-observability. Enabling it without that ClickHouse leaves the pod retrying its migration. NOTE: features.* is EXCLUDED from the self-bootstrap upgrade patch, so setting this in a values file on an UPGRADE is silently inert — enabling it on a live cluster is an Installer CR edit."
         },
-        "githubProviderKogConfig": {
+        "sloRollup": {
           "type": "boolean",
           "default": false,
-          "description": "Opt-in. Installs the two install-level Configurations that BUILDER PUBLISHING needs (RepositoryConfiguration and PullRequestConfiguration, both named github-blueprints-config) into the release namespace. OFF BY DEFAULT and it must stay off on any cluster where those Configurations were applied by hand -- enabling it there TAKES THEM OVER, which is untested; krateo-057 is exactly that case. Needs github-provider-kog, and that component's `kinds` must include Repository and PullRequest: neither deps nor requiresApiGroups can see that, so a render guard in definitions.yaml refuses the combination."
+          "title": "SLO rollup",
+          "description": "Install krateo-slo-rollup: a CronJob that applies a ClickHouse daily rollup table (krateo_slo_daily) and a refreshable view, so a rolling 28-day SLO can be computed although every otel_* table keeps only 7 days. OFF by default. It adds no ingest path and nothing to the insert path of the otel_metrics tables. Requires the observability stack and the collector's source tables: installed before them the Job fails with a clear message, and with the tables present but empty it succeeds with zero rows. Changing rollup.ttlDays on a LIVE cluster later needs an ALTER TTL grant the shipped otelcollector grants do not include -- the Job then fails and logs the exact statement to run.",
+          "x-krateo-owner": "acmp"
         },
-        "identityLifecycle": {
+        "specialistAgents": {
           "type": "boolean",
-          "default": false,
-          "description": "Opt-in. Reconciles downstream identity CRs for a user's lifecycle (component identity-lifecycle, with identity-lifecycle-crd for its UserLifecycle CRD). Defaults false because it is a new component and `features.*` is inert on an upgrade, so enabling it is a deliberate CR edit rather than something a version bump can switch on. The CRD carries helm.sh/resource-policy: keep, so disabling the feature drains the component without deleting any UserLifecycle object."
+          "description": "Deploy the 4 component specialist agents (authn/snowplow/frontend/clickstack) + clickhouse-mcp (needs coreAgents)."
         },
-        "keycloak": {
+        "structureGraph": {
           "type": "boolean",
-          "default": false,
-          "description": "Opt-in. Installs the Keycloak realm stack that fronts Krateo sign-in. SIX components, all gated on this one flag: keycloak-operator (provides k8s.keycloak.org), cloudnative-pg (provides postgresql.cnpg.io for the embedded database), external-secrets (provides external-secrets.io and generators.external-secrets.io), keycloak itself, keycloak-config-kog (turns realm configuration -- identity provider, authentication flows, required actions, mappers -- into CRs) and krateo-keycloak-realm. OFF by default because it creates a realm and an identity broker, which is a policy decision rather than a default; and `features.*` is inert on an upgrade, so enabling it is a deliberate CR edit. It does NOT create authn's OIDCConfig OBJECT: the CRD (oidcconfigs.oidc.authn.krateo.io) is owned by the authn-crd release, and the realm stack creates the object. HISTORY, kept because the correction matters: this text used to say the flag did NOT install keycloak-config-kog, because the floor was >= 0.5.1 -- that version renders the execution controller's authn ServiceAccount allowlist CR plus its two Roles, and at 0.5.0 authn refuses the execution controller with 403 'not in the exchange allowlist', so the locked first-broker-login flow and the browser-flow redirector never reconcile. The pin has been at or above 0.5.1 since, so the note became false while still being read as current. BEFORE ENABLING ON A GATEWAY/PATH-MODE CLUSTER: exposure.hosts and exposure.baseDomain are HOST-MODE ONLY, so Keycloak cannot be given a subdomain while gatewayMode=path -- it needs a path entry in the generated platformRoutes table AND Keycloak's http-relative-path, so that the issuer its tokens carry is stable. Check also for pre-existing UNOWNED keycloak.ogen.krateo.io CRDs: a CRD with a dangling owner blocks oasgen regeneration, so a RestDefinition can report Ready while the CRD keeps its OLD schema (krateo-057 has six such CRDs from 2026-09-09)."
-        },
-        "accessReview": {
-          "type": "boolean",
-          "default": false,
-          "description": "Opt-in. Periodic access-review campaigns over the roles Krateo binds (component access-review, with access-review-crd for its AccessReviewCampaign CRD). Defaults false because it is a new component and `features.*` is inert on an upgrade, so enabling it is a deliberate CR edit. The CRD carries helm.sh/resource-policy: keep, so disabling the feature drains the component without deleting any campaign."
-        },
-        "capabilityRoles": {
-          "type": "boolean",
-          "default": false,
-          "title": "Capability roles",
-          "description": "Install krateo-capability-roles: the capability catalog's aggregating ClusterRoles, its Capabilities & roles settings page (Form/Table/Flex/PageHeader + a RESTAction), and optionally the tenant-reader Kyverno policies. OFF by default. ADOPTION TARGET: this chart is already hand-installed on krateo-demo at 0.6.2, so enabling it there is a takeover of an existing release, not a fresh install. REQUIRES KYVERNO ONLY IF componentValues['krateo-capability-roles'].tenantReader.enabled is true (the chart default): templates/tenant-reader-policies.yaml renders ValidatingPolicy and GeneratingPolicy on policies.kyverno.io/v1. Measured: enabled=true renders 14 objects with 6 policies.kyverno.io references, enabled=false renders 11 with none. There is deliberately no requiresApiGroups on the pin, because a hard group requirement would block every cluster that does not need the policies — krateo-057 has 0 kyverno CRDs. Set tenantReader.enabled=false on any cluster without Kyverno; leaving it true there fails loudly at render, which is intended."
+          "description": "Deploy structure-graph-mcp-server, the code-STRUCTURE grounding layer (a Graphify tree-sitter AST graph of the engine repos: query_graph/shortest_path/get_neighbors/graph_stats). Both consumers — krateo-autopilot and core-provider-agent — reference it off by default, so turning this on without also setting their mcpServers.structureGraph.enabled deploys a server nothing names. Needs coreAgents. Default false."
         },
         "tenantOnboarding": {
           "type": "boolean",

@@ -252,6 +252,23 @@ features:
                                   #   unless enabled. Precondition: the cert-manager-issuers ACME HTTP-01 solver assumes the
                                   #   Gateway API edge is present. NOTE: external-dns moved to its own `externalDns` feature (#115),
                                   #   so a host-mode ingress install that also wants DNS enables BOTH ingress and externalDns.
+  internalTls: false               # OPT-IN internal TLS (authn#145): cert-manager-issuers (for the CA ClusterIssuer) +
+                                  #   trust-manager (to distribute that CA as a Bundle). SEPARATE from `ingress` on purpose:
+                                  #   ingress also brings gateway-api-crds, which renders the same five cluster-scoped Gateway
+                                  #   API CRDs that agentgateway-controller owns, so ingress and agentGateway are MUTUALLY
+                                  #   EXCLUSIVE (#557) — and that exclusivity has nothing to do with TLS. Before this flag an
+                                  #   agentGateway cluster could not get a CA issuer at all. cert-manager-issuers reaches here
+                                  #   via alsoFeatures, so turning on EITHER flag enables it, and no existing ingress install
+                                  #   loses anything (the cloudnative-pg/cloudnativePg pattern).
+                                  #   NOTE: cert-manager itself is NOT in this feature. It stays on `ingress` alone, and
+                                  #   cert-manager-issuers + trust-manager declare requiresApiGroups: [cert-manager.io]
+                                  #   instead — so on a cluster where cert-manager was installed by hand (057 runs the
+                                  #   upstream chart), enabling TLS does NOT render our blueprint over it. The cdc sets
+                                  #   TakeOwnership unconditionally since core-provider 2.13.82, so that would have ADOPTED
+                                  #   a hand-installed release as a side effect of a feature flag.
+                                  #   INCOMPLETE ON PURPOSE: the Bundle object needs a template in the cert-manager-issuers
+                                  #   chart (krateo-blueprints, NOT this repo) and that is not written yet. Enabling this
+                                  #   today starts trust-manager with nothing to reconcile. Keep it false until that lands.
   externalDns: false               # OPT-IN external-dns (#115): manage DNS records for the platform LoadBalancer + any annotated
                                   #   Service/Gateway via a DNS provider — STANDALONE (does NOT need features.ingress, so it works
                                   #   with the agentgateway-controller path). Configure the `externalDns` block below (provider +
