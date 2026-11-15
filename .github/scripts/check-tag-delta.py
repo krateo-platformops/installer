@@ -79,7 +79,15 @@ def errors(tag, msg, pin_delta, dep_delta):
         return bad
     claimed_pins, claimed_deps = parsed
     def norm(rows):
-        return sorted((n, f, None if a is None else str(a), None if b is None else str(b))
+        # BOTH SIDES THROUGH ONE RENDERER. The claimed rows come from the tag message, where a
+        # value is already a string; the derived rows come from the pins, where a non-scalar field
+        # is a dict. str(dict) is Python repr, which is NOT what the generator wrote, so comparing
+        # str() against the message's JSON made every non-scalar row mismatch even once the block
+        # parsed. td.scalar is the generator's own renderer, so a value is compared in exactly the
+        # representation it was claimed in.
+        return sorted((n, f,
+                       None if a is None else (a if isinstance(a, str) else td.scalar(a)),
+                       None if b is None else (b if isinstance(b, str) else td.scalar(b)))
                       for n, f, a, b in rows)
     for label, claimed, actual in (("pin", claimed_pins, pin_delta),
                                    ("chart dependency", claimed_deps, dep_delta)):
@@ -117,8 +125,29 @@ def self_test():
     dd = [("core-provider", "version", "2.13.82", "2.13.95")]
     good = "header\n\n" + td.block(pd, dd) + "\n\ntrailer"
 
+    # A NON-SCALAR FIELD. `resources` is a nested dict, and its arrival broke this gate on tag
+    # 0.3.651: Python's repr of a dict contains spaces, BLOCK_RE requires \S* for a value, so the
+    # block did not match AT ALL and the gate reported "declares no PINS-CHANGED block" about a tag
+    # whose message carried a correct generated block. The generator and the parser disagreed about
+    # their own format, which is worse than either being wrong alone -- the claim read as right to
+    # a human and as absent to the check. Fixed by rendering a non-scalar as compact sorted JSON in
+    # td.scalar, and by normalising BOTH sides of the comparison through that same renderer.
+    nspd = [("portal", "resources",
+             {"requests": {"cpu": "50m", "memory": "64Mi"}, "limits": {"cpu": "500m", "memory": "512Mi"}},
+             {"requests": {"cpu": "50m", "memory": "96Mi"}, "limits": {"memory": "512Mi"}}),
+            ("agentgateway-controller", "resources", None,
+             {"requests": {"cpu": "50m", "memory": "224Mi"}, "limits": {"memory": "512Mi"}})]
+    nsgood = "header\n\n" + td.block(nspd, []) + "\n\ntrailer"
+    # the same delta with ONE dict value altered: the check must still see the VALUE, not just the
+    # field name, or a block could claim any resources and pass.
+    nsother = [(nspd[0][0], nspd[0][1], nspd[0][2], {"requests": {"cpu": "50m", "memory": "999Mi"},
+                                                     "limits": {"memory": "512Mi"}}),
+               nspd[1]]
+
     cases = [
         ("an exact generated block is accepted", good, pd, dd, True),
+        ("a NON-SCALAR (dict) row round-trips", nsgood, nspd, [], True),
+        ("a dict row whose VALUE differs is refused", nsgood, nsother, [], False),
         ("a block missing one carried change is refused", "x\n" + td.block(pd[:1], dd), pd, dd, False),
         ("a block claiming a change not carried is refused", "x\n" + td.block(pd, dd), pd[:1], dd, False),
         ("a block with the wrong dep version is refused", "x\n" + td.block(pd, dd), pd,
