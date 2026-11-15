@@ -4375,7 +4375,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - frontend
   - git-provider
@@ -4486,7 +4486,7 @@ components:
   # 1.8.73; diff -r reports only Chart.yaml.
   # 1.8.117: CONTENT CHANGE -- 2 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.120
+  version: 1.8.121
   deps: ['portal']
   tier: platform
   feature: portal
@@ -4526,7 +4526,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - portal
   tier: platform
@@ -4597,7 +4597,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - portal
   tier: platform
@@ -4608,7 +4608,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - portal
   tier: platform
@@ -4681,6 +4681,30 @@ components:
 #     gateway /content/debug/vars 401. A 200 WITH index.html IS A FALSE PASS (SPA fallback).
 - name: alerts-page
   kind: AlertsPage
+  # 1.8.121: ONE OF 5 CHARTS WITH A CONTENT CHANGE in this bump (the others: compositions-page,
+  #   dashboard-page, portal, portal-agents); the remaining 12 are version-only. frontend's counts
+  #   from the PUBLISHED charts: alerts-page 45 names 0 invalid, which is -1 from 1.8.120 (the
+  #   removed Button), and portal-agents 128 names 0 invalid, +1 (the new Button). Both expected,
+  #   so a count moving here is NOT the signal it was for 1.8.119 -- it is the signal only when it
+  #   moves UNEXPLAINED.
+  #
+  #   #440, FROM THE SLICE 3a LIVE CHECK ON 057 (Diego's decisions): /alerts keeps ONE Agentiko
+  #   button -- the second "Ask Agentiko ->" (the old Author route) is removed and Ask's prompt now
+  #   offers to author an alert. /agents gains a link line, "The rest is fine: N tool servers
+  #   Accepted - M tools - on the Tool servers tab ->", and the "Tools discovered" tile counts
+  #   ACCEPTED servers only.
+  #
+  #   #439 IS THE ONE WITH A DEPENDENCY WORTH RECORDING. A composition with an unrecognised
+  #   Ready=Unknown reason AND Synced=False now reads "failed" rather than "pending" in the
+  #   compositions list, the Dashboard inbox and the header pill; ZeroEvidence and
+  #   ChildrenForbidden are unchanged. It was written from THIS chart's own incident on 2026-11-14,
+  #   when 1.8.119's invalid metadata.name left the composition at Ready=Unknown/ObserveFailed +
+  #   Synced=False/ReconcileError for hours while the portal called it "pending".
+  #   BUT core-provider #509 (2.13.99, NOT YET PINNED) makes the cdc write False/Unavailable with
+  #   the cause instead of Unknown/ObserveFailed, so the exact state #439 was written for largely
+  #   STOPS OCCURRING once that lands. #439 is still right -- it covers any OTHER unrecognised
+  #   Unknown reason -- but do not expect to reproduce it after 2.13.99. Diego chose 1.8.121 BEFORE
+  #   2.13.99 for exactly this reason: each change stays attributable.
   # 1.8.120: THE ONLY MEMBER OF THIS BUMP WITH A RENDERED CHANGE. portal #437 renames the Select
   #   `alerts-hasIncidents` to `alerts-has-incidents` and follows the ref in the filter bar. That
   #   name is why 1.8.119 could not be installed at all: an uppercase letter is not an RFC 1123
@@ -4713,7 +4737,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - portal
   tier: platform
@@ -4758,7 +4782,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - portal
   tier: platform
@@ -4799,7 +4823,7 @@ components:
   kind: CompositionsPage
   # 1.8.117: CONTENT CHANGE -- 5 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - portal
   tier: platform
@@ -4811,7 +4835,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - portal
   tier: platform
@@ -4823,7 +4847,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - portal
   tier: platform
@@ -4835,7 +4859,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - portal
   tier: platform
@@ -4847,7 +4871,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - portal
   tier: platform
@@ -4859,7 +4883,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - portal
   tier: platform
@@ -4871,7 +4895,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - portal
   tier: platform
@@ -4881,7 +4905,7 @@ components:
   kind: SettingsPage
   # 1.8.117: CONTENT CHANGE -- 6 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - portal
   tier: platform
@@ -4891,7 +4915,7 @@ components:
   kind: ObservabilityPage
   # 1.8.117: CONTENT CHANGE -- 9 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - portal
   tier: platform
@@ -4910,7 +4934,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.120
+  version: 1.8.121
   deps:
   - portal
   tier: platform
