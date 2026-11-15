@@ -1,0 +1,60 @@
+name: check-cdc-resources-contract
+
+# A per-Kind cdc `resources` pin must reach a field core-provider actually reads, and carry the
+# whole contract.
+#
+# WHY, with a date and a cost. The installer rendered this block at the CompositionDefinition's
+# spec.resources for as long as the feature existed. The CD CRD declares spec as
+# {apiRef, chart, controller, deploy, statusDataTemplate, upgradePolicy} — there is no
+# spec.resources — so the apiserver PRUNED every value while kubectl reported success.
+#
+# Measured on krateo-057, 2026-11-15: 0 of 73 live CDs carried spec.resources, and portal's
+# controller ran resources BYTE-IDENTICAL to a component with no pin at all — having carried a
+# 512Mi pin since #65, whose title was "give the portal CDC controller 512Mi so it stops OOMKilling
+# on cold reconcile". The OOMKills stopped because the chart's DEFAULT limit was already 512Mi. So
+# the intervention looked like it had worked, and a pruned field is indistinguishable from a
+# redundant one by outcome alone. That is why this is a gate and not a review note.
+#
+# NOTHING WE OWNED WOULD HAVE CAUGHT IT:
+#   check-pin-fields          validates the pin's SHAPE, not where the chart renders it
+#   check-rendered-names      validates metadata.name on rendered CHILDREN, not CD spec fields
+#   the values-path diff      compares the component chart's values, not the CD we write
+#   every roll verification   read the cdc's resources and saw the DEFAULT, which looked fine
+#
+# Three rules: every emitted CD spec field is one the CRD declares (the general form, covering
+# fields nobody has invented yet); the path is spec.controller.resources by name; and the contract
+# is whole, because spec.controller.resources REPLACES core-provider's cdc.resources rather than
+# merging, so an omitted field is a dropped default. No cpu limit is part of the contract —
+# core-provider measured a 500m limit throttling ~99.8% of CFS periods during cold start.
+#
+# Two falsifiers run on every invocation: a template mutated back to spec.resources must be
+# refused, and a planted limits.cpu must be caught. Without them a pass cannot be told from a gate
+# that checks nothing.
+
+on:
+  pull_request:
+      # NO `branches:` filter: a branches: [main] here means the gate does not run on a STACKED
+      # pull request, which then shows "all checks passed" with every gate skipped.
+    # NO `paths:` filter: a path-filtered workflow never STARTS on a PR that misses its paths, so
+    # a required context would wait forever on "Expected".
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  cdc-resources-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Set up Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: v3.19.0
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Every resources pin reaches spec.controller.resources and carries the whole contract
+        run: python3 .github/scripts/check-cdc-resources-contract.py

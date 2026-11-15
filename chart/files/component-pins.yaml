@@ -2999,6 +2999,20 @@ components:
 - name: krateo-marketplace-catalog
   kind: KrateoMarketplaceCatalog
   version: 0.1.2
+  # resources: per-Kind override, 2026-11-15. observability's 7-day container
+  #   working-set max for this cdc was 111.8 MiB on 60s samples, so treat it as a FLOOR
+  #   rather than a peak. 144Mi is that x1.15 rounded up to 16Mi (core-provider's method).
+  #   The chart default request is 128Mi, which this controller was already at or above,
+  #   and the request is BOTH the eviction floor and GOMEMLIMIT -- so it was eviction-exposed
+  #   mid-helm-operation and GC-squeezed at the same time. All three fields are set because
+  #   spec.controller.resources REPLACES cdc.resources rather than merging; no cpu limit, by
+  #   core-provider's measurement that 500m throttled ~99.8% of CFS periods on cold start.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 144Mi
+    limits:
+      memory: 512Mi
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: portal
@@ -4388,12 +4402,18 @@ components:
   # create then loops on the external-create handshake and the composition never goes Ready.
   # Override just this controller's memory via the CompositionDefinition spec.resources (requests
   # unchanged, so no scheduling impact); other controllers keep the small default.
+  # resources: SET TO THE CONTRACT 2026-11-15, replacing values that had never taken effect.
+  #   The old block asked for a 64Mi request and a 500m cpu limit and rendered at spec.resources,
+  #   which the CRD does not declare, so the apiserver pruned it: the controller ran the chart
+  #   default (128Mi / 512Mi) the whole time. Activating the old values as-written would have
+  #   LOWERED this controller's request 128Mi -> 64Mi and its GOMEMLIMIT to 64Mi, under its own
+  #   measured 7-day peak of ~80 MiB, and added back the cpu limit core-provider removed on
+  #   purpose. 96Mi is 80 x 1.15 rounded up to 16Mi, core-provider's recommendation.
   resources:
     requests:
       cpu: 50m
-      memory: 64Mi
+      memory: 96Mi
     limits:
-      cpu: 500m
       memory: 512Mi
 
 # The agent control plane — /agents, agent detail, agent policies — as its own composition.
@@ -5259,6 +5279,20 @@ components:
 - name: clickhouse-operator
   kind: ClickhouseOperator
   version: 0.1.2
+  # resources: per-Kind override, 2026-11-15. observability's 7-day container
+  #   working-set max for this cdc was 123.0 MiB on 60s samples, so treat it as a FLOOR
+  #   rather than a peak. 144Mi is that x1.15 rounded up to 16Mi (core-provider's method).
+  #   The chart default request is 128Mi, which this controller was already at or above,
+  #   and the request is BOTH the eviction floor and GOMEMLIMIT -- so it was eviction-exposed
+  #   mid-helm-operation and GC-squeezed at the same time. All three fields are set because
+  #   spec.controller.resources REPLACES cdc.resources rather than merging; no cpu limit, by
+  #   core-provider's measurement that 500m throttled ~99.8% of CFS periods on cold start.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 144Mi
+    limits:
+      memory: 512Mi
   # requiresApiGroups — HARD render-time requirements, found by hack/hard-dep-requires-gate.py.
   # This chart renders objects of the groups below but does not ship them, so without their CRDs
   # chart-inspector cannot render it AT ALL and the composition 500s every reconcile, forever.
@@ -6241,6 +6275,20 @@ components:
 - name: kagent-crds
   kind: KagentCrds
   version: 0.1.6
+  # resources: per-Kind override, 2026-11-15. observability's 7-day container
+  #   working-set max for this cdc was 133.6 MiB on 60s samples, so treat it as a FLOOR
+  #   rather than a peak. 160Mi is that x1.15 rounded up to 16Mi (core-provider's method).
+  #   The chart default request is 128Mi, which this controller was already at or above,
+  #   and the request is BOTH the eviction floor and GOMEMLIMIT -- so it was eviction-exposed
+  #   mid-helm-operation and GC-squeezed at the same time. All three fields are set because
+  #   spec.controller.resources REPLACES cdc.resources rather than merging; no cpu limit, by
+  #   core-provider's measurement that 500m throttled ~99.8% of CFS periods on cold start.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 160Mi
+    limits:
+      memory: 512Mi
   repo: oci://ghcr.io/krateo-agentiko/charts
   tier: observability
   feature: coreAgents
@@ -8364,6 +8412,20 @@ components:
   # patching release-oci.yaml in one repo would break its byte-identical property. Documented
   # upstream in krateo-agentiko/agentgateway-policies#91.
   version: 0.2.0
+  # resources: per-Kind override, 2026-11-15. observability's 7-day container
+  #   working-set max for this cdc was 185.3 MiB on 60s samples, so treat it as a FLOOR
+  #   rather than a peak. 224Mi is that x1.15 rounded up to 16Mi (core-provider's method).
+  #   The chart default request is 128Mi, which this controller was already at or above,
+  #   and the request is BOTH the eviction floor and GOMEMLIMIT -- so it was eviction-exposed
+  #   mid-helm-operation and GC-squeezed at the same time. All three fields are set because
+  #   spec.controller.resources REPLACES cdc.resources rather than merging; no cpu limit, by
+  #   core-provider's measurement that 500m throttled ~99.8% of CFS periods on cold start.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 224Mi
+    limits:
+      memory: 512Mi
   repo: oci://ghcr.io/krateo-agentiko/charts
   tier: platform
   feature: agentGateway

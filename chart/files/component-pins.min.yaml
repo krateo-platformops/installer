@@ -92,6 +92,12 @@ components:
 - name: krateo-marketplace-catalog
   kind: KrateoMarketplaceCatalog
   version: 0.1.2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 144Mi
+    limits:
+      memory: 512Mi
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: portal
@@ -139,9 +145,8 @@ components:
   resources:
     requests:
       cpu: 50m
-      memory: 64Mi
+      memory: 96Mi
     limits:
-      cpu: 500m
       memory: 512Mi
 - name: portal-agents
   kind: PortalAgents
@@ -287,6 +292,12 @@ components:
 - name: clickhouse-operator
   kind: ClickhouseOperator
   version: 0.1.2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 144Mi
+    limits:
+      memory: 512Mi
   tier: observability
   feature: portal
 - name: mongodb-operator
@@ -401,6 +412,12 @@ components:
 - name: kagent-crds
   kind: KagentCrds
   version: 0.1.6
+  resources:
+    requests:
+      cpu: 50m
+      memory: 160Mi
+    limits:
+      memory: 512Mi
   repo: oci://ghcr.io/krateo-agentiko/charts
   tier: observability
   feature: coreAgents
@@ -636,6 +653,12 @@ components:
 - name: agentgateway-controller
   kind: AgentgatewayController
   version: 0.2.0
+  resources:
+    requests:
+      cpu: 50m
+      memory: 224Mi
+    limits:
+      memory: 512Mi
   repo: oci://ghcr.io/krateo-agentiko/charts
   tier: platform
   feature: agentGateway
