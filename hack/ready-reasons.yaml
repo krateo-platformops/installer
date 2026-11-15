@@ -182,6 +182,23 @@ converging:
 # failed: a real failure. Fail the verification and name the message.
 failed:
   - Unavailable
+  # core-provider#530 / unstructured-runtime v1.21.0. Written by UNSTRUCTURED-RUNTIME, not the cdc,
+  # and the parent verdict `failed` is COMPUTED BY THE ROLLUP (krateoReady maps it to childFailed)
+  # rather than written on the child. Clears only when an existence check succeeds, or when a human
+  # removes the krateo.io/external-create-pending annotation -- so `indefinite`, with no deadline.
+  # TWO PATHS WRITE THE REASON, BUT ONLY ONE MAPS IT (core-provider's precision, not my reading):
+  #   the REASON is written by whichever controller runs unstructured-runtime >= v1.21.0 -- the cdc
+  #     on its own compositions after a core-provider release with #530, and rest-dynamic-controller
+  #     on its CRs after RDC bumps (which oasgen will NOT do as a ride-along);
+  #   the `failed` MAPPING lives ONLY in the cdc. So an RDC child sitting at CreateOutcomeUnknown
+  #     fails its PARENT only once a core-provider release carries #530.
+  # Both paths exist; the parent verdict needs core-provider either way. The practical consequence:
+  # seeing this reason on an RDC child does NOT imply the parent has gone unhealthy, and a parent
+  # that has NOT gone unhealthy does not mean the child is fine.
+  # This file classifies by REASON alone, so two components writing the same reason is invisible
+  # here; fine while the classification agrees, and the thing that would force a `writer` key if
+  # they ever diverge.
+  - CreateOutcomeUnknown
 
 # unevaluated: core-provider's rollup counts these healthy for a PARENT. This repo's tooling counts
 # them NOT converged -- see the deliberate difference above.
