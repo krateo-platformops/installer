@@ -220,6 +220,26 @@ data:
         url: {{ .Values.ociRepo }}/installer
         version: {{ .Chart.Version | quote }}
 {{- include "inst.chartExtras" (list . .Values.ociRepo) | nindent 8 }}
+      # The umbrella's OWN cdc resources. This CD is not a pinned component -- it is built here
+      # and applied by the self-register hook -- so component-pins.yaml cannot reach it, and the
+      # per-Kind override had to be added at this second site.
+      #
+      # 160Mi because observability's 7-day container working-set max for installers v0-3-648 was
+      # 138.1 MiB on 60s samples (a FLOOR, not a peak), x1.15 rounded up to 16Mi. The chart default
+      # request is 128Mi, so this controller was already ABOVE it -- and the request is both the
+      # eviction floor and GOMEMLIMIT, which makes the umbrella's own controller eviction-exposed
+      # in the middle of the helm operation it is running. That is the worst place for it.
+      #
+      # ALL THREE FIELDS, because spec.controller.resources REPLACES cdc.resources rather than
+      # merging. No cpu limit, by core-provider's measurement that 500m throttled ~99.8% of CFS
+      # periods on cold start.
+      controller:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 160Mi
+          limits:
+            memory: 512Mi
   installer.yaml: |
     apiVersion: {{ include "inst.apiVersion" (list .Chart.Version) }}
     kind: Installer

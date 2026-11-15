@@ -141,12 +141,34 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   {{- with $c.resources }}
-  {{/* Per-Kind CDC controller resources. The core-provider chart's shared cdc.resources default
-       (small, ~256Mi) suits most components; a component that renders many children (e.g. portal)
-       sets its own here so its controller does not OOMKill on the cold reconcile. Absent -> the
-       shared default applies and the CD renders byte-identically to before. */}}
-  resources:
-    {{- toYaml . | nindent 4 }}
+  {{/* Per-Kind CDC controller resources, at spec.controller.resources.
+
+       IT USED TO RENDER AT spec.resources AND WAS SILENTLY DISCARDED. The CompositionDefinition
+       CRD declares spec as {apiRef, chart, controller, deploy, statusDataTemplate, upgradePolicy}
+       -- there is no spec.resources -- so the apiserver PRUNED the whole block while the write
+       reported success. Measured on krateo-057 2026-11-15: 0 of 73 live CDs carried
+       spec.resources, and portal's controller ran resources byte-identical to a component with no
+       pin at all. The pin had been in place since #65, titled "give the portal CDC controller
+       512Mi so it stops OOMKilling on cold reconcile", and the OOMKills stopped because the
+       chart's DEFAULT limit was already 512Mi -- so the intervention looked like it worked.
+
+       IT REPLACES, IT DOES NOT MERGE. core-provider marshals this whole and the cdc Deployment
+       template uses it INSTEAD of the chart's cdc.resources (cdcvalues.go:34,
+       assets/cdc/deployment.yaml:149). So every pin that sets this must set all of
+       requests.cpu, requests.memory and limits.memory, or it silently drops a default.
+
+       NO CPU LIMIT, DELIBERATELY. helm/core-provider/values.yaml:416 under cdc.resources says so:
+       a 500m limit throttled the engine in ~99.8% of CFS periods during the cold-start burst, and
+       a cdc reconcile has the same bursty shape. check-cdc-resources-contract enforces the whole
+       shape so a pin cannot reintroduce one.
+
+       AND requests.memory IS GOMEMLIMIT. The cdc sets GOMEMLIMIT from the container's own
+       requests.memory (cdc.goMemLimit: request, deployment.yaml:91-96), so this value is at once
+       the eviction floor and the Go heap ceiling. Setting it below a controller's measured peak
+       makes it GC-thrash; setting it too low makes it eviction-bait mid-helm-operation. */}}
+  controller:
+    resources:
+      {{- toYaml . | nindent 6 }}
   {{- end }}
 {{- end }}
 {{- end }}

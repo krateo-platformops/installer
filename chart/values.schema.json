@@ -555,7 +555,7 @@
           },
           "resources": {
             "type": "object",
-            "description": "Per-Kind CDC controller compute resources (corev1.ResourceRequirements), threaded onto the component CompositionDefinition spec.resources. Absent -> the core-provider chart cdc.resources default applies.",
+            "description": "Per-Kind CDC controller compute resources (corev1.ResourceRequirements), threaded onto the component CompositionDefinition's spec.controller.resources. IT REPLACES the core-provider chart's cdc.resources rather than merging with it, so a pin that sets this must set ALL of requests.cpu, requests.memory and limits.memory or it silently drops a default. Set NO cpu limit: a 500m limit throttled the engine in ~99.8% of CFS periods during the cold-start burst, and core-provider's own values.yaml marks the omission deliberate. requests.memory is ALSO GOMEMLIMIT (cdc.goMemLimit: request), so it is at once the eviction floor and the Go heap ceiling -- below a controller's measured peak it GC-thrashes. Absent -> the shared cdc.resources default applies (128Mi request / 512Mi limit) and the CD renders byte-identically. THIS USED TO SAY spec.resources, which the CRD does not declare, so every value set here was pruned by the apiserver while the write reported success.",
             "additionalProperties": false,
             "properties": {
               "limits": {
