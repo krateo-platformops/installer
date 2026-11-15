@@ -33,6 +33,7 @@ the generator is, and the generator has its own falsifiers.
     python3 hack/tag-delta.py 0.3.640             -> that tag against its predecessor
     python3 hack/tag-delta.py --self-test
 """
+import json
 import re
 import subprocess
 import sys
@@ -102,10 +103,32 @@ def delta(old, new):
     return out
 
 
+def scalar(v):
+    r"""A value rendered so a row stays parseable: ONE whitespace-free token.
+
+    WHY. Every row was `name field old -> new` with scalar values, and both BLOCK_RE and LINE_RE
+    require `\S*` for old and new. The first non-scalar field to change broke that: on tag 0.3.651
+    the `resources` field moved from absent to a nested dict, and Python's repr of a dict contains
+    spaces, so BLOCK_RE did not match the block AT ALL. The gate then reported "declares no
+    PINS-CHANGED block" about a tag whose message carried a correct, generated block -- because the
+    generator emitted something the parser could not read. Generator and parser disagreeing about
+    their own format is worse than either being wrong alone: the claim looked right to a human and
+    absent to the check.
+
+    So a non-scalar is rendered as COMPACT JSON with sorted keys: no spaces, and stable across runs
+    so the same delta always produces the same row.
+    """
+    if v is None:
+        return "~"
+    if isinstance(v, (str, int, float, bool)):
+        return str(v)
+    return json.dumps(v, separators=(",", ":"), sort_keys=True)
+
+
 def block(pin_delta, dep_delta):
     """The machine-readable claim. Generated, never typed."""
     def fmt(rows):
-        return ["  %s %s %s -> %s" % (n, f, "~" if a is None else a, "~" if b is None else b)
+        return ["  %s %s %s -> %s" % (n, f, scalar(a), scalar(b))
                 for n, f, a, b in rows]
     lines = ["PINS-CHANGED: %d" % len(pin_delta)] + fmt(pin_delta)
     lines += ["CHART-DEPS-CHANGED: %d" % len(dep_delta)] + fmt(dep_delta)
