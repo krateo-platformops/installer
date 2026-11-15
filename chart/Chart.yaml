@@ -314,6 +314,30 @@ dependencies:
 # it. A probe of a dependency's schema measures nothing unless the dependency is ENABLED and
 # PRESENT -- and the ACCEPTING result is the vacuous one, which is the direction that reads like a
 # finding rather than like a broken instrument.
+# 2.13.100 (2026-11-15): #512 adds a `krateo.composition.gvr` attribute to every cdc metric, span
+# and log. No condition, no reason, no values key, no CRD change -- so the classifier and every
+# schema node are untouched. Every cdc rolls once for the image. Requires snowplow >= 1.12.70.
+#
+# VALUES UNCHANGED, verified twice independently as for 2.13.99: observability flattened both
+# charts at 146 -> 146 paths with 0 added/removed/renamed/changed; my own flattening gives
+# 130 -> 130 leaves with the same zero deltas. The counts differ because we flatten differently
+# (nodes vs leaves); the deltas agree, which is the part that matters.
+#
+# THE FIRST THREE-DIGIT PATCH IN THIS LINE, and that is worth a line of its own because a string
+# comparison orders 2.13.100 BEFORE 2.13.99 -- an upgrade would read as a downgrade. Checked, not
+# assumed, before pinning:
+#   check-no-silent-downgrade  parses to tuple(int(p) for p in parts); live test on a simulated
+#                              2.13.99 -> 2.13.100 bump exits 0, "0 declared downgrade(s)"
+#   check-schema-size-budget   COMPACT_CONFIGMAP_FLOOR is a TUPLE (2,13,95) and cp_version is
+#                              parsed, so WALL 1 picks MINIFIED at 2.13.100 exactly as at 2.13.99.
+#                              CONTROL: pinning 2.13.94 flips it to PRETTY-PRINTED and exits 1, so
+#                              that floor check discriminates rather than passing vacuously.
+# No gate orders versions with a relational operator on a raw string.
+#
+# ROLLED TOGETHER WITH keycloak 0.4.1 as 0.3.650, which is Diego's call and costs nothing in
+# attribution: keycloak 0.4.1 renders IDENTICALLY on 057, so the roll's entire observable effect is
+# this image change. 2.13.99's roll was an hour earlier; bundling avoids a third full 73-cdc roll.
+
 # 2.13.99 (2026-11-15): #509, #510, #511, #507. Pinned WITH core-provider-crds as always.
 # NO CRD change, no RBAC change, no new condition and no new Ready=Unknown reason in this one --
 # core-provider stated that explicitly, and the one thing it does change is a VERDICT, not a shape.
@@ -354,11 +378,11 @@ dependencies:
 - condition: bootstrap.coreProvider.enabled
   name: core-provider
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.99
+  version: 2.13.100
 - condition: bootstrap.coreProvider.enabled
   name: core-provider-crds
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.99
+  version: 2.13.100
 description: Umbrella orchestrator blueprint that sequences the per-component Krateo
   PlatformOps blueprints into one ordered, readiness-gated install.
 home: https://krateo.io
