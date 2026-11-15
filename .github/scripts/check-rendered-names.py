@@ -58,6 +58,16 @@ MERGE_TARGETS = ("origin/main", "main")
 # the entry is stale. Values that silently substitute for a guard are worse than no entry.
 RENDER_VALUES = {
     "internal-ca-bundle": {"target": {"namespaces": ["krateo-system"]}},
+    # builder-gate has ALWAYS required this -- gate.yaml:27 fails with ".Values.instances is empty,
+    # so this chart would render NOTHING and report success". VERIFIED AGAINST THE OUTGOING PIN:
+    # 1.8.45 fails with the identical message, so this is not a 1.8.46 regression.
+    #
+    # The chart's own message is worth keeping in mind here, because it describes this gate's job:
+    # "If you meant to turn builder-gate OFF, disable its FEATURE rather than emptying instances".
+    # Emptying instances is a chart that renders nothing and EXITS 0 -- exactly the vacuous pass this
+    # gate exists to refuse, which is why the chart fails closed and why the fixture must supply the
+    # value rather than the gate skipping the chart.
+    "builder-gate": {"instances": [{"name": "portal-builder", "builders": ["portal-builder"]}]},
 }
 
 RFC1123_SUBDOMAIN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$")
