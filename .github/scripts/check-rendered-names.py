@@ -58,6 +58,18 @@ MERGE_TARGETS = ("origin/main", "main")
 # the entry is stale. Values that silently substitute for a guard are worse than no entry.
 RENDER_VALUES = {
     "internal-ca-bundle": {"target": {"namespaces": ["krateo-system"]}},
+    # krateo-keycloak-realm has ALWAYS required this -- templates/userprofile.yaml:2 fails with
+    # "parentClient.redirectUris is required when parentClient.enabled". VERIFIED AGAINST THE
+    # OUTGOING PIN: 0.5.1 fails identically, so this is not a 0.5.3 regression. The gate only hit it
+    # now because it scans CHANGED charts, and this pin had not moved since the gate was written --
+    # which is worth noting as a property of the gate rather than of the chart: an unchanged pin's
+    # render guard is unexercised here, so `--all` is what finds the rest of these.
+    # The value is a PLACEHOLDER in the chart's own documented shape, not the production value;
+    # Diego's approved value for 057 is https://portal.krateo.dev/auth?kind=oidc and belongs on the
+    # CR, not in a CI fixture.
+    "krateo-keycloak-realm": {
+        "parentClient": {"redirectUris": ["https://cmp.example.com/auth?kind=oidc"]}
+    },
     # builder-gate has ALWAYS required this -- gate.yaml:27 fails with ".Values.instances is empty,
     # so this chart would render NOTHING and report success". VERIFIED AGAINST THE OUTGOING PIN:
     # 1.8.45 fails with the identical message, so this is not a 1.8.46 regression.

@@ -1,0 +1,128 @@
+name: check-chart-requires-floors
+
+# Enforce each pinned chart's `krateo.io/requires-<component>` version floors.
+#
+# WHY IT EXISTS, AND IT IS A MEASURED FAILURE. krateo-keycloak-realm 0.5.3 raises
+# `krateo.io/requires-keycloak-config-kog` to `>= 0.9.2`, because 0.9.2 is the release whose
+# KeycloakRealm CRD declares the two remember-me timeout fields. keycloak-provider-kog measured the
+# split pair on a disposable GKE cluster: realm 0.5.3 against 0.9.1's CRD leaves the stored CR with
+# `rememberMe: true` and WITHOUT both timeouts, and the composition stays Ready. A silent prune --
+# the apiserver drops fields the CRD does not declare and reports the object as accepted.
+#
+# So the annotation was the only control, and nothing read it. `check-same-version-line` keeps the
+# members of ONE line in step; this is a floor BETWEEN LINES. "Pin the pair or neither" lived in a
+# chat message, which retracted-versions.yaml's own header already warns about: prose is not a
+# control, because nothing evaluates it.
+#
+# IT FAILS CLOSED. An unparseable constraint, an annotation naming an unpinned component, and a
+# chart whose annotations cannot be read are all REFUSALS. A floor gate that cannot read a floor has
+# not checked it, and calling that green is how the prune above reaches a cluster with CI green.
+
+on:
+  pull_request:
+      # NO `branches:` filter, deliberately -- a `branches: [main]` here means the gate does not run
+      # on a STACKED pull request, which then shows "all checks passed" with every gate skipped.
+      # Measured on the #623->#624->#625 stack: 25 checks on the one based on main, 2 on the others.
+  push:
+    branches: [main]
+  schedule:
+    # Nightly --all sweep. REQUIRED, not a nicety: the PR scan reads the floors DECLARED BY the
+    # changed charts, so a floor declared ABOUT a changed component by an UNCHANGED chart is only
+    # caught here. Bumping A can violate a floor that unchanged B declares about A, and nothing in
+    # A's own PR would say so.
+    - cron: "19 3 * * *"
+  workflow_dispatch:
+    inputs:
+      all:
+        description: "Sweep every pin instead of only the changed ones"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  requires-floors:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # The changed-pin scan compares against the base ref, so a shallow clone of one commit
+          # cannot resolve it and the gate falls back to --all. Fetching the history keeps the PR
+          # path cheap; the fallback stays as the safety net rather than the normal route.
+          fetch-depth: 0
+      - name: Set up helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: v3.19.0
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
+      # REGISTRY LOGIN, copied from check-pin-ci.yaml rather than reinvented -- that gate solved the
+      # same problem and its comments record why each half exists.
+      #
+      # WHY IT IS REQUIRED HERE. Reading a floor means reading the chart's annotations, which means
+      # pulling the chart. The pins span SEVEN registries and three of them are private to an
+      # unauthenticated runner: krateo-agentiko (17 pins), krateo-blueprints (20) and
+      # krateo-platformops/krateo-saas (1). Measured on this gate's first CI run: 20 charts answered
+      # "COULD NOT READ the chart's annotations ... GET https://ghcr.io/token?scope=...", the gate
+      # failed closed as designed, and the result was a PERMANENTLY RED gate rather than a finding.
+      #
+      # FAILS, NEVER SKIPS, when the secret is absent. A gate that quietly stops verifying reports
+      # green without having checked anything.
+      - name: Registry login
+        run: |
+          if [ -z "${{ secrets.PAT }}" ]; then
+            echo "::error::PAT is not set or not visible to this repository. This gate pulls each"
+            echo "::error::chart to read its krateo.io/requires-* annotations, and private packages"
+            echo "::error::answer 401 to an unauthenticated runner. Failing rather than skipping."
+            exit 1
+          fi
+          echo "${{ secrets.PAT }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # POSITIVE CONTROL. A login that SUCCEEDS proves a handshake, not read access -- and without
+      # this, a PAT lacking read:packages on a private org would log in cleanly and then make every
+      # chart in that org report "COULD NOT READ", which reads as a chart problem and is not one.
+      # Three controls because the three private orgs are three separate grants: one passing does
+      # not imply the others.
+      - name: Prove the credential can read each private org
+        run: |
+          set -euo pipefail
+          fail=0
+          probe() {
+            if helm show chart "$1" --version "$2" >/dev/null 2>&1; then
+              echo "  ok   $1 $2"
+            else
+              echo "::error::CANNOT READ $1 $2 -- it is PINNED on main, so it must be readable."
+              echo "::error::PAT lacks read:packages on that org. Every pin there will report"
+              echo "::error::COULD NOT READ, which looks like a chart defect and is not one."
+              fail=1
+            fi
+          }
+          probe oci://ghcr.io/krateo-agentiko/charts/repo-mcp-server 0.1.6
+          probe oci://ghcr.io/krateo-blueprints/charts/internal-ca-bundle 0.16.0
+          probe oci://ghcr.io/krateo-platformops/krateo-saas/krateo-capability-roles 0.6.2
+          [ "$fail" = "0" ] || exit 1
+          echo "positive control OK: a currently-pinned chart in EACH private org is readable"
+      - name: Self-test the rules with no registry
+        # FIRST, and on every run. The live check pulls charts and can fail for network reasons; the
+        # self-tests cannot, so a red here is unambiguously a broken rule rather than a flaky pull.
+        # 11 cases, each asserted in BOTH directions -- the violated floor is refused AND the
+        # satisfied one is accepted, because a gate that refuses a legitimate pin is worse than none.
+        run: python3 .github/scripts/check-chart-requires-floors.py --self-test
+      - name: Check the floors
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.all }}" = "true" ]; then
+            python3 .github/scripts/check-chart-requires-floors.py --all
+          else
+            python3 .github/scripts/check-chart-requires-floors.py
+          fi
+        env:
+          # THE PR's BASE SHA, not `origin/<branch>`. A `git show origin/main:<path>` fails in an
+          # actions checkout -- the remote-tracking ref is not created -- so changed_pins() returned
+          # None and the gate silently fell back to --all on its first CI run. The fallback is the
+          # right SAFETY net (it cannot pass vacuously) but it is the wrong NORMAL path: --all pulls
+          # 91 charts on every PR. A sha is resolvable with fetch-depth: 0 and needs no refspec.
+          GITHUB_BASE_REF: ${{ github.event.pull_request.base.sha || '' }}

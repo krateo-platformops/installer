@@ -9371,7 +9371,7 @@ components:
   #   It REQUIRES the snowplow endpoint Secret and snowplow + authn wired into the rdc deployment.
   #   Declared in componentValues in this same change, with no installer default. Inert on
   #   krateo-057 today because features.keycloak is false there.
-  version: 0.8.1
+  version: 0.9.2
   requiresApiGroups:
   - ogen.krateo.io
   - external-secrets.io
@@ -9458,7 +9458,7 @@ components:
   # Same shape as the nightly-review caveat observability raised: a static reference to a SETTABLE
   # name. agentiko-mcp-server's side is a value defaulting to "" that refuses to render in exchange
   # mode, so their half fails loudly at install; this half is the one that can drift quietly.
-  version: 0.5.1
+  version: 0.5.3
   # THE RENDER-TIME GATE THAT MATTERS. Every object this chart emits is a KOG-generated kind in
   # keycloak.ogen.krateo.io, and those CRDs do not exist until keycloak-config-kog's oasgen
   # RestDefinitions have been reconciled. requiresApiGroups is hard-ANDed outside the $exists
