@@ -65,7 +65,24 @@ VERDICT_TO_CLASS = {
 #
 # So: locate the header row, map names to indices, and refuse rather than guess when a required
 # column is missing or a row's cell count does not match the header's.
-REQUIRED_COLUMNS = ("reason", "status", "parent verdict")
+# `condition` arrives with core-provider#529: the table grows from 14 rows over Ready alone to 36
+# rows over five condition types, with a new FIRST column naming the condition. THIS PARSER MUST
+# WORK ON BOTH SHAPES, because they are holding that merge until it does -- a parser that only
+# understood the new format would be useless for validating the file that exists today.
+#
+# WHY KEY BY (condition, reason) AND NOT reason alone: the same reason string appears under two
+# conditions. `ReconcilePaused` is Ready=True AND Synced=False. A reason-keyed map collapses them
+# and then disagrees with itself about the status.
+REQUIRED_COLUMNS = ("reason", "status")
+CONDITION_COLUMN = "condition"
+# `parent verdict` is filled only on Ready rows in the new shape; the others read a dash, because
+# the rollup reads only Ready.
+VERDICT_COLUMN = "parent verdict"
+# ApiResolved has one OPEN row whose reason is literally "(authn's reason)": on a refusal authn's
+# own discriminator passes through verbatim (NoMapping, AudienceMismatch, MissingBearer, ...). So an
+# UNLISTED ApiResolved reason is that family, NOT a drift to refuse. Refusing it would make the gate
+# fire whenever authn declined for a new reason -- a false alarm by design.
+OPEN_ROW_CONDITIONS = {"ApiResolved"}
 
 
 
@@ -79,10 +96,10 @@ def _cells(line):
 
 
 def parse_table(text):
-    """{reason: {statuses, verdicts}} from the generated markdown, read BY HEADER NAME.
+    """{(condition, reason): {statuses, verdicts}} from the generated markdown, BY HEADER NAME.
 
-    Raises ValueError when the table is missing, a required column is absent, or a row's cell
-    count does not match the header's -- never guesses a column's position."""
+    Works on both shapes: with no `condition` column every row is a Ready row, which is what the
+    pre-#529 table was. Raises ValueError rather than guessing a column's position."""
     header, idx = None, {}
     rows = {}
     for line in text.splitlines():
@@ -91,7 +108,7 @@ def parse_table(text):
             continue
         low = [c.lower() for c in cells]
         if header is None:
-            if "reason" in low:                      # the header row
+            if "reason" in low:
                 header = cells
                 idx = {name: i for i, name in enumerate(low)}
                 missing = [c for c in REQUIRED_COLUMNS if c not in idx]
@@ -99,8 +116,13 @@ def parse_table(text):
                     raise ValueError(
                         "the generated table is missing required column(s) %s; found %s. Refusing "
                         "to guess positions." % (missing, low))
+                if CONDITION_COLUMN not in idx and VERDICT_COLUMN not in idx:
+                    raise ValueError(
+                        "the table has neither a %r nor a %r column, so there is no way to tell "
+                        "which condition a row describes or how a parent reads it. Found %s."
+                        % (CONDITION_COLUMN, VERDICT_COLUMN, low))
             continue
-        if set("".join(cells)) <= set("-: "):        # the |---|---| separator
+        if set("".join(cells)) <= set("-: "):
             continue
         if len(cells) != len(header):
             raise ValueError(
@@ -109,9 +131,14 @@ def parse_table(text):
         reason = cells[idx["reason"]].strip().strip("`")
         if not reason:
             continue
-        e = rows.setdefault(reason, {"statuses": set(), "verdicts": set()})
+        cond = (cells[idx[CONDITION_COLUMN]].strip().strip("`")
+                if CONDITION_COLUMN in idx else "Ready")
+        e = rows.setdefault((cond, reason), {"statuses": set(), "verdicts": set()})
         e["statuses"].add(cells[idx["status"]].strip())
-        e["verdicts"].add(cells[idx["parent verdict"]].strip())
+        if VERDICT_COLUMN in idx:
+            v = cells[idx[VERDICT_COLUMN]].strip()
+            if v and v not in ("-", "--", "\u2014", "—"):
+                e["verdicts"].add(v)
     if header is None:
         raise ValueError("no markdown table found in the generated file at all. A comparison "
                          "against an empty set would pass everything.")
@@ -130,35 +157,54 @@ def classify(vendored):
 
 
 def compare(upstream_rows, vendored):
-    """Broken-rule sentences; [] when the vendored copy agrees with the table."""
+    """Broken-rule sentences; [] when the vendored copy agrees with the table.
+
+    READY rows are checked against the converged/converging/failed/unevaluated lists via the parent
+    verdict. Rows for the OTHER conditions are checked against condition_types[<cond>], because the
+    rollup reads only Ready and those rows carry no verdict."""
     bad = []
     mine = classify(vendored)
-    up = set(upstream_rows)
-    missing = up - set(mine)
-    extra = set(mine) - up
-    for r in sorted(missing):
-        v = sorted(upstream_rows[r]["verdicts"])
-        bad.append("MISSING: upstream has %r (verdict %s) and the vendored file does not classify "
-                   "it. Any verification built from this file would treat it as unknown -- and if "
-                   "its verdict is healthy, would report a FAILURE on a healthy cluster." % (r, v))
-    for r in sorted(extra):
-        bad.append("STALE: the vendored file classifies %r, which upstream no longer lists. Either "
-                   "it was removed or renamed; a classifier naming a reason that cannot be written "
-                   "is dead weight that hides the real set." % r)
-    for r in sorted(up & set(mine)):
-        want = {VERDICT_TO_CLASS.get(v) for v in upstream_rows[r]["verdicts"]}
+    ctypes = vendored.get("condition_types") or {}
+    up_ready = {r for (c, r) in upstream_rows if c == "Ready"}
+
+    for r in sorted(up_ready - set(mine)):
+        v = sorted(upstream_rows[("Ready", r)]["verdicts"])
+        bad.append("MISSING: upstream has Ready reason %r (verdict %s) and the vendored file does "
+                   "not classify it. A verification built from this file would treat it as unknown "
+                   "-- and if its verdict is healthy, would report a FAILURE on a healthy cluster."
+                   % (r, v))
+    for r in sorted(set(mine) - up_ready):
+        bad.append("STALE: the vendored file classifies Ready reason %r, which upstream no longer "
+                   "lists. A classifier naming a reason that cannot be written hides the real set."
+                   % r)
+    for r in sorted(up_ready & set(mine)):
+        want = {VERDICT_TO_CLASS.get(v) for v in upstream_rows[("Ready", r)]["verdicts"]}
         want.discard(None)
         if not want:
-            bad.append("UNMAPPED VERDICT: %r carries verdict(s) %s, which this gate does not know "
-                       "how to map. Upstream added a verdict value; VERDICT_TO_CLASS needs it."
-                       % (r, sorted(upstream_rows[r]["verdicts"])))
+            bad.append("UNMAPPED VERDICT: Ready reason %r carries verdict(s) %s, which this gate "
+                       "does not know how to map. VERDICT_TO_CLASS needs it."
+                       % (r, sorted(upstream_rows[("Ready", r)]["verdicts"])))
             continue
         if mine[r] not in want:
-            bad.append("MISCLASSIFIED: %r is %r here but upstream's parent verdict %s maps to %s."
-                       % (r, mine[r], sorted(upstream_rows[r]["verdicts"]), sorted(want)))
-    # a reason that is healthy upstream AND paired with Synced!=True must be listed as needing it
-    req = set(vendored.get("requires_synced_true") or [])
-    for r in sorted(req - set(mine)):
+            bad.append("MISCLASSIFIED: Ready reason %r is %r here but upstream's parent verdict %s "
+                       "maps to %s." % (r, mine[r],
+                                        sorted(upstream_rows[("Ready", r)]["verdicts"]),
+                                        sorted(want)))
+
+    for (cond, reason) in sorted(k for k in upstream_rows if k[0] != "Ready"):
+        if cond in OPEN_ROW_CONDITIONS:
+            continue
+        entry = ctypes.get(cond)
+        if entry is None:
+            bad.append("MISSING CONDITION: upstream lists condition %r (e.g. reason %r) and the "
+                       "vendored file has no condition_types entry for it." % (cond, reason))
+            continue
+        known = set(entry.get("healthy") or []) | set(entry.get("unhealthy") or [])
+        if reason not in known:
+            bad.append("MISSING: upstream has %s reason %r and the vendored file does not list it "
+                       "under condition_types[%r]." % (cond, reason, cond))
+
+    for r in sorted(set(vendored.get("requires_synced_true") or []) - set(mine)):
         bad.append("requires_synced_true names %r, which is not classified at all." % r)
     return bad
 
@@ -178,32 +224,61 @@ def fetch_upstream():
 SELF_TESTS = [
     # (label, upstream rows, vendored dict, expect_refused)
     ("agreement is accepted",
-     {"Available": {"statuses": {"True"}, "verdicts": {"healthy"}}},
-     {"converged": ["Available"], "converging": [], "failed": [], "unevaluated": []}, False),
+     {("Ready", "Available"): {"statuses": {"True"}, "verdicts": {"healthy"}}},
+     {"converged": ["Available"], "converging": [], "failed": [], "unevaluated": [], "condition_types": {}}, False),
     ("THE REAL BUG: a healthy reason absent from the vendored file is REFUSED",
-     {"Available": {"statuses": {"True"}, "verdicts": {"healthy"}},
-      "ReconcileGracefullyPaused": {"statuses": {"True"}, "verdicts": {"healthy"}}},
-     {"converged": ["Available"], "converging": [], "failed": [], "unevaluated": []}, True),
+     {("Ready", "Available"): {"statuses": {"True"}, "verdicts": {"healthy"}},
+      ("Ready", "ReconcileGracefullyPaused"): {"statuses": {"True"}, "verdicts": {"healthy"}}},
+     {"converged": ["Available"], "converging": [], "failed": [], "unevaluated": [], "condition_types": {}}, True),
     ("a converging reason filed as converged is REFUSED",
-     {"Creating": {"statuses": {"False"}, "verdicts": {"converging"}}},
-     {"converged": ["Creating"], "converging": [], "failed": [], "unevaluated": []}, True),
+     {("Ready", "Creating"): {"statuses": {"False"}, "verdicts": {"converging"}}},
+     {"converged": ["Creating"], "converging": [], "failed": [], "unevaluated": [], "condition_types": {}}, True),
     ("a failed reason filed as converging is REFUSED",
-     {"Unavailable": {"statuses": {"False"}, "verdicts": {"failed"}}},
-     {"converged": [], "converging": ["Unavailable"], "failed": [], "unevaluated": []}, True),
+     {("Ready", "Unavailable"): {"statuses": {"False"}, "verdicts": {"failed"}}},
+     {"converged": [], "converging": ["Unavailable"], "failed": [], "unevaluated": [], "condition_types": {}}, True),
     ("a vendored reason upstream dropped is REFUSED",
-     {"Available": {"statuses": {"True"}, "verdicts": {"healthy"}}},
+     {("Ready", "Available"): {"statuses": {"True"}, "verdicts": {"healthy"}}},
      {"converged": ["Available", "GoneForever"], "converging": [], "failed": [],
-      "unevaluated": []}, True),
+      "unevaluated": [], "condition_types": {}}, True),
     ("THE DELIBERATE DIFFERENCE is accepted: unevaluated maps to its own class",
-     {"ObserveFailed": {"statuses": {"Unknown"},
+     {("Ready", "ObserveFailed"): {"statuses": {"Unknown"},
                         "verdicts": {"unevaluated (rolls up as healthy)"}}},
-     {"converged": [], "converging": [], "failed": [], "unevaluated": ["ObserveFailed"]}, False),
+     {"converged": [], "converging": [], "failed": [], "unevaluated": ["ObserveFailed"], "condition_types": {}}, False),
     ("a NEW upstream verdict value is REFUSED rather than silently mapped",
-     {"Whatever": {"statuses": {"False"}, "verdicts": {"brand-new-verdict"}}},
-     {"converged": ["Whatever"], "converging": [], "failed": [], "unevaluated": []}, True),
+     {("Ready", "Whatever"): {"statuses": {"False"}, "verdicts": {"brand-new-verdict"}}},
+     {"converged": ["Whatever"], "converging": [], "failed": [], "unevaluated": [], "condition_types": {}}, True),
     ("a reason on TWO rows (cdc + runtime) with one verdict is accepted",
-     {"Creating": {"statuses": {"False"}, "verdicts": {"converging"}}},
-     {"converged": [], "converging": ["Creating"], "failed": [], "unevaluated": []}, False),
+     {("Ready", "Creating"): {"statuses": {"False"}, "verdicts": {"converging"}}},
+     {"converged": [], "converging": ["Creating"], "failed": [], "unevaluated": [], "condition_types": {}}, False),
+    # --- the #529 condition-column paths. Each of these is a NEW code path and none of the cases
+    # above exercises it, so without them the rework would be unfalsified.
+    ("SAME reason under TWO conditions is NOT collapsed",
+     {("Ready", "ReconcilePaused"): {"statuses": {"True"}, "verdicts": {"healthy"}},
+      ("Synced", "ReconcilePaused"): {"statuses": {"False"}, "verdicts": set()}},
+     {"converged": ["ReconcilePaused"], "converging": [], "failed": [], "unevaluated": [],
+      "condition_types": {"Synced": {"healthy": ["ReconcileSuccess"],
+                                     "unhealthy": ["ReconcilePaused"]}}}, False),
+    ("an UNLISTED non-Ready reason is REFUSED",
+     {("Ready", "Available"): {"statuses": {"True"}, "verdicts": {"healthy"}},
+      ("RBACComplete", "SomethingNew"): {"statuses": {"False"}, "verdicts": set()}},
+     {"converged": ["Available"], "converging": [], "failed": [], "unevaluated": [],
+      "condition_types": {"RBACComplete": {"healthy": ["Applied"]}}}, True),
+    ("a WHOLE unlisted condition is REFUSED",
+     {("Ready", "Available"): {"statuses": {"True"}, "verdicts": {"healthy"}},
+      ("BrandNewCondition", "Whatever"): {"statuses": {"True"}, "verdicts": set()}},
+     {"converged": ["Available"], "converging": [], "failed": [], "unevaluated": [],
+      "condition_types": {}}, True),
+    ("ApiResolved's OPEN family: an unlisted reason is ACCEPTED, not refused",
+     {("Ready", "Available"): {"statuses": {"True"}, "verdicts": {"healthy"}},
+      ("ApiResolved", "AudienceMismatch"): {"statuses": {"False"}, "verdicts": set()}},
+     {"converged": ["Available"], "converging": [], "failed": [], "unevaluated": [],
+      "condition_types": {"ApiResolved": {"healthy": ["Resolved"]}}}, False),
+    ("a non-Ready row does NOT pollute the Ready classification",
+     {("Ready", "Available"): {"statuses": {"True"}, "verdicts": {"healthy"}},
+      ("Synced", "ReconcileError"): {"statuses": {"False"}, "verdicts": set()}},
+     {"converged": ["Available"], "converging": [], "failed": [], "unevaluated": [],
+      "condition_types": {"Synced": {"healthy": ["ReconcileSuccess"],
+                                     "unhealthy": ["ReconcileError"]}}}, False),
 ]
 
 

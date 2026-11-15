@@ -116,6 +116,10 @@ condition_types:
   Synced:
     universal: true
     healthy: [ReconcileSuccess]
+    # `unhealthy` means KNOWN AND NOT THE HEALTHY ONE -- it includes expected states such as a
+    # deliberate pause, not only failures. The gate treats healthy|unhealthy as the known set.
+    unhealthy: [ReconcileError, ReconcilePaused, ReconcileDeferred, ReconcileGracefullyPaused,
+                GracefulPausePending]
     note: >-
       a PAUSED composition reports Ready=True with Synced=False/ReconcilePaused. It was healthy when
       paused and nothing is maintaining that state now, so it must not satisfy a dependency gate.
@@ -123,10 +127,26 @@ condition_types:
   ChartRenderable:
     universal: false   # absent on a paused composition
     healthy: [Renderable]
+    unhealthy: [UnservedKind, ValuesSchemaViolation, InspectorRejected, InspectorUnavailable]
     note: chart-inspector rendered the chart against this cluster.
   RBACComplete:
     universal: false   # absent on a paused composition
     healthy: [Applied]
+    unhealthy: [ApplyFailed, NamespaceTerminating, NotEvaluated]
+  ApiResolved:
+    universal: false   # only on compositions whose CompositionDefinition has an apiRef, which is
+                       # why 057's census of four condition types never showed it
+    healthy: [Resolved]
+    open_family: true  # ONE ROW UPSTREAM IS DELIBERATELY OPEN: on a refusal, authn's own
+                       # discriminator passes through VERBATIM (NoMapping, AudienceMismatch,
+                       # MissingBearer, ...). So an unlisted ApiResolved reason is that family and
+                       # the gate must NOT refuse it -- refusing would fire whenever authn declined
+                       # for a new reason, which is a false alarm by construction. The gate's
+                       # OPEN_ROW_CONDITIONS carries this.
+    note: >-
+      the reason sets above arrive generated with core-provider#529 (36 rows over five condition
+      types). Until that merges they are RELAYED from core-provider rather than read from the file,
+      so the gate's first run against the merged table is what confirms them.
     note: >-
       every RBAC object derived from the chart was applied. A chart-inspector outage is what puts
       this at risk, and it is the condition a Ready-only check cannot see.
