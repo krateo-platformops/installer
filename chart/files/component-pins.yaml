@@ -4389,7 +4389,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - frontend
   - git-provider
@@ -4506,7 +4506,7 @@ components:
   # 1.8.73; diff -r reports only Chart.yaml.
   # 1.8.117: CONTENT CHANGE -- 2 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.121
+  version: 1.8.123
   deps: ['portal']
   tier: platform
   feature: portal
@@ -4546,7 +4546,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - portal
   tier: platform
@@ -4617,7 +4617,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - portal
   tier: platform
@@ -4628,7 +4628,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - portal
   tier: platform
@@ -4757,7 +4757,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - portal
   tier: platform
@@ -4802,12 +4802,32 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - portal
   tier: platform
   feature: portal
 - name: compositions-page
+  # 1.8.123: SKIPPING 1.8.122 DELIBERATELY. Two cosmetic fixes landed an hour apart and the line
+  #   moves as one, so taking 1.8.123 directly is one 17-chart roll instead of two. frontend left
+  #   the call to me; 057 had already taken six rolls today.
+  #
+  #   #441 (was 1.8.122) IS THIS CHART'S FIX, and it is the interesting one. composition-resources'
+  #   jq joined every fetched child on the COMPOSITION's namespace, so a child living anywhere else
+  #   never matched. The detail page's Relations list and match bar therefore read alerts-page at
+  #   "2% match - 1/45" with 44 children Pending, and portal at 39/56 -- numbers that look like a
+  #   measurement of unhealthy children rather than a broken join. frontend reproduced 2% and 69%
+  #   by running the chart's own jq over 057's real objects, then 100% (45/45, 56/56) with the fix
+  #   (.rns == $m._rns in place of .rns == $m._cns), and verified the shipped artifact contains the
+  #   new form. Same error class as a predicate applied to the wrong subject: the instrument
+  #   reported confidently about something it was not looking at.
+  #
+  #   #442 (1.8.123) is observability-page only: three /observability counter queries over- and
+  #   under-counting across pod restarts (reconcile successes read 160869 against 52081 over 24h).
+  #
+  #   NOTHING ELSE MOVES. Both PRs touch only these two pages' jq -- no CRD, no controller, no
+  #   other chart's rendered output -- so expect only compositions-page's and observability-page's
+  #   managed objects to update, and the other 15 to re-render identically.
   # Renders into krateo-compositions, which the chart creates. readerGroups admins + devs (chart values.yaml).
   #
   # 1.8.85 -> 1.8.89, and it is the ONLY portal-repo chart moving. The other four that 1.8.89
@@ -4843,7 +4863,7 @@ components:
   kind: CompositionsPage
   # 1.8.117: CONTENT CHANGE -- 5 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - portal
   tier: platform
@@ -4855,7 +4875,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - portal
   tier: platform
@@ -4867,7 +4887,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - portal
   tier: platform
@@ -4879,7 +4899,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - portal
   tier: platform
@@ -4891,7 +4911,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - portal
   tier: platform
@@ -4903,7 +4923,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - portal
   tier: platform
@@ -4915,7 +4935,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - portal
   tier: platform
@@ -4925,7 +4945,7 @@ components:
   kind: SettingsPage
   # 1.8.117: CONTENT CHANGE -- 6 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - portal
   tier: platform
@@ -4935,7 +4955,7 @@ components:
   kind: ObservabilityPage
   # 1.8.117: CONTENT CHANGE -- 9 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - portal
   tier: platform
@@ -4954,7 +4974,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.121
+  version: 1.8.123
   deps:
   - portal
   tier: platform
