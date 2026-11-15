@@ -7435,6 +7435,16 @@
                   "description": "OTEL_SERVICE_NAME: service.name on every span. The chart's own default is krateo-alert-provider."
                 }
               }
+            },
+            "crdReaderGroups": {
+              "type": "array",
+              "title": "crdReaderGroups",
+              "description": "Groups granted `get` on the single CustomResourceDefinition alerts.observability.krateo.io, via the chart's own ClusterRole (helm/alert-provider/templates/clusterrole-krateo-alert-crd-reader.yaml). The alert edit drawer's `crd` stage needs it; without it a non-admin gets a 403 there while every other part of the page works. SCOPED BY resourceNames TO THAT ONE CRD -- a `get` on one named object, not on the kind -- and alert-provider has a test that fails if resourceNames is removed, so the narrowing cannot silently widen. NO SCHEMA DEFAULT, deliberately: the installer applies schema defaults onto the Installer CR, so a default here would silently re-assert itself over a group someone had removed. The chart's values.yaml carries [] and its schema has no default either, so nothing re-asserts at either layer. Copied to match alert-provider's own values.schema.json at 0.2.84: array, items string with minLength 1, uniqueItems, no `required` at any depth.",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
             }
           }
         },
