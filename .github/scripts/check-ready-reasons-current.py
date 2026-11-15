@@ -51,21 +51,70 @@ VERDICT_TO_CLASS = {
     "unevaluated (rolls up as healthy)": "unevaluated",
 }
 
-ROW_RE = re.compile(r"^\|\s*`(\w+)`\s*\|\s*(\w+)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|")
+# PARSE BY HEADER NAME, NOT BY POSITION.
+#
+# This gate read the first four cells positionally. core-provider#523 then inserted an
+# "expected to clear" column -- and it happened to land AFTER "parent verdict", so the parse still
+# lined up. That was luck. frontend hit the identical bug in the portal's own copy of this gate and
+# fixed it the same way; they are the reason this is being corrected rather than left.
+#
+# Measured on a synthetic table with a column inserted at position 3: the 4th capture read the
+# WRITER as the parent verdict, and the gate reported UNMAPPED VERDICT. Loud -- but loud by luck.
+# Had that inserted cell contained "healthy" or "converging", the gate would have AGREED with a
+# shifted table and reported a clean comparison against nothing.
+#
+# So: locate the header row, map names to indices, and refuse rather than guess when a required
+# column is missing or a row's cell count does not match the header's.
+REQUIRED_COLUMNS = ("reason", "status", "parent verdict")
+
+
+
+def _cells(line):
+    """The cells of a markdown table row, or None when the line is not one."""
+    s = line.strip()
+    if not s.startswith("|"):
+        return None
+    inner = s[1:-1] if s.endswith("|") else s[1:]
+    return [c.strip() for c in inner.split("|")]
 
 
 def parse_table(text):
-    """{reason: {statuses, verdicts}} from the generated markdown. A reason may appear on more
-    than one row (Creating is written by both the cdc and the runtime), so collect sets."""
+    """{reason: {statuses, verdicts}} from the generated markdown, read BY HEADER NAME.
+
+    Raises ValueError when the table is missing, a required column is absent, or a row's cell
+    count does not match the header's -- never guesses a column's position."""
+    header, idx = None, {}
     rows = {}
     for line in text.splitlines():
-        m = ROW_RE.match(line)
-        if not m:
+        cells = _cells(line)
+        if cells is None:
             continue
-        reason, status, _writer, verdict = m.group(1), m.group(2), m.group(3), m.group(4).strip()
+        low = [c.lower() for c in cells]
+        if header is None:
+            if "reason" in low:                      # the header row
+                header = cells
+                idx = {name: i for i, name in enumerate(low)}
+                missing = [c for c in REQUIRED_COLUMNS if c not in idx]
+                if missing:
+                    raise ValueError(
+                        "the generated table is missing required column(s) %s; found %s. Refusing "
+                        "to guess positions." % (missing, low))
+            continue
+        if set("".join(cells)) <= set("-: "):        # the |---|---| separator
+            continue
+        if len(cells) != len(header):
+            raise ValueError(
+                "a row has %d cells but the header has %d: %r. A cell-count mismatch means the "
+                "column mapping cannot be trusted." % (len(cells), len(header), cells[:3]))
+        reason = cells[idx["reason"]].strip().strip("`")
+        if not reason:
+            continue
         e = rows.setdefault(reason, {"statuses": set(), "verdicts": set()})
-        e["statuses"].add(status)
-        e["verdicts"].add(verdict)
+        e["statuses"].add(cells[idx["status"]].strip())
+        e["verdicts"].add(cells[idx["parent verdict"]].strip())
+    if header is None:
+        raise ValueError("no markdown table found in the generated file at all. A comparison "
+                         "against an empty set would pass everything.")
     return rows
 
 
