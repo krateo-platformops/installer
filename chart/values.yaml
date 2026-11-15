@@ -322,6 +322,40 @@ features:
 # exposure.tls.host automatically (compositions.yaml forcePaths gateway.platformHostname), so external-dns
 # publishes/updates the DNS record for the portal following the LoadBalancer IP — no static IP, no manual
 # record. Provider credentials go in `env` as a secretKeyRef (the operator creates the Secret out-of-band).
+# Internal TLS (authn#145), paired with features.internalTls. ONE value with TWO consumers, derived
+# by the chart so they cannot disagree.
+#
+# WHY ONE VALUE. cert-manager-issuers writes the root CA Certificate (and so its Secret
+# krateo-root-ca-key-pair) into a namespace; cert-manager READS cluster CA Secrets only from its
+# --cluster-resource-namespace; and trust-manager reads Bundle SOURCES only from its
+# app.trust.namespace. All three must name the same namespace or the CA ClusterIssuer never becomes
+# Ready -- silently, because a Certificate nobody consumes raises no error.
+#
+# AND THE TWO CHARTS' DEFAULTS DISAGREE WITH EACH OTHER:
+#     cert-manager-issuers  internalCA.namespace   default ""            -> the release namespace
+#     trust-manager         app.trust.namespace    default "cert-manager"
+# So "both unset" is not a consistent state, it is a guaranteed mismatch. That is why this value is
+# REQUIRED when features.internalTls is on rather than defaulted: the installer refuses to render
+# instead of producing an issuer that never goes Ready.
+#
+# Setting it is SAFE on an install where cert-manager already runs in the issuers' own namespace:
+# the correct value there equals the namespace already in use, so the issuers chart moves nothing and
+# trust-manager's default is corrected. It only mints a second root CA if set to the WRONG namespace
+# -- which is a wrong answer, not a consequence of being asked.
+#
+# Measured on krateo-057: cert-manager runs in ns `cert-manager` with
+# --cluster-resource-namespace=$(POD_NAMESPACE) (fieldRef metadata.namespace), while 91 of 92 helm
+# releases live in krateo-system. So 057's correct value is `cert-manager`, NOT the release
+# namespace, and the default would have been wrong there.
+internalTls:
+  certManagerNamespace: ""        # REQUIRED when features.internalTls is true. The namespace
+                                  #   cert-manager itself runs in -- read it from the live
+                                  #   deployment's --cluster-resource-namespace, do not guess.
+                                  #   Derived by the chart into BOTH
+                                  #   cert-manager-issuers.internalCA.namespace and
+                                  #   trust-manager.app.trust.namespace, with forcePath, so a
+                                  #   componentValues override cannot make them disagree.
+
 externalDns:
   provider:
     name: cloudflare              # cloudflare | aws | google | azure | ... (whatever the upstream chart supports)

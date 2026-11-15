@@ -794,6 +794,35 @@
 {{- if and $c.agent $mcpHash }}
 {{- include "inst.forcePath" (dict "target" $spec "path" (list "rollGuard") "value" $mcpHash) }}
 {{- end }}
+{{- /* INTERNAL TLS (authn#145) -- ONE value, TWO consumers, derived here so they cannot disagree.
+     .Values.internalTls.certManagerNamespace must name the namespace cert-manager RUNS in, because
+     that is where cert-manager reads cluster CA Secrets from (--cluster-resource-namespace) and
+     where trust-manager reads Bundle SOURCES from (app.trust.namespace). The issuers chart writes
+     the CA Certificate there; trust-manager looks for it there.
+
+     forcePath, NOT fillPath, and NOT a declared componentValues node: these two leaves are derived
+     from one installer value and a per-component override could only ever make them disagree. The
+     installer-computed wiring is authoritative here for the same reason it is for service/config.
+
+     REQUIRED RATHER THAN DEFAULTED. The two charts' defaults disagree with each other ("" = the
+     release namespace vs "cert-manager"), so "unset" is a guaranteed mismatch, not a safe default.
+     A mismatch produces a CA ClusterIssuer that never becomes Ready, silently -- a Certificate
+     nobody consumes raises no error. So the render FAILS instead. */ -}}
+{{- if eq (include "inst.featureEnabled" (list $top "internalTls")) "true" }}
+{{- $caNs := (default dict $top.Values.internalTls).certManagerNamespace | default "" }}
+{{- if eq $c.name "cert-manager-issuers" }}
+{{- if not $caNs }}
+{{- fail "features.internalTls is on but internalTls.certManagerNamespace is empty. Set it to the namespace cert-manager RUNS in (read --cluster-resource-namespace from its deployment; on krateo-057 that is `cert-manager`, not the release namespace). It is required because cert-manager-issuers defaults the CA namespace to the RELEASE namespace while trust-manager defaults app.trust.namespace to `cert-manager` -- so leaving it unset makes the two disagree and the CA ClusterIssuer never becomes Ready, with no error anywhere." }}
+{{- end }}
+{{- include "inst.forcePath" (dict "target" $spec "path" (list "internalCA" "namespace") "value" $caNs) }}
+{{- end }}
+{{- if eq $c.name "trust-manager" }}
+{{- if not $caNs }}
+{{- fail "features.internalTls is on but internalTls.certManagerNamespace is empty; trust-manager would read Bundle sources from its chart default `cert-manager` while the CA is written to the release namespace. See the cert-manager-issuers message." }}
+{{- end }}
+{{- include "inst.forcePath" (dict "target" $spec "path" (list "app" "trust" "namespace") "value" $caNs) }}
+{{- end }}
+{{- end }}
 ---
 apiVersion: composition.krateo.io/{{ $emit }}
 kind: {{ $c.kind }}

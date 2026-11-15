@@ -6331,9 +6331,50 @@ components:
   requiresApiGroups:
   - cert-manager.io
 
+- name: internal-ca-bundle
+  # Renders the trust-manager Bundle that distributes the internal CA (authn#145). A SEPARATE CHART
+  # from cert-manager-issuers, and that is authn's finding rather than my preference:
+  #
+  #   a Bundle inside cert-manager-issuers reintroduces the race that chart was SPLIT to avoid. Its
+  #   own Chart.yaml records that cert-manager.io CRDs from another source are not established when
+  #   the parent's objects apply ("no matches for kind ClusterIssuer"), and that a race inside one
+  #   release is not something the installer models. A trust.cert-manager.io/v1alpha1 Bundle has the
+  #   same problem: with internalTls on, issuers and trust-manager both gate only on cert-manager.io,
+  #   so the issuers release can apply before the Bundle CRD exists. And adding
+  #   requiresApiGroups: [trust.cert-manager.io] to ISSUERS would block every ingress-only install,
+  #   where trust-manager is absent -- so the chart cannot express the ordering it would need.
+  #
+  # As its own component it is ordered by the mechanism already here: requiresApiGroups on the group
+  # trust-manager establishes. ingress-only installs are untouched.
+  #
+  # NO VERSION CONTROL EXISTS FOR THIS PIN and that is not an oversight: 0.15.0 is its FIRST release,
+  # so there is no outgoing version to probe as a positive control. The control used instead was
+  # cert-manager-issuers 0.15.0 from the same repo and tag (FOUND), which proves the repo+tag path
+  # resolves, plus 9.9.9 absent. A new chart's first pin cannot have the usual control and saying so
+  # is better than implying it did.
+  #
+  # The source is FIXED, not a value: Secret krateo-root-ca-key-pair key ca.crt, the literal the
+  # issuers chart writes. A value there could only ever be set wrong.
+  #
+  # target.namespaces is REQUIRED and an empty list FAILS the render, with a sentence. An unset
+  # namespaceSelector on a Bundle writes the ConfigMap to EVERY namespace in the cluster -- a
+  # fail-open default on a trust distribution path. Note the guard is in the chart's RENDER, not in
+  # its CRD: the generated CRD accepts [], because the chart's own defaults must satisfy its schema
+  # for helm lint. authn corrected me on that; a check written against the CRD would pass while the
+  # real guard sits elsewhere. They also showed the mutant: with the guard removed, the empty case
+  # renders an empty selector, so it is load-bearing.
+  kind: InternalCaBundle
+  chart: internal-ca-bundle
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.15.0
+  tier: platform
+  feature: internalTls
+  requiresApiGroups:
+  - trust.cert-manager.io
+
 - name: cert-manager-issuers
   kind: CertManagerIssuers
-  version: 0.10.0
+  version: 0.15.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   requiresApiGroups:
   - cert-manager.io

@@ -39,6 +39,7 @@ import yaml
 
 CHART = "chart"
 CM, CMI, TM = "cert-manager", "cert-manager-issuers", "trust-manager"
+BUNDLE = "internal-ca-bundle"
 GWCRDS, AGW, AGC = "gateway-api-crds", "agentgateway", "agentgateway-controller"
 
 
@@ -186,6 +187,74 @@ def main(argv):
             ck("deps" not in cm[0],
                "RULE 4: cert-manager no longer deps on agentgateway",
                "that ordering artifact is what chained TLS to #557")
+
+        # ---- RULE 5: the Bundle chart, and the ONE value with TWO consumers.
+        # The derivation itself is asserted in chart/tests/internal_tls_derivation_test.yaml,
+        # because it lives in compositions.yaml, which is lookup-gated and renders NOTHING under
+        # `helm template` -- measured: with the feature on and the value unset, plain
+        # `helm template` exits 0 and the guard never runs. What IS reachable here is the schema
+        # layer, which rejects at chart LOAD, before any template renders.
+        bundle = [x for x in comps if x.get("name") == BUNDLE]
+        ck(len(bundle) == 1, "RULE 5: internal-ca-bundle is pinned exactly once", "found %d" % len(bundle))
+        if bundle:
+            ck(bundle[0].get("feature") == "internalTls",
+               "RULE 5: internal-ca-bundle gated on internalTls", repr(bundle[0].get("feature")))
+            ck(bundle[0].get("requiresApiGroups") == ["trust.cert-manager.io"],
+               "RULE 5: internal-ca-bundle requiresApiGroups [trust.cert-manager.io]",
+               "ordered by the group trust-manager establishes, NOT by deps -- a "
+               "requiresApiGroups on ISSUERS would block every ingress-only install")
+        if cmi:
+            ck(cmi[0].get("version") == "0.15.0",
+               "RULE 5: cert-manager-issuers at 0.15.0 (the version with internalCA.namespace)",
+               repr(cmi[0].get("version")))
+
+        # the single value must be DECLARED, and the two derived leaves must NOT be settable
+        import json as _json
+        schema = _json.load(open("chart/values.schema.json", encoding="utf-8"))
+        sp = schema["properties"]
+        node = (sp.get("internalTls") or {}).get("properties") or {}
+        ck("certManagerNamespace" in node,
+           "RULE 5: internalTls.certManagerNamespace is declared",
+           "the ONE value both consumers derive from")
+        cvp = sp["componentValues"]["properties"]
+        ck("internal-ca-bundle" in cvp,
+           "RULE 5: componentValues.internal-ca-bundle is declared",
+           "target.namespaces is a real user choice, so it must be settable")
+        # THE DESIGN: the two derived leaves are deliberately NOT settable, so a per-component
+        # override cannot make them disagree. This is stronger than forcePath winning -- the value
+        # cannot be expressed at all.
+        iss_node = (cvp.get("cert-manager-issuers") or {}).get("properties") or {}
+        ica = (iss_node.get("internalCA") or {}).get("properties") or {}
+        ck("namespace" not in ica,
+           "RULE 5: componentValues.cert-manager-issuers.internalCA.namespace is NOT settable",
+           "refused at chart load, so the two derived leaves cannot be made to disagree")
+        ck("trust-manager" not in cvp,
+           "RULE 5: componentValues.trust-manager is NOT declared",
+           "its only installer-set value is the derived trust namespace")
+        tns = (cvp.get("internal-ca-bundle") or {}).get("properties", {}).get(
+            "target", {}).get("properties", {}).get("namespaces")
+        ck(bool(tns) and tns.get("uniqueItems") is True,
+           "RULE 5: internal-ca-bundle target.namespaces has uniqueItems",
+           "the EMPTY-list refusal is in the CHART'S RENDER, not its CRD -- the generated CRD "
+           "accepts [], so do not assert that layer")
+
+        # ---- RULE 6: a bad namespace value must be refused by the schema.
+        bad_ns, e = render(dst, {"internalTls": True})  # feature on; value checked by the suite
+        # the value's own pattern, exercised through a render
+        import tempfile as _tf, yaml as _yaml, os as _os, subprocess as _sp
+        fh = _tf.NamedTemporaryFile("w", suffix=".yaml", delete=False)
+        _yaml.safe_dump({"bootstrap": {"coreProvider": {"enabled": False}},
+                         "installDefinitions": True,
+                         "features": {"internalTls": True},
+                         "internalTls": {"certManagerNamespace": "Cert_Manager"}}, fh)
+        fh.close()
+        r = _sp.run(["helm", "template", "t", dst, "-f", fh.name, "--kube-version", "1.36.0"],
+                    capture_output=True, text=True, timeout=600)
+        _os.unlink(fh.name)
+        ck(r.returncode != 0 and ("certManagerNamespace" in (r.stderr or "")
+                                  or "pattern" in (r.stderr or "").lower()),
+           "RULE 6 (falsifier): an invalid certManagerNamespace is REFUSED by the schema",
+           "exit=%d" % r.returncode)
 
         print()
         print("  %s" % ("all rules pass" if not fails else "FAILURES: %s" % fails))
