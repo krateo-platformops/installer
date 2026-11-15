@@ -104,7 +104,7 @@ components:
   # 0.28.1: co-versioned with oasgen-provider. Same k8s >= 1.36 floor; carries no part of the
   # regression fix, which is provider-side only.
   # 0.64.0: moves with the oasgen line (one tag publishes all three charts).
-  version: 0.64.0
+  version: 0.71.0
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -5134,11 +5134,62 @@ components:
   #   not render (oasgen#628). Declared in componentValues in THIS SAME CHANGE: the node is closed,
   #   so a split would prune maxBodyMiB silently while kubectl printed "patched".
   #   The bounds are mirrored; the chart's `default: 4` deliberately is NOT.
-  version: 0.64.0
+  version: 0.71.0
   tier: platform
   feature: portal
   chart: controller-render-service
 - name: oasgen-provider
+  # 0.71.0: #697 (the retry branch keys on the create's OUTCOME) + #698 (a log section). THREE charts,
+  #   because the oasgen line is declared in .github/pin-version-lines.yaml since #855 --
+  #   controller-render-service runs the oasgen-provider image with the /bin/oasgen-render entrypoint,
+  #   so its version IS oasgen's version. I asked keycloak-provider-kog to investigate that coupling
+  #   this morning without reading my own repo first; the line and its reason were already there.
+  #
+  #   WHAT 0.70.0 WAS, AND WHY WE SKIPPED IT. I recommended pinning 0.70.0 to Diego: it fixed the
+  #   false Ready=True on a 303 duplicate, and I characterised the remaining re-create as "a Warning
+  #   event every 3 minutes". Diego overrode me and waited. azuredevops-provider-kog then forced the
+  #   race: 0.70.0 DUPLICATED VENDOR OBJECTS, 3 of 3 trials where the race fired, 2 objects per CR.
+  #   github-provider-kog had told me in advance that "on a kind where the vendor mints the id this
+  #   would duplicate per repeat", read from code -- and I relayed it to Diego as a footnote about
+  #   why waiting might be worth it rather than as the reason to wait. I treated NOT YET MEASURED as
+  #   NOT LOAD-BEARING. 0.69.0 and 0.70.0 are now retracted in oasgen's own file.
+  #
+  #   BOTH GATES GREEN ON THE PUBLISHED ARTIFACT, not a branch build:
+  #     azuredevops (071p)  fired 10 of 10, DUPLICATED 0 of 10, trigger proven per trial by Warning
+  #                         events AND 11 controller-log lines (log-primary; events dedupe). The
+  #                         "last reconcile errored" route counted 0, against 3 on 0.70.0. They raised
+  #                         5 trials to 10 so a zero is interpretable, and committed that 0 FIRED
+  #                         means VOID rather than a pass.
+  #     github              1 POST in 5 min (0.70.0: 3), 0 "last reconcile errored", the condition
+  #                         persisting, ordering #693 at +31.1 ms +/-17.6 -> HOLDS. Their CRDs are
+  #                         BYTE-IDENTICAL 0.64.0 through 0.71.0, which removes CRD regeneration as a
+  #                         risk across seven minor versions.
+  #     keycloak            regression PASS on every arm; the render arm I asked for showed
+  #                         0.64.0 -> 4 differences (the positive control, the same 4 paths),
+  #                         0.70.0 -> 0, 0.71.0 -> 0. KOG floor at 0.71.0 is >= 0.67.0, so no KOG
+  #                         release is needed.
+  #
+  #   TWO RESIDUALS, STATED BECAUSE A UNIFORM GREEN WOULD BE DISHONEST:
+  #     1. #693's WITHHOLD ORDERING HAS ONLY EVER BEEN OBSERVED UNCONTENDED. azuredevops'
+  #        errUpdateManaged counter read 0 in all 10 trials, so the contended path the ordering
+  #        exists for never occurred; github's two HOLDS are both on the uncontended path. One
+  #        mechanism in this fix is measured under contention and one is not.
+  #     2. A THIRD OUTCOME, found in azuredevops' trial 1 and invisible to every check I had. The
+  #        create landed, then BOTH the status write and the external-create-succeeded annotation
+  #        lost to the racer. The runtime then logs "cannot determine creation result" on every
+  #        resync and NEVER re-creates: one real vendor object, no id, Ready=False/Creating
+  #        INDEFINITELY, needing a human to remove the annotation. Not a duplicate, not a wedge.
+  #        My P1-P4 predicates all key on external-create-succeeded being PRESENT, so all four read
+  #        clean on a permanently stuck CR. agentiko-mcp-server added P5 for it (older than 10 min +
+  #        external-create-pending + no -succeeded + Ready not True) with a fixture showing it firing
+  #        and the young case not -- and the honest caveat that P5's zero on 0.64.0 is over an EMPTY
+  #        population, since all 15 CRs carrying the pending marker also carry succeeded.
+  #
+  #   057's EXPOSURE: zero by observation, not by construction. github established the precondition
+  #   is no `findby` + a declared get verb + no identifier in status -- a property of the KIND and the
+  #   CR's state, not of GitHub's 303. So any future pin bringing a no-findby kind reopens it. And
+  #   azuredevops' own kinds (PolicyStatus, CheckTask, Run) have ZERO served kinds and ZERO CRs on
+  #   057, so their clean result reaches me through the MECHANISM, not through objects 057 holds.
   # DO NOT PIN 0.66.0. A HOT LOOP, reported by its own author unprompted 2026-11-14, with the CR's
   # conditions CORRECT throughout -- so nothing in status shows it and no readiness gate of ours
   # would catch it.
@@ -5298,7 +5349,7 @@ components:
   #   genuinely create-less and would then report it, correctly.
   #   github-provider-kog verified its 32+32 CRDs render byte-identically to 0.63.1's, same 5
   #   warnings, 0 whole-object differences, with a maxLength positive control present in both.
-  version: 0.64.0
+  version: 0.71.0
   # 0.43.0, NOT the 0.42.0 this PR first proposed. The two extra releases are correctness fixes a
   # consumer feels, both reported by the openstack-nova-operator-kog session and CLOSED upstream:
   #   #322 a populated spec object compared EQUAL to an EMPTY remote object, so
