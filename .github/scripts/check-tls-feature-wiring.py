@@ -164,8 +164,17 @@ def main(argv):
         tm = [x for x in comps if x.get("name") == TM]
         ck(len(tm) == 1, "RULE 4: trust-manager is pinned exactly once", "found %d" % len(tm))
         if tm:
-            ck(tm[0].get("repo") == "oci://quay.io/jetstack/charts",
-               "RULE 4: trust-manager pins from upstream quay.io", repr(tm[0].get("repo")))
+            ck(tm[0].get("repo") == "oci://ghcr.io/krateo-blueprints/charts",
+               "RULE 4: trust-manager pins from ingress-blueprint, not the vendor", repr(tm[0].get("repo")))
+            # AND the pinned version must carry NO leading v -- that IS the defect, stated as a
+            # property. jetstack's Chart.yaml says `version: v0.20.0`; core-provider generates the
+            # CD apiVersion from the CHART, so the CRD served vv0-20-0 while inst.emitTag -- which
+            # reads the PIN -- wanted v0-20-0. Mismatch, arm 3, the composition WITHHELD and
+            # features.internalTls silently inert with the umbrella Ready=True.
+            ck(not str(tm[0].get("version", "")).startswith("v"),
+               "RULE 4: trust-manager's pinned version has NO leading v",
+               "%r -> inst.emitTag computes %r" % (tm[0].get("version"),
+                                                   "v" + str(tm[0].get("version","")).replace(".", "-")))
             ck(tm[0].get("upstream") is True,
                "RULE 4: trust-manager carries upstream: true",
                "check-pin-ci's provenance arm is EXPLICIT, never inferred")
@@ -263,7 +272,7 @@ def main(argv):
         # per-namespace Roles instead when it is set. So this value is a PRIVILEGE GRANT, and it is
         # derived from internal-ca-bundle's target list because those are the same namespaces.
         tpl = io.open("chart/templates/compositions.yaml", encoding="utf-8").read()
-        ck('list "app" "targetNamespaces"' in tpl,
+        ck('list "trust-manager" "app" "targetNamespaces"' in tpl,
            "RULE 7: app.targetNamespaces is derived on the trust-manager branch",
            "forcePath into the component's own spec, beside app.trust.namespace")
         ck('"internal-ca-bundle"' in tpl and "$bundleNs" in tpl,

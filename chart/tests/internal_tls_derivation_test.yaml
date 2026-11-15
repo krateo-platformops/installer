@@ -81,7 +81,12 @@ tests:
           spec:
             group: composition.krateo.io
             names: {kind: TrustManager}
-            versions: [{name: v0-20-0, served: true}]
+            versions: [{name: v0-17-0, served: true}]   # the WRAPPER's version.
+            # The pin moved from quay.io/jetstack 0.20.0 to ingress-blueprint 0.17.0.
+            # jetstack's Chart.yaml says `version: v0.20.0`, so core-provider generated the
+            # CD apiVersion as vv0-20-0 while inst.emitTag -- which reads the PIN -- wanted
+            # v0-20-0: mismatch, arm 3, the composition WITHHELD and the feature silently
+            # inert. Our own version has no leading v, so both sides agree at v0-17-0.
         - apiVersion: apiextensions.k8s.io/v1
           kind: CustomResourceDefinition
           metadata: {name: internalcabundles.composition.krateo.io}
@@ -115,7 +120,7 @@ tests:
           path: kind
           value: CertManagerIssuers
       - equal:
-          path: spec.app.trust.namespace
+          path: spec.trust-manager.app.trust.namespace
           value: cert-manager
         documentSelector:
           path: kind
@@ -123,7 +128,7 @@ tests:
       # THE RBAC SCOPE, derived from the OTHER component's list. If this is ever absent or empty,
       # trust-manager's ClusterRole regains cluster-wide `configmaps: delete`.
       - equal:
-          path: spec.app.targetNamespaces
+          path: spec.trust-manager.app.targetNamespaces
           value: [krateo-system]
         documentSelector:
           path: kind
@@ -189,7 +194,7 @@ tests:
           path: kind
           value: InternalCaBundle
       - notExists:
-          path: spec.app
+          path: spec.trust-manager.app
         documentSelector:
           path: kind
           value: InternalCaBundle
