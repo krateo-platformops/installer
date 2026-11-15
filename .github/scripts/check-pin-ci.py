@@ -250,6 +250,67 @@ def tag_sha(slug, tag):
 # A false negative here (a real test suite this pattern does not recognise) is a LOUD,
 # correctable failure: widen the pattern. A false positive is a silent pass, which is the
 # failure this guard exists to end. Keep the asymmetry.
+# THIRD-PARTY SOURCES: this gate asserts OUR notion of green CI, and that is not a claim it can
+# make about a repo we do not run. Measured 2026-11-15 when trust-manager was first bumped:
+#
+#   trust-manager      v0.20.0  cert-manager/trust-manager    check-runs=0  statuses=0
+#   cloudnative-pg     0.29.1   cloudnative-pg/charts         no tag 0.29.1 in that repo
+#   external-secrets   2.14.0   (no github source in the chart at all)
+#   keycloak-operator  0.4.1    krateo-blueprints/...         check-runs=15   <- OURS, upstream app
+#   keycloak           0.4.1    krateo-blueprints/...         check-runs=15   <- OURS, upstream app
+#
+# The repo is PUBLIC and READABLE and the tag resolves -- jetstack simply does not report CI as
+# GitHub check-runs. So `norun` here is not "nothing tested this code", it is "this gate cannot see
+# their CI", and those are different claims. The UNVERIFIABLE arm already draws that distinction for
+# an unreadable repo; this draws it for a repo whose CI is not check-run shaped.
+#
+# IT DOES NOT WEAKEN REAL COVERAGE. Those three pins pass today only because the gate checks BUMPED
+# pins and nobody had bumped them; the first bump blocks with an unactionable message. This replaces
+# an accidental pass plus an unactionable block with a stated, reviewable fact.
+#
+# TWO SAFEGUARDS, because an exemption applicable to our own repos is a hole:
+#   1. EXPLICIT PER PIN, NEVER INFERRED -- the same design rule as `upstream:`. A pin must carry
+#      `thirdPartyCI: <reason>`, and the reason is PRINTED, so the exemption is reviewable in the
+#      diff rather than silent.
+#   2. PROVEN FROM THE SLUG, not from the flag. The resolved source repo must NOT be in a Krateo
+#      org. A pin claiming the exemption for a krateo-* repo is a FAILURE -- otherwise the flag
+#      becomes a way to silence our own red CI.
+KRATEO_ORGS = ("krateo-platformops", "krateo-blueprints", "krateo-agentiko")
+
+
+THIRD_PARTY_FILE = ".github/third-party-ci.yaml"
+_tp_cache = {}
+
+
+def _third_party_map():
+    """{component: reason} from the CI-side file. NOT a pin field.
+
+    check-pin-fields refused the pin-field version with the reason that decided this: the
+    self-bootstrap writes the EFFECTIVE components list back to the Installer CR, so a pin key
+    absent from values.schema.json's components[].items.properties makes the apiserver reject that
+    write with "unknown field". A CI-only concern does not belong in the CR or in the schema's byte
+    budget -- it belongs beside pin-version-lines.yaml, which CI reads and nothing renders."""
+    if not _tp_cache:
+        try:
+            with open(THIRD_PARTY_FILE, encoding="utf-8") as fh:
+                _tp_cache.update((yaml.safe_load(fh) or {}).get("components") or {})
+        except FileNotFoundError:
+            _tp_cache["__missing__"] = True
+    return {k: v for k, v in _tp_cache.items() if k != "__missing__"}
+
+
+def third_party_ok(pin, slug):
+    """(exempt, message). Exempt only when the FILE says so AND the slug is not ours."""
+    reason = _third_party_map().get(pin.get("name"))
+    if not reason:
+        return False, None
+    owner = (slug or "").split("/")[0].lower()
+    if owner in KRATEO_ORGS:
+        return False, ("claims thirdPartyCI but %s IS a Krateo org. The exemption exists for repos "
+                       "we do not run; using it on our own would silence our own red CI." % owner)
+    return True, "third-party source, CI not assertable by this gate: %s" % reason
+
+
 TEST_RUN_RE = re.compile(r"(^|[^a-z])(go )?test(s|ing)?([^a-z]|$)|^(vet|kind|drift|gate)$", re.I)
 
 
@@ -873,8 +934,18 @@ def main():
                 print(f"    note: {slug} CI still in progress — not failing, but the pin is "
                       f"unverified until it completes")
             elif verdict == "norun":
-                failures.append(f"{name} {version}: {slug} has NO CI run for the tagged commit — "
-                                f"{detail}. Nothing tested this code; that is not the same as it passing.")
+                exempt, why = third_party_ok(pin, slug)
+                if exempt:
+                    print(f"    note: {slug} — {why}")
+                elif why:
+                    failures.append(f"{name} {version}: {why}")
+                else:
+                    failures.append(f"{name} {version}: {slug} has NO CI run for the tagged commit — "
+                                    f"{detail}. Nothing tested this code; that is not the same as it "
+                                    f"passing. If {slug} is a repo we do not run and its CI is not "
+                                    f"check-run shaped, add it to .github/third-party-ci.yaml with a "
+                                    f"reason — the exemption is refused for any krateo-* org, so it "
+                                    f"cannot silence our own CI.")
             elif verdict == "notested":
                 failures.append(
                     f"{name} {version}: {slug} CI is green but NOTHING TESTED THE CODE — {detail}. "

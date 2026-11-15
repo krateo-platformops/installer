@@ -6413,7 +6413,7 @@ components:
   kind: TrustManager
   chart: trust-manager
   repo: oci://quay.io/jetstack/charts
-  version: 0.20.0
+  version: v0.20.0
   upstream: true
   tier: platform
   feature: internalTls

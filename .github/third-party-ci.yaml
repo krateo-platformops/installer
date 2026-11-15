@@ -1,0 +1,34 @@
+# Pins whose SOURCE REPO is one we do not run, so check-pin-ci cannot assert our notion of green CI.
+#
+# WHY THIS FILE EXISTS AND NOT A PIN FIELD. The first attempt put `thirdPartyCI:` on the pin itself,
+# and check-pin-fields refused it with the reason that matters: the self-bootstrap writes the
+# EFFECTIVE components list back to the Installer CR, so a pin key absent from
+# values.schema.json's components[].items.properties makes the apiserver reject that write with
+# "unknown field". Declaring it in the schema would also push a CI-only concern into the CR and into
+# the schema's byte budget. CI-only metadata belongs beside pin-version-lines.yaml and
+# retraction-sources.yaml, which are read by CI and never rendered.
+#
+# WHAT THE EXEMPTION MEANS. Not "this code is fine" -- "this gate cannot see their CI". Those are
+# different claims and the gate prints the reason rather than passing silently. The repo is public
+# and readable and the tag resolves; the commit simply carries no check-runs or statuses.
+#
+# TWO SAFEGUARDS, because an exemption applicable to our own repos is a hole:
+#   1. EXPLICIT PER ENTRY, NEVER INFERRED -- the same rule as a pin's `upstream:`. The reason is
+#      printed by the gate, so the exemption is reviewable in the diff rather than silent.
+#   2. PROVEN FROM THE SLUG, not from this file. check-pin-ci refuses the exemption for any
+#      krateo-* org, so listing one of ours here cannot silence our own red CI.
+#
+# MEASURED 2026-11-15, across every upstream:true pin, the first time trust-manager was bumped:
+#   trust-manager      v0.20.0  cert-manager/trust-manager  check-runs=0  statuses=0
+#   cloudnative-pg     0.29.1   cloudnative-pg/charts       no tag 0.29.1 in that repo
+#   external-secrets   2.14.0   no github source in the chart at all
+#   keycloak-operator  0.4.1    krateo-blueprints/...       check-runs=15   <- OURS, not exempt
+#   keycloak           0.4.1    krateo-blueprints/...       check-runs=15   <- OURS, not exempt
+# Only the first is listed: the other two unresolvable ones have never been bumped, and an
+# exemption written before it is needed is an exemption nobody reviewed against a real failure.
+components:
+  trust-manager: >-
+    cert-manager/trust-manager publishes no GitHub check-runs or commit statuses on release tags;
+    measured 0 of each at v0.20.0's commit de34e5e7, with the repo public and readable and the
+    annotated tag peeling correctly. Their release process is theirs; this gate can only state
+    that it cannot see it.
