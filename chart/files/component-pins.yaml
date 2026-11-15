@@ -52,7 +52,7 @@ components:
   # key carries that, and probing the pin NAME instead reports it absent.
   # 0.47.0: moves with authn as a declared version line (installer#896). Carries #156's two
   # new optional fields and the CEL rule on audiences[] items analysed on the authn entry.
-  version: 0.47.0
+  version: 0.52.0
   tier: platform
   feature: portal
 - name: oasgen-provider-crd
@@ -638,6 +638,40 @@ components:
 #
 # CONTROLS: authn and authn-crds 0.37.0 resolve; the outgoing 0.36.0 resolves; authn 9.9.9 does not.
 - name: authn
+  # 0.52.0 (2026-11-14), FROM 0.47.0 -- a FIVE-RELEASE SPAN on the component that mints every
+  #   identity, so authn measured all five hops rather than just the last. Their reading, per hop:
+  #     0.48.0  chart files none; values none; audit records gain identity.claim. No state.
+  #     0.49.0  chart files: certificate-internal.yaml (NEW, renders only when set), configmap.yaml
+  #             and deployment.yaml (both gated on the same key), values.schema.json, values.yaml.
+  #             VALUES +4: internal.tls, .issuerRef, .issuerRef.kind, .issuerRef.name. Default
+  #             empty so nothing renders. No state.
+  #     0.50.0  chart files none; values none. Audit only.
+  #     0.51.0  authn-crds ldapconfigs gains optional spec.tlsCA. THE ONE NOTICE IN THE SPAN:
+  #             LDAP StartTLS and ldaps:// now VERIFY the server certificate. 057 and demo have
+  #             0 LDAPConfigs, so cleared -- but a cluster WITH LDAPConfigs needs its CA in place
+  #             before this lands.
+  #     0.52.0  chart files none; values none. A `system:` username is refused for every strategy,
+  #             with tests pinning that no strategy issues system:authenticated,
+  #             system:unauthenticated or system:anonymous -- snowplow's RBAC relies on that.
+  #   Across the whole span: values +4 (exactly those), -0, and NO key appeared then vanished (the
+  #   union of every tag's paths minus 0.47.0's and 0.52.0's is empty). No migration, no
+  #   stored-state change, no ordering requirement in any hop.
+  #
+  #   THE +4 PATHS ARE WHY componentValues.authn.internal.tls IS DECLARED IN THIS SAME CHANGE.
+  #   `internal` is additionalProperties:false on BOTH sides and this schema declared only
+  #   [networkPolicy, port]. Pinning 0.52.0 without the node would make internal.tls settable
+  #   nowhere: the apiserver would prune it while the write reported success. That is the
+  #   component-pin-bumped-past-its-schema shape, and the node mirrors the chart's bounds exactly,
+  #   including the kind enum ["", "Issuer", "ClusterIssuer"].
+  #
+  #   exactUsernames IS NOT TOUCHED and must not be: acmp holds it false on demo through the
+  #   tenant switchover and componentValues is a merge patch, so an omitted key is preserved.
+  #
+  #   PORT 8082 AND THE SERVICE NAME HOLD ACROSS THE WHOLE SPAN, which core-provider 2.13.98's
+  #   URL_AUTHN default depends on: authn confirmed service.port is 8082 in all six tags and that
+  #   no hop touched service.yaml or _helpers.tpl, so the Service is <release fullname> = `authn`
+  #   throughout. Verified live on 057 at the 0.3.645 roll: URL_AUTHN resolved to
+  #   http://authn.krateo-system.svc.cluster.local:8082 in all 74 cdc ConfigMaps.
   # PRECONDITION CORRECTION (2026-11-10, after authn pushed back): an earlier note in this repo's
   # history said krateo-057 has 0 basic Users. That number came from the DEMO cluster and was
   # attributed to 057 — a wrong-cluster read, not a broken instrument. Measured on 057:
@@ -865,7 +899,7 @@ components:
   # 'shallowest new ancestor spec.versions[0]' produced by a walker that never emits list-element
   # paths. The precise walker descends properties/items by name instead of string-matching paths.
   # authn + authn-crd are a DECLARED version line (installer#896), so these two cannot separate.
-  version: 0.47.0
+  version: 0.52.0
   # 0.27.3 -> 0.31.0, SKIPPING SIX RELEASES, all published in the two days before this pin.
   # I first wrote this pin as 0.30.0 -> 0.31.0 and the assertion in my own edit script caught it:
   # 0.30.0 was a0-openstack's per-cluster .Values.components[] override, NOT the fleet pin. The
@@ -5309,6 +5343,18 @@ components:
 #
 # CONTROLS: 0.1.34 resolves; the outgoing 0.1.33 resolves; 9.9.9 does not.
 - name: krateo-observability
+  # DEMO IS HELD AT 0.1.42 BY DIEGO'S FILM FREEZE (2026-11-11) -- not a technical hold, and not
+  #   something a routine catch-up should lift. It is a `components[]` override in demo's
+  #   user-supplied values, so it leaves no trace in this file; recorded here at acmp's request
+  #   (2026-11-14) so the next person does not have to go asking why the pin here is ignored there.
+  #   Confirmed by the observability session: 0.1.42 -> 0.1.45 touches only ClickHouse/Keeper image
+  #   pins and a new HyperDX Mongo credential template. Lifting the freeze is ITS OWN ROLL.
+  #   AND THE ORDER MATTERS AFTERWARDS: 0.1.45 BEFORE 0.1.46, because 0.1.46's render guard needs
+  #   the mongodb-hyperdx-credentials Secret that 0.1.45 creates. Going straight to 0.1.46 from
+  #   0.1.42 skips the Secret's creator.
+  #   Holding 0.1.42 against this tag's alert-provider-crd 0.2.83 is the SAFE direction: the
+  #   version constraint recorded below is on the NEWER chart (0.1.45 needs alert-provider-crd
+  #   >= 0.2.68), so an older chart against a newer CRD simply does not use the added field.
   # 0.1.38, NOT the 0.1.37 its owner asked for. I had promised them exactly this: re-check
   # immediately before cutting, take the newer one if it is there, and NAME the version so they
   # know which they are getting. 0.1.38 verified a STRICT SUPERSET, not assumed:
