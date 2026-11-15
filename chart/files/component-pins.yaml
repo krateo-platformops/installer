@@ -3050,6 +3050,7 @@ components:
   # provider (was skewed 0.14.2 vs provider 0.14.1 for 10 days). 0.15.1 = security-only (no CRD
   # change); kept in lockstep with the provider to preserve the no-skew invariant.
   version: 0.17.0
+  upstream: true
   tier: platform
   feature: portal
   # 0.15.5 (#27, fixes #26): a Repo whose PUSH LANDED but whose status write afterwards hit a 409 stayed
@@ -6389,6 +6390,25 @@ components:
   tier: platform
   feature: ingress
 - name: trust-manager
+  # WRAPPED, not pinned from the vendor (Diego, 2026-11-15). ingress-blueprint's passthrough,
+  # beside cert-manager and internal-ca-bundle: OUR version 0.17.0, jetstack's v0.20.0 in
+  # appVersion, their chart vendored in charts/ with a Chart.lock.
+  #
+  # THIS IS WHAT FIXES THE DOUBLED v. With the pin at quay.io/jetstack 0.20.0, jetstack's
+  # Chart.yaml said `version: v0.20.0`; core-provider generates the CD apiVersion from the
+  # CHART, so the CRD served vv0-20-0 while inst.emitTag -- which reads the PIN -- wanted
+  # v0-20-0. Mismatch, so inst.emitTagFrom took arm 3 and WITHHELD the composition, and
+  # features.internalTls silently did nothing: no error, umbrella Ready=True. With our own
+  # version the two agree at v0-17-0 and it cannot recur.
+  #
+  # `upstream: true` STAYS, and my first instinct to drop it was wrong. The flag is not about
+  # who owns the CHART -- it is about whether the APPVERSION names one of OUR tags. Here
+  # appVersion is v0.20.0, which is jetstack's version, so resolving `appVersion->tag` would
+  # aim the gate at cert-manager/trust-manager -- a repo that publishes no check-runs, giving
+  # `norun` and an unactionable refusal. check-pin-ci caught exactly that the moment I dropped
+  # it, which is how I learned the flag's actual meaning. Its `chartVersion->tag 0.17.0` route
+  # still asserts ingress-blueprint's own CI at the tagged commit, which is the check that
+  # matters now that the chart is ours.
   # The Bundle CONTROLLER for internal TLS (authn#145). Pinned STRAIGHT FROM UPSTREAM rather than
   # wrapped in a krateo blueprint, following cloudnative-pg and external-secrets: verified pullable at
   # oci://quay.io/jetstack/charts/trust-manager 0.19.0 and 0.20.0, so no wrapper needs authoring and no
@@ -6412,8 +6432,8 @@ components:
   # nothing to reconcile. That is why the feature defaults OFF and no cluster has it on.
   kind: TrustManager
   chart: trust-manager
-  repo: oci://quay.io/jetstack/charts
-  version: 0.20.0
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.17.0
   upstream: true
   tier: platform
   feature: internalTls

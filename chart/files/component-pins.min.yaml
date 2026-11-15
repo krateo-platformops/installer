@@ -105,6 +105,7 @@ components:
   kind: GitProviderCrds
   chart: git-provider-crds
   version: 0.17.0
+  upstream: true
   tier: platform
   feature: portal
 - name: git-provider
@@ -396,8 +397,8 @@ components:
 - name: trust-manager
   kind: TrustManager
   chart: trust-manager
-  repo: oci://quay.io/jetstack/charts
-  version: 0.20.0
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.17.0
   upstream: true
   tier: platform
   feature: internalTls

@@ -833,11 +833,16 @@
 {{- end }}
 {{- include "inst.forcePath" (dict "target" $spec "path" (list "internalCA" "namespace") "value" $caNs) }}
 {{- end }}
+{{/* NESTED under the subchart key since the pin moved to ingress-blueprint 0.17.0: a passthrough
+     wrapper puts upstream values under the dependency name, which is cert-manager 0.10.0's
+     convention too. The alternative -- re-exposing app.* at the wrapper's top level -- would be
+     TWO paths to one value with nothing keeping them in step, which is the drift class these
+     derivations exist to remove. */}}
 {{- if eq $c.name "trust-manager" }}
 {{- if not $caNs }}
 {{- fail "features.internalTls is on but internalTls.certManagerNamespace is empty; trust-manager would read Bundle sources from its chart default `cert-manager` while the CA is written to the release namespace. See the cert-manager-issuers message." }}
 {{- end }}
-{{- include "inst.forcePath" (dict "target" $spec "path" (list "app" "trust" "namespace") "value" $caNs) }}
+{{- include "inst.forcePath" (dict "target" $spec "path" (list "trust-manager" "app" "trust" "namespace") "value" $caNs) }}
 {{- /* RBAC SCOPE (authn, 2026-11-15) -- a SECOND derived leaf on this component, and the one whose
      drift costs a privilege rather than a 401.
      trust-manager v0.20.0, templates/clusterrole.yaml:39:
@@ -867,7 +872,7 @@
 {{- if not $bundleNs }}
 {{- fail "features.internalTls is on but componentValues.internal-ca-bundle.target.namespaces is empty, so trust-manager's RBAC scope cannot be derived. Leaving it unset is NOT a safe default: trust-manager's chart puts `configmaps: get,list,create,patch,watch,delete` and `events: create,patch` in a CLUSTER-ROLE whenever app.targetNamespaces is empty (clusterrole.yaml:39 + _helpers.tpl:72), so the installer would grant cluster-wide ConfigMap DELETE. Set target.namespaces to the namespaces the CA bundle must reach (on krateo-057 that is the krateo namespace); trust-manager's RBAC is then scoped to exactly those plus the trust and release namespaces." }}
 {{- end }}
-{{- include "inst.forcePath" (dict "target" $spec "path" (list "app" "targetNamespaces") "value" $bundleNs) }}
+{{- include "inst.forcePath" (dict "target" $spec "path" (list "trust-manager" "app" "targetNamespaces") "value" $bundleNs) }}
 {{- end }}
 {{- end }}
 ---
