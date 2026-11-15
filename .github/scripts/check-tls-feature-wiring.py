@@ -213,8 +213,8 @@ def main(argv):
                "ordered by the group trust-manager establishes, NOT by deps -- a "
                "requiresApiGroups on ISSUERS would block every ingress-only install")
         if cmi:
-            ck(cmi[0].get("version") == "0.16.0",
-               "RULE 5: cert-manager-issuers at 0.16.0 (internalCA.namespace + ingress-blueprint sources)",
+            ck(cmi[0].get("version") == "0.18.0",
+               "RULE 5: cert-manager-issuers at 0.18.0 (root-CA rotationPolicy: Never -- see below)",
                repr(cmi[0].get("version")))
 
         # the single value must be DECLARED, and the two derived leaves must NOT be settable

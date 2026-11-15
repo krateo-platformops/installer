@@ -74,7 +74,17 @@ tests:
           spec:
             group: composition.krateo.io
             names: {kind: CertManagerIssuers}
-            versions: [{name: v0-16-0, served: true}]
+            versions: [{name: v0-18-0, served: true}]   # ingress-blueprint 0.18.0: the ROOT CA
+            # rotationPolicy. 0.16.0 ran on cert-manager defaults -- 90d and, since v1.18,
+            # rotationPolicy: Always, so the ROOT got a NEW KEY at every re-issue. The bundle
+            # would switch to the new ca.crt while an unrotated leaf kept the old key, so every
+            # bundle-trusting client refuses that service until ITS own renewal -- ~2h per cycle
+            # on 057. 0.18.0 sets duration 87600h, renewBefore 8760h, rotationPolicy: Never.
+            # authn measured both directions on a disposable cluster: with the old spec a root
+            # renewal changed the key and the unchanged leaf FAILED; with this one the key is
+            # kept and the leaf VERIFIES. THE UPGRADE RE-ISSUES NOTHING on an existing cluster
+            # (same serial, notAfter still 90d) -- it takes effect at the root's NEXT renewal,
+            # which on 057 is 2027-01-14T20:09Z. So the pin must land BEFORE that date.
         - apiVersion: apiextensions.k8s.io/v1
           kind: CustomResourceDefinition
           metadata: {name: trustmanagers.composition.krateo.io}
