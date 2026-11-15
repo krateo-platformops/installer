@@ -162,13 +162,75 @@ def parse_block(text):
     return pins, deps
 
 
-def previous_tag(ref):
+OCI_CHART = "oci://ghcr.io/krateo-platformops/charts/installer"
+# How far back to look for a RELEASED tag before giving up. Skipped tags are rare -- one in the
+# whole history as of 2026-11-15 -- so a published predecessor is normally the first candidate.
+MAX_WALK = 10
+
+
+def chart_published(version, _probe=None):
+    """True if this version's chart resolves in the registry. `_probe` is for the self-tests."""
+    if _probe is not None:
+        return _probe(version)
+    r = subprocess.run(["helm", "show", "chart", OCI_CHART, "--version", version],
+                       capture_output=True, text=True, timeout=300)
+    return r.returncode == 0
+
+
+def candidate_tags(ref):
+    """Every semver tag strictly older than `ref`, newest first. [] if `ref` is not a tag."""
     r = subprocess.run(["git", "tag", "--sort=-v:refname"], capture_output=True, text=True)
     tags = [t for t in r.stdout.split("\n") if re.match(r"^\d+\.\d+\.\d+$", t)]
     if ref not in tags:
-        return None
-    i = tags.index(ref)
-    return tags[i + 1] if i + 1 < len(tags) else None
+        return []
+    return tags[tags.index(ref) + 1:]
+
+
+def previous_released_tag(ref, _probe=None):
+    """(tag, skipped, error) -- the previous tag whose CHART WAS ACTUALLY PUBLISHED.
+
+    WHY NOT JUST THE PREVIOUS TAG. 0.3.658 was cut from a branch for a validation run and
+    release-oci REFUSED it ("Release tags must be cut from main"), so the tag exists and no chart
+    was ever published for it. Comparing 0.3.659 against it reported
+
+        CHART-DEPS-CHANGED: 2
+          core-provider version 2.13.102 -> 2.13.101    <- reads as a DOWNGRADE
+
+    a transition no cluster can make, because nothing ever ran 2.13.102 from the installer. The
+    harmless direction is the one that happened. THE DANGEROUS DIRECTION IS THE REVERSE: a REAL
+    dependency change reading as EXPECTED because the unpublished baseline already contained it --
+    the gate would then confirm that a tag declares what it carries, against content nothing ran.
+
+    A FLOOR, NOT A SILENT SKIP. If no candidate resolves within MAX_WALK, this returns an error
+    rather than a tag. An unresolvable baseline is not an empty delta.
+
+    AND THE TWO CAUSES ARE NOT DISTINGUISHABLE FROM THIS PROBE, so the error says so instead of
+    picking one: an unreachable registry and a long run of unpublished tags both look like "nothing
+    resolves". A negative control does not separate them either -- if the registry is unreachable,
+    an impossible version fails for the same reason a real one does.
+
+    NOTE the current tag is NOT usable as a positive control: at tag time release-oci is still
+    running, so `ref`'s own chart legitimately does not resolve yet. Measured on 0.3.661, where
+    check-tag-delta went green while release-oci was still in progress."""
+    cands = candidate_tags(ref)
+    if not cands:
+        return None, [], "%s is not a semver tag in this repo, or it has no predecessor" % ref
+    skipped = []
+    for c in cands[:MAX_WALK]:
+        if chart_published(c, _probe):
+            return c, skipped, None
+        skipped.append(c)
+    return None, skipped, (
+        "no RELEASED tag found in the %d candidates before %s (%s). Either the registry is "
+        "unreachable from here or those tags were all cut and never published -- this probe cannot "
+        "tell which, so it refuses rather than comparing against an unpublished baseline."
+        % (len(cands[:MAX_WALK]), ref, ", ".join(cands[:MAX_WALK])))
+
+
+def previous_tag(ref):
+    """Kept for the two-argument path's callers; prefer previous_released_tag."""
+    c = candidate_tags(ref)
+    return c[0] if c else None
 
 
 def self_test():
@@ -231,7 +293,44 @@ def self_test():
     else:
         print("ok    falsifier: 0.3.638's REAL prose claim does not satisfy this gate")
 
-    print("tag-delta: %s" % ("OK -- %d field-level delta cases, 1 round trip, 4 falsifiers" % len(cases)
+    # ---- the previous-RELEASED-tag walk. An INJECTED probe, so these never touch the registry:
+    # a self-test that needs the network is one that gets skipped on the day it matters.
+    import unittest.mock as _mock
+    walk_cases = [
+        ("the immediate predecessor IS published -> used, nothing skipped",
+         ["0.3.660", "0.3.659"], {"0.3.660"}, "0.3.660", []),
+        ("THE REAL CASE: the predecessor is UNPUBLISHED -> skipped, the next is used",
+         ["0.3.658", "0.3.657", "0.3.656"], {"0.3.657", "0.3.656"}, "0.3.657", ["0.3.658"]),
+        ("TWO unpublished in a row -> both skipped",
+         ["0.3.658", "0.3.657", "0.3.656"], {"0.3.656"}, "0.3.656", ["0.3.658", "0.3.657"]),
+        ("THE FLOOR: none published -> no tag and an ERROR, never an empty delta",
+         ["0.3.658", "0.3.657"], set(), None, ["0.3.658", "0.3.657"]),
+    ]
+    for label, cands, published, want_tag, want_skipped in walk_cases:
+        with _mock.patch.object(sys.modules[__name__], "candidate_tags", lambda _r, _c=cands: list(_c)):
+            tag, skipped, err = previous_released_tag("X", _probe=lambda v, _p=published: v in _p)
+        ok = tag == want_tag and skipped == want_skipped and (err is None) == (want_tag is not None)
+        print("%s  walk: %s" % ("ok   " if ok else "FAIL ", label))
+        if not ok:
+            print("        got tag=%r skipped=%r err=%s" % (tag, skipped, bool(err)))
+            fails += 1
+    # the floor's message must NAME the ambiguity rather than assert one cause
+    with _mock.patch.object(sys.modules[__name__], "candidate_tags", lambda _r: ["0.3.658"]):
+        _t, _s, err = previous_released_tag("X", _probe=lambda v: False)
+    if err and "cannot tell which" in err and "unreachable" in err:
+        print("ok    the floor's error names BOTH causes instead of picking one")
+    else:
+        print("FAIL  the floor's error does not name the registry/unpublished ambiguity"); fails += 1
+    # a ref that is not a tag must error, not silently compare against the newest tag
+    with _mock.patch.object(sys.modules[__name__], "candidate_tags", lambda _r: []):
+        _t, _s, err = previous_released_tag("not-a-tag", _probe=lambda v: True)
+    if err and "not a semver tag" in err:
+        print("ok    a non-tag ref errors rather than picking a baseline")
+    else:
+        print("FAIL  a non-tag ref did not error"); fails += 1
+
+    print("tag-delta: %s" % ("OK -- %d field-level delta cases, 1 round trip, 4 falsifiers, "
+                             "%d walk cases + 2 floor falsifiers" % (len(cases), len(walk_cases))
                              if not fails else "%d FAILURE(S)" % fails))
     return 1 if fails else 0
 
@@ -246,10 +345,14 @@ def main(argv):
         old, new = argv[0], argv[1]
     else:
         new = argv[0]
-        old = previous_tag(new)
-        if not old:
-            sys.stderr.write("tag-delta: cannot find the tag before %s\n" % new)
+        old, skipped, err = previous_released_tag(new)
+        if err:
+            sys.stderr.write("tag-delta: %s\n" % err)
             return 2
+        for s in skipped:
+            sys.stderr.write("tag-delta: SKIPPING %s as a baseline -- its chart was never "
+                             "published, so a delta against it describes a transition no cluster "
+                             "can make.\n" % s)
     po, pn = pins_at(old), pins_at(new)
     do, dn = deps_at(old), deps_at(new)
     if po is None or pn is None:
