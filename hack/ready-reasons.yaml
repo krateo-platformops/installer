@@ -182,6 +182,15 @@ converging:
 # failed: a real failure. Fail the verification and name the message.
 failed:
   - Unavailable
+  # core-provider#530 / unstructured-runtime v1.21.0. Written by UNSTRUCTURED-RUNTIME, not the cdc,
+  # and the parent verdict `failed` is COMPUTED BY THE ROLLUP (krateoReady maps it to childFailed)
+  # rather than written on the child. Clears only when an existence check succeeds, or when a human
+  # removes the krateo.io/external-create-pending annotation -- so `indefinite`, with no deadline.
+  # It reaches 057 twice over: through a core-provider release that bumps the runtime, AND through
+  # rest-dynamic-controller's own bump for its children. This file classifies by REASON alone, so
+  # two components writing the same reason is invisible here; that is fine while the classification
+  # agrees, and is the thing that would force a `writer` key if they ever diverge.
+  - CreateOutcomeUnknown
 
 # unevaluated: core-provider's rollup counts these healthy for a PARENT. This repo's tooling counts
 # them NOT converged -- see the deliberate difference above.
