@@ -314,14 +314,51 @@ dependencies:
 # it. A probe of a dependency's schema measures nothing unless the dependency is ENABLED and
 # PRESENT -- and the ACCEPTING result is the vacuous one, which is the direction that reads like a
 # finding rather than like a broken instrument.
+# 2.13.99 (2026-11-15): #509, #510, #511, #507. Pinned WITH core-provider-crds as always.
+# NO CRD change, no RBAC change, no new condition and no new Ready=Unknown reason in this one --
+# core-provider stated that explicitly, and the one thing it does change is a VERDICT, not a shape.
+#
+# READ #509 FIRST, BECAUSE IT CHANGES WHAT GREEN MEANS. A composition whose helm reconcile or
+# derived-RBAC apply fails now reports Ready=False/Unavailable WITH THE CAUSE, and its parent
+# counts it FAILED. Installer/installer therefore turns Ready=False/Unavailable naming the
+# component whenever any component fails that way, where before it stayed True/Available.
+#
+# THAT IS THE UMBRELLA TELLING THE TRUTH, NOT A REGRESSION, and it was found here: on 2026-11-14
+# alerts-page sat at Ready=Unknown/ObserveFailed + Synced=False/ReconcileError for over three
+# hours -- its composition could not install at all, 1.8.119 having rendered an invalid
+# metadata.name -- while the umbrella read "Composition is up-to-date (1 of 137 managed children
+# not health-evaluated)". A failed child was being counted as UNEVALUATED, which never affects
+# Ready. I found it by censusing every composition's reason for an unrelated purpose, not because
+# anything surfaced it. core-provider filed #508 and fixed it as #509.
+#
+# SO AFTER THIS PIN: a red umbrella means a component was ALREADY failing. Read the component it
+# names. The verdict moved; the cluster did not.
+#
+# #510 NoIdentifierRecorded child -> failed. #507 TerminalByDesign child -> healthy (inert,
+# child-only; ChildStalled is NOT in this release and must not be assumed). #511 narrows audit
+# emission to real writes and adds the write event plus krateo.operation -- which matters for
+# dz-audit's volume measurement, because on 2.13.98 a roll's reconcile wave produced 454 audit
+# rows in 3m53s and then nothing for the next 13 minutes while the flag was still on. A volume
+# figure taken from a window containing a roll measures the roll.
+#
+# VALUES: UNCHANGED, verified twice independently rather than assumed. observability flattened
+# both charts and reported 146 -> 146 paths, 0 added, 0 removed, 0 renamed, 0 changed defaults,
+# with only Chart.yaml differing. I repeated it with my own flattening and got 130 -> 130 leaves,
+# 0 added, 0 removed, 0 changed -- the path COUNTS differ because we flatten differently (nodes vs
+# leaves), and the DELTAS agree exactly, which is the part that matters. So this pin needs no
+# values work and no schema node.
+#
+# EVERY CDC ROLLS ONCE for the new image; their ConfigMap is unchanged. Requires snowplow >= 1.12.70
+# (core-provider's hold is ON <= 1.12.69, which they have agreed to write that way from now on);
+# 057 runs 1.12.70.
 - condition: bootstrap.coreProvider.enabled
   name: core-provider
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.98
+  version: 2.13.99
 - condition: bootstrap.coreProvider.enabled
   name: core-provider-crds
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.98
+  version: 2.13.99
 description: Umbrella orchestrator blueprint that sequences the per-component Krateo
   PlatformOps blueprints into one ordered, readiness-gated install.
 home: https://krateo.io
