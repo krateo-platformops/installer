@@ -635,12 +635,12 @@ components:
 - name: alert-provider-crd
   kind: AlertProviderCrds
   chart: alert-provider-crds
-  version: 0.2.83
+  version: 0.2.85
   tier: observability
   feature: portal
 - name: alert-provider
   kind: AlertProvider
-  version: 0.2.83
+  version: 0.2.85
   requiresApiGroups:
   - observability.krateo.io
   deps:
