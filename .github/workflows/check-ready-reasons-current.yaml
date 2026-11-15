@@ -1,0 +1,43 @@
+name: check-ready-reasons-current
+
+# hack/ready-reasons.yaml classifies every reason a composition's Ready condition can carry, and
+# every roll verification in this repo reads it. This gate compares it against core-provider's
+# GENERATED table (docs/ready-reasons.md, core-provider#515/#517) and fails on drift.
+#
+# IT DOES NOT RUN ON EVERY PR, deliberately. It reads a file from another repo, so a per-PR run is a
+# flake source -- and a gate that fails closed on a 404 blocks every PR for a reason unrelated to any
+# of them. It runs on a schedule (to catch upstream adding a reason), on dispatch, and on PRs that
+# touch the vendored file or the gate itself (to validate a hand edit).
+#
+# The falsifiers run as their own step. Without them the gate is vacuous: a comparison that can only
+# return "agrees" would pass an empty upstream table, a missing reason and a misclassification alike.
+
+on:
+  pull_request:
+    paths:
+      - hack/ready-reasons.yaml
+      - .github/scripts/check-ready-reasons-current.py
+      - .github/workflows/check-ready-reasons-current.yaml
+  schedule:
+    # 06:40 UTC daily. Upstream regenerates the table from a test, so a new reason lands whenever
+    # they add one -- not on any cadence of ours.
+    - cron: '40 6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  ready-reasons-current:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+      - name: Falsifiers
+        run: python3 .github/scripts/check-ready-reasons-current.py --self-test
+      - name: Compare the vendored classification against core-provider's generated table
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/check-ready-reasons-current.py
