@@ -715,7 +715,7 @@ components:
   kind: KeycloakOperator
   chart: keycloak-operator
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.4.0
+  version: 0.4.1
   upstream: true
   tier: platform
   feature: keycloak
@@ -723,7 +723,7 @@ components:
   kind: Keycloak
   chart: keycloak
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.4.0
+  version: 0.4.1
   upstream: true
   requiresApiGroups:
   - k8s.keycloak.org

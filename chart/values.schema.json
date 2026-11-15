@@ -11527,6 +11527,23 @@
                           "type": "string"
                         }
                       }
+                    },
+                    "backup": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "CNPG backup configuration for the Keycloak database, from keycloak 0.4.1. Absent leaves the chart default, which configures no backup.",
+                      "properties": {
+                        "volumeSnapshot": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "className": {
+                              "type": "string",
+                              "description": "VolumeSnapshotClass for CNPG volume-snapshot backups of the database (e.g. a pd.csi.storage.gke.io class on GKE). Empty = no backup configuration, which is the chart default. The class itself is cluster infrastructure and is NOT rendered by the chart, so it must exist before this is set. Emptying the value removes spec.backup from the CNPG Cluster, proven live by keycloak-provider-kog, so the knob is reversible."
+                            }
+                          }
+                        }
+                      }
                     }
                   }
                 },
