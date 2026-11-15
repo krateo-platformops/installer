@@ -821,6 +821,36 @@
 {{- fail "features.internalTls is on but internalTls.certManagerNamespace is empty; trust-manager would read Bundle sources from its chart default `cert-manager` while the CA is written to the release namespace. See the cert-manager-issuers message." }}
 {{- end }}
 {{- include "inst.forcePath" (dict "target" $spec "path" (list "app" "trust" "namespace") "value" $caNs) }}
+{{- /* RBAC SCOPE (authn, 2026-11-15) -- a SECOND derived leaf on this component, and the one whose
+     drift costs a privilege rather than a 401.
+     trust-manager v0.20.0, templates/clusterrole.yaml:39:
+         {{ if not .Values.app.targetNamespaces }} <namespacedResourcesRules> {{ end }}
+     and _helpers.tpl:72 defines those rules as
+         configmaps  get,list,create,patch,watch,DELETE
+         events      create,patch
+     So leaving app.targetNamespaces UNSET -- the chart default, whose own description says
+     "trust-manager can write targets in any namespace" -- puts those verbs in a CLUSTER-ROLE.
+     Setting it makes templates/rbac-per-namespace.yaml render a Role+RoleBinding per namespace
+     instead, over uniq(targetNamespaces + app.trust.namespace + releaseNamespace), and the
+     ClusterRole omits them entirely.
+
+     DERIVED, NOT SETTABLE, and derived from the OTHER component: the namespaces trust-manager must
+     write ConfigMaps into are exactly the ones internal-ca-bundle's Bundle targets. Two independent
+     lists could only ever disagree, and BOTH directions of disagreement are silent:
+       bundle target not in targetNamespaces -> the ConfigMap is never written, and a Bundle with no
+                                               target raises no error
+       targetNamespaces wider than targets  -> a ConfigMap delete grant nobody needs
+     componentValues.trust-manager is not declared at all, so there is no second place to set it.
+
+     FAIL ON EMPTY rather than write []: an empty list is FALSY in helm, so forcing [] would take the
+     `if not` branch and produce exactly the cluster-wide ClusterRole this derivation exists to avoid.
+     Writing the hazard while appearing to configure against it is worse than refusing. */ -}}
+{{- $icb := index (default dict $top.Values.componentValues) "internal-ca-bundle" | default dict }}
+{{- $bundleNs := (default dict $icb.target).namespaces | default list }}
+{{- if not $bundleNs }}
+{{- fail "features.internalTls is on but componentValues.internal-ca-bundle.target.namespaces is empty, so trust-manager's RBAC scope cannot be derived. Leaving it unset is NOT a safe default: trust-manager's chart puts `configmaps: get,list,create,patch,watch,delete` and `events: create,patch` in a CLUSTER-ROLE whenever app.targetNamespaces is empty (clusterrole.yaml:39 + _helpers.tpl:72), so the installer would grant cluster-wide ConfigMap DELETE. Set target.namespaces to the namespaces the CA bundle must reach (on krateo-057 that is the krateo namespace); trust-manager's RBAC is then scoped to exactly those plus the trust and release namespaces." }}
+{{- end }}
+{{- include "inst.forcePath" (dict "target" $spec "path" (list "app" "targetNamespaces") "value" $bundleNs) }}
 {{- end }}
 {{- end }}
 ---
