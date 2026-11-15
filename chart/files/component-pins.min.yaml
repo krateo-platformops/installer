@@ -403,9 +403,18 @@ components:
   feature: internalTls
   requiresApiGroups:
   - cert-manager.io
+- name: internal-ca-bundle
+  kind: InternalCaBundle
+  chart: internal-ca-bundle
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.16.0
+  tier: platform
+  feature: internalTls
+  requiresApiGroups:
+  - trust.cert-manager.io
 - name: cert-manager-issuers
   kind: CertManagerIssuers
-  version: 0.10.0
+  version: 0.16.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   requiresApiGroups:
   - cert-manager.io

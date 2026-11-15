@@ -20791,6 +20791,43 @@
               "description": "The served ZendeskRequestConfiguration version. The chart ships v1alpha1, which is what 057 serves."
             }
           }
+        },
+        "internal-ca-bundle": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The trust-manager Bundle that distributes the internal CA. Its SOURCE is fixed in the chart (Secret krateo-root-ca-key-pair, key ca.crt -- the literal cert-manager-issuers writes) and is deliberately not settable.",
+          "properties": {
+            "name": {
+              "type": "string",
+              "default": "krateo-internal-ca",
+              "maxLength": 253,
+              "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$",
+              "description": "Bundle name, and the name of the target ConfigMap it writes."
+            },
+            "target": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "default": "ca.crt",
+                  "pattern": "^[-._a-zA-Z0-9]+$",
+                  "description": "ConfigMap key holding the CA. identity-lifecycle expects ca.crt."
+                },
+                "namespaces": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "default": [],
+                  "items": {
+                    "type": "string",
+                    "maxLength": 63,
+                    "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+                  },
+                  "description": "Namespaces whose workloads must trust the internal CA. REQUIRED: an EMPTY list fails the chart's render with a sentence, because a Bundle with no namespaceSelector writes the ConfigMap to EVERY namespace in the cluster. Note the guard is in the chart's RENDER, not its CRD -- the generated CRD accepts [], since the chart's own defaults must satisfy its schema for helm lint. Do not write a check against the CRD expecting it to refuse an empty list."
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -20877,6 +20914,20 @@
     },
     "core-provider-crds": {
       "type": "object"
+    },
+    "internalTls": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "authn#145: internal TLS wiring. ONE value with TWO consumers, derived by the chart into cert-manager-issuers.internalCA.namespace and trust-manager.app.trust.namespace with forcePath, so they cannot disagree. Those two leaves are deliberately NOT declared under componentValues: they are installer-computed and a per-component override could only make them inconsistent.",
+      "properties": {
+        "certManagerNamespace": {
+          "type": "string",
+          "default": "",
+          "maxLength": 63,
+          "pattern": "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$",
+          "description": "REQUIRED when features.internalTls is true; the render FAILS if empty. The namespace cert-manager RUNS in -- read --cluster-resource-namespace from its deployment. Required rather than defaulted because the two charts' own defaults disagree ('' = the release namespace vs 'cert-manager'), so unset is a guaranteed mismatch that yields a CA ClusterIssuer which never becomes Ready, silently."
+        }
+      }
     }
   }
 }

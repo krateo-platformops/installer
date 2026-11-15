@@ -43,6 +43,23 @@ DEFAULT_REPO = "oci://ghcr.io/krateo-platformops/charts"
 MERGE_TARGETS = ("origin/main", "main")
 
 # RFC 1123 subdomain: what the apiserver enforces on metadata.name for most kinds.
+# Charts whose DEFAULTS deliberately fail the render, with the minimal values that make them
+# renderable. Without this they come back "NOT RENDERED" and this gate correctly refuses to claim it
+# checked them -- which is right, but means such a chart can never be cleared at all.
+#
+# internal-ca-bundle is the first: its target.namespaces is required and an EMPTY list fails with a
+# sentence, because a Bundle with no namespaceSelector writes its ConfigMap to EVERY namespace in the
+# cluster. The guard lives in the chart's RENDER rather than its CRD, because the chart's own
+# defaults must satisfy its schema for `helm lint` -- so the generated CRD accepts [] and the render
+# refuses it. krateo-blueprints states that as its convention for a required list, so this recurs.
+#
+# THE VALUES MUST NOT MASK A REGRESSION. The chart is rendered WITHOUT them first, and if it renders
+# fine the gate REFUSES: either the fail-closed guard was removed -- a change worth failing on -- or
+# the entry is stale. Values that silently substitute for a guard are worse than no entry.
+RENDER_VALUES = {
+    "internal-ca-bundle": {"target": {"namespaces": ["krateo-system"]}},
+}
+
 RFC1123_SUBDOMAIN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$")
 MAX_NAME = 253
 
@@ -193,7 +210,24 @@ def rendered_names(repo, chart, version):
             if len(subdirs) != 1:
                 return None, "unexpected unpack layout: %s" % subdirs
             root = os.path.join(tmp, subdirs[0])
-        r = _run(["helm", "template", "t", root, "--kube-version", "1.36.0"])
+        extra = RENDER_VALUES.get(chart)
+        vf = None
+        if extra is not None:
+            bare = _run(["helm", "template", "t", root, "--kube-version", "1.36.0"])
+            if bare.returncode == 0:
+                return None, ("RENDER_VALUES has an entry for %r but the chart renders FINE without "
+                              "it. Either its fail-closed guard was removed -- which is a change "
+                              "worth failing on -- or the entry is stale. Remove the entry or "
+                              "restore the guard; do not leave values that mask it." % chart)
+            vf = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False)
+            yaml.safe_dump(extra, vf, default_flow_style=False)
+            vf.close()
+        cmd = ["helm", "template", "t", root, "--kube-version", "1.36.0"]
+        if vf is not None:
+            cmd += ["-f", vf.name]
+        r = _run(cmd)
+        if vf is not None:
+            os.unlink(vf.name)
         if r.returncode:
             return None, "helm template failed: %s" % (r.stderr or r.stdout).strip()[:200]
         names = []

@@ -6331,9 +6331,75 @@ components:
   requiresApiGroups:
   - cert-manager.io
 
+- name: internal-ca-bundle
+  # Renders the trust-manager Bundle that distributes the internal CA (authn#145). A SEPARATE CHART
+  # from cert-manager-issuers, and that is authn's finding rather than my preference:
+  #
+  #   a Bundle inside cert-manager-issuers reintroduces the race that chart was SPLIT to avoid. Its
+  #   own Chart.yaml records that cert-manager.io CRDs from another source are not established when
+  #   the parent's objects apply ("no matches for kind ClusterIssuer"), and that a race inside one
+  #   release is not something the installer models. A trust.cert-manager.io/v1alpha1 Bundle has the
+  #   same problem: with internalTls on, issuers and trust-manager both gate only on cert-manager.io,
+  #   so the issuers release can apply before the Bundle CRD exists. And adding
+  #   requiresApiGroups: [trust.cert-manager.io] to ISSUERS would block every ingress-only install,
+  #   where trust-manager is absent -- so the chart cannot express the ordering it would need.
+  #
+  # As its own component it is ordered by the mechanism already here: requiresApiGroups on the group
+  # trust-manager establishes. ingress-only installs are untouched.
+  #
+  # 0.16.0 RATHER THAN 0.15.0, and the reason is a defect in MY gate's inputs, not in the chart.
+  # 0.15.0 was built and tested here and NOT merged: check-pin-ci resolved its provenance by
+  # inference -- appVersion -> a tag of that name in a `sources` repo -- and 0.15.0 listed
+  # github.com/cert-manager/trust-manager, where appVersion v0.20.0 is a real tag. So the gate
+  # asserted CI in cert-manager/trust-manager, which this gate's own rationale calls "a different
+  # claim wearing the same green tick".
+  #
+  # I asked for OCI provenance stamps as the fix. authn read the gate and showed me that would NOT
+  # have worked: the stamp is consulted only `if not checked` (line 802), and inference had already
+  # resolved, so the stamp would never be read. Their fix hits the PRIMARY route instead -- `sources`
+  # now names krateo-blueprints/ingress-blueprint, the repo that BUILDS the chart, and
+  # `chartVersion->tag 0.16.0` resolves there. Verified from source: per source repo the gate tries
+  # chartVersion->tag FIRST and appVersion->tag only as a fallback.
+  #
+  # This is the keycloak-config-kog 0.5.2 case, which the gate documents: a repo that is not a build
+  # input carrying a colliding tag. A render-only chart shipping ClusterIssuers and a Bundle TARGETS
+  # cert-manager; it is not BUILT from it. Control that this is not just "delete the inconvenient
+  # metadata": agentgateway at 0.16.0 KEEPS sources [github.com/agentgateway/agentgateway], because
+  # upstream there is a real build input (a subchart). Measured, not assumed.
+  #
+  # Both charts also carry the four org.opencontainers.image.* annotations now, with a post-package
+  # check that the stamp equals the tag commit before any push -- so the stamp is evidence rather
+  # than a claim the chart makes about itself. revision bd42b34f for both.
+  #
+  # NO OUTGOING-VERSION CONTROL EXISTS FOR internal-ca-bundle and that is not an oversight: 0.15.0
+  # was never pinned, so there is no live version to probe as a positive control.
+  # so there is no outgoing version to probe as a positive control. The control used instead was
+  # cert-manager-issuers 0.15.0 from the same repo and tag (FOUND), which proves the repo+tag path
+  # resolves, plus 9.9.9 absent. A new chart's first pin cannot have the usual control and saying so
+  # is better than implying it did.
+  #
+  # The source is FIXED, not a value: Secret krateo-root-ca-key-pair key ca.crt, the literal the
+  # issuers chart writes. A value there could only ever be set wrong.
+  #
+  # target.namespaces is REQUIRED and an empty list FAILS the render, with a sentence. An unset
+  # namespaceSelector on a Bundle writes the ConfigMap to EVERY namespace in the cluster -- a
+  # fail-open default on a trust distribution path. Note the guard is in the chart's RENDER, not in
+  # its CRD: the generated CRD accepts [], because the chart's own defaults must satisfy its schema
+  # for helm lint. authn corrected me on that; a check written against the CRD would pass while the
+  # real guard sits elsewhere. They also showed the mutant: with the guard removed, the empty case
+  # renders an empty selector, so it is load-bearing.
+  kind: InternalCaBundle
+  chart: internal-ca-bundle
+  repo: oci://ghcr.io/krateo-blueprints/charts
+  version: 0.16.0
+  tier: platform
+  feature: internalTls
+  requiresApiGroups:
+  - trust.cert-manager.io
+
 - name: cert-manager-issuers
   kind: CertManagerIssuers
-  version: 0.10.0
+  version: 0.16.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   requiresApiGroups:
   - cert-manager.io

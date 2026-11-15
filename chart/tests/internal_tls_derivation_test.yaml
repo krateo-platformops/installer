@@ -1,0 +1,140 @@
+# features.internalTls -- ONE value derived into TWO component specs, and the guard that refuses the
+# mismatching default.
+#
+# WHY THIS SUITE EXISTS, AND WHY IT IS NOT A helm template CHECK. The derivation and its `fail` live
+# in compositions.yaml, which LISTs every CRD with `lookup` at its head. `helm template` DISABLES
+# lookup, so that file renders ZERO composition objects and the guard NEVER RUNS. I measured exactly
+# that before writing this: with features.internalTls on and certManagerNamespace unset, plain
+# `helm template` exits 0 and the guard's sentence is absent from stderr. So a check built on
+# `helm template` would have reported a protection that does not exist, and the `fail` would first
+# have fired on a real cluster the moment someone enabled the feature.
+#
+# helm-unittest's kubernetesProvider CAN serve the CRD LIST, which is what makes the file testable.
+#
+# WHAT THE VALUE IS FOR. Three namespaces must agree or the CA ClusterIssuer never becomes Ready,
+# silently:
+#   cert-manager-issuers writes the root CA Certificate (and its Secret krateo-root-ca-key-pair)
+#     into internalCA.namespace
+#   cert-manager READS cluster CA Secrets only from its --cluster-resource-namespace
+#   trust-manager reads Bundle SOURCES only from app.trust.namespace
+# And the two charts' own defaults DISAGREE: issuers defaults to the release namespace, trust-manager
+# defaults to "cert-manager". So "both unset" is a guaranteed mismatch, not a safe default -- which
+# is why the render FAILS rather than defaulting, and why CASE 2 is the most important case here.
+#
+# THE HOSTILE-OVERRIDE CASE IS NOT HERE, AND THAT IS DELIBERATE. The two leaves are written with
+# inst.forcePath and are NOT declared as componentValues nodes, so an attempt to set
+# componentValues.cert-manager-issuers.internalCA.namespace is refused by values.schema.json at
+# CHART LOAD -- before any template renders. helm-unittest reports that as an error rather than a
+# failed template, so it is not assertable in this file. It is asserted in
+# .github/scripts/check-tls-feature-wiring.py, at the layer where it actually happens. Measured:
+# helm reports "at '/componentValues/cert-manager-issuers/internalCA': additional properties
+# 'namespace' not allowed" and "at '/componentValues': additional properties 'trust-manager' not
+# allowed". So the override cannot even be expressed, which is stronger than forcePath winning --
+# forcePath is the belt to that braces.
+suite: features.internalTls - one value derived into two components
+templates:
+  - templates/compositions.yaml
+tests:
+  - it: "with the value set, BOTH components carry it and they AGREE"
+    set:
+      features.internalTls: true
+      internalTls.certManagerNamespace: cert-manager
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider: &fixture
+      scheme:
+        "apiextensions.k8s.io/v1/CustomResourceDefinition":
+          gvr:
+            version: v1
+            group: apiextensions.k8s.io
+            resource: customresourcedefinitions
+      objects:
+        # the three composition CRDs, each served at its pinned version
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: certmanagerissuerses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: CertManagerIssuers}
+            versions: [{name: v0-16-0, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: trustmanagers.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: TrustManager}
+            versions: [{name: v0-20-0, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: internalcabundles.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: InternalCaBundle}
+            versions: [{name: v0-16-0, served: true}]
+        # requiresApiGroups: cert-manager.io for issuers and trust-manager,
+        # trust.cert-manager.io for the bundle. Without these the components are withheld
+        # and every assertion below would pass vacuously on an empty render.
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: clusterissuers.cert-manager.io}
+          spec:
+            group: cert-manager.io
+            names: {kind: ClusterIssuer}
+            versions: [{name: v1, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: bundles.trust.cert-manager.io}
+          spec:
+            group: trust.cert-manager.io
+            names: {kind: Bundle}
+            versions: [{name: v1alpha1, served: true}]
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.internalCA.namespace
+          value: cert-manager
+        documentSelector:
+          path: kind
+          value: CertManagerIssuers
+      - equal:
+          path: spec.app.trust.namespace
+          value: cert-manager
+        documentSelector:
+          path: kind
+          value: TrustManager
+
+  - it: "THE GUARD: with features.internalTls on and the value UNSET, the render FAILS"
+    set:
+      features.internalTls: true
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider: *fixture
+    asserts:
+      - failedTemplate:
+          errorPattern: "internalTls.certManagerNamespace is empty"
+
+  - it: "with the feature OFF and the value unset, the render succeeds and neither component appears"
+    set:
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider: *fixture
+    asserts:
+      - notFailedTemplate: {}
+      - notExists:
+          path: spec.internalCA
+
+  - it: "the bundle takes NO derived value - only the two that must agree do"
+    set:
+      features.internalTls: true
+      internalTls.certManagerNamespace: cert-manager
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider: *fixture
+    asserts:
+      - notFailedTemplate: {}
+      # InternalCaBundle renders with an EMPTY spec: it reads the CA from trust-manager's trust
+      # namespace, which is already derived there, so there is nothing for it to carry. If a future
+      # change starts writing a namespace here too, that is a THIRD place the value lives and this
+      # assertion is what will say so.
+      - equal:
+          path: spec
+          value: {}
+        documentSelector:
+          path: kind
+          value: InternalCaBundle
