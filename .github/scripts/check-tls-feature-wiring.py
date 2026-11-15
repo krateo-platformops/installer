@@ -33,7 +33,7 @@ set, which is what makes every presence assertion above it informative.
     python3 .github/scripts/check-tls-feature-wiring.py              -> check
     python3 .github/scripts/check-tls-feature-wiring.py --self-test  -> the two falsifiers alone
 """
-import json, os, shutil, subprocess, sys, tempfile
+import io, json, os, shutil, subprocess, sys, tempfile
 
 import yaml
 
@@ -255,6 +255,29 @@ def main(argv):
                                   or "pattern" in (r.stderr or "").lower()),
            "RULE 6 (falsifier): an invalid certManagerNamespace is REFUSED by the schema",
            "exit=%d" % r.returncode)
+
+        # ---- RULE 7: the RBAC-SCOPE derivation (authn's finding, 2026-11-15).
+        # trust-manager v0.20.0's clusterrole.yaml:39 includes _helpers.tpl:72's
+        # namespacedResourcesRules -- configmaps get,list,create,patch,watch,DELETE and events
+        # create,patch -- whenever app.targetNamespaces is EMPTY. rbac-per-namespace.yaml renders
+        # per-namespace Roles instead when it is set. So this value is a PRIVILEGE GRANT, and it is
+        # derived from internal-ca-bundle's target list because those are the same namespaces.
+        tpl = io.open("chart/templates/compositions.yaml", encoding="utf-8").read()
+        ck('list "app" "targetNamespaces"' in tpl,
+           "RULE 7: app.targetNamespaces is derived on the trust-manager branch",
+           "forcePath into the component's own spec, beside app.trust.namespace")
+        ck('"internal-ca-bundle"' in tpl and "$bundleNs" in tpl,
+           "RULE 7: derived from internal-ca-bundle's target.namespaces, not a value of its own",
+           "the Bundle's targets ARE the namespaces trust-manager must write ConfigMaps into")
+        ck("RBAC scope cannot be derived" in tpl,
+           "RULE 7: an EMPTY derived list is REFUSED, not written",
+           "[] is FALSY in helm, so writing it takes the very `if not` branch that produces the "
+           "cluster-wide ClusterRole -- writing the hazard while appearing to configure against it")
+        tm_app = ((cvp.get("trust-manager") or {}).get("properties") or {}).get("app") or {}
+        ck("targetNamespaces" not in (tm_app.get("properties") or {}),
+           "RULE 7: componentValues.trust-manager.app.targetNamespaces is NOT settable",
+           "a second place to set it could only disagree with the Bundle's list, and the "
+           "disagreement is silent BOTH ways: no ConfigMap written, or a wider delete grant")
 
         print()
         print("  %s" % ("all rules pass" if not fails else "FAILURES: %s" % fails))

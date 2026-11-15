@@ -31,6 +31,24 @@
 # 'namespace' not allowed" and "at '/componentValues': additional properties 'trust-manager' not
 # allowed". So the override cannot even be expressed, which is stronger than forcePath winning --
 # forcePath is the belt to that braces.
+#
+# A SECOND DERIVED LEAF ON trust-manager, ADDED 2026-11-15 (authn's finding). app.targetNamespaces is
+# derived from componentValues.internal-ca-bundle.target.namespaces, because the namespaces
+# trust-manager must write ConfigMaps into are exactly the ones the Bundle targets. It is NOT a
+# convenience: trust-manager v0.20.0's clusterrole.yaml:39 puts
+#     configmaps  get,list,create,patch,watch,DELETE
+#     events      create,patch
+# into a CLUSTER-ROLE whenever app.targetNamespaces is empty (_helpers.tpl:72 defines the rules;
+# rbac-per-namespace.yaml renders per-namespace Roles instead when it is set). So an unset value is a
+# cluster-wide ConfigMap DELETE grant, and an EMPTY LIST is the same thing -- [] is falsy in helm and
+# takes the very `if not` branch we are avoiding. That is why the guard REFUSES an empty list rather
+# than writing it: writing the hazard while appearing to configure against it is worse than refusing.
+#
+# CONSEQUENCE FOR THE SUITE, and it is a real contract change: with features.internalTls on,
+# componentValues.internal-ca-bundle.target.namespaces is now REQUIRED. Every case below that turns
+# the feature on therefore sets it. That requirement already existed one layer down -- the bundle
+# chart's own defaults fail its render -- but it was only discoverable when the composition rendered
+# on a cluster. Now it is a chart-load refusal with a sentence that says what to set.
 suite: features.internalTls - one value derived into two components
 templates:
   - templates/compositions.yaml
@@ -39,6 +57,7 @@ tests:
     set:
       features.internalTls: true
       internalTls.certManagerNamespace: cert-manager
+      componentValues.internal-ca-bundle.target.namespaces: [krateo-system]
       bootstrap.coreProvider.enabled: false
     kubernetesProvider: &fixture
       scheme:
@@ -101,6 +120,27 @@ tests:
         documentSelector:
           path: kind
           value: TrustManager
+      # THE RBAC SCOPE, derived from the OTHER component's list. If this is ever absent or empty,
+      # trust-manager's ClusterRole regains cluster-wide `configmaps: delete`.
+      - equal:
+          path: spec.app.targetNamespaces
+          value: [krateo-system]
+        documentSelector:
+          path: kind
+          value: TrustManager
+
+  - it: "THE RBAC GUARD: feature on, certManagerNamespace set, but the bundle's namespaces EMPTY -> REFUSED"
+    set:
+      features.internalTls: true
+      internalTls.certManagerNamespace: cert-manager
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider: *fixture
+    asserts:
+      # Not a convenience check. Without this refusal the installer writes app.targetNamespaces: []
+      # and trust-manager's chart takes the `if not` branch -- a cluster-wide ConfigMap DELETE grant
+      # produced by the installer, silently, as a side effect of enabling a TLS feature.
+      - failedTemplate:
+          errorPattern: "trust-manager's RBAC scope cannot be derived"
 
   - it: "THE GUARD: with features.internalTls on and the value UNSET, the render FAILS"
     set:
@@ -120,21 +160,36 @@ tests:
       - notExists:
           path: spec.internalCA
 
-  - it: "the bundle takes NO derived value - only the two that must agree do"
+  - it: "the bundle takes NO DERIVED value - it is the SOURCE, not a consumer"
     set:
       features.internalTls: true
       internalTls.certManagerNamespace: cert-manager
+      componentValues.internal-ca-bundle.target.namespaces: [krateo-system]
       bootstrap.coreProvider.enabled: false
     kubernetesProvider: *fixture
     asserts:
       - notFailedTemplate: {}
-      # InternalCaBundle renders with an EMPTY spec: it reads the CA from trust-manager's trust
-      # namespace, which is already derived there, so there is nothing for it to carry. If a future
-      # change starts writing a namespace here too, that is a THIRD place the value lives and this
-      # assertion is what will say so.
+      # The bundle's spec carries EXACTLY what the user set and nothing the installer derived. It is
+      # now the SOURCE of trust-manager's RBAC scope, so a derived namespace appearing here would mean
+      # the value had acquired a second home -- which is what this asserts against. The previous
+      # version of this case asserted `spec: {}`; that stopped being the right assertion when
+      # target.namespaces became required, because the user's own list legitimately appears.
       - equal:
           path: spec
-          value: {}
+          value:
+            target:
+              namespaces:
+                - krateo-system
+        documentSelector:
+          path: kind
+          value: InternalCaBundle
+      - notExists:
+          path: spec.internalCA
+        documentSelector:
+          path: kind
+          value: InternalCaBundle
+      - notExists:
+          path: spec.app
         documentSelector:
           path: kind
           value: InternalCaBundle
