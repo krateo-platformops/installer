@@ -18405,7 +18405,7 @@
               }
             },
             "readerGroups": {
-              "description": "Groups granted read of the portal SHELL (layout, theme, header, sidebar Menu, and the shared RESTActions the pages read) in the release namespace. This is the floor beneath every page grant: a group needs this AND the readerGroups of each page chart it should see. Empty grants nobody anything.",
+              "description": "Groups granted read of the portal SHELL (layout, theme, header, sidebar Menu, and the shared RESTActions the pages read) in the release namespace. This is the floor beneath every page grant: a group needs this AND the readerGroups of each page chart it should see. Empty grants nobody anything. A FRESH INSTALL SETS NO GROUP HERE, so a user whose only group is `devs` gets 403 on the app-shell layout and sees no portal at all; this is an explicit opt-in per cluster since 0.3.628, when portal.enableCyberjokerUser lost its schema default (#872) because that default had drifted from the pinned chart's own `false`.",
               "items": {
                 "type": "string"
               },
@@ -20778,6 +20778,10 @@
                       "type": "string"
                     },
                     "description": "Groups granted zendeskrequests get/list/watch/create and zendeskrequestconfigurations get/list in the namespace."
+                  },
+                  "tokenRotation": {
+                    "type": "boolean",
+                    "description": "Rotate this organisation's token with External Secrets Operator (needs zendesk.baseUrl, zendesk.oauthClientId and the Secret label external-secrets.io/type=webhook). Default false."
                   }
                 }
               }
@@ -20789,6 +20793,43 @@
             "configurationVersion": {
               "type": "string",
               "description": "The served ZendeskRequestConfiguration version. The chart ships v1alpha1, which is what 057 serves."
+            },
+            "zendesk": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The Zendesk instance and the public OAuth client the tokens were authorized with; used by token rotation only.",
+              "properties": {
+                "baseUrl": {
+                  "type": "string",
+                  "description": "Instance URL, https, no path."
+                },
+                "oauthClientId": {
+                  "type": "string",
+                  "description": "Identifier of the public OAuth client (no secret exists or is used)."
+                }
+              }
+            },
+            "tokenRotation": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Schedule and lifetimes of the External Secrets Operator token rotation.",
+              "properties": {
+                "refreshInterval": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*(s|m|h)$",
+                  "description": "At most half of accessTokenExpiresIn."
+                },
+                "accessTokenExpiresIn": {
+                  "type": "integer",
+                  "minimum": 300,
+                  "maximum": 172800
+                },
+                "refreshTokenExpiresIn": {
+                  "type": "integer",
+                  "minimum": 604800,
+                  "maximum": 7776000
+                }
+              }
             }
           }
         },

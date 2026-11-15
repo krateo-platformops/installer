@@ -337,7 +337,16 @@
 {{- $_ := set $spec "localModel" (dict "enabled" true "host" $top.Values.localModel.host "model" $top.Values.localModel.model) }}
 {{- end }}
 {{- else if or $c.agent $c.modelOwner }}
+{{/* DECLARED-AT-THE-WRITTEN-VERSION (#936). Each of these keys is installer-computed wiring, and
+     where the CRD version the CR is written AT does not declare it, the apiserver PRUNES it and the
+     write reports success. Measured on 057: hitlApproval written 8 / declared 5, rollGuard 9/8,
+     vertexAI 10/9, agentgateway 11/10. All three affected owners confirmed the keys are INERT for
+     their agents and declined to declare them to satisfy a gate, so the fix belongs here.
+     inst.canHold returns "true" when the version declares the key OR when it cannot be determined,
+     so the fallback is exactly today's behaviour -- see inst.declaredSpecKeys. */}}
+{{- if eq (include "inst.canHold" (list $c.kind $emit $allCRDs "vertexAI")) "true" }}
 {{- $_ := set $spec "vertexAI" (dict "enabled" $top.Values.vertexAI.enabled "projectID" $top.Values.vertexAI.projectID "location" $top.Values.vertexAI.location "secretName" $top.Values.vertexAI.secretName "secretKey" $top.Values.vertexAI.secretKey) }}
+{{- end }}
 {{- end }}
 {{- /* HITL approval gate. Applies to EVERY agent — the user-facing orchestrator AND its
        delegated subagents. kagent >=0.9.9 propagates a subagent's tool-approval interrupt up to the
@@ -357,9 +366,13 @@
        tools). This lets one agent opt a specific tool in/out without an all-or-nothing switch. */}}
 {{- if $c.agent }}
 {{- if hasKey $c "requireApproval" }}
+{{- if eq (include "inst.canHold" (list $c.kind $emit $allCRDs "requireApproval")) "true" }}
 {{- $_ := set $spec "requireApproval" $c.requireApproval }}
+{{- end }}
 {{- else }}
+{{- if eq (include "inst.canHold" (list $c.kind $emit $allCRDs "hitlApproval")) "true" }}
 {{- $_ := set $spec "hitlApproval" $top.Values.hitlApproval }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- /* componentValues: per-component spec overrides, deep-merged into the rendered spec. The
@@ -482,7 +495,9 @@
      (carrying the logged-in user's Bearer) at the gateway instead of kagent-ui, which is the only
      way that token is ever validated. */ -}}
 {{- if or $c.agent $c.modelOwner (eq $c.name "frontend") -}}
+{{- if eq (include "inst.canHold" (list $c.kind $emit $allCRDs "agentgateway")) "true" }}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "agentgateway" "enabled") "value" true) -}}
+{{- end }}
 {{- end -}}
 {{- /* And CORS on the gateway, because that portal call is a cross-origin BROWSER call: the
      preflight it sends first carries no token, so the authorization policy would 403 it and the
@@ -792,7 +807,9 @@
 {{- include "inst.forcePath" (dict "target" $spec "path" (list "gateway" "mcpBackendHash") "value" $mcpHash) }}
 {{- end }}
 {{- if and $c.agent $mcpHash }}
+{{- if eq (include "inst.canHold" (list $c.kind $emit $allCRDs "rollGuard")) "true" }}
 {{- include "inst.forcePath" (dict "target" $spec "path" (list "rollGuard") "value" $mcpHash) }}
+{{- end }}
 {{- end }}
 {{- /* INTERNAL TLS (authn#145) -- ONE value, TWO consumers, derived here so they cannot disagree.
      .Values.internalTls.certManagerNamespace must name the namespace cert-manager RUNS in, because

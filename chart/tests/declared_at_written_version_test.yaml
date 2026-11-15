@@ -1,0 +1,233 @@
+# #936 -- the chart must not write a spec key the CRD VERSION IT IS WRITTEN AT cannot hold.
+#
+# WHY. The installer injects computed wiring onto component CRs. Where the served CRD version does
+# not declare the key, the apiserver PRUNES it and the write reports success. Measured on krateo-057
+# against the umbrella's own helm manifest:
+#       key              written  declared  PRUNED
+#       hitlApproval          8         5       3   ClickstackAgent, IncidentAgent, NightlyReview
+#       rollGuard             9         8       1   NightlyReview
+#       vertexAI             10         9       1   NightlyReview
+#       agentgateway         11        10       1   NightlyReview
+# All three affected owners confirmed the keys are genuinely INERT for their agents and declined to
+# declare them merely to satisfy a gate -- which was right, and is why the fix is on this side.
+#
+# THE SAME PREDICATE COVERS THE BUMP INSTANT. inst.emitTagFrom emits a composition at the OLD served
+# version when the target is not served yet, so a newly-declared key is pruned at write time -- acmp
+# hit exactly that pinning keycloak 0.4.1 and setting a new node in the same roll. One question asked
+# at two moments; one helper.
+#
+# WHY A helm-unittest SUITE AND NOT A helm template CHECK: compositions.yaml LISTs every CRD with
+# `lookup` at its head, and `helm template` DISABLES lookup, so that file renders ZERO composition
+# objects. Nothing in it can be exercised by a plain render. kubernetesProvider can serve the LIST.
+#
+# CASES 3 AND 4 ARE THE FALSIFIERS AND THEY ARE THE POINT. The fail-safe direction is deliberate:
+# when the schema is OPEN or the version cannot be found, inst.canHold returns true and the key is
+# written exactly as today. Failing closed would silently stop writing values that DO land -- a
+# regression nobody would see. Without these two cases, an implementation that never wrote anything
+# would pass case 2.
+suite: "#936 - never write a key the written-at CRD version cannot hold"
+templates:
+  - templates/compositions.yaml
+tests:
+  - it: "CASE 1 (declared): a version that DECLARES vertexAI gets it"
+    set:
+      features.coreAgents: true
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider:
+      scheme: &scheme
+        "apiextensions.k8s.io/v1/CustomResourceDefinition":
+          gvr: {version: v1, group: apiextensions.k8s.io, resource: customresourcedefinitions}
+        "composition.krateo.io/v0-1-6/KagentCrds":
+          gvr: {group: composition.krateo.io, version: v0-1-6, resource: kagentcrdses}
+          namespaced: true
+        "composition.krateo.io/v0-1-22/Kagent":
+          gvr: {group: composition.krateo.io, version: v0-1-22, resource: kagents}
+          namespaced: true
+      objects:
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: kagent.dev-probe}
+          spec:
+            group: kagent.dev
+            names: {kind: Agent}
+            versions: [{name: v1alpha1, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: kagentcrdses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: KagentCrds}
+            versions: [{name: v0-1-6, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: kagents.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: Kagent}
+            versions: [{name: v0-1-22, served: true}]
+        # THE SUBJECT: ModelConfigs v0-1-2 DECLARES vertexAI and agentgateway
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: modelconfigses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: ModelConfigs}
+            versions:
+              - name: v0-1-2
+                served: true
+                schema:
+                  openAPIV3Schema:
+                    type: object
+                    properties:
+                      spec:
+                        type: object
+                        properties:
+                          vertexAI: {type: object}
+                          agentgateway: {type: object}
+                          models: {type: object}
+        - apiVersion: composition.krateo.io/v0-1-6
+          kind: KagentCrds
+          metadata: {name: kagent-crds, namespace: krateo-system}
+          status:
+            conditions: [{type: Ready, status: "True"}, {type: Synced, status: "True"}]
+        - apiVersion: composition.krateo.io/v0-1-22
+          kind: Kagent
+          metadata: {name: kagent, namespace: krateo-system}
+          status:
+            conditions: [{type: Ready, status: "True"}, {type: Synced, status: "True"}]
+    asserts:
+      - notFailedTemplate: {}
+      - exists:
+          path: spec.vertexAI
+        documentSelector:
+          path: kind
+          value: ModelConfigs
+
+  - it: "CASE 2 (THE FIX): a version that does NOT declare vertexAI does not get it written"
+    set:
+      features.coreAgents: true
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider:
+      scheme: *scheme
+      objects:
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: kagent.dev-probe}
+          spec:
+            group: kagent.dev
+            names: {kind: Agent}
+            versions: [{name: v1alpha1, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: kagentcrdses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: KagentCrds}
+            versions: [{name: v0-1-6, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: kagents.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: Kagent}
+            versions: [{name: v0-1-22, served: true}]
+        # vertexAI DELIBERATELY ABSENT from the declared properties -- the NightlyReview shape
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: modelconfigses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: ModelConfigs}
+            versions:
+              - name: v0-1-2
+                served: true
+                schema:
+                  openAPIV3Schema:
+                    type: object
+                    properties:
+                      spec:
+                        type: object
+                        properties:
+                          models: {type: object}
+        - apiVersion: composition.krateo.io/v0-1-6
+          kind: KagentCrds
+          metadata: {name: kagent-crds, namespace: krateo-system}
+          status:
+            conditions: [{type: Ready, status: "True"}, {type: Synced, status: "True"}]
+        - apiVersion: composition.krateo.io/v0-1-22
+          kind: Kagent
+          metadata: {name: kagent, namespace: krateo-system}
+          status:
+            conditions: [{type: Ready, status: "True"}, {type: Synced, status: "True"}]
+    asserts:
+      - notFailedTemplate: {}
+      - notExists:
+          path: spec.vertexAI
+        documentSelector:
+          path: kind
+          value: ModelConfigs
+
+  - it: "CASE 3 (FALSIFIER, fail-safe): an OPEN schema still gets the key"
+    set:
+      features.coreAgents: true
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider:
+      scheme: *scheme
+      objects:
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: kagent.dev-probe}
+          spec:
+            group: kagent.dev
+            names: {kind: Agent}
+            versions: [{name: v1alpha1, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: kagentcrdses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: KagentCrds}
+            versions: [{name: v0-1-6, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: kagents.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: Kagent}
+            versions: [{name: v0-1-22, served: true}]
+        # no vertexAI property, BUT x-kubernetes-preserve-unknown-fields -> nothing is pruned
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: modelconfigses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: ModelConfigs}
+            versions:
+              - name: v0-1-2
+                served: true
+                schema:
+                  openAPIV3Schema:
+                    type: object
+                    properties:
+                      spec:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                        properties:
+                          models: {type: object}
+        - apiVersion: composition.krateo.io/v0-1-6
+          kind: KagentCrds
+          metadata: {name: kagent-crds, namespace: krateo-system}
+          status:
+            conditions: [{type: Ready, status: "True"}, {type: Synced, status: "True"}]
+        - apiVersion: composition.krateo.io/v0-1-22
+          kind: Kagent
+          metadata: {name: kagent, namespace: krateo-system}
+          status:
+            conditions: [{type: Ready, status: "True"}, {type: Synced, status: "True"}]
+    asserts:
+      - notFailedTemplate: {}
+      - exists:
+          path: spec.vertexAI
+        documentSelector:
+          path: kind
+          value: ModelConfigs

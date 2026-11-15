@@ -1106,6 +1106,76 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 
      krateo-blueprints' openstack umbrella uses a version-agnostic escape and said so; this is why.
      An existence check must be permissive, because its job is to STOP a deletion. */}}
+{{/* inst.declaredSpecKeys — the top-level `spec` property names a (Kind, served tag) can HOLD.
+     args: (list "Kind" "v0-2-6" $allCRDs)
+     returns: "*" when it cannot be determined or the schema is OPEN, else the space-joined key names.
+
+     WHY A SENTINEL RATHER THAN AN EMPTY STRING. "" is ambiguous: it is also what a CRD declaring zero
+     spec properties would yield, and a caller reading "" as "allow everything" would then write into
+     a schema that holds nothing. "*" says "no opinion" and nothing else can produce it.
+
+     WHY THIS EXISTS. The chart writes installer-computed wiring onto component CRs. Where the CRD
+     version it is written AT does not declare the key, the apiserver PRUNES it and the write reports
+     success. Measured on 057 against the umbrella's own helm manifest (installer#936):
+
+         key              written  declared  PRUNED
+         hitlApproval          8         5       3   ClickstackAgent, IncidentAgent, NightlyReview
+         rollGuard             9         8       1   NightlyReview
+         vertexAI             10         9       1   NightlyReview
+         agentgateway         11        10       1   NightlyReview
+
+     All three owners confirmed the keys are genuinely INERT for their agents and declined to declare
+     them just to turn a gate green -- which was the right instinct, and is why the fix belongs here.
+
+     FAIL-SAFE DIRECTION IS DELIBERATE. When the CRD or the version is absent, or the schema is open,
+     this returns "*" and callers write the key as they do today. The current behaviour is "write and
+     let the apiserver prune", so falling back to it is never worse than today -- whereas failing
+     closed would silently stop writing values that DO land, which is a regression nobody would see.
+     A lookup returning nothing is the normal state under `helm template`, so this matters. */}}
+{{- define "inst.declaredSpecKeys" -}}
+{{- $kind := index . 0 -}}{{- $tag := index . 1 -}}{{- $allCRDs := index . 2 -}}
+{{- $out := "*" -}}
+{{- range $crd := (default list $allCRDs) -}}
+{{- if and (eq (dig "spec" "group" "" $crd) "composition.krateo.io") (eq (dig "spec" "names" "kind" "" $crd) $kind) -}}
+{{- range $v := (default list (dig "spec" "versions" list $crd)) -}}
+{{- if and $v.served (eq ($v.name | toString) ($tag | toString)) -}}
+{{- $sp := dig "schema" "openAPIV3Schema" "properties" "spec" dict $v -}}
+{{- $props := dig "properties" dict $sp -}}
+{{- $preserve := dig "x-kubernetes-preserve-unknown-fields" false $sp -}}
+{{- $addl := dig "additionalProperties" false $sp -}}
+{{/* additionalProperties: false is CLOSED. additionalProperties: {a schema} is open. */}}
+{{- $openAddl := kindIs "map" $addl -}}
+{{- if or $preserve $openAddl -}}
+{{- $out = "*" -}}
+{{- else if $props -}}
+{{- $out = (keys $props | sortAlpha | join " ") -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $out -}}
+{{- end -}}
+
+
+{{/* inst.canHold — may this (Kind, tag) hold `spec.<key>`?  "true" or "".
+     args: (list "Kind" "v0-2-6" $allCRDs "hitlApproval")
+
+     "*" from inst.declaredSpecKeys means no opinion, so this returns "true" -- see the fail-safe
+     note there. The point of routing every write site through ONE predicate is that the steady-state
+     prune (#936) and the BUMP-INSTANT prune are the same question asked at different moments: acmp
+     pinned keycloak 0.4.1 and set a new node's value in the same roll, inst.emitTagFrom emitted the
+     CR at the OLD served version whose schema lacked the node, and the value was pruned while the
+     write reported success. One predicate, both moments. */}}
+{{- define "inst.canHold" -}}
+{{- $kind := index . 0 -}}{{- $tag := index . 1 -}}{{- $allCRDs := index . 2 -}}{{- $key := index . 3 -}}
+{{- $declared := include "inst.declaredSpecKeys" (list $kind $tag $allCRDs) -}}
+{{- if eq $declared "*" -}}true
+{{- else if has $key (splitList " " $declared) -}}true
+{{- end -}}
+{{- end -}}
+
+
 {{- define "inst.compositionExistsAny" -}}
 {{- $top := index . 0 -}}{{- $kind := index . 1 -}}{{- $name := index . 2 -}}{{- $allCRDs := index . 3 -}}
 {{- $found := "" -}}
