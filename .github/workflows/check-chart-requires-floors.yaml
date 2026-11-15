@@ -58,6 +58,53 @@ jobs:
           version: v3.19.0
       - name: Install PyYAML
         run: pip install --quiet pyyaml
+
+      # REGISTRY LOGIN, copied from check-pin-ci.yaml rather than reinvented -- that gate solved the
+      # same problem and its comments record why each half exists.
+      #
+      # WHY IT IS REQUIRED HERE. Reading a floor means reading the chart's annotations, which means
+      # pulling the chart. The pins span SEVEN registries and three of them are private to an
+      # unauthenticated runner: krateo-agentiko (17 pins), krateo-blueprints (20) and
+      # krateo-platformops/krateo-saas (1). Measured on this gate's first CI run: 20 charts answered
+      # "COULD NOT READ the chart's annotations ... GET https://ghcr.io/token?scope=...", the gate
+      # failed closed as designed, and the result was a PERMANENTLY RED gate rather than a finding.
+      #
+      # FAILS, NEVER SKIPS, when the secret is absent. A gate that quietly stops verifying reports
+      # green without having checked anything.
+      - name: Registry login
+        run: |
+          if [ -z "${{ secrets.PAT }}" ]; then
+            echo "::error::PAT is not set or not visible to this repository. This gate pulls each"
+            echo "::error::chart to read its krateo.io/requires-* annotations, and private packages"
+            echo "::error::answer 401 to an unauthenticated runner. Failing rather than skipping."
+            exit 1
+          fi
+          echo "${{ secrets.PAT }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # POSITIVE CONTROL. A login that SUCCEEDS proves a handshake, not read access -- and without
+      # this, a PAT lacking read:packages on a private org would log in cleanly and then make every
+      # chart in that org report "COULD NOT READ", which reads as a chart problem and is not one.
+      # Three controls because the three private orgs are three separate grants: one passing does
+      # not imply the others.
+      - name: Prove the credential can read each private org
+        run: |
+          set -euo pipefail
+          fail=0
+          probe() {
+            if helm show chart "$1" --version "$2" >/dev/null 2>&1; then
+              echo "  ok   $1 $2"
+            else
+              echo "::error::CANNOT READ $1 $2 -- it is PINNED on main, so it must be readable."
+              echo "::error::PAT lacks read:packages on that org. Every pin there will report"
+              echo "::error::COULD NOT READ, which looks like a chart defect and is not one."
+              fail=1
+            fi
+          }
+          probe oci://ghcr.io/krateo-agentiko/charts/repo-mcp-server 0.1.6
+          probe oci://ghcr.io/krateo-blueprints/charts/internal-ca-bundle 0.16.0
+          probe oci://ghcr.io/krateo-platformops/krateo-saas/krateo-capability-roles 0.6.2
+          [ "$fail" = "0" ] || exit 1
+          echo "positive control OK: a currently-pinned chart in EACH private org is readable"
       - name: Self-test the rules with no registry
         # FIRST, and on every run. The live check pulls charts and can fail for network reasons; the
         # self-tests cannot, so a red here is unambiguously a broken rule rather than a flaky pull.
@@ -73,4 +120,9 @@ jobs:
             python3 .github/scripts/check-chart-requires-floors.py
           fi
         env:
-          GITHUB_BASE_REF: ${{ github.base_ref && format('origin/{0}', github.base_ref) || '' }}
+          # THE PR's BASE SHA, not `origin/<branch>`. A `git show origin/main:<path>` fails in an
+          # actions checkout -- the remote-tracking ref is not created -- so changed_pins() returned
+          # None and the gate silently fell back to --all on its first CI run. The fallback is the
+          # right SAFETY net (it cannot pass vacuously) but it is the wrong NORMAL path: --all pulls
+          # 91 charts on every PR. A sha is resolvable with fetch-depth: 0 and needs no refspec.
+          GITHUB_BASE_REF: ${{ github.event.pull_request.base.sha || '' }}
