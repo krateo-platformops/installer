@@ -391,16 +391,26 @@ components:
   kind: CertManager
   version: 0.10.0
   repo: oci://ghcr.io/krateo-blueprints/charts
-  deps:
-  - agentgateway
   tier: platform
   feature: ingress
+- name: trust-manager
+  kind: TrustManager
+  chart: trust-manager
+  repo: oci://quay.io/jetstack/charts
+  version: 0.20.0
+  upstream: true
+  tier: platform
+  feature: internalTls
+  requiresApiGroups:
+  - cert-manager.io
 - name: cert-manager-issuers
   kind: CertManagerIssuers
   version: 0.10.0
   repo: oci://ghcr.io/krateo-blueprints/charts
-  deps:
-  - cert-manager
+  requiresApiGroups:
+  - cert-manager.io
+  alsoFeatures:
+  - internalTls
   tier: platform
   feature: ingress
 - name: external-dns

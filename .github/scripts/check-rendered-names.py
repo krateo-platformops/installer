@@ -46,6 +46,28 @@ MERGE_TARGETS = ("origin/main", "main")
 RFC1123_SUBDOMAIN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$")
 MAX_NAME = 253
 
+# RBAC IS THE EXCEPTION, AND THIS GATE GOT IT WRONG. Role, ClusterRole, RoleBinding and
+# ClusterRoleBinding names are validated as PATH SEGMENT NAMES, not as RFC 1123 subdomains: the
+# apiserver forbids only "", ".", "..", "/" and "%". A COLON IS LEGAL AND CONVENTIONAL there --
+# `system:controller:bootstrap-signer` ships with Kubernetes itself.
+#
+# Measured on 057 when this gate rejected trust-manager 0.20.0 for `trust-manager:leaderelection`:
+#     clusterroles          384 total,  97 with a colon in the name
+#     roles                 456 total,  18 with a colon
+#     clusterrolebindings   373 total,  82 with a colon
+#     rolebindings          460 total,  20 with a colon
+# including `kube-system/cert-manager:leaderelection` -- the SAME shape, from the cert-manager chart
+# this repo already pins. So the rejected name is not merely tolerated, it is the house convention of
+# the upstream project, and the gate was about to block a correct chart.
+#
+# That matters beyond this one pin: the <name>:leaderelection convention is common to every
+# controller-runtime chart, so the bug was a latent veto on a whole class of upstream components, and
+# the only reason it surfaced today is that trust-manager is the first such chart pinned since the
+# gate merged. A gate that rejects valid input is worse than no gate: it argues for patching an
+# upstream chart to satisfy it.
+RBAC_KINDS = frozenset(("Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding"))
+PATH_SEGMENT_FORBIDDEN = ("/", "%")
+
 
 def name_errors(kind, name):
     """Broken-rule sentences for one metadata.name; [] when it is valid."""
@@ -55,6 +77,16 @@ def name_errors(kind, name):
         return ["%s has an EMPTY metadata.name" % kind]
     if len(s) > MAX_NAME:
         bad.append("%s %r is %d characters, over the %d-character limit" % (kind, s, len(s), MAX_NAME))
+    if kind in RBAC_KINDS:
+        # path segment name: everything except "", ".", "..", "/" and "%"
+        if s in (".", ".."):
+            bad.append("%s %r is %r, which is not a usable path segment name" % (kind, s, s))
+        for ch in PATH_SEGMENT_FORBIDDEN:
+            if ch in s:
+                bad.append("%s %r contains %r, which the apiserver forbids in an RBAC object name. "
+                           "The apiserver REFUSES such an object, so the composition cannot converge "
+                           "and the cdc retries indefinitely." % (kind, s, ch))
+        return bad
     if not RFC1123_SUBDOMAIN.match(s):
         why = []
         if any(c.isupper() for c in s):
@@ -188,6 +220,21 @@ SELF_TESTS = [
     ("empty", "ConfigMap", "", False),
     ("254 characters", "ConfigMap", "a" * 254, False),
     ("253 characters", "ConfigMap", "a" * 253, True),
+    # --- RBAC path segment names. THE REAL FALSE POSITIVE this gate produced, plus its live
+    # precedent on 057, plus the cases that must STILL be refused so the exemption is not a hole.
+    ("THE FALSE POSITIVE: a colon in a Role name", "Role", "trust-manager:leaderelection", True),
+    ("its LIVE precedent on 057", "Role", "cert-manager:leaderelection", True),
+    ("Kubernetes' own convention", "ClusterRole", "system:controller:bootstrap-signer", True),
+    ("a colon in a RoleBinding", "RoleBinding", "trust-manager:leaderelection", True),
+    ("an UPPERCASE RBAC name is legal too", "ClusterRole", "Admin:Reader", True),
+    ("a slash is STILL refused in RBAC", "Role", "foo/bar", False),
+    ("a percent is STILL refused in RBAC", "ClusterRole", "foo%bar", False),
+    ("'..' is STILL refused in RBAC", "Role", "..", False),
+    ("an empty RBAC name is STILL refused", "Role", "", False),
+    ("254 chars is STILL refused in RBAC", "Role", "a" * 254, False),
+    # and the exemption must NOT leak to other kinds
+    ("a colon in a ConfigMap is STILL refused", "ConfigMap", "foo:bar", False),
+    ("a colon in a Service is STILL refused", "Service", "foo:bar", False),
 ]
 
 

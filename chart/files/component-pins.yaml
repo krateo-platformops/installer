@@ -6258,16 +6258,48 @@ components:
   kind: CertManager
   version: 0.10.0
   repo: oci://ghcr.io/krateo-blueprints/charts
-  deps:
-  - agentgateway
   tier: platform
   feature: ingress
+- name: trust-manager
+  # The Bundle CONTROLLER for internal TLS (authn#145). Pinned STRAIGHT FROM UPSTREAM rather than
+  # wrapped in a krateo blueprint, following cloudnative-pg and external-secrets: verified pullable at
+  # oci://quay.io/jetstack/charts/trust-manager 0.19.0 and 0.20.0, so no wrapper needs authoring and no
+  # blueprint owner needs finding. FIRST non-ghcr.io registry in this file.
+  #
+  # requiresApiGroups, NOT deps:[cert-manager] -- the same reason as cert-manager-issuers below.
+  # trust-manager needs cert-manager for its own webhook certificate. But 057 runs cert-manager
+  # HAND-INSTALLED (the upstream chart cert-manager-v1.21.1 in ns cert-manager, not our blueprint
+  # cert-manager-0.10.0), and a `deps` on our component would force OUR cert-manager to render there.
+  # The cdc sets TakeOwnership unconditionally from core-provider 2.13.82, so enabling TLS would ADOPT
+  # a hand-installed release as a side effect of a feature flag. requiresApiGroups is satisfied by
+  # whichever cert-manager is present, ours or theirs.
+  #
+  # THIS CHART RENDERS NO BUNDLE. It ships the Bundle CRD and the controller, and has no template for
+  # a Bundle object -- read from 0.20.0's templates/ directly. Its `extraObjects` escape hatch is
+  # deliberately NOT used: free-form manifests through a closed CRD schema need
+  # x-kubernetes-preserve-unknown-fields, which is the exact pruning hazard #933 and #936 are about.
+  # The Bundle belongs in the cert-manager-issuers chart, which already renders cert-manager.io objects
+  # from typed values and already knows the CA's name. THAT CHART CHANGE IS IN krateo-blueprints, NOT
+  # THIS REPO, and is not done yet -- so enabling features.internalTls today starts a controller with
+  # nothing to reconcile. That is why the feature defaults OFF and no cluster has it on.
+  kind: TrustManager
+  chart: trust-manager
+  repo: oci://quay.io/jetstack/charts
+  version: 0.20.0
+  upstream: true
+  tier: platform
+  feature: internalTls
+  requiresApiGroups:
+  - cert-manager.io
+
 - name: cert-manager-issuers
   kind: CertManagerIssuers
   version: 0.10.0
   repo: oci://ghcr.io/krateo-blueprints/charts
-  deps:
-  - cert-manager
+  requiresApiGroups:
+  - cert-manager.io
+  alsoFeatures:
+  - internalTls
   tier: platform
   feature: ingress
 - name: external-dns
