@@ -7445,6 +7445,16 @@
                 "minLength": 1
               },
               "uniqueItems": true
+            },
+            "alertPatcherGroups": {
+              "type": "array",
+              "title": "alertPatcherGroups",
+              "description": "Groups granted `patch` on observability.krateo.io/alerts, via a Role and RoleBinding `krateo-alert-patcher` that alert-provider's own chart renders IN ITS RELEASE NAMESPACE (never a ClusterRole -- acmp's #121, scope approved by Diego). One rule, one verb, one resource. This is the write counterpart to crdReaderGroups: that one grants `get` on the single CRD so the alert edit drawer's `crd` stage can load; this one lets the group actually save the edit. A group with crdReaderGroups but not this sees the drawer and gets a 403 on save. NO SCHEMA DEFAULT, deliberately -- the installer applies schema defaults onto the Installer CR, so a default here would silently re-assert itself over a group someone had removed. alert-provider's values.yaml carries [] and its schema has no default either. Matches alert-provider 0.2.85's own values.schema.json: array, items string with minLength 1, uniqueItems, no `required` at any depth.",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
             }
           }
         },
