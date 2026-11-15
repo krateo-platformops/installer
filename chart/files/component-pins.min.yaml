@@ -105,7 +105,6 @@ components:
   kind: GitProviderCrds
   chart: git-provider-crds
   version: 0.17.0
-  upstream: true
   tier: platform
   feature: portal
 - name: git-provider
