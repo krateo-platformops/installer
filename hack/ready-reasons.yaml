@@ -44,6 +44,93 @@
 #                                          re-read will produce false failures at some rate.
 # 4 of the 14 rows were live; 10 have never appeared on this cluster.
 
+# EVERY CONDITION TYPE A COMPOSITION CARRIES -- not just Ready.
+#
+# WHY THIS SECTION EXISTS. Every verification I wrote on 2026-11-15 read `Ready`, and sometimes
+# `Synced`. That is TWO of FOUR. agentiko-mcp-server handed me a `CannotObserveExternalResource`
+# Warning on the Installer composition to judge; reading its conditions properly to answer them is
+# the only reason I discovered the other two exist.
+#
+# RBACComplete IS THE ONE THAT MATTERS, because it is exactly what the Warning threatened: two of the
+# three affected components failed with "generating RBAC using chart-inspector: ... Get
+# http://installer-core-provider-chart-inspector...". If RBACComplete had gone False, every
+# verification I ran that day would have reported a CLEAN CLUSTER.
+#
+# Measured across all 86 compositions on krateo-057, 2026-11-15:
+#     Ready             86/86   True/Available 70, True/AvailablePartialCoverage 15,
+#                               True/ReconcilePaused 1
+#     Synced            86/86   True/ReconcileSuccess 85, False/ReconcilePaused 1
+#     ChartRenderable   85/86   True/Renderable 85
+#     RBACComplete      85/86   True/Applied 85
+# The one object lacking the last two is AcmeFeedback/acme-feedback-controller, the paused one -- so
+# absence there is a property of being paused, not a gap.
+#
+# The ONLY non-True condition anywhere was that same object's Synced=False/ReconcilePaused, which is
+# documented upstream as the liveness half of a healthy pause.
+#
+# NOTE core-provider's generated table (core-provider#515/#517) covers the READY reasons only. The
+# reasons for the other three types are not generated anywhere, so the values below are OBSERVED, not
+# derived -- the same weakness that left ReconcileGracefullyPaused out of my Ready set until the
+# generated table existed. Asked them whether the table can cover all four types.
+# A COMPONENT CHART THAT CANNOT RENDER: where the failure lands, and where it does NOT.
+#
+# Answered from code by core-provider (kp/main 1582c05) rather than guessed, after
+# keycloak-provider-kog found that krateo-keycloak-realm 0.5.2 FAILS to render with 057's values
+# ("parentClient.redirectUris is required when parentClient.enabled" -- a deliberate refusal to
+# create a portal client nobody can sign in through).
+#
+# THE DISTINCTION I COULD NOT HAVE DERIVED, and the reason I asked instead:
+#
+#   a component chart's values.schema.json `required`
+#     -> becomes its GENERATED CRD's schema
+#     -> the apiserver REJECTS the umbrella's write of the composition CR
+#     -> the UMBRELLA'S OWN helm apply fails.  THIS is what froze krateo-demo twice.
+#
+#   a component chart's template `fail`
+#     -> is not in the schema, so the CR is ACCEPTED
+#     -> only that component's own render fails
+#     -> chart-inspector is called PER COMPOSITION with that composition and its own CD
+#        (applyDerivedRBAC, composition.go:1678). The umbrella's cdc renders ONLY the installer
+#        chart; it never renders a component's chart. So the failure CANNOT touch the umbrella's
+#        ChartRenderable or RBACComplete, and cannot stop its helm operation or its 136 siblings.
+#
+# BUT THE ROLLUP CARRIES IT UP, which is the half that matters operationally:
+#   a NEW component (e.g. the first enable of a feature): Create's render fails
+#     (composition.go:982) -> Ready=False/Creating on that component -> the umbrella reads a
+#     CONVERGING child -> umbrella Ready=False/Creating INDEFINITELY. No deadline until
+#     core-provider#498's ChildStalled ships.
+#   an ALREADY-INSTALLED component whose values later break: Observe's render failure goes through
+#     failObserveWithFinding -> Ready=False/Unavailable on the component -> umbrella
+#     Ready=False/Unavailable NAMING the child.
+#
+# SO, FOR A ROLL THAT ENABLES A FEATURE: the component's values are not a precondition for the
+# CLUSTER -- nothing wedges, nothing else stops -- but they ARE a precondition for the umbrella ever
+# reading Ready=True. Any verification gating on the umbrella's Ready, which every one of mine does,
+# will hold indefinitely. Treat required componentValues as blocking for that reason, not because
+# the cluster is at risk.
+
+condition_types:
+  Ready:
+    universal: true
+    note: classified by the converged/converging/failed/unevaluated lists below.
+  Synced:
+    universal: true
+    healthy: [ReconcileSuccess]
+    note: >-
+      a PAUSED composition reports Ready=True with Synced=False/ReconcilePaused. It was healthy when
+      paused and nothing is maintaining that state now, so it must not satisfy a dependency gate.
+      inst.readyFromConditions requires Synced=True for exactly this reason.
+  ChartRenderable:
+    universal: false   # absent on a paused composition
+    healthy: [Renderable]
+    note: chart-inspector rendered the chart against this cluster.
+  RBACComplete:
+    universal: false   # absent on a paused composition
+    healthy: [Applied]
+    note: >-
+      every RBAC object derived from the chart was applied. A chart-inspector outage is what puts
+      this at risk, and it is the condition a Ready-only check cannot see.
+
 source:
   repo: krateo-platformops/core-provider
   path: docs/ready-reasons.md
