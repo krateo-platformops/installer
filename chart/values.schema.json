@@ -20778,6 +20778,10 @@
                       "type": "string"
                     },
                     "description": "Groups granted zendeskrequests get/list/watch/create and zendeskrequestconfigurations get/list in the namespace."
+                  },
+                  "tokenRotation": {
+                    "type": "boolean",
+                    "description": "Rotate this organisation's token with External Secrets Operator (needs zendesk.baseUrl, zendesk.oauthClientId and the Secret label external-secrets.io/type=webhook). Default false."
                   }
                 }
               }
@@ -20789,6 +20793,43 @@
             "configurationVersion": {
               "type": "string",
               "description": "The served ZendeskRequestConfiguration version. The chart ships v1alpha1, which is what 057 serves."
+            },
+            "zendesk": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The Zendesk instance and the public OAuth client the tokens were authorized with; used by token rotation only.",
+              "properties": {
+                "baseUrl": {
+                  "type": "string",
+                  "description": "Instance URL, https, no path."
+                },
+                "oauthClientId": {
+                  "type": "string",
+                  "description": "Identifier of the public OAuth client (no secret exists or is used)."
+                }
+              }
+            },
+            "tokenRotation": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Schedule and lifetimes of the External Secrets Operator token rotation.",
+              "properties": {
+                "refreshInterval": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*(s|m|h)$",
+                  "description": "At most half of accessTokenExpiresIn."
+                },
+                "accessTokenExpiresIn": {
+                  "type": "integer",
+                  "minimum": 300,
+                  "maximum": 172800
+                },
+                "refreshTokenExpiresIn": {
+                  "type": "integer",
+                  "minimum": 604800,
+                  "maximum": 7776000
+                }
+              }
             }
           }
         },
