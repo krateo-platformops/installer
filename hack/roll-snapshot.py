@@ -55,7 +55,8 @@ def _run(args):
 
 
 def capture(ctx, secrets=()):
-    snap = {"context": ctx, "releases": {}, "compositions": {}, "secrets": {}}
+    snap = {"context": ctx, "releases": {}, "compositions": {},
+            "definitions": {}, "secrets": {}}
 
     for rel in json.loads(_run(["helm", "--kube-context", ctx, "list", "-A", "-o", "json"]) or "[]"):
         snap["releases"]["%s/%s" % (rel["namespace"], rel["name"])] = {
@@ -88,6 +89,45 @@ def capture(ctx, secrets=()):
                 "uid": o["metadata"].get("uid"),
             }
 
+    # CompositionDefinitions. ADDED 2026-11-16, and the reason is specific: a chart-version bump is
+    # a NEW CRD version, so Observe finds the version not yet served and writes
+    # Ready=False/Unavailable; Update adds it and succeeds; the runtime then requeues after the poll
+    # interval (3m default, and 057's Deployment sets no override) before the next Observe can write
+    # Available. core-provider is explicit that this is a READING OF 2.13.105's CODE, NOT A
+    # MEASUREMENT -- they have not observed it on 057, and neither have I.
+    #
+    # IT MATTERS BECAUSE THE UMBRELLA READS IT. cdc childhealth.go:801 routes any *.krateo.io group
+    # through krateoEval, a CD's group is core.krateo.io, and krateoEval maps Unavailable -> FAILED.
+    # On 057, 69 of 76 CDs carry release-name=installer-platform, so they are children of the
+    # umbrella composition. A tag that bumps 21 components therefore makes the umbrella read failed
+    # children for the length of that window -- and check-ready-gate BLOCKS on
+    # Ready=False/Unavailable. Without this section neither the transient nor its clearing is
+    # recorded, so a verification could not tell a settling roll from a broken one.
+    #
+    # readyAt IS THE FIELD THAT MAKES THE WINDOW MEASURABLE. Ready status+reason alone says what a
+    # CD reads at snapshot time; lastTransitionTime says WHEN it changed, which is the only way a
+    # pre/post pair bounds the window rather than merely sampling it.
+    for o in json.loads(_run(["kubectl", "--context", ctx, "get",
+                              "compositiondefinitions.core.krateo.io", "-A",
+                              "-o", "json"]) or '{"items":[]}').get("items", []):
+        st = o.get("status") or {}
+        conds = {x["type"]: x for x in (st.get("conditions") or [])}
+        r = conds.get("Ready") or {}
+        s = conds.get("Synced") or {}
+        m = o["metadata"]
+        ann = m.get("annotations") or {}
+        lab = m.get("labels") or {}
+        snap["definitions"]["%s/%s" % (m["namespace"], m["name"])] = {
+            "chartVersion": ((o.get("spec") or {}).get("chart") or {}).get("version"),
+            "Ready": "%s/%s" % (r.get("status"), r.get("reason", "")) if r else None,
+            "readyAt": r.get("lastTransitionTime"),
+            "Synced": "%s/%s" % (s.get("status"), s.get("reason", "")) if s else None,
+            "uid": m.get("uid"),
+            # Which parent rolls this up, so an umbrella child is distinguishable from a stray.
+            "parent": ann.get("meta.helm.sh/release-name"),
+            "compositionId": lab.get("krateo.io/composition-id") or ann.get("krateo.io/composition-id"),
+        }
+
     # Secrets: metadata only. Never a value, and the data KEY NAMES only so a key appearing or
     # disappearing is visible.
     for ref in secrets:
@@ -112,7 +152,8 @@ def capture(ctx, secrets=()):
 
 def diff(pre, post, expect_delta=None, matching=None):
     """Pure, so the self-test drives it without a cluster."""
-    out = {"releases": {}, "compositions": {}, "secrets": {}, "problems": []}
+    out = {"releases": {}, "compositions": {}, "definitions": {},
+           "secrets": {}, "problems": []}
 
     pr, po = pre.get("releases", {}), post.get("releases", {})
     out["releases"]["gone"] = sorted(set(pr) - set(po))
@@ -167,6 +208,33 @@ def diff(pre, post, expect_delta=None, matching=None):
     if out["compositions"]["gone"]:
         out["problems"].append("COMPOSITIONS DISAPPEARED: %s" % out["compositions"]["gone"])
 
+    pd, pod = pre.get("definitions", {}), post.get("definitions", {})
+    out["definitions"]["gone"] = sorted(set(pd) - set(pod))
+    out["definitions"]["new"] = sorted(set(pod) - set(pd))
+    dch = {}
+    for k in sorted(set(pd) & set(pod)):
+        a, b = pd[k], pod[k]
+        d = {f: [a.get(f), b.get(f)]
+             for f in ("chartVersion", "Ready", "readyAt", "Synced", "uid", "parent")
+             if a.get(f) != b.get(f)}
+        if d:
+            dch[k] = d
+    out["definitions"]["changed"] = dch
+    if out["definitions"]["gone"]:
+        out["problems"].append("COMPOSITIONDEFINITIONS DISAPPEARED: %s" % out["definitions"]["gone"])
+    # THE ONE THAT PROTECTS THE ROLL VERIFICATION. A CD still reading False/Unavailable after the
+    # roll is the state krateoEval maps to FAILED, which the umbrella inherits and
+    # check-ready-gate blocks on. Not-yet-settled and genuinely broken look identical in a single
+    # sample, so this is reported as a problem and the caller re-snapshots rather than treating it
+    # as a verdict. readyAt is in the changed set above so the window is bounded, not just sampled.
+    not_ready = {k: v.get("Ready") for k, v in pod.items() if v.get("Ready") != "True/Available"}
+    if not_ready:
+        out["problems"].append(
+            "COMPOSITIONDEFINITIONS NOT True/Available: %d of %d -- %s. A chart-version bump is "
+            "EXPECTED to show this until the next Observe (poll interval, 3m default): re-snapshot "
+            "before concluding, and compare readyAt to bound the window."
+            % (len(not_ready), len(pod), json.dumps(not_ready, sort_keys=True)))
+
     ps, pos = pre.get("secrets", {}), post.get("secrets", {})
     for k in sorted(set(ps) | set(pos)):
         a, b = ps.get(k, {}), pos.get(k, {})
@@ -200,6 +268,18 @@ def _self_test():
                                              "managed": 64, "Ready": "True/Available",
                                              "Synced": "True/ReconcileSuccess", "uid": "u-portal"},
         },
+        "definitions": {
+            "krateo-system/portal": {"chartVersion": "1.8.129", "Ready": "True/Available",
+                                     "readyAt": "2026-11-16T10:00:00Z",
+                                     "Synced": "True/ReconcileSuccess", "uid": "d-portal",
+                                     "parent": "installer-platform",
+                                     "compositionId": "58e2c59a"},
+            "krateo-system/authn": {"chartVersion": "0.52.0", "Ready": "True/Available",
+                                    "readyAt": "2026-11-16T10:00:00Z",
+                                    "Synced": "True/ReconcileSuccess", "uid": "d-authn",
+                                    "parent": "installer-platform",
+                                    "compositionId": "58e2c59a"},
+        },
         "secrets": {"krateo-system/cj": {"present": True, "dataKeys": ["password"],
                                          "resourceVersion": "100", "writes": []}},
     }
@@ -214,6 +294,10 @@ def _self_test():
             if k == "uid": p["compositions"]["portals/krateo-system/portal"]["uid"] = v
             if k == "av": p["compositions"]["portals/krateo-system/portal"]["apiVersion"] = v
             if k == "managed": p["compositions"]["portals/krateo-system/portal"]["managed"] = v
+            if k == "cd_ready": p["definitions"]["krateo-system/portal"]["Ready"] = v
+            if k == "cd_readyat": p["definitions"]["krateo-system/portal"]["readyAt"] = v
+            if k == "cd_chart": p["definitions"]["krateo-system/portal"]["chartVersion"] = v
+            if k == "cd_drop": del p["definitions"]["krateo-system/portal"]
             if k == "secret_rv": p["secrets"]["krateo-system/cj"]["resourceVersion"] = v
             if k == "secret_keys": p["secrets"]["krateo-system/cj"]["dataKeys"] = v
         return p
@@ -237,6 +321,20 @@ def _self_test():
         ("a Secret's resourceVersion moving is reported as WRITTEN, not as a problem",
          post(secret_rv="200"), None, None, 0),
         ("a Secret's KEY SET changing IS a problem", post(secret_keys=["password", "token"]), None, None, 1),
+        # CompositionDefinitions. The first case is the one that protects a roll verification:
+        # a CD left at False/Unavailable is what krateoEval maps to FAILED and the umbrella
+        # inherits, so it must be REPORTED rather than passed over.
+        ("a CD left at False/Unavailable IS a problem",
+         post(cd_ready="False/Unavailable"), None, None, 1),
+        ("a CD at False/Creating IS a problem too -- converging is not converged, and Creating\n          has no deadline on either the composition or the CD side",
+         post(cd_ready="False/Creating"), None, None, 1),
+        ("a CD DISAPPEARING is always a problem", post(cd_drop=True), None, None, 1),
+        ("FALSIFIER: a CD chartVersion moving is REPORTED but is not by itself a problem --\n          that is exactly what a pin bump is supposed to do",
+         post(cd_chart="1.8.130"), None, None, 0),
+        ("FALSIFIER: readyAt moving while Ready stays True/Available is a re-transition, not a\n          failure -- it is the field that BOUNDS the bump window, so it must not raise on its own",
+         post(cd_readyat="2026-11-16T21:00:00Z"), None, None, 0),
+        ("FALSIFIER: identical definitions raise nothing, so the check above is not raising\n          unconditionally",
+         post(), None, None, 0),
     ]
     bad = 0
     for label, po, delta, match, want in cases:
@@ -273,9 +371,13 @@ def main():
         snap = capture(a.context, a.secret)
         with open(a.out, "w", encoding="utf-8") as fh:
             json.dump(snap, fh, indent=1, sort_keys=True)
-        print("captured %d release(s), %d composition(s), %d secret(s) -> %s"
-              % (len(snap["releases"]), len(snap["compositions"]), len(snap["secrets"]), a.out))
-        if not snap["releases"] or not snap["compositions"]:
+        print("captured %d release(s), %d composition(s), %d definition(s), %d secret(s) -> %s"
+              % (len(snap["releases"]), len(snap["compositions"]),
+                 len(snap["definitions"]), len(snap["secrets"]), a.out))
+        # Definitions join the emptiness refusal: a snapshot with no CDs cannot bound the
+        # bump window, and reporting it as a baseline is how a check that never ran looks
+        # exactly like one that passed.
+        if not snap["releases"] or not snap["compositions"] or not snap["definitions"]:
             print("REFUSED: a snapshot with no releases or no compositions is not a baseline. "
                   "Check the context and try again -- an empty capture read as a baseline is "
                   "worse than none, because the diff will later report everything as new.")
