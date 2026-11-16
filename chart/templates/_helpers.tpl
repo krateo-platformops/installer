@@ -1239,6 +1239,40 @@ An explicitly set componentValues value always wins; this only fills an ABSENT k
 Returns the resolved map. Used by the fresh-install CR AND, through inst.componentValuesPatch, by
 the surgical upgrade patch — so the two paths cannot drift.
 */}}
+{{/* --------------------------------------------------------------------------------------
+     inst.kogUrls — keycloak-config-kog's three DERIVED values, as a map.
+     args: (list $top)   ->  JSON {baseUrl, tokenEndpoint, bootstrapNamespace}
+
+     EXTRACTED SO IT CAN BE TESTED, exactly as inst.platformRoutes was. The derivation lived inline
+     in compositions.yaml, and that file emits a component only when all its `deps` are Ready
+     (Pass B, inst.depsReady) -- keycloak-config-kog has SIX. So asserting it through a render needs a
+     fixture carrying six Ready dep compositions, which is a lot of scaffolding to get at three
+     printf calls. A helper can be probed directly with synthetic values.
+
+     WHY THESE ARE DERIVED AND NOT FILLED. They used to be filled into the CR by
+     inst.componentValuesResolved "only if absent". That helper feeds BOTH the fresh-install CR and
+     inst.componentValuesPatch -- the merge patch applied on EVERY upgrade -- so the value was written
+     into the CR, became explicit, and the guard never fired again. keycloak-provider-kog measured the
+     consequence on krateo-057: both URLs frozen WITHOUT /keycloak since first install, so #968's
+     relativePath derivation was correct and unreachable.
+
+     relativePath is trimSuffix'd. values.schema.json's pattern already refuses `/keycloak/` and `/`
+     at chart load, so this is unreachable from a NEW value -- it exists for a value that was written
+     before the pattern did, which is the case a schema cannot repair. Keeping it is cheap; relying on
+     the pattern alone would not cover the clusters that already carry one.
+     -------------------------------------------------------------------------------------- */}}
+{{- define "inst.kogUrls" -}}
+{{- $top := index . 0 -}}
+{{- $ns := $top.Values.namespaces.krateo -}}
+{{- $rel := trimSuffix "/" (dig "keycloak" "keycloak" "http" "relativePath" "" (default dict $top.Values.componentValues)) -}}
+{{- dict
+     "baseUrl" (printf "http://keycloak-service.%s.svc.cluster.local:8080%s" $ns $rel)
+     "tokenEndpoint" (printf "http://keycloak-service.%s.svc.cluster.local:8080%s/realms/master/protocol/openid-connect/token" $ns $rel)
+     "bootstrapNamespace" $ns
+   | toJson -}}
+{{- end -}}
+
+
 {{- define "inst.componentValuesResolved" -}}
 {{- $top := . -}}
 {{- $cv := deepCopy (default dict $top.Values.componentValues) -}}
@@ -1247,70 +1281,28 @@ the surgical upgrade patch — so the two paths cannot drift.
 {{- range $c := (include "inst.componentsYaml" $top | fromYaml).components -}}
 {{- $_ := set $known (toString $c.name) true -}}
 {{- end -}}
-{{- if hasKey $known "keycloak-config-kog" -}}
-{{- $comp := "keycloak-config-kog" -}}
-{{- if not (hasKey $cv $comp) -}}{{- $_ := set $cv $comp dict -}}{{- end -}}
-{{- $entry := index $cv $comp -}}
-{{- if not (and (hasKey $entry "keycloak") (kindIs "map" (index $entry "keycloak"))) -}}
-{{- $_ := set $entry "keycloak" dict -}}
-{{- end -}}
-{{- $kc := index $entry "keycloak" -}}
-{{/* HOISTED to this block on purpose. Declared inside the baseUrl guard it was OUT OF SCOPE at the
-     tokenEndpoint site 30 lines below -- helm scopes a variable to its enclosing BLOCK, not to the
-     define. My static check said "declared before every use, all in one define"; both were true and
-     neither was sufficient. The render said `undefined variable "$kcRelPath"`, which is the only
-     instrument that actually answers the question. Both URLs need it, so it belongs where both can
-     see it. */}}
-{{- $kcRelPath := trimSuffix "/" (dig "keycloak" "keycloak" "http" "relativePath" "" (default dict $top.Values.componentValues)) -}}
-{{- if not (dig "baseUrl" "" $kc) -}}
-{{/* relativePath MUST be appended, or the KOG and the token Webhook get 404s on a path-mode
-     cluster. Keycloak serves at http-relative-path, so with relativePath=/keycloak the in-cluster
-     base is http://keycloak-service.<ns>.svc.cluster.local:8080/keycloak -- not the bare root. This
-     is the same silent-disagreement class as the keycloak-system default and as hard-coding the
-     route prefix: two values that must agree, with the disagreement invisible until a request 404s.
-     Deriving baseUrl, tokenEndpoint and the gateway route from the SAME value makes all three agree
-     by construction. An explicit componentValues value still wins -- the dig default only fills an
-     unset one, so 057's existing explicit URLs are unchanged. */}}
-{{- $_ := set $kc "baseUrl" (printf "http://keycloak-service.%s.svc.cluster.local:8080%s" $ns $kcRelPath) -}}
-{{- end -}}
-{{/* auth.externalSecret.tokenEndpoint and auth.bootstrap.namespace are the SAME class as baseUrl:
-     the chart's own defaults name `keycloak-system`, while Krateo installs every composition into
-     namespaces.krateo. Measured on krateo-demo 2026-11-11: the chart default made the Webhook
-     generator POST to a host in a namespace that does not exist, both admin ExternalSecrets stayed
-     SecretSyncedError, and the KOG could authenticate to nothing -- so it reconciled nothing.
+{{/* keycloak-config-kog's derived baseUrl, tokenEndpoint and auth.bootstrap.namespace USED TO BE
+     FILLED HERE, "only if absent". They are now derived in compositions.yaml with inst.forcePath, and
+     the move is a BUG FIX rather than a tidy-up.
 
-     tokenEndpoint is consulted in BOOTSTRAP MODE TOO (confirmed from the 0.5.3 chart source by
-     keycloak-provider-kog): bootstrap only changes the credential SOURCE, not the token URL.
+     THIS HELPER IS CALLED FROM TWO PLACES: the fresh-install CR (self-bootstrap.yaml) and
+     inst.componentValuesPatch below, which is the merge patch applied on EVERY upgrade. So anything
+     filled here is WRITTEN INTO THE INSTALLER CR, becomes an explicit operator value, and the "only
+     if absent" guard never fires again for that cluster. A derivation placed here is frozen at first
+     install.
 
-     auth.bootstrap.namespace must hold the namespace of Secret keycloak-bootstrap-service, which the
-     keycloak blueprint creates alongside the instance -- so it is the Keycloak namespace, i.e. the
-     same $ns. The chart `required`s it whenever bootstrap is enabled, so a missing value FAILS the
-     render rather than misbehaving quietly. Enabling bootstrap is a MODE choice and not
-     namespace-dependent, so it is a constant default in values.yaml, not derived here.
+     keycloak-provider-kog measured it on krateo-057: the CR carries both URLs WITHOUT /keycloak, and
+     a render with 057's values reproduced it while the control -- the same render with those two keys
+     deleted -- produced the correct /keycloak form. So #968's relativePath derivation was right and
+     unreachable on every existing cluster.
 
-     NOT set here and deliberately: auth.externalSecret.enabled. Bootstrap is a SUB-MODE of
-     externalSecret -- the ExternalSecrets and the Webhook generator render only when
-     externalSecret.enabled is true -- so forcing it false would mean nothing mints a token at all.
-     It stays at the chart's own default. */}}
-{{- if not (and (hasKey $entry "auth") (kindIs "map" (index $entry "auth"))) -}}
-{{- $_ := set $entry "auth" dict -}}
-{{- end -}}
-{{- $auth := index $entry "auth" -}}
-{{- if not (and (hasKey $auth "externalSecret") (kindIs "map" (index $auth "externalSecret"))) -}}
-{{- $_ := set $auth "externalSecret" dict -}}
-{{- end -}}
-{{- $es := index $auth "externalSecret" -}}
-{{- if not (dig "tokenEndpoint" "" $es) -}}
-{{- $_ := set $es "tokenEndpoint" (printf "http://keycloak-service.%s.svc.cluster.local:8080%s/realms/master/protocol/openid-connect/token" $ns $kcRelPath) -}}
-{{- end -}}
-{{- if not (and (hasKey $auth "bootstrap") (kindIs "map" (index $auth "bootstrap"))) -}}
-{{- $_ := set $auth "bootstrap" dict -}}
-{{- end -}}
-{{- $bs := index $auth "bootstrap" -}}
-{{- if not (dig "namespace" "" $bs) -}}
-{{- $_ := set $bs "namespace" $ns -}}
-{{- end -}}
-{{- end -}}
+     forcePath in compositions.yaml runs BEFORE the componentValues merge, and that merge uses `merge`
+     rather than `mergeOverwrite`, so the destination wins: the stale persisted keys are overridden at
+     render and no componentValuesUnset is needed anywhere.
+
+     DO NOT ADD A FILL-IF-ABSENT DERIVATION HERE. If a value must be computed, compute it at render in
+     compositions.yaml. This helper is for resolving what the OPERATOR set, plus the explicit nulls
+     componentValuesUnset needs -- not for installer-computed wiring. */}}
 {{- $cv | toJson -}}
 {{- end -}}
 

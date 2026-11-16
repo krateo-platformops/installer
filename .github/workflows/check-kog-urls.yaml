@@ -1,0 +1,43 @@
+name: check-kog-urls
+
+# Exercises inst.kogUrls, extracted from compositions.yaml so it could be tested at all.
+#
+# compositions.yaml emits a component only when all its `deps` are Ready (Pass B, inst.depsReady),
+# and keycloak-config-kog has SIX. A render-based assertion would need a fixture carrying six Ready
+# dep compositions -- a lot of scaffolding to reach three printf calls, and brittle against any
+# change to that dep list. So the derivation lives in a helper and this probe calls it directly,
+# exactly as check-platform-routes does for inst.platformRoutes.
+#
+# NO REGISTRY LOGIN IS NEEDED: the probe chart is built from _helpers.tpl alone and pulls nothing.
+
+on:
+  pull_request:
+    paths:
+      - "chart/templates/_helpers.tpl"
+      - "chart/templates/compositions.yaml"
+      - ".github/scripts/check-kog-urls.py"
+      - ".github/workflows/check-kog-urls.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "chart/templates/_helpers.tpl"
+      - "chart/templates/compositions.yaml"
+      - ".github/scripts/check-kog-urls.py"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Set up Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: v3.19.0
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: The KOG URLs follow relativePath and the krateo namespace
+        run: python3 .github/scripts/check-kog-urls.py
