@@ -641,6 +641,20 @@ componentValues:
       name: gemini-flash
   # pro-tier candidate: root-cause analysis is judgment work (rank competing causes, notice a missing piece of
   # evidence, refuse to guess) where the flash tier fabricates.
+  # SEEDED DELIBERATELY, AND THE SEED IS THE WHOLE POINT. A schema `default:` on a nested leaf is
+  # INERT unless its PARENT componentValues.<comp> is present here -- schema-expansion does not
+  # materialize a parent key that has no value seed. Measured on this branch before seeding:
+  # `retention` declared with `default: "0s"` produced ZERO occurrences in the render, while an
+  # explicitly set value produced one. So the schema default alone would have been decoration.
+  #
+  # WHAT IT GUARDS. incident-provider >= 0.12.0 sweeps Closed and Resolved incidents 30 days after
+  # status.resolution.at, as a PERMANENT DELETE on the first reconcile. Measured on krateo-057:
+  # 232 incidents (96 Closed, 49 Open, 86 Resolved, 1 Verifying), of which 31 qualify and would be
+  # destroyed, the oldest resolved 1010h ago. Open and Verifying are never touched.
+  # "0s" keeps everything. Diego decided 2026-11-16: roll with everything kept and choose a
+  # retention period as its own decision later.
+  incident-provider:
+    retention: "0s"
   incident-agent:
     modelConfig:
       name: gemini-flash
