@@ -1,0 +1,37 @@
+name: check-pin-moves-are-declared
+on:
+  pull_request:
+    paths:
+      - chart/files/component-pins.yaml
+      - chart/files/component-pins.min.yaml
+      - .github/scripts/check-pin-moves-are-declared.py
+      - .github/workflows/check-pin-moves-are-declared.yaml
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # THE WHOLE POINT OF THIS GATE is a comparison against the merge target, so the merge
+          # target must be fetched. fetch-depth 0 rather than a shallow clone: a stacked branch
+          # can sit any number of commits above main, and a shallow fetch would make
+          # `git show origin/main:<pins>` fail -- which this gate reports as SKIP, i.e. it would
+          # pass vacuously in exactly the case it exists to catch.
+          fetch-depth: 0
+      - name: fetch the merge target
+        run: git fetch --no-tags origin "${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+      - name: self-test first
+        # The self-test carries the two falsifiers (a line name alone is not a declaration; a
+        # prefix does not satisfy a longer name). If it regresses, the gate's verdict on the real
+        # branch is worthless, so refuse before reading it.
+        run: python3 .github/scripts/check-pin-moves-are-declared.py --self-test
+      - name: check this PR
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: python3 .github/scripts/check-pin-moves-are-declared.py
