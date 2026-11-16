@@ -449,7 +449,7 @@ components:
   feature: coreAgents
 - name: kagent
   kind: Kagent
-  version: 0.1.22
+  version: 0.1.23
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
