@@ -414,7 +414,7 @@ components:
   - trust.cert-manager.io
 - name: cert-manager-issuers
   kind: CertManagerIssuers
-  version: 0.16.0
+  version: 0.18.0
   repo: oci://ghcr.io/krateo-blueprints/charts
   requiresApiGroups:
   - cert-manager.io
