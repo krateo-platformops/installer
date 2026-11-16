@@ -9537,6 +9537,64 @@ components:
   version: 0.4.3
   tier: platform
   feature: identityLifecycle
+- name: kyverno
+  # 3.9.2 (Kyverno v1.19.2). A NEW COMPONENT, and the dependency identity-lifecycle could not
+  # declare for itself. With accessRequest.enabled the IL chart renders policies.kyverno.io/v1 CEL
+  # policies UNCONDITIONALLY -- the decided-by stamp -- so the group must be served or the apply
+  # fails. MEASURED on krateo-057 2026-11-16, before this pin existed: ZERO CRDs in any kyverno.io
+  # group, ZERO kyverno Deployments, ZERO kyverno pins anywhere in this file.
+  #
+  # 1.19 IS A FLOOR, not a preference: IL serves NamespacedMutatingPolicy and
+  # NamespacedValidatingPolicy, which are policies.kyverno.io/v1 kinds. 3.9.2/v1.19.2 is what
+  # identity-lifecycle's own e2e installs and asserts (it checks the kyverno-admission-controller
+  # image is v1.19.2) and what IL#39's 281/0 run proved against. keycloak-provider-kog supplied
+  # both figures and their provenance.
+  #
+  # GATED ON identityLifecycle ALONE, and NOT on a features.kyverno of its own. I wrote that flag
+  # first -- feature kyverno + alsoFeatures [identityLifecycle], copying cloudnative-pg's shape --
+  # and check-feature-render refused it, correctly:
+  #
+  #     kyverno: turning it OFF removed NOTHING, but ['kyverno'] is gated on it
+  #              and rendered in the baseline
+  #
+  # by_feature is keyed by the PRIMARY `feature` only; alsoFeatures is not in it. So
+  # features.kyverno's only component was kept alive by identityLifecycle, and NOTHING could ever
+  # disappear when that flag was switched off -- an unverifiable toggle. cloudnative-pg passes
+  # because features.keycloak gates several components, so turning it off still removes some even
+  # though cloudnative-pg itself survives via alsoFeatures; the gate requires that SOMETHING goes,
+  # not that a particular component does.
+  #
+  # The honest reading is that features.kyverno has no INDEPENDENT consumer yet. Its second consumer
+  # -- demo's tenant-namespace-on-login ClusterPolicy -- is deliberately out of this change. When
+  # that lands and needs Kyverno without IL, features.kyverno arrives WITH a component only it
+  # gates, and the gate can prove it. A flag added before then is speculative and untestable.
+  #
+  # NO `deps` ENTRY, deliberately. IL's requiresApiGroups: [kyverno.io] (#974) already orders IL
+  # after Kyverno: IL withholds itself until the group is served, with inst.withheldReason's own
+  # sentence. A `deps: [kyverno]` would add a SECOND ordering rule saying the same thing, and the
+  # two could disagree -- requiresApiGroups is satisfied by ANY provider of the group, including a
+  # hand-installed Kyverno, while deps would demand this component specifically.
+  #
+  # OCI, NOT THE CLASSIC HELM REPO. kyverno publishes both; oci://ghcr.io/kyverno/charts/kyverno
+  # 3.9.2 resolves at appVersion v1.19.2, verified. Every other pin in this file is OCI and NO pin
+  # uses chartRepo -- so taking the classic repo would have made this the first exercise of that
+  # render path for no benefit. Third-party OCI orgs are established precedent: cloudnative-pg and
+  # external-secrets both pin from their vendors' own ghcr orgs.
+  #
+  # upstream: true because the appVersion (v1.19.2) is NOT one of our tags -- that flag is about
+  # appVersion provenance, not chart ownership, and it disables check-pin-ci's appVersion->tag route.
+  #
+  # THE SECOND CONSUMER IS DELIBERATELY NOT HERE: demo's tenant-namespace-on-login ClusterPolicy
+  # and its kyverno:*:additional / kyverno:tenant-isolation:* roles. Whether those belong in the
+  # installer is a TENANCY-OWNERSHIP question, not a packaging one, and it is raised separately.
+  # This pin installs Kyverno; it declares no policy.
+  chart: kyverno
+  feature: identityLifecycle
+  kind: Kyverno
+  repo: oci://ghcr.io/kyverno/charts
+  tier: platform
+  upstream: true
+  version: 3.9.2
 - name: identity-lifecycle
   # NEW COMPONENT, wired 2026-11-04. Reconciles downstream identity CRs for a user's lifecycle.
   #
