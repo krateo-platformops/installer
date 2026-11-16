@@ -6528,6 +6528,17 @@ components:
   # trust-manager reports unsynced or a stale generation; ABSENT = the Bundle could not be read.
   # A missing Bundle does NOT make ApiResolved False -- snowplow serves a partial body as 200 -- so a
   # consumer must check PRESENT AND TRUE. agentiko-mcp-server's census does.
+  #
+  # AND "ABSENT MEANS UNREADABLE" HOLDS *ONLY BECAUSE* THIS IS A PLAIN-PATH MAPPING. core-provider
+  # measured the projection engine itself (unstructured-runtime v1.21.1, statusprojection.Project,
+  # against a fixture carrying prior values): a plain path like ${ .api.bundle.synced } over a
+  # missing key writes NULL, which the apiserver drops for a non-nullable field -- hence absent. But
+  # a GUARDED form, ${ ... // empty } or an iterator over the missing key, writes NOTHING, so the
+  # field KEEPS ITS PREVIOUS VALUE: stale, not absent, and indistinguishable from a fresh read.
+  #
+  # So do NOT "harden" this expression with a // fallback. The bare path is what makes an unreadable
+  # Bundle detectable at all, and a guard would convert a visible gap into a silent lie. That is the
+  # case core-provider's new ApiPartiallyResolved reason exists to catch.
   apiRef:
     name: krateo-internal-ca-status
     namespace: krateo-system
