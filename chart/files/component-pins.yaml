@@ -6404,6 +6404,30 @@ components:
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: ingress
+  # ADDED 2026-11-16. features.internalTls needed a CA and NOTHING installed one.
+  # cert-manager-issuers, trust-manager and internal-ca-bundle all sit under or reach
+  # internalTls, and all three carry requiresApiGroups on cert-manager.io or
+  # trust.cert-manager.io -- so with ingress OFF and internalTls ON they were WITHHELD,
+  # silently, and the internal CA chain never started.
+  #
+  # 057 only works because a cert-manager was HAND-INSTALLED there: release `cert-manager`
+  # in ns cert-manager, chart cert-manager-v1.21.1, rev 1, user-supplied values exactly
+  # {crds: {enabled: true}}, and the cert-manager.io CRDs annotated to that release.
+  # Diego, 2026-11-16: "There never must be hand-installed releases outside installer
+  # itself." So this is the fix, and 057 needs a separate migration to remove that release.
+  #
+  # THIS COMPONENT WAS ALREADY A BLUEPRINT -- cert-manager 0.10.0 from krateo-blueprints,
+  # kind CertManager -- and its own default cert-manager.crds.enabled: true is IDENTICAL to
+  # the single value the hand-install sets. Nothing needed packaging. The gate simply never
+  # rendered it, because `feature: ingress` with no alsoFeatures made it unreachable from
+  # internalTls.
+  #
+  # WHY alsoFeatures AND NOT A DOCUMENTED PREREQUISITE: #557 makes features.ingress and
+  # features.agentGateway mutually exclusive (gateway-api-crds renders the same five
+  # cluster-scoped CRDs the agentgateway-controller release owns), so "enable ingress to get
+  # a CA" is not available on an agent-gateway cluster. 057 runs agentGateway.
+  alsoFeatures:
+    - internalTls
 - name: trust-manager
   # WRAPPED, not pinned from the vendor (Diego, 2026-11-15). ingress-blueprint's passthrough,
   # beside cert-manager and internal-ca-bundle: OUR version 0.17.0, jetstack's v0.20.0 in

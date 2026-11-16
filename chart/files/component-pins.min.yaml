@@ -393,6 +393,8 @@ components:
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: ingress
+  alsoFeatures:
+    - internalTls
 - name: trust-manager
   kind: TrustManager
   chart: trust-manager
