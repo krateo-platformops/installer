@@ -13242,6 +13242,12 @@
                   }
                 }
               }
+            },
+            "retention": {
+              "type": "string",
+              "default": "0s",
+              "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+              "description": "How long a Closed or Resolved incident is kept after status.resolution.at, as a Go duration. \"0s\" KEEPS EVERYTHING and is the DEFAULT HERE DELIBERATELY, which differs from incident-provider's own chart default of 720h (30 days). WHY: the retention sweep is a PERMANENT DELETE on the first reconcile after the component moves to >=0.12.0. Measured on krateo-057 before this was written: 232 incidents (96 Closed, 49 Open, 86 Resolved, 1 Verifying), of which 31 have status.resolution.at older than 720h and WOULD HAVE BEEN DELETED, oldest resolved 1010h ago. Open and Verifying are never touched. A DEFAULT IS THE ONLY SAFE SHAPE. Declaring the key without one leaves a cluster that does not set it on the CHART's 720h, so the dangerous value would be what you get by doing nothing -- and the installer's job here is to make the safe value the one that needs no action. Diego decided 2026-11-16: roll with everything kept, choose a retention period as its own decision later. Set a real period only with that decision, and know that shortening it deletes immediately and irreversibly on the next reconcile."
             }
           }
         },

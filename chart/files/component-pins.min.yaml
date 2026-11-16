@@ -307,7 +307,7 @@ components:
   feature: portal
 - name: krateo-observability
   kind: KrateoObservability
-  version: 0.1.45
+  version: 0.1.47
   deps:
   - clickhouse-operator
   - mongodb-operator
