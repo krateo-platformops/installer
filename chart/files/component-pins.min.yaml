@@ -324,7 +324,7 @@ components:
   feature: portal
 - name: krateo-slo-rollup
   kind: KrateoSloRollup
-  version: 0.1.1
+  version: 0.1.2
   deps:
   - otel-collector-daemonset
   tier: observability

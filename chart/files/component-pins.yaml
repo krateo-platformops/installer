@@ -5791,8 +5791,24 @@ components:
   # the tables present but empty it succeeds with zero rows.
   #
   # TWO OPERATIONAL FACTS a reader needs and the chart cannot enforce:
-  #   - it reads the `otel-clickhouse-credentials` Secret and needs ClickHouse >= 24.10
-  #     (the platform runs 26.8, so this is satisfied today and is a floor, not a target).
+  #   - IT READS `clickhouse-slo-rollup-credentials` SINCE 0.1.2, AND THAT CHANGE IS WHY THE PIN
+  #     MOVED. 0.1.1 defaulted clickhouse.credentialsSecret.name to `otel-clickhouse-credentials`
+  #     -- THE COLLECTOR'S WRITE IDENTITY -- so enabling features.sloRollup would have run an
+  #     hourly CronJob with INSERT/ALTER on the otel_* ingest path it only needs to READ. A
+  #     privilege escalation arriving as a chart DEFAULT, and the Job would have WORKED, so no
+  #     condition, event or release state would ever have reported it. observability found it in
+  #     their own review before anyone enabled the feature; I had the pin staged and would have
+  #     rolled it. The platform's least-privilege `slo_rollup` user is now the default.
+  #     I COULD NOT HAVE PAPERED OVER IT HERE: componentValues.krateo-slo-rollup carries ZERO
+  #     `default` occurrences deliberately, so the chart's own default was the only layer that
+  #     could carry the fix -- which is the argument for keeping that node default-free.
+  #     Verified by me, not relayed: `helm show values` at both versions flattens to 33 paths
+  #     each, 0 added, 0 removed, and EXACTLY ONE changed default --
+  #     clickhouse.credentialsSecret.name: otel-clickhouse-credentials ->
+  #     clickhouse-slo-rollup-credentials. Registry probes: 0.1.2 resolves, 0.1.1 (outgoing,
+  #     positive control) resolves, 9.9.9 absent.
+  #   - needs ClickHouse >= 24.10 (the platform runs 26.8, so this is satisfied today and is a
+  #     floor, not a target).
   #   - changing `rollup.ttlDays` on a LIVE cluster later needs an ALTER TTL grant that
   #     otelcollector's shipped grants do NOT include. The Job fails and logs the exact
   #     statement until a human runs it. So the first ttlDays change is a manual step, by design.
@@ -5801,7 +5817,7 @@ components:
   # dark is what makes that acceptable -- nothing installs until someone enables the feature,
   # which is a CR edit rather than a values change.
   kind: KrateoSloRollup
-  version: 0.1.1
+  version: 0.1.2
   deps:
   - otel-collector-daemonset
   tier: observability
