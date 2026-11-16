@@ -1,0 +1,120 @@
+# The RESTAction that gives internal-ca-bundle a status, and the three gates that decide whether it
+# is applied at all.
+#
+# WHY A UNITTEST AND NOT A `helm template` CHECK. The template is gated on the restactions CRD being
+# SERVED -- installer-platform must not apply an object whose kind snowplow-crds has not registered.
+# `helm template` disables lookup, so that gate always closes and the object renders ZERO times. I
+# measured exactly that: a successful render with the CD present and the RESTAction absent. A check
+# built on helm template would have reported "0 RESTActions" and been unable to tell a working
+# template from a broken one. helm-unittest's kubernetesProvider can serve the CRD.
+#
+# WHY THE OBJECT IS HERE AND NOT IN THE BLUEPRINT CHART: core-provider's Deploy calls
+# applyRestActionRBAC -- which loads the referenced RESTAction and FAILS if it is missing -- BEFORE
+# creating the composition controller. A RESTAction inside the chart only exists once that controller
+# installs the chart, so it would never exist. authn measured the deadlock on a kind cluster:
+# ApiRefRBACComplete=False RESTActionNotFound, Synced=False, and ZERO controller Deployments.
+#
+# THE CONTENT IS authn's, verified against 057's live Bundle. The three details that matter:
+#   * the path is CLUSTER-SCOPED -- bundles.trust.cert-manager.io is scope: Cluster and
+#     krateo-internal-ca has no namespace. A namespaced path would 404 while looking correct;
+#   * `synced` requires observedGeneration == metadata.generation, so a stale True from an older spec
+#     does not count;
+#   * NO top-level spec.filter, so the resolved status stays keyed by call name and the projection's
+#     ${ .api.bundle.synced } resolves. A top-level filter would move it and the projection would
+#     silently produce nothing.
+suite: the internal-ca status RESTAction and its gates
+templates:
+  - templates/restaction.internal-ca-status.yaml
+tests:
+  - it: "with internalTls ON and the restactions CRD served, the RESTAction is applied"
+    set:
+      features.internalTls: true
+      installDefinitions: true
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider: &served
+      scheme:
+        "apiextensions.k8s.io/v1/CustomResourceDefinition":
+          gvr:
+            version: v1
+            group: apiextensions.k8s.io
+            resource: customresourcedefinitions
+      objects:
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata:
+            name: restactions.templates.krateo.io
+          spec:
+            group: templates.krateo.io
+            names:
+              kind: RESTAction
+            versions:
+              - name: v1
+                served: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: RESTAction
+      - equal:
+          path: metadata.name
+          value: krateo-internal-ca-status
+      - equal:
+          path: metadata.namespace
+          value: krateo-system
+      # CLUSTER-SCOPED path. The whole projection 404s if a namespaces/ segment creeps in.
+      - equal:
+          path: spec.api[0].path
+          value: /apis/trust.cert-manager.io/v1alpha1/bundles/krateo-internal-ca
+      - equal:
+          path: spec.api[0].name
+          value: bundle
+      - equal:
+          path: spec.api[0].verb
+          value: GET
+      # NO top-level spec.filter -- the result must land at .api.bundle, keyed by call name.
+      - notExists:
+          path: spec.filter
+      # the generation check, which is what makes a stale True not count
+      - matchRegex:
+          path: spec.api[0].filter
+          pattern: 'observedGeneration'
+
+  - it: "THE CRD GATE: without the restactions CRD, nothing is applied"
+    set:
+      features.internalTls: true
+      installDefinitions: true
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider:
+      scheme:
+        "apiextensions.k8s.io/v1/CustomResourceDefinition":
+          gvr:
+            version: v1
+            group: apiextensions.k8s.io
+            resource: customresourcedefinitions
+      objects: []
+    asserts:
+      # installer-platform must not apply an object whose kind is unregistered -- on a fresh cluster
+      # snowplow-crds and installer-platform install in an order this chart must not assume.
+      - hasDocuments:
+          count: 0
+
+  - it: "THE FEATURE GATE: with internalTls OFF, nothing is applied even with the CRD served"
+    set:
+      installDefinitions: true
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider: *served
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: "THE MODE GATE: in bootstrap mode nothing is applied"
+    set:
+      features.internalTls: true
+      installDefinitions: true
+      bootstrap.coreProvider.enabled: true
+    kubernetesProvider: *served
+    asserts:
+      # the bootstrap helm install registers only the Installer composition; component objects belong
+      # to the composition-mode render, exactly as definitions.yaml is gated.
+      - hasDocuments:
+          count: 0
