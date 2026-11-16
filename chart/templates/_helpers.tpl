@@ -1261,7 +1261,7 @@ the surgical upgrade patch — so the two paths cannot drift.
      neither was sufficient. The render said `undefined variable "$kcRelPath"`, which is the only
      instrument that actually answers the question. Both URLs need it, so it belongs where both can
      see it. */}}
-{{- $kcRelPath := dig "keycloak" "keycloak" "http" "relativePath" "" (default dict $top.Values.componentValues) -}}
+{{- $kcRelPath := trimSuffix "/" (dig "keycloak" "keycloak" "http" "relativePath" "" (default dict $top.Values.componentValues)) -}}
 {{- if not (dig "baseUrl" "" $kc) -}}
 {{/* relativePath MUST be appended, or the KOG and the token Webhook get 404s on a path-mode
      cluster. Keycloak serves at http-relative-path, so with relativePath=/keycloak the in-cluster
@@ -1540,7 +1540,15 @@ be tested without faking that flag.
 {{- else if $d.gatewayPathsFrom }}
 {{- if eq $d.gatewayPathsFrom "keycloakRealm" }}
 {{- $cv := default dict $top.Values.componentValues }}
-{{- $rp := dig "keycloak" "keycloak" "http" "relativePath" "" $cv }}
+{{/* NORMALISED, because three different malformed shapes are reachable otherwise
+     (keycloak-provider-kog, reviewing #968): Keycloak's OWN default http-relative-path is `/`,
+     and someone may write `/keycloak/` with a trailing slash. Unnormalised those give
+     `//realms/<realm>/` or `/keycloak//realms/<realm>/` as routes -- prefixes that can never
+     match -- so the feature would be silently unreachable, which is the exact bug this change
+     exists to fix. trimSuffix turns `/` into "" and `/keycloak/` into `/keycloak`. "" then takes
+     the guard below, which is right: at the root, Keycloak's /resources/ would hijack that
+     prefix from the portal SPA. */}}
+{{- $rp := trimSuffix "/" (dig "keycloak" "keycloak" "http" "relativePath" "" $cv) }}
 {{- if not $rp }}
 {{- fail (printf "components[%s]: gatewayPathsFrom=keycloakRealm needs componentValues.keycloak.keycloak.http.relativePath, which is empty. On a gatewayMode=path cluster Keycloak MUST be served under a path prefix -- exposure.hosts is host-mode only, so it cannot be given a subdomain, and the issuer in its tokens must stay stable whatever path a request arrives on. Set it to e.g. /keycloak (no trailing slash). Without it there is no prefix to route and every OIDC login would 200 with the SPA instead." $d.name) }}
 {{- end }}
