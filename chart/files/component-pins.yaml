@@ -9668,9 +9668,27 @@ components:
   feature: identityLifecycle
 
   # KYVERNO IS A HARD DEPENDENCY AND WAS UNDECLARED. With accessRequest.enabled the IL chart
-  # ALWAYS renders Kyverno CEL policies (policies.kyverno.io/v1 -- the decided-by stamp), so the
-  # group must be served or the apply fails. MEASURED on krateo-057 2026-11-16: ZERO CRDs in any
-  # kyverno.io group and ZERO kyverno Deployments. Nothing in the installer pins Kyverno either.
+  # ALWAYS renders Kyverno CEL policies -- the decided-by stamp -- so the group must be served or the
+  # apply fails. MEASURED on krateo-057 2026-11-16: ZERO CRDs in any kyverno.io group and ZERO
+  # kyverno Deployments. Nothing in the installer pins Kyverno either (now #977).
+  #
+  # THE GROUP IS policies.kyverno.io, NOT kyverno.io, and #974 guarded the wrong one.
+  # keycloak-provider-kog caught it. IL renders its two policies as
+  #     apiVersion: policies.kyverno.io/v1   (accessrequest.yaml:143 and :186,
+  #                                           NamespacedMutatingPolicy / NamespacedValidatingPolicy)
+  # which is a DIFFERENT API group. A Kyverno serving kyverno.io but not policies.kyverno.io -- an
+  # older one, or one with the CEL policy types switched off -- would OPEN the gate and then fail the
+  # apply, which is exactly the unexplained failure #974 existed to remove. Guarding the wrong group
+  # is worse than no guard: it reads as protection.
+  #
+  # VERIFIED BOTH HALVES. IL 0.4.3 renders policies.kyverno.io/v1 at those two lines; and a DEFAULT
+  # render of kyverno 3.9.2 (no --set, which is what IL's own e2e uses) ships 11 CRDs in
+  # policies.kyverno.io, including both kinds IL needs. They live in the kyverno-api SUBCHART under
+  # templates/crds/ rather than a plain crds/ directory, so they are rendered rather than always
+  # installed -- which is why naming the precise group matters: a future version could gate them.
+  #
+  # inst.unmetApiGroups matches on .spec.group ALONE, so policies.kyverno.io/v1 is not expressible;
+  # the group is as tight as this mechanism goes.
   #
   # Before this line the failure mode was a FAILED APPLY with no explanation. With it the
   # component withholds itself and inst.withheldReason says "requires API group(s) kyverno.io,
@@ -9681,7 +9699,7 @@ components:
   #
   # NOT on identity-lifecycle-crd: that chart publishes CRDs and renders no policies.
   requiresApiGroups:
-    - kyverno.io
+    - policies.kyverno.io
 - name: krateo-capability-roles
   # ADOPTION, not a new install (Diego, 2026-11-10). This chart is already deployed on krateo-demo as
   # a HAND-INSTALLED release (rev 5, krateo-capability-roles-0.6.2, krateo-system) that the installer
