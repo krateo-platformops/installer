@@ -9778,10 +9778,30 @@ components:
   # demo runs CHART DEFAULTS (helm get values returns null), and the default is
   # tenantReader.enabled=true — which works there only because kyverno is hand-installed (20 CRDs).
   # Enabling this feature on 057 therefore requires componentValues tenantReader.enabled=false until
-  # kyverno is itself an installer component; kyverno is deliberately NOT adopted, because its
-  # release owns the 22 CRDs behind the tenant-namespace-on-login ClusterPolicy, whose generate rules
-  # are immutable and whose deletion removes every tenant namespace it generated (the chart's own
-  # tenant-reader-policies.yaml header says so).
+  # kyverno serves policies.kyverno.io there.
+  #
+  # SUPERSEDED 2026-11-16, and the reason is recorded because the sentence it replaces was right
+  # when written. This entry used to say "kyverno is deliberately NOT adopted". It IS now: kyverno
+  # is a pinned component (#977), and Diego decided on 2026-11-16 that the installer ADOPTS demo's
+  # existing Kyverno IN PLACE -- the pin gains `namespace: kyverno` so a roll upgrades release
+  # kyverno/kyverno rather than standing up a second release and adopting its CRDs into
+  # krateo-system. Scoped in installer#999, which needs two renderer changes first: a pinned
+  # non-registerOnly component declaring `namespace` currently ABORTS the umbrella render
+  # (definitions.yaml:30), and compositions.yaml:917 hardcodes the instance namespace.
+  #
+  # The hazard that sentence named has NOT gone away, it has moved. Kyverno's CRDs carry NO
+  # helm.sh/resource-policy: keep -- measured on the 3.9.2 chart, 22 of 22 without it, while
+  # cert-manager's 6 DO carry it, which is why that adoption is survivable and this one is not by
+  # default. And when the installer STOPS rendering an adopted component, core-provider uninstalls
+  # its release and deletes everything it owns (measured on kc-roll057 by keycloak-provider-kog).
+  # So after adoption, turning features.identityLifecycle OFF deletes the 22 CRDs and every
+  # instance of them: tenant-namespace-on-login, and also THIS component's two tenant-reader
+  # policies. With the GeneratingPolicy's evaluation.synchronize.enabled=true and
+  # orphanDownstreamOnPolicyDelete unset, deleting it is expected to delete the RoleBindings it
+  # generated in every tenant namespace (acmp's reading, not measured on Kyverno 1.19).
+  #
+  # CORRECTION: the count above said 20 CRDs. It is 22 -- acmp counted them on demo by
+  # meta.helm.sh/release-name, and the 3.9.2 chart renders 22 as templates.
   kind: KrateoCapabilityRoles
   chart: krateo-capability-roles
   repo: oci://ghcr.io/krateo-platformops/krateo-saas
