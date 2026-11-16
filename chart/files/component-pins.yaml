@@ -7819,7 +7819,36 @@ components:
   # NOT block this cutover -- it means that until it lands, incident-provider's own reconcile errors
   # can open Incidents ABOUT incident-provider. A known cost, not a surprise.
   kind: IncidentProvider
-  version: 0.11.0
+  # 0.14.0 (2026-11-16). TAKEN TOGETHER WITH A FIX, because the two cannot be separated:
+  #   the installer was sending componentValues.incident-provider.retention at the TOP of
+  #   that node, and the chart reads `.Values.controller.retention`. Its own
+  #   values.schema.json is additionalProperties:false at BOTH levels, so the top-level key
+  #   is REJECTED rather than ignored -- `helm template --set retention=0s` fails on 0.11.0
+  #   and on 0.14.0 with "additional properties 'retention' not allowed". So the retention
+  #   guard was inert AND the next roll would have wedged this composition.
+  #   0.11.0 accepts NEITHER path (`controller.retention` is undeclared there too), so the
+  #   path fix and this pin have to land in one change.
+  #   WHY THE GUARD MATTERS: the retention sweep is a PERMANENT DELETE on the first
+  #   reconcile at >=0.12.0. Measured on 057 before the guard was written: 232 incidents,
+  #   31 with status.resolution.at older than the chart's 720h default, oldest 1010h --
+  #   all of which the chart default would delete. `0s` keeps everything, and Diego decided
+  #   on 2026-11-16 to roll with everything kept and choose a period separately.
+  #   0.14.0 ITSELF (acmp, closes incident-provider#28): a stale applyAction whose target
+  #   version is no longer served is RE-TARGETED to the CRD's storage version with no agent
+  #   run, but only when every field the payload sets is declared there and no howToFix
+  #   script names the old version; the condition goes False/Retargeted and a person
+  #   re-applies. Otherwise reanalysis is requested as before, now capped at 3 per incident
+  #   (annotation observability.krateo.io/stale-reanalyses), then
+  #   ReanalysisBudgetExhausted. Incidents on 057 already carrying the old episode record
+  #   count as 1 request, so each can take 2 more agent runs at most.
+  #   NEW RBAC: the chart's ClusterRole gains `get` on
+  #   apiextensions.k8s.io/customresourcedefinitions (needed to read the storage version).
+  #   Verified: 0 templates mention it at 0.11.0, 1 at 0.14.0.
+  #   CRD change is descriptions only, no new fields. The only values key added across
+  #   0.11.0 -> 0.14.0 is `controller.retention` -- measured on the charts, not taken from a
+  #   per-release note, because 0.12.0 and 0.13.0 are skipped by this jump.
+  #   Probes: 0.14.0, 0.13.0, 0.12.0 and 0.11.0 all resolve for both charts; 9.9.9 absent.
+  version: 0.14.0
   deps:
   - incident-provider-crd
   tier: observability
@@ -7853,7 +7882,36 @@ components:
   # The OCI repo does not change: both charts resolve at ghcr.io/krateo-platformops/charts.
   kind: IncidentProviderCrds
   chart: incident-provider-crds
-  version: 0.11.0
+  # 0.14.0 (2026-11-16). TAKEN TOGETHER WITH A FIX, because the two cannot be separated:
+  #   the installer was sending componentValues.incident-provider.retention at the TOP of
+  #   that node, and the chart reads `.Values.controller.retention`. Its own
+  #   values.schema.json is additionalProperties:false at BOTH levels, so the top-level key
+  #   is REJECTED rather than ignored -- `helm template --set retention=0s` fails on 0.11.0
+  #   and on 0.14.0 with "additional properties 'retention' not allowed". So the retention
+  #   guard was inert AND the next roll would have wedged this composition.
+  #   0.11.0 accepts NEITHER path (`controller.retention` is undeclared there too), so the
+  #   path fix and this pin have to land in one change.
+  #   WHY THE GUARD MATTERS: the retention sweep is a PERMANENT DELETE on the first
+  #   reconcile at >=0.12.0. Measured on 057 before the guard was written: 232 incidents,
+  #   31 with status.resolution.at older than the chart's 720h default, oldest 1010h --
+  #   all of which the chart default would delete. `0s` keeps everything, and Diego decided
+  #   on 2026-11-16 to roll with everything kept and choose a period separately.
+  #   0.14.0 ITSELF (acmp, closes incident-provider#28): a stale applyAction whose target
+  #   version is no longer served is RE-TARGETED to the CRD's storage version with no agent
+  #   run, but only when every field the payload sets is declared there and no howToFix
+  #   script names the old version; the condition goes False/Retargeted and a person
+  #   re-applies. Otherwise reanalysis is requested as before, now capped at 3 per incident
+  #   (annotation observability.krateo.io/stale-reanalyses), then
+  #   ReanalysisBudgetExhausted. Incidents on 057 already carrying the old episode record
+  #   count as 1 request, so each can take 2 more agent runs at most.
+  #   NEW RBAC: the chart's ClusterRole gains `get` on
+  #   apiextensions.k8s.io/customresourcedefinitions (needed to read the storage version).
+  #   Verified: 0 templates mention it at 0.11.0, 1 at 0.14.0.
+  #   CRD change is descriptions only, no new fields. The only values key added across
+  #   0.11.0 -> 0.14.0 is `controller.retention` -- measured on the charts, not taken from a
+  #   per-release note, because 0.12.0 and 0.13.0 are skipped by this jump.
+  #   Probes: 0.14.0, 0.13.0, 0.12.0 and 0.11.0 all resolve for both charts; 9.9.9 absent.
+  version: 0.14.0
   tier: observability
   feature: portal
 - name: alert-provider-crd
