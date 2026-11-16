@@ -530,7 +530,7 @@ components:
   orchestrator: true
 - name: incident-agent
   kind: IncidentAgent
-  version: 0.3.7
+  version: 0.3.8
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
