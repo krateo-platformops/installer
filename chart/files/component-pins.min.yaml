@@ -410,6 +410,13 @@ components:
   version: 0.16.0
   tier: platform
   feature: internalTls
+  apiRef:
+    name: krateo-internal-ca-status
+    namespace: krateo-system
+  statusDataTemplate:
+    - forPath: caBundleSynced
+      type: boolean
+      expression: ${ .api.bundle.synced }
   requiresApiGroups:
   - trust.cert-manager.io
 - name: cert-manager-issuers
