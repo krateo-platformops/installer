@@ -6502,6 +6502,39 @@ components:
   version: 0.16.0
   tier: platform
   feature: internalTls
+  # STATUS PROJECTION. The Bundle this component manages publishes only a `Synced` condition and no
+  # `Ready`, so core-provider's rollup has nothing evaluable and the composition sits at
+  # Ready=Unknown/ZeroEvidence permanently -- a working feature reporting an unknown parent. The
+  # CA has been distributing correctly throughout; only the REPORTING was wrong.
+  #
+  # apiRef names the RESTAction in templates/restaction.internal-ca-status.yaml, which ships in THIS
+  # release next to the CompositionDefinition. It cannot live in the blueprint chart: core-provider's
+  # Deploy calls applyRestActionRBAC -- which loads the referenced RESTAction and FAILS if missing --
+  # BEFORE creating the composition controller, so a RESTAction inside the chart would never exist.
+  # authn measured that deadlock on a kind cluster: ApiRefRBACComplete=False RESTActionNotFound, 0
+  # controller Deployments. I had argued for the blueprint chart on domain-boundary grounds; a
+  # boundary argument says where something SHOULD live and not whether it CAN.
+  #
+  # `type: boolean` IS REQUIRED, not decoration. Without it core-provider generates the status
+  # property as a STRING and the composition fails Synced=False with
+  # `status.caBundleSynced ... must be of type string: "boolean"`. authn measured that too, and this
+  # repo's statusDataTemplate schema had to be widened to accept `type` at all -- it was closed to
+  # {expression, forPath}, so the measured requirement was inexpressible.
+  #
+  # Ready STAYS Unknown/ZeroEvidence and that is the point: `conditions` is a reserved status field,
+  # so a projection CANNOT write it. A Synced-only child can never be rolled up as healthy.
+  #
+  # THREE STATES, from authn's negative control: true = synced for the CURRENT generation; false =
+  # trust-manager reports unsynced or a stale generation; ABSENT = the Bundle could not be read.
+  # A missing Bundle does NOT make ApiResolved False -- snowplow serves a partial body as 200 -- so a
+  # consumer must check PRESENT AND TRUE. agentiko-mcp-server's census does.
+  apiRef:
+    name: krateo-internal-ca-status
+    namespace: krateo-system
+  statusDataTemplate:
+    - forPath: caBundleSynced
+      type: boolean
+      expression: ${ .api.bundle.synced }
   requiresApiGroups:
   - trust.cert-manager.io
 

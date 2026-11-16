@@ -1,0 +1,89 @@
+{{/* ------------------------------------------------------------------------------------------------
+     The RESTAction that lets internal-ca-bundle report a status at all.
+
+     WHY IT IS HERE AND NOT IN THE BLUEPRINT CHART. I argued it belonged in ingress-blueprint's
+     internal-ca-bundle chart, on the principle that a blueprint's own object belongs with the
+     blueprint. authn read core-provider 2.13.105's deploy.go and found that would DEADLOCK:
+
+         Deploy runs applyRestActionRBAC BEFORE creating the composition controller Deployment.
+         applyRestActionRBAC calls snowplow's GET /rbac, which loads the referenced RESTAction and
+         FAILS if it is missing. Deploy then returns and no controller is created. A RESTAction inside
+         the chart only exists once that controller installs the chart -- so it never exists.
+
+     MEASURED on a disposable kind cluster mirroring 057's versions (cert-manager v1.21.1,
+     trust-manager 0.17.0, authn 0.52.0, snowplow 1.12.70, core-provider 2.13.105,
+     internal-ca-bundle 0.16.0). Phase A, the CD applied WITHOUT this object:
+         ApiRefRBACComplete=False RESTActionNotFound   (snowplow /rbac answered 404)
+         Synced=False ReconcileError
+         0 composition controller Deployments, no -restaction ClusterRole
+     Phase B, this object applied: the CD cleared in 30 seconds and the whole chain resolved.
+
+     So a domain-boundary argument tells you where something SHOULD live and cannot tell you whether
+     it CAN live there. The reference and its target must be in one release.
+
+     WHY internal-ca-bundle NEEDS IT. jetstack's Bundle publishes only a `Synced` condition and no
+     `Ready`, so core-provider's rollup has nothing evaluable and the composition sits at
+     Ready=Unknown/ZeroEvidence permanently -- a working feature reporting an unknown parent. This
+     projects the Bundle's own signal onto the composition as status.caBundleSynced.
+
+     Ready STAYS Unknown/ZeroEvidence, deliberately: `conditions` is a reserved status field in
+     core-provider, so a projection CANNOT write it. That is the guarantee a Synced-only child is
+     never rolled up as healthy, and agentiko-mcp-server's census has an UNEXPECTED-READY arm that
+     fires if it ever is.
+
+     THE FILTER IS authn's, verified against 057's live Bundle in a pipe
+     ({"synced":true,"reason":"Synced","observedGeneration":1,"generation":1}). Three details I would
+     have got wrong:
+       * `synced` requires observedGeneration == metadata.generation, so a stale True from an older
+         spec does not count;
+       * NO top-level spec.filter, so the resolved status stays keyed by call name and the result
+         lands at .api.bundle. A top-level filter would move it and the projection would silently
+         resolve to nothing;
+       * the path is CLUSTER-SCOPED. bundles.trust.cert-manager.io is scope: Cluster and
+         krateo-internal-ca has no namespace -- I had conflated it with the namespaced ConfigMap of
+         the same name. A namespaced path would 404 while looking correct.
+
+     THE THREE-STATE READING, from authn's negative control, which disproved their own earlier claim:
+     pointing the path at a missing Bundle does NOT make ApiResolved False. snowplow serves a partial
+     body as 200, so the controller sees success and:
+         true    -> synced for the CURRENT generation
+         false   -> trust-manager reports it unsynced, or a stale generation
+         ABSENT  -> the Bundle could not be read
+     So ApiResolved alone cannot distinguish a read failure, and a consumer must check PRESENT AND
+     TRUE. agentiko's census already does.
+
+     GATED on the same conditions as definitions.yaml (composition mode: installDefinitions on and the
+     bootstrap core-provider off), on internalTls, and on the restactions CRD actually being served --
+     installer-platform must not apply an object whose kind snowplow-crds has not registered yet.
+     ------------------------------------------------------------------------------------------------ */}}
+{{- if and .Values.installDefinitions (not .Values.bootstrap.coreProvider.enabled) }}
+{{- if eq (include "inst.featureEnabled" (list $ "internalTls")) "true" }}
+{{- $crds := (lookup "apiextensions.k8s.io/v1" "CustomResourceDefinition" "" "").items }}
+{{- $hasRestAction := false }}
+{{- range $crd := $crds }}{{- if eq $crd.metadata.name "restactions.templates.krateo.io" }}{{- $hasRestAction = true }}{{- end }}{{- end }}
+{{- if $hasRestAction }}
+apiVersion: templates.krateo.io/v1
+kind: RESTAction
+metadata:
+  name: krateo-internal-ca-status
+  namespace: {{ .Values.namespaces.krateo }}
+spec:
+  api:
+    - name: bundle
+      verb: GET
+      path: /apis/trust.cert-manager.io/v1alpha1/bundles/krateo-internal-ca
+      headers:
+        - "Accept: application/json"
+      filter: >-
+        .bundle
+        | (.metadata.generation // 0) as $gen
+        | ([(.status.conditions // [])[] | select(.type == "Synced")] | first // {}) as $c
+        | {
+            synced: (($c.status // "") == "True" and ($c.observedGeneration // -1) == $gen),
+            reason: ($c.reason // ""),
+            observedGeneration: ($c.observedGeneration // null),
+            generation: $gen
+          }
+{{- end }}
+{{- end }}
+{{- end }}
