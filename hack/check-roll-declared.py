@@ -67,14 +67,28 @@ def dig(obj, dotted):
 def evaluate(spec, live_components, moves, carry):
     """Pure, so the self-test can drive it without a cluster or a helm binary."""
     problems = []
-    comps = {c["name"]: str(c.get("version"))
+    # ABSENT IS null ON BOTH SIDES, and that symmetry is load-bearing. A component being ADDED
+    # moves from absent to a version, and a component being REMOVED moves the other way. The first
+    # version of this check wrote str() over both sides, so an absent component became the STRING
+    # "None" in the declared set and stayed None in the measured set -- so an addition could be
+    # DETECTED but never DECLARED, and the check refused the one roll it was written for.
+    # Caught by running it against the real 0.3.671 dry-run on krateo-057, where `kyverno` is a new
+    # component: 22 moved, 22 declared, 21 matching, and kyverno reported as
+    #   MOVING TO THE WRONG VERSION: {"kyverno": [[null, "3.9.2"], ["None", "3.9.2"]]}
+    # The self-test had a case asserting an addition is DETECTED and no case asserting it can be
+    # DECLARED, which is why it passed 10/10 while this was broken. Declare an addition as
+    # [null, "<version>"] and a removal as ["<version>", null].
+    def norm(x):
+        return None if x is None else str(x)
+
+    comps = {c["name"]: norm(c.get("version"))
              for c in (spec.get("components") or []) if "name" in c}
-    live = {c["name"]: str(c.get("version"))
+    live = {c["name"]: norm(c.get("version"))
             for c in (live_components or []) if "name" in c}
 
     moved = {n: (live.get(n), comps.get(n))
              for n in set(comps) | set(live) if comps.get(n) != live.get(n)}
-    declared = {n: (str(v[0]), str(v[1])) for n, v in (moves or {}).items()}
+    declared = {n: (norm(v[0]), norm(v[1])) for n, v in (moves or {}).items()}
 
     extra = {n: v for n, v in moved.items() if n not in declared}
     missing = {n: v for n, v in declared.items() if n not in moved}
@@ -174,6 +188,19 @@ def _self_test():
 
         ("FALSIFIER: no carry-over paths requested -> storage is not checked at all",
          spec(LIVE, storage=None), {}, {}, 0),
+
+        # THE CASE THIS SUITE WAS MISSING, and its absence let a real defect through. The two cases
+        # above assert an addition and a removal are DETECTED. Neither asserted one can be
+        # DECLARED, so `str(None) == "None"` broke declarability while the suite stayed green.
+        ("an ADDED component DECLARED as [null, version] -> PASS",
+         spec(LIVE + [{"name": "kyverno", "version": "3.9.2"}]),
+         {"kyverno": [None, "3.9.2"]}, {}, 0),
+        ("a REMOVED component DECLARED as [version, null] -> PASS",
+         spec([c for c in LIVE if c["name"] != "cert-manager-issuers"]),
+         {"cert-manager-issuers": ["0.16.0", None]}, {}, 0),
+        ("an addition declared with the WRONG target version is still refused",
+         spec(LIVE + [{"name": "kyverno", "version": "3.9.2"}]),
+         {"kyverno": [None, "3.8.0"]}, {}, 1),
     ]
     bad = 0
     for label, sp, moves, carry, want_bad in cases:
