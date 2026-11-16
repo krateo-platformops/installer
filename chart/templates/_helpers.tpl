@@ -111,11 +111,25 @@ components:
   - image
   - pullSecrets
 {{/* kagent's PER-USER tool server runs a private krateo-agentiko build (the token-leak fix). The
-     path is the SIBLING key toolImagePullSecrets, and NOT the pullSecrets inside toolImage:
-     toolImage's schema requires repository and digest, crdgen carries chart `required` into the
-     composition CRD, and the injection below CREATES the parent object while setting only the leaf.
-     So aiming at toolImage would write it with neither required sibling and the apiserver would
-     reject the Kagent CR. Only the UPSTREAM sub-chart tool path is public; this one needs the cred. */}}
+     path is the SIBLING key toolImagePullSecrets, and NOT the pullSecrets inside toolImage.
+
+     THE CONCLUSION SURVIVES kagent 0.1.23 AND ITS REASON DOES NOT, which is why this is rewritten
+     rather than left alone. Until 0.1.22 the argument was: toolImage's schema REQUIRED repository
+     and digest, crdgen carries chart `required` into the composition CRD, and the injection below
+     CREATES the parent object while setting only the leaf -- so aiming at toolImage would write it
+     with neither required sibling and the apiserver would reject the Kagent CR.
+
+     0.1.23 removes `digest` from values entirely: the digest now comes from the chart's own helper,
+     so no stored value can override it. toolImage has NO `required` left, and the schema's ONLY
+     `required` anywhere is perUserRbac.toolImagePullSecrets.items: [name]. The old argument is gone.
+
+     AIMING INSIDE toolImage IS STILL REFUSED, by a different mechanism: toolImage keeps
+     `additionalProperties: false` and its declared properties are exactly [pullPolicy, repository].
+     `pullSecrets` is not among them, so the injection is refused at CHART LOAD rather than by the
+     apiserver. Same outcome, earlier and louder.
+
+     Measured on the PUBLISHED 0.1.23 schema, not taken from the release note. Only the UPSTREAM
+     sub-chart tool path is public; this one needs the cred. */}}
 - name: kagent
   path:
   - perUserRbac
