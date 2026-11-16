@@ -53,6 +53,54 @@ jobs:
           version: v3.19.0
       - name: Install PyYAML
         run: pip install --quiet pyyaml
+
+      # A LATENT GAP, EXPOSED BY THE FIRST PRIVATE-REGISTRY PIN RATHER THAN INTRODUCED BY IT. This gate
+      # PULLS each changed chart to render it, and the pins span seven registries of which three are
+      # private to an unauthenticated runner. Until a changed pin lived in one of them, every run
+      # happened to touch only public charts and the missing login never showed.
+      #
+      # It surfaced on incident-agent 0.3.7 -> 0.3.8, whose pin repo is
+      # oci://ghcr.io/krateo-agentiko/charts: `helm pull` answered
+      # "failed to perform FetchReference" and the gate reported
+      # "1 changed pin(s) but ZERO metadata.name values were rendered". That message is the gate working
+      # -- it fails closed on a vacuous zero, because a zero here reads exactly like a clean result.
+      #
+      # FAILS, NEVER SKIPS, when the secret is absent, for the same reason as the floors gate: a check
+      # that quietly stops verifying reports green without having checked anything.
+      - name: Registry login
+        run: |
+          if [ -z "${{ secrets.PAT }}" ]; then
+            echo "::error::PAT is not set or not visible to this repository. This gate PULLS each changed"
+            echo "::error::chart to render it, and private packages answer 401 to an unauthenticated"
+            echo "::error::runner -- which this gate reports as ZERO rendered names. Failing, not skipping."
+            exit 1
+          fi
+          echo "${{ secrets.PAT }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # POSITIVE CONTROL, three probes because the three private orgs are three separate grants and one
+      # passing does not imply the others. A login that SUCCEEDS proves a handshake, not read access: a
+      # PAT lacking read:packages on an org would log in cleanly and then make every chart there fail to
+      # render, which this gate would report as zero names and which reads as a chart defect.
+      - name: Prove the credential can read each private org
+        run: |
+          set -euo pipefail
+          fail=0
+          probe() {
+            if helm show chart "$1" --version "$2" >/dev/null 2>&1; then
+              echo "  ok   $1 $2"
+            else
+              echo "::error::CANNOT READ $1 $2 -- it is PINNED on main, so it must be readable."
+              echo "::error::PAT lacks read:packages on that org. A changed pin there would render ZERO"
+              echo "::error::names and look like a chart defect rather than a credential one."
+              fail=1
+            fi
+          }
+          probe oci://ghcr.io/krateo-agentiko/charts/repo-mcp-server 0.1.6
+          probe oci://ghcr.io/krateo-blueprints/charts/internal-ca-bundle 0.16.0
+          probe oci://ghcr.io/krateo-platformops/krateo-saas/krateo-capability-roles 0.6.2
+          [ "$fail" = "0" ] || exit 1
+          echo "positive control OK: a currently-pinned chart in EACH private org is readable"
+
       - name: The name rules hold, and the gate discriminates on the real case
         run: python3 .github/scripts/check-rendered-names.py --self-test
       - name: Every name a changed chart renders is a valid Kubernetes name
