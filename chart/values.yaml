@@ -681,7 +681,8 @@ componentValues:
   # "0s" keeps everything. Diego decided 2026-11-16: roll with everything kept and choose a
   # retention period as its own decision later.
   incident-provider:
-    retention: "0s"
+    controller:
+      retention: "0s"
   incident-agent:
     modelConfig:
       name: gemini-flash
