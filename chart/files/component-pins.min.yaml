@@ -818,6 +818,14 @@ components:
   version: 0.4.3
   tier: platform
   feature: identityLifecycle
+- name: kyverno
+  chart: kyverno
+  feature: identityLifecycle
+  kind: Kyverno
+  repo: oci://ghcr.io/kyverno/charts
+  tier: platform
+  upstream: true
+  version: 3.9.2
 - name: identity-lifecycle
   kind: IdentityLifecycle
   version: 0.4.3
