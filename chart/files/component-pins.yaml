@@ -7779,7 +7779,7 @@ components:
   # NOT block this cutover -- it means that until it lands, incident-provider's own reconcile errors
   # can open Incidents ABOUT incident-provider. A known cost, not a surprise.
   kind: IncidentProvider
-  version: 0.11.0
+  version: 0.13.0
   deps:
   - incident-provider-crd
   tier: observability
@@ -7813,7 +7813,7 @@ components:
   # The OCI repo does not change: both charts resolve at ghcr.io/krateo-platformops/charts.
   kind: IncidentProviderCrds
   chart: incident-provider-crds
-  version: 0.11.0
+  version: 0.13.0
   tier: observability
   feature: portal
 - name: alert-provider-crd
