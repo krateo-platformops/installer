@@ -1255,8 +1255,23 @@ the surgical upgrade patch — so the two paths cannot drift.
 {{- $_ := set $entry "keycloak" dict -}}
 {{- end -}}
 {{- $kc := index $entry "keycloak" -}}
+{{/* HOISTED to this block on purpose. Declared inside the baseUrl guard it was OUT OF SCOPE at the
+     tokenEndpoint site 30 lines below -- helm scopes a variable to its enclosing BLOCK, not to the
+     define. My static check said "declared before every use, all in one define"; both were true and
+     neither was sufficient. The render said `undefined variable "$kcRelPath"`, which is the only
+     instrument that actually answers the question. Both URLs need it, so it belongs where both can
+     see it. */}}
+{{- $kcRelPath := dig "keycloak" "keycloak" "http" "relativePath" "" (default dict $top.Values.componentValues) -}}
 {{- if not (dig "baseUrl" "" $kc) -}}
-{{- $_ := set $kc "baseUrl" (printf "http://keycloak-service.%s.svc.cluster.local:8080" $ns) -}}
+{{/* relativePath MUST be appended, or the KOG and the token Webhook get 404s on a path-mode
+     cluster. Keycloak serves at http-relative-path, so with relativePath=/keycloak the in-cluster
+     base is http://keycloak-service.<ns>.svc.cluster.local:8080/keycloak -- not the bare root. This
+     is the same silent-disagreement class as the keycloak-system default and as hard-coding the
+     route prefix: two values that must agree, with the disagreement invisible until a request 404s.
+     Deriving baseUrl, tokenEndpoint and the gateway route from the SAME value makes all three agree
+     by construction. An explicit componentValues value still wins -- the dig default only fills an
+     unset one, so 057's existing explicit URLs are unchanged. */}}
+{{- $_ := set $kc "baseUrl" (printf "http://keycloak-service.%s.svc.cluster.local:8080%s" $ns $kcRelPath) -}}
 {{- end -}}
 {{/* auth.externalSecret.tokenEndpoint and auth.bootstrap.namespace are the SAME class as baseUrl:
      the chart's own defaults name `keycloak-system`, while Krateo installs every composition into
@@ -1286,7 +1301,7 @@ the surgical upgrade patch — so the two paths cannot drift.
 {{- end -}}
 {{- $es := index $auth "externalSecret" -}}
 {{- if not (dig "tokenEndpoint" "" $es) -}}
-{{- $_ := set $es "tokenEndpoint" (printf "http://keycloak-service.%s.svc.cluster.local:8080/realms/master/protocol/openid-connect/token" $ns) -}}
+{{- $_ := set $es "tokenEndpoint" (printf "http://keycloak-service.%s.svc.cluster.local:8080%s/realms/master/protocol/openid-connect/token" $ns $kcRelPath) -}}
 {{- end -}}
 {{- if not (and (hasKey $auth "bootstrap") (kindIs "map" (index $auth "bootstrap"))) -}}
 {{- $_ := set $auth "bootstrap" dict -}}
@@ -1481,7 +1496,66 @@ be tested without faking that flag.
 {{- $gwCertRef := index . 4 -}}
 {{- $routes := list }}
 {{- range $d := $components }}
-{{- if and $d.gatewayPath (eq (include "inst.compEnabled" (list $top $d)) "true") }}
+{{/* ENABLEMENT IS CHECKED FIRST, before any path computation, and that ordering is load-bearing.
+     My first version computed the paths at the top of this loop, so the keycloakRealm derivation
+     -- and its `fail` when relativePath is unset -- ran for EVERY pin carrying
+     gatewayPathsFrom, enabled or not. On a cluster with features.keycloak false that would have
+     failed the whole umbrella render over a component it does not install. It passed my first
+     test only because a disabled component happens to be absent from $components, which is luck
+     rather than design: this loop must not depend on that. Gating here makes a disabled
+     component cost nothing and cannot fail. */}}
+{{- if eq (include "inst.compEnabled" (list $top $d)) "true" }}
+{{/* PATHS: one route per prefix. `gatewayPath` (string) stays the single-prefix form and renders
+     BYTE-IDENTICALLY to before -- the four portal pins (authn /authn, snowplow /content, frontend /,
+     krateo-sse-proxy /events) are untouched by this change, which is the control the PR asserts.
+     `gatewayPaths` (list) is the multi-prefix form. Setting BOTH is a render failure rather than a
+     silent precedence rule: a pin that disagrees with itself about its own routes is a bug, and
+     picking one quietly is how the WRONG prefix ends up public.
+
+     `gatewayPathsFrom` names a DERIVATION instead of literal paths. Keycloak needs one because its
+     prefixes are built from two values that can both change:
+       componentValues.keycloak.keycloak.http.relativePath          e.g. /keycloak
+       componentValues.krateo-keycloak-realm.realm.name             default krateo
+     Hard-coding /keycloak/realms/krateo/ in the pin would repeat exactly the coupling this PR also
+     fixes for baseUrl/tokenEndpoint: rename the realm or move the relative path and the route
+     silently stops matching, with every composition Ready. Deriving all three from the same two
+     values makes them agree by CONSTRUCTION.
+
+     Why a NAMED derivation and not a name match on `keycloak`: the pin declares which rule applies,
+     so the coupling is greppable from the pins file and adding a second rule is an explicit act.
+     keycloak-provider-kog measured the hazard this shape avoids: `/keycloak/realms/` alone would
+     also expose the MASTER realm's sign-in and token endpoints to the internet, so admin passwords
+     could be tried there even with /keycloak/admin unrouted. Only the one realm is exposed. */}}
+{{- $paths := list }}
+{{- if and $d.gatewayPath $d.gatewayPaths }}
+{{- fail (printf "components[%s]: sets BOTH gatewayPath (%s) and gatewayPaths (%v). Use one: gatewayPath for a single prefix, gatewayPaths for several. Choosing between them silently would decide which prefix becomes PUBLIC." $d.name $d.gatewayPath $d.gatewayPaths) }}
+{{- end }}
+{{- if and $d.gatewayPathsFrom (or $d.gatewayPath $d.gatewayPaths) }}
+{{- fail (printf "components[%s]: sets gatewayPathsFrom (%s) together with literal paths. A derived component must not also carry literals -- the literals would be dead and the derivation would look unused." $d.name $d.gatewayPathsFrom) }}
+{{- end }}
+{{- if $d.gatewayPaths }}
+{{- $paths = $d.gatewayPaths }}
+{{- else if $d.gatewayPath }}
+{{- $paths = list $d.gatewayPath }}
+{{- else if $d.gatewayPathsFrom }}
+{{- if eq $d.gatewayPathsFrom "keycloakRealm" }}
+{{- $cv := default dict $top.Values.componentValues }}
+{{- $rp := dig "keycloak" "keycloak" "http" "relativePath" "" $cv }}
+{{- if not $rp }}
+{{- fail (printf "components[%s]: gatewayPathsFrom=keycloakRealm needs componentValues.keycloak.keycloak.http.relativePath, which is empty. On a gatewayMode=path cluster Keycloak MUST be served under a path prefix -- exposure.hosts is host-mode only, so it cannot be given a subdomain, and the issuer in its tokens must stay stable whatever path a request arrives on. Set it to e.g. /keycloak (no trailing slash). Without it there is no prefix to route and every OIDC login would 200 with the SPA instead." $d.name) }}
+{{- end }}
+{{- $realm := dig "krateo-keycloak-realm" "realm" "name" "krateo" $cv }}
+{{- if not $realm }}{{- $realm = "krateo" }}{{- end }}
+{{/* ONE realm, not the whole /realms/ tree, and the sign-in assets. /admin is deliberately absent:
+     routing it would put the admin console on the public internet. Trailing slashes matter -- they
+     make each prefix an element boundary, so /keycloak/realmsx and /keycloak/realms/krateox cannot
+     match. No rewrite: Keycloak already serves under relativePath. */}}
+{{- $paths = list (printf "%s/realms/%s/" $rp $realm) (printf "%s/resources/" $rp) }}
+{{- else }}
+{{- fail (printf "components[%s]: gatewayPathsFrom=%s is not a derivation this chart knows. The only one is keycloakRealm." $d.name $d.gatewayPathsFrom) }}
+{{- end }}
+{{- end }}
+{{- if $paths }}
 {{- $backendName := include "inst.svcname" (list $top $d.svcMatch) }}
 {{- if not $backendName }}{{- $backendName = $d.name }}{{- end }}
 {{/* Listener + ports: default to the shared platform-http:$gwPlatformPort listener and the peer's
@@ -1517,14 +1591,22 @@ be tested without faking that flag.
 {{- $lspec = dict "name" $lname "port" (int (default $gwPlatformPort $d.gatewayPort)) "protocol" "HTTPS" "tls" (dict "certificateRef" $gwCertRef) }}
 {{- end }}
 {{- end }}
+{{- range $i, $p := $paths }}
+{{/* NAME: a single-prefix component keeps its BARE name, so the existing four routes are
+     byte-identical. Several prefixes get <name>-<index>, because two HTTPRoutes sharing a name
+     would collide and agentgateway-policies requires them unique. */}}
+{{- $rname := $d.name }}
+{{- if gt (len $paths) 1 }}{{- $rname = printf "%s-%d" $d.name $i }}{{- end }}
 {{- $route := dict
-     "name" $d.name
+     "name" $rname
      "listener" $lspec
-     "pathPrefix" $d.gatewayPath
+     "pathPrefix" $p
      "rewrite" (default false $d.gatewayRewrite)
      "backend" (dict "name" $backendName "port" (int (default $d.exposePort $d.gatewayPort)))
      "auth" (dict "mode" (default "public" $d.gatewayAuth)) }}
 {{- $routes = append $routes $route }}
+{{- end }}
+{{- end }}
 {{- end }}
 {{- end }}
 routes:

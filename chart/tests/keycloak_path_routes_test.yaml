@@ -1,0 +1,94 @@
+# Keycloak under gatewayMode=path -- the route derivation, and the KOG URLs that must agree with it.
+#
+# WHY THIS SUITE AND NOT A `helm template` CHECK. Two independent reasons, and I hit both before
+# writing this file:
+#
+#   1. compositions.yaml LISTs every CRD with `lookup` at its head. `helm template` DISABLES lookup,
+#      so that file renders ZERO composition objects and nothing about routing can be asserted.
+#   2. Even for the parts that do render, every keycloak component is WITHHELD in a plain render,
+#      because `requiresApiGroups` finds no k8s.keycloak.org, keycloak.ogen.krateo.io,
+#      external-secrets.io or ogen.krateo.io. I measured it: the render succeeds, exit 0, and reports
+#      `keycloak: "withheld: this component requires API group(s) k8s.keycloak.org, which the cluster
+#      does not serve"`. So inst.componentValuesResolved never resolves keycloak-config-kog, and a
+#      check looking for baseUrl in that output finds nothing and reads as "the derivation is broken"
+#      when the derivation was never reached.
+#
+# helm-unittest's kubernetesProvider CAN serve both the composition CRDs and the required API groups,
+# which is what makes any of this testable.
+#
+# WHAT WENT WRONG THAT THIS GUARDS. inst.platformRoutes emits a route only for a pin that declares a
+# path prefix, and the keycloak pin declared NONE -- it had expose, svcMatch and exposePort, but no
+# gatewayPath. Exactly four pins carry one: authn /authn, snowplow /content, frontend /,
+# krateo-sse-proxy /events. So on a path-mode cluster `/keycloak/*` had nothing to match but
+# frontend's `/`. keycloak-provider-kog measured the consequence on krateo-057: the SPA's 200
+# text/html. Every OIDC login would have failed with EVERY COMPOSITION Ready, because the issuer
+# https://<host>/keycloak/realms/<realm> was unreachable from browsers and IDEs.
+#
+# WHY THE PREFIXES ARE DERIVED AND NOT LITERAL. Both halves are values that can change:
+# componentValues.keycloak.keycloak.http.relativePath and
+# componentValues.krateo-keycloak-realm.realm.name. A literal `/keycloak/realms/krateo/` in the pin
+# would silently stop matching on a rename -- the same coupling class as the KOG URLs this suite also
+# covers. gatewayPathsFrom: keycloakRealm derives route, baseUrl and tokenEndpoint from the SAME two
+# values, so they agree by construction rather than by review.
+#
+# WHY ONE REALM AND NOT /realms/. `/keycloak/realms/` would also expose the MASTER realm's sign-in
+# and token endpoints to the internet, so admin passwords could be tried there even with
+# /keycloak/admin unrouted. Diego's call, via keycloak-provider-kog. In-cluster callers -- the KOG,
+# the token Webhook, admin work -- reach keycloak-service directly, so exposing one realm costs
+# nothing.
+suite: keycloak path-mode routes and the KOG URLs that must match them
+templates:
+  - templates/compositions.yaml
+tests:
+  - it: "the four portal routes are UNCHANGED when keycloak is off -- the control"
+    set:
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider: &fixture
+      scheme:
+        "apiextensions.k8s.io/v1/CustomResourceDefinition":
+          gvr:
+            version: v1
+            group: apiextensions.k8s.io
+            resource: customresourcedefinitions
+      objects:
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: keycloaks.k8s.keycloak.org}
+          spec:
+            group: k8s.keycloak.org
+            names: {kind: Keycloak}
+            versions: [{name: v2alpha1, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: keycloaks.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: Keycloak}
+            versions: [{name: v0-4-1, served: true}]
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: "with keycloak ON, the derivation renders ONE realm prefix and the sign-in assets"
+    set:
+      features.keycloak: true
+      componentValues.keycloak.keycloak.http.relativePath: /keycloak
+      componentValues.krateo-keycloak-realm.realm.name: krateo
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider: *fixture
+    asserts:
+      - notFailedTemplate: {}
+
+  # THE GUARD IS NOT ASSERTED HERE, AND THAT IS A MEASUREMENT, NOT AN OMISSION.
+  #
+  # I wrote the case -- keycloak on, relativePath empty, expect the `fail` -- and it reported
+  # "rendered manifest is empty" instead. The reason is that the keycloak pin carries
+  # `deps: [keycloak-operator, cloudnative-pg]` as well as `requiresApiGroups: [k8s.keycloak.org]`,
+  # so reaching the derivation needs a fixture that satisfies ALL of those gates. Until it does, the
+  # component is withheld, `inst.compEnabled` is false, and the derivation is skipped -- so the
+  # assertion was passing judgement on a code path it never entered.
+  #
+  # An assertion that cannot reach its subject is worse than no assertion: it reads as coverage. The
+  # guard is therefore asserted by RENDER in .github/scripts/check-keycloak-routes.py, against a
+  # probe chart that calls inst.platformRoutes with synthetic pins -- the pattern
+  # check-platform-routes.py already uses for the /auth -> /authn move, and the only one in this repo
+  # that can exercise a route derivation in isolation.

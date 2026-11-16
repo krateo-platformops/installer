@@ -776,6 +776,9 @@ components:
   expose: true
   svcMatch: keycloak-service
   exposePort: 8080
+  gatewayPathsFrom: keycloakRealm
+  gatewayRewrite: false
+  gatewayAuth: public
   feature: keycloak
 - name: keycloak-config-kog
   kind: KeycloakConfigKog
