@@ -982,6 +982,62 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
      is what makes it possible to keep a live composition alive at a version the cluster still
      answers on while a bump is in flight.
      --------------------------------------------------------------------------------------- */}}
+{{/* --------------------------------------------------------------------------------------
+     inst.jsonSchemaConfigmaps — the jsonschema ConfigMap names a blueprint's readers must be able to
+     `get`, as a space-separated list. args: (list "Kind" "chartVersion" $allCRDs)
+
+     WHY THE GRANT EXISTS. A tenant's blueprint create form is EMPTY without it. The form's schema
+     source is core-provider's `<resource>-<version>-jsonschema-configmap`, and tenants cannot read
+     the CRD fallback by design -- so Bob saw "This blueprint is still being registered". Diego chose
+     to have core-provider write that ConfigMap next to its CompositionDefinition; this is the read
+     grant that lets the group see it once it is there.
+
+     THE NAME FORMAT IS CONFIRMED TWO WAYS by acmp, which is why it is safe to construct:
+       code (core-provider 2.13.103): getJsonSchemaConfigmapNN = nn.Name + "-jsonschema-configmap",
+         where nn.Name = fmt.Sprintf("%s-%s", gvr.Resource, gvr.Version) -- no truncation, no
+         transform, and gvr.Version is the CRD version string (v0-2-61), not the chart's 0.2.61;
+       live demo: 55 *-jsonschema-configmap objects, of which 54 of 54 composition ones match
+         <plural>-<a SERVED crd version>-jsonschema-configmap exactly. The 55th is
+         installer-core-provider-jsonschema-configmap, not a composition CRD, so out of scope.
+
+     THE PLURAL COMES FROM THE CRD, NOT FROM A RULE. `SelfserviceKrateo` pluralises to
+     `selfservicekrateoes`, which crdgen decides and no pluralisation rule I could write would
+     reproduce. So it is read from the CRD whose group is composition.krateo.io and whose names.kind
+     matches -- the same match inst.servedTags makes.
+
+     EVERY SERVED VERSION *PLUS* THE PINNED ONE, deduped, and that removes a window acmp had already
+     accepted. During a version bump the portal reads .compdef.status.apiVersion, so a grant naming
+     only the pinned version leaves the form empty until the CD migrates; one naming only the served
+     version goes stale forever. Naming both means the OUTGOING ConfigMap stays readable until its CRD
+     version stops being served, and the INCOMING one is readable the moment it exists. The list is
+     rebuilt every render, so a version that stops being served drops out by itself.
+
+     EMPTY WHEN LOOKUP IS EMPTY, deliberately. Under `helm template` lookup is disabled, $allCRDs is
+     empty, and the plural is unknowable -- so this returns nothing and the caller omits the rule.
+     An absent rule is a visible empty form; a GUESSED resourceNames entry is a grant that silently
+     matches nothing, which looks configured and is not.
+     -------------------------------------------------------------------------------------- */}}
+{{- define "inst.jsonSchemaConfigmaps" -}}
+{{- $kind := index . 0 -}}{{- $ver := index . 1 -}}{{- $allCRDs := index . 2 -}}
+{{- $plural := "" -}}
+{{- $served := list -}}
+{{- range $allCRDs -}}
+{{- if and (eq .spec.group "composition.krateo.io") (eq .spec.names.kind $kind) -}}
+{{- $plural = .spec.names.plural -}}
+{{- range .spec.versions -}}{{- if .served -}}{{- $served = append $served .name -}}{{- end -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $out := list -}}
+{{- if $plural -}}
+{{- $want := printf "v%s" ($ver | toString | replace "." "-") -}}
+{{- range $t := (append $served $want | uniq) -}}
+{{- if $t -}}{{- $out = append $out (printf "%s-%s-jsonschema-configmap" $plural $t) -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $out | uniq | sortAlpha | join " " -}}
+{{- end -}}
+
+
 {{- define "inst.servedTags" -}}
 {{- $kind := index . 0 -}}{{- $allCRDs := index . 1 -}}
 {{- $tags := list -}}
