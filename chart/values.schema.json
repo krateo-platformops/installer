@@ -13969,6 +13969,27 @@
                       }
                     }
                   }
+                },
+                "rememberMe": {
+                  "type": "boolean",
+                  "title": "rememberMe",
+                  "description": "Show \"Remember me\" on the Keycloak sign-in page. A ticked session gets a persistent cookie and rememberMeSessions' timeouts; unticked sessions are unchanged. The chart's own default is false (Keycloak's default). NO SCHEMA DEFAULT HERE, deliberately -- the installer applies schema defaults onto the Installer CR, so a default would silently re-assert itself over an operator's choice. KEY NAME CHECKED AGAINST THE CHART, not against Keycloak: the realm CR spec field the template produces is also `rememberMe`, but its two timeout fields are NOT -- see rememberMeSessions."
+                },
+                "rememberMeSessions": {
+                  "type": "object",
+                  "title": "rememberMeSessions",
+                  "description": "SSO timeouts in SECONDS for sessions signed in with Remember me ticked. 0 means use the realm's ordinary SSO timeouts. THE KEY NAMES HERE ARE THE CHART'S, NOT THE CR'S: the chart reads `rememberMeSessions.idleTimeout` and `.maxLifespan` and its template renders them as the KeycloakRealm spec fields `ssoSessionIdleTimeoutRememberMe` and `ssoSessionMaxLifespanRememberMe`. Declaring the CR-spec names here instead would have produced a node the chart never reads -- settable, silently inert, and APPARENTLY fixed, which is worse than a refusal. REMOVING THESE KEYS LATER IS NOT A NO-OP: dropping them from the values file is inert (RFC-7386 omission preserves), but a componentValuesUnset renders false/0/0, which is one realm PUT that actively turns Remember me OFF.",
+                  "additionalProperties": false,
+                  "properties": {
+                    "idleTimeout": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "maxLifespan": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
                 }
               }
             },
