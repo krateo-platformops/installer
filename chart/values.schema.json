@@ -634,6 +634,25 @@
           },
           "version": {
             "type": "string"
+          },
+          "gatewayPaths": {
+            "type": "array",
+            "title": "gatewayPaths",
+            "description": "Several path prefixes for ONE component, when a single prefix would expose more than intended. Mutually exclusive with gatewayPath, and the render FAILS if both are set rather than picking one -- choosing silently is how the wrong prefix becomes public. Each prefix renders its own route named <component>-<index>; a single-prefix component keeps its bare name, so the four portal routes are byte-identical.",
+            "items": {
+              "type": "string",
+              "pattern": "^/[^?#\\s]*$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "gatewayPathsFrom": {
+            "type": "string",
+            "title": "gatewayPathsFrom",
+            "description": "Names a DERIVATION that computes this component's path prefixes, instead of literal paths. Mutually exclusive with both gatewayPath and gatewayPaths. The only value is `keycloakRealm`, which builds [<relativePath>/realms/<realm>/, <relativePath>/resources/] from componentValues.keycloak.keycloak.http.relativePath and componentValues.krateo-keycloak-realm.realm.name. It exists because hard-coding those prefixes would repeat the coupling this change fixes for the KOG URLs: rename the realm or move the relative path and the route silently stops matching while every composition stays Ready. Deriving route, baseUrl and tokenEndpoint from the same two values makes them agree by construction. An unknown value fails the render loudly.",
+            "enum": [
+              "keycloakRealm"
+            ]
           }
         },
         "required": [

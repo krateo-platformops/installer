@@ -35,3 +35,10 @@ jobs:
         run: pip install --quiet pyyaml
       - name: Prove the path-mode routing property
         run: python3 .github/scripts/check-platform-routes.py
+      # Keycloak's exposure rides the same helper, so it rides the same workflow. It is a SEPARATE
+      # step rather than a separate workflow because the two share inst.platformRoutes: a change that
+      # breaks one almost always touches the other, and a single failed workflow is easier to read
+      # than two. check-platform-routes is also the byte-identity control for the four portal routes,
+      # which check-keycloak-routes asserts again from its own direction.
+      - name: Prove Keycloak's path-mode exposure, and that the admin console is NOT routed
+        run: python3 .github/scripts/check-keycloak-routes.py

@@ -9349,6 +9349,27 @@ components:
   expose: true
   svcMatch: keycloak-service
   exposePort: 8080
+  # PATH-MODE ROUTING, derived rather than literal. inst.platformRoutes emits a route only for a
+  # pin that declares prefixes, and keycloak declared NONE -- so on a gatewayMode=path cluster
+  # /keycloak/* fell through to frontend's `/` and returned the SPA. keycloak-provider-kog measured
+  # exactly that on 057: the SPA's 200 text/html. Every OIDC login would have failed with all
+  # compositions Ready, because the issuer https://<host>/keycloak/realms/<realm> was unreachable
+  # from browsers and IDEs. That is the worst shape of failure to debug.
+  #
+  # keycloakRealm derives [<relativePath>/realms/<realm>/, <relativePath>/resources/]. ONE realm,
+  # not the whole /realms/ tree: /keycloak/realms/ alone would ALSO expose the MASTER realm's
+  # sign-in and token endpoints publicly, so admin passwords could be tried there even with
+  # /keycloak/admin unrouted (Diego's call, relayed by keycloak-provider-kog). /admin stays
+  # unrouted. In-cluster callers -- the KOG, the token Webhook, admin work -- reach keycloak-service
+  # directly and are unaffected, so exposing one realm costs nothing.
+  #
+  # NOT literal paths, because the realm name is a VALUE (componentValues.krateo-keycloak-realm.
+  # realm.name, default krateo) and so is the prefix (componentValues.keycloak.keycloak.http.
+  # relativePath). A literal would silently stop matching on a rename -- the same coupling class
+  # this change also fixes for the KOG's baseUrl and tokenEndpoint.
+  gatewayPathsFrom: keycloakRealm
+  gatewayRewrite: false
+  gatewayAuth: public
   feature: keycloak
 - name: keycloak-config-kog
   # NEW COMPONENT, wired 2026-11-11, the last piece of demo Phase 2. Turns realm configuration into
