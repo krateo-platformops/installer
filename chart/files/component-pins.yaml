@@ -9534,7 +9534,7 @@ components:
   kind: IdentityLifecycleCrds
   chart: identity-lifecycle-crds
   # LOCKSTEP with identity-lifecycle.
-  version: 0.4.1
+  version: 0.4.3
   tier: platform
   feature: identityLifecycle
 - name: identity-lifecycle
@@ -9559,11 +9559,27 @@ components:
   kind: IdentityLifecycle
   # 0.3.0 (AUDIT-4, Diego-approved, live-proven on GKE). Its extraEnv was ALREADY declared in
   # componentValues, so unlike access-review it needs no widening -- checked rather than assumed.
-  version: 0.4.1
+  version: 0.4.3
   deps:
   - identity-lifecycle-crd
   tier: platform
   feature: identityLifecycle
+
+  # KYVERNO IS A HARD DEPENDENCY AND WAS UNDECLARED. With accessRequest.enabled the IL chart
+  # ALWAYS renders Kyverno CEL policies (policies.kyverno.io/v1 -- the decided-by stamp), so the
+  # group must be served or the apply fails. MEASURED on krateo-057 2026-11-16: ZERO CRDs in any
+  # kyverno.io group and ZERO kyverno Deployments. Nothing in the installer pins Kyverno either.
+  #
+  # Before this line the failure mode was a FAILED APPLY with no explanation. With it the
+  # component withholds itself and inst.withheldReason says "requires API group(s) kyverno.io,
+  # which the cluster does not serve" -- the readable shape every other unmet dependency gets.
+  # IL then cannot install until Kyverno is present, which is correct: it could not have worked.
+  # keycloak-provider-kog raised the gap; their rehearsal used Kyverno chart 3.9.2 (v1.19.2).
+  # Whether Kyverno becomes an installer pin is a separate decision.
+  #
+  # NOT on identity-lifecycle-crd: that chart publishes CRDs and renders no policies.
+  requiresApiGroups:
+    - kyverno.io
 - name: krateo-capability-roles
   # ADOPTION, not a new install (Diego, 2026-11-10). This chart is already deployed on krateo-demo as
   # a HAND-INSTALLED release (rev 5, krateo-capability-roles-0.6.2, krateo-system) that the installer
