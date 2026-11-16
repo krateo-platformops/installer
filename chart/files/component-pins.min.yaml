@@ -815,16 +815,18 @@ components:
 - name: identity-lifecycle-crd
   kind: IdentityLifecycleCrds
   chart: identity-lifecycle-crds
-  version: 0.4.1
+  version: 0.4.3
   tier: platform
   feature: identityLifecycle
 - name: identity-lifecycle
   kind: IdentityLifecycle
-  version: 0.4.1
+  version: 0.4.3
   deps:
   - identity-lifecycle-crd
   tier: platform
   feature: identityLifecycle
+  requiresApiGroups:
+    - kyverno.io
 - name: krateo-capability-roles
   kind: KrateoCapabilityRoles
   chart: krateo-capability-roles

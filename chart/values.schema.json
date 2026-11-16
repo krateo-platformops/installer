@@ -12297,6 +12297,23 @@
                     },
                     "usernameCheckCRDVerified": {
                       "type": "boolean"
+                    },
+                    "caBundle": {
+                      "type": "object",
+                      "title": "caBundle",
+                      "description": "The CA bundle identity-lifecycle presents when calling authn over TLS (AUTHN_CA_FILE). NEW in identity-lifecycle 0.4.2. On a cluster with internal TLS this is trust-manager's distributed bundle: {configMap: krateo-internal-ca, key: ca.crt} -- trust-manager writes that ConfigMap into IL's release namespace, so the namespaces it targets must include it. THE EMPTY configMap IS ALLOWED ON PURPOSE: the pattern's outer (...)? accepts \"\", which is the chart's own default meaning no bundle. A pattern that rejected \"\" would make that default unwritable -- keycloak-provider-kog caught that before I tightened it. NO DEFAULT and NO REQUIRED, matching the source chart, which has neither anywhere in this node. THE CHART REFUSES TO RENDER when configMap is set with an http:// accessRequest.authn.url, so a bundle configured against a plaintext endpoint fails loudly rather than being silently unused.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "configMap": {
+                          "type": "string",
+                          "pattern": "^([a-z0-9]([-a-z0-9.]*[a-z0-9])?)?$",
+                          "maxLength": 253
+                        },
+                        "key": {
+                          "type": "string",
+                          "pattern": "^[-._a-zA-Z0-9]+$"
+                        }
+                      }
                     }
                   }
                 },
