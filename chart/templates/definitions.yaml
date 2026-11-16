@@ -80,6 +80,23 @@ rules:
   - apiGroups: ["core.krateo.io"]
     resources: ["compositiondefinitions"]
     verbs: ["get", "list", "watch"]
+{{- $jsCMs := compact (splitList " " (include "inst.jsonSchemaConfigmaps" (list $c.kind $c.version $allCRDs))) }}
+{{- if $jsCMs }}
+{{/* The form's SCHEMA SOURCE. By resourceNames only: a blueprint namespace can hold other
+     ConfigMaps, and a namespace-wide `configmaps: get` would hand the group all of them. Namespaced
+     Role, never a ClusterRole. Omitted entirely when lookup is empty, because a guessed name is a
+     grant that silently matches nothing. */}}
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    resourceNames:
+      {{- range $n := $jsCMs }}
+      - {{ $n | quote }}
+      {{- end }}
+    verbs:
+      - get
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
