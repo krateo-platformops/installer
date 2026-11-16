@@ -5663,12 +5663,25 @@ components:
   #   null and 057's CR overrides only clickstack.clickhouse extraUsersConfig and
   #   hyperdxLoadBalancer. An override of defaultAlerts.alerts REPLACES the whole list and
   #   would silently not get the new alert.
+  # 0.1.51 (2026-11-16, replacing the 0.1.50 pinned hours earlier and never tagged). Adds a
+  #   SECOND alert, `sre-rest-controller-vendor-5xx-persistent`: same `where` as the fast one,
+  #   threshold >= 4 over 15m for 4 consecutive windows. It exists because the fast alert has a
+  #   FLOOR: one failed pass logs 1-6 lines depending on the controller's error retries, so
+  #   `>= 20 in 15m` needs about 4 failing resources at worst. The persistent one catches a
+  #   vendor 5xx lasting about an hour on as little as ONE resource. In a large outage it fires
+  #   one window after the fast alert, and its runbook says to work the outage under the fast
+  #   one. Diego approved it; oasgen-provider found the floor.
+  #   VERIFIED BY ALERT NAME: 32 -> 33, one added, none removed or renamed, and exactly one
+  #   field changed on an existing alert -- `sre-rest-controller-vendor-5xx.runbook`, floor text
+  #   only, its spec untouched. Schema `required` identical again: no root, two items-level.
+  #   My probes: 0.1.51 resolves, 0.1.50 and 0.1.45 resolve as controls, 9.9.9 absent.
+  #   observability#189, merge 6e9a38f, tag 3.1.101, 17 check-runs 0 bad, release-oci succeeded.
   #   Provenance from the observability session: observability#188, merge 2c28bae, tag 3.1.100,
   #   18 check-runs 0 bad, release-oci succeeded. My own registry probes: 0.1.50 resolves,
   #   0.1.48 resolves (positive control), 0.1.45 resolves (second control), 9.9.9 absent.
   #   Schema `required` read AT PIN TIME: identical to 0.1.48 -- no root `required`, two
   #   items-level blocks (defaultAlerts.alerts.items, defaultMetrics.items). No umbrella wedge.
-  version: 0.1.50
+  version: 0.1.51
   deps:
   - clickhouse-operator
   - mongodb-operator
