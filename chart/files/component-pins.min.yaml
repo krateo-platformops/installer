@@ -826,7 +826,7 @@ components:
   tier: platform
   feature: identityLifecycle
   requiresApiGroups:
-    - kyverno.io
+    - policies.kyverno.io
 - name: krateo-capability-roles
   kind: KrateoCapabilityRoles
   chart: krateo-capability-roles
