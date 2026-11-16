@@ -1,0 +1,42 @@
+name: check-jsonschema-cm-grant
+
+# Exercises inst.jsonSchemaConfigmaps, extracted from definitions.yaml so it could be tested at all.
+#
+# The construction needs a live CRD LIST -- `lookup` -- to know a kind's plural and its served
+# versions, and `helm template` disables lookup. So a render-based check could only ever observe the
+# empty case, which is exactly the case that must NOT be mistaken for a working grant. The helper
+# takes the CRD list as an argument, so this probe can feed it synthetic CRDs.
+#
+# NO REGISTRY LOGIN IS NEEDED: the probe chart is built from _helpers.tpl alone and pulls nothing.
+
+on:
+  pull_request:
+    paths:
+      - "chart/templates/_helpers.tpl"
+      - "chart/templates/definitions.yaml"
+      - ".github/scripts/check-jsonschema-cm-grant.py"
+      - ".github/workflows/check-jsonschema-cm-grant.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "chart/templates/_helpers.tpl"
+      - "chart/templates/definitions.yaml"
+      - ".github/scripts/check-jsonschema-cm-grant.py"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Set up Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: v3.19.0
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: The jsonschema ConfigMap names follow the CRD, not a pluralisation rule
+        run: python3 .github/scripts/check-jsonschema-cm-grant.py
