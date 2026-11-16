@@ -5641,7 +5641,34 @@ components:
   # provenance from appVersion at all. Do NOT unblock this by deleting `sources` or the appVersion.
   # 0.1.36: every default alert carries a one-sentence description, not message. NEEDS
   # alert-provider-crd 0.2.68: an older CRD drops the field.
-  version: 0.1.48
+  # 0.1.50 (2026-11-16, replacing the 0.1.49 that was verified but never pinned). Combined
+  #   0.1.45 -> 0.1.50 against what krateo-057 runs. VERIFIED BY NAME, not by list index:
+  #   defaultAlerts.alerts goes 31 -> 32, ONE alert added (`sre-rest-controller-vendor-5xx`),
+  #   NONE removed or renamed. An index-keyed diff of this list reports that single insertion
+  #   as 67 modified and 8 removed paths, because the new entry lands at index 18 and shifts
+  #   every later one -- a named list must be diffed by NAME. The one genuine index-stable
+  #   change is clickstack.hyperdx.deployment.initContainers[0].image 2.35.0 -> 2.39.1, which
+  #   is in 0.1.48 -> 0.1.49, NOT in the alert change.
+  #   The new alert fires when generated REST controllers keep failing to observe their vendor
+  #   with HTTP 5xx: >= 20 in 15 min for 2 consecutive windows. Replayed by the observability
+  #   session against 057's real 11-12 GitHub 503 outage: fires 15:00Z, clears 15:45Z, silent
+  #   on isolated 5xx blips and quiet days. NEEDS alert-provider >= 0.2.69; 057 runs 0.2.85.
+  #   PRECONDITION CHECKED, not assumed: 0.1.46's render guard needs the
+  #   `mongodb-hyperdx-credentials` Secret that 0.1.45 creates, so a jump from 0.1.42 would
+  #   skip its creator. 057 is at 0.1.45 and that Secret is present, so 0.1.50 is safe HERE --
+  #   it would NOT be safe from demo's 0.1.42.
+  #   DEMO IS UNAFFECTED: it is held at 0.1.42 by the film freeze via a components[] override
+  #   in its own values, so this pin does not reach it (see the note at the top of this entry).
+  #   NEITHER FILE OVERRIDES defaultAlerts -- chart componentValues.krateo-observability is
+  #   null and 057's CR overrides only clickstack.clickhouse extraUsersConfig and
+  #   hyperdxLoadBalancer. An override of defaultAlerts.alerts REPLACES the whole list and
+  #   would silently not get the new alert.
+  #   Provenance from the observability session: observability#188, merge 2c28bae, tag 3.1.100,
+  #   18 check-runs 0 bad, release-oci succeeded. My own registry probes: 0.1.50 resolves,
+  #   0.1.48 resolves (positive control), 0.1.45 resolves (second control), 9.9.9 absent.
+  #   Schema `required` read AT PIN TIME: identical to 0.1.48 -- no root `required`, two
+  #   items-level blocks (defaultAlerts.alerts.items, defaultMetrics.items). No umbrella wedge.
+  version: 0.1.50
   deps:
   - clickhouse-operator
   - mongodb-operator
