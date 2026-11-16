@@ -375,6 +375,40 @@
 {{- end }}
 {{- end }}
 {{- end }}
+{{- /* keycloak-config-kog's TWO URLS AND ITS BOOTSTRAP NAMESPACE, derived HERE rather than filled
+       into the CR -- and that distinction is the whole bug fix.
+
+       THEY USED TO BE FILLED IN inst.componentValuesResolved, "only if absent". That helper is called
+       from TWO places: the fresh-install CR (self-bootstrap.yaml:197) AND inst.componentValuesPatch
+       (_helpers.tpl:1343), which is the merge patch applied on EVERY upgrade. So the derived value was
+       WRITTEN INTO THE CR, became an explicit operator value, and the "only if absent" guard never
+       fired again for that cluster. Every such derivation was frozen at first install.
+
+       MEASURED by keycloak-provider-kog on krateo-057, whose CR carries:
+           keycloak.baseUrl                    http://keycloak-service.krateo-system...:8080
+           auth.externalSecret.tokenEndpoint   ...:8080/realms/master/protocol/openid-connect/token
+       -- neither with /keycloak. Rendering 0.3.670 with 057's values and features.keycloak=true
+       reproduced it; the CONTROL, the same render with those two keys deleted, produced
+       ...:8080/keycloak. So #968's derivation was correct and unreachable on every existing cluster.
+
+       forcePath FIXES IT WITHOUT AN UNSET, because this runs BEFORE the componentValues merge below
+       and that merge uses `merge`, not `mergeOverwrite` -- the destination wins. I did not take the
+       comment's word for it (a count in a comment had just been wrong): rendered at line 386's exact
+       shape, `merge` kept FROM_FORCEPATH while `mergeOverwrite` kept FROM_COMPONENTVALUES. So the
+       stale persisted keys stay in the CR and are OVERRIDDEN at render -- inert, not authoritative.
+
+       relativePath is trimSuffix'd for the same reason as the route derivation (#970): Keycloak's own
+       default is `/`, and `/keycloak/` would give `:8080//realms/...`.
+
+       THE THREE SCHEMA KEYS ARE NOW SETTABLE-BUT-IGNORED, which is the worst kind of knob. Refusing
+       them at chart load -- the shape cert-manager-issuers.internalCA.namespace already uses -- is a
+       SEPARATE change, because removing a declared key deserves its own review. */}}
+{{- if eq $c.name "keycloak-config-kog" }}
+{{- $kog := (include "inst.kogUrls" (list $top)) | fromJson }}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "keycloak" "baseUrl") "value" $kog.baseUrl) }}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "auth" "externalSecret" "tokenEndpoint") "value" $kog.tokenEndpoint) }}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "auth" "bootstrap" "namespace") "value" $kog.bootstrapNamespace) }}
+{{- end }}
 {{- /* componentValues: per-component spec overrides, deep-merged into the rendered spec. The
        installer-computed wiring above (service/config/vertexAI/hitlApproval) stays AUTHORITATIVE
        — `merge` gives the dest ($spec) precedence, so it wins on any leaf conflict — letting a
