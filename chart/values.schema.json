@@ -15561,8 +15561,8 @@
                   "type": "string"
                 },
                 "ttlDays": {
-                  "description": "Must exceed the 28-day SLO window.",
-                  "minimum": 29,
+                  "description": "Must exceed the 30-day SLO window by at least a day. RAISED 29 -> 31 WITH THE 0.1.3 PIN, to match the chart: krateo-slo-rollup 0.1.3's own values.schema.json sets minimum 31, because the 30d statements in ops/slo-alert/sli-span-metrics.sql read 30 whole UTC days before today, so a TTL of 29 or 30 could expire the window's first day before it is read. LEAVING THIS AT 29 WOULD HAVE BEEN A DRIFT IN THE PERMISSIVE DIRECTION: the Installer CRD would accept 29 or 30, the apiserver would store it, and the chart would then refuse to render -- measured, `--set rollup.ttlDays=30` on 0.1.3 fails with \"at '/rollup/ttlDays': minimum: got 30, want 31\" while 0.1.2 accepted it. Nothing sets it today (chart values null, and 057's CR carries no krateo-slo-rollup values at all), so this closes a latent trap rather than fixing a live break. The chart default of 40 is unchanged and satisfies both.",
+                  "minimum": 31,
                   "type": "integer"
                 }
               },

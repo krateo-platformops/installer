@@ -5857,7 +5857,25 @@ components:
   # dark is what makes that acceptable -- nothing installs until someone enables the feature,
   # which is a CR edit rather than a values change.
   kind: KrateoSloRollup
-  version: 0.1.2
+  # 0.1.3 (2026-11-16, replacing the 0.1.2 pinned in #985 and never tagged).
+  #   ONE VALUES-CONTRACT CHANGE, and it needed a matching change HERE: the chart's own
+  #   rollup.ttlDays minimum goes 29 -> 31, because the 30d statements in
+  #   ops/slo-alert/sli-span-metrics.sql read 30 whole UTC days before today, so a TTL of 29
+  #   or 30 could expire the window's first day before it is read.
+  #   THE INSTALLER'S SCHEMA SAID 29 AND IS RAISED TO 31 IN THIS PR. Left alone it would have
+  #   been drift in the PERMISSIVE direction -- the Installer CRD accepts 29 or 30, the
+  #   apiserver stores it, and the chart then refuses to render. Measured:
+  #     --set rollup.ttlDays=30   0.1.2 OK   0.1.3 REFUSED "minimum: got 30, want 31"
+  #     --set rollup.ttlDays=31   0.1.2 OK   0.1.3 OK
+  #   Latent, not live: chart values set no krateo-slo-rollup block and 057's CR carries none,
+  #   so nothing stored is newly refused. The chart default 40 satisfies both minimums.
+  #   EVERYTHING ELSE IS DOCUMENTATION AND TESTS: the README and kind e2e now read the table
+  #   by the canonical SLI rules (bucket intervals, no interpolation) and the interpolating
+  #   tests/rollup-query.sql is gone. No values path added, removed or renamed. Rendered output
+  #   is identical to 0.1.2 except the helm.sh/chart label, for any accepted value.
+  #   observability#190, merge a7db924, tag 3.1.102, 13 check-runs 0 bad, release-oci OK.
+  #   My probes: 0.1.3, 0.1.2 and 0.1.1 resolve; 9.9.9 absent.
+  version: 0.1.3
   deps:
   - otel-collector-daemonset
   tier: observability
