@@ -63,9 +63,14 @@ jobs:
       # same problem and its comments record why each half exists.
       #
       # WHY IT IS REQUIRED HERE. Reading a floor means reading the chart's annotations, which means
-      # pulling the chart. The pins span SEVEN registries and three of them are private to an
-      # unauthenticated runner: krateo-agentiko (17 pins), krateo-blueprints (20) and
-      # krateo-platformops/krateo-saas (1). Measured on this gate's first CI run: 20 charts answered
+      # pulling the chart. The pins span SEVERAL registries and three of them are private to an
+      # unauthenticated runner: krateo-agentiko, krateo-blueprints and
+      # krateo-platformops/krateo-saas. THE COUNT IS DELIBERATELY NOT WRITTEN HERE -- the gate
+      # DERIVES and PRINTS the breakdown on every run. This comment used to say SEVEN; the real
+      # figure was six, and I quoted this line to another session as a measurement, who put it in
+      # their repo's documentation before I had counted it. A prose count drifts as pins move.
+      # The PRIVATE ORGS are named rather than counted because each is a separate grant and the
+      # positive control below probes all three; that list changing is a real event, not drift. Measured on this gate's first CI run: 20 charts answered
       # "COULD NOT READ the chart's annotations ... GET https://ghcr.io/token?scope=...", the gate
       # failed closed as designed, and the result was a PERMANENTLY RED gate rather than a finding.
       #

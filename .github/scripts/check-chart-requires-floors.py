@@ -271,10 +271,38 @@ def self_test():
     return 0
 
 
+def print_registry_breakdown(pins):
+    """DERIVED, NOT STATED IN A COMMENT, and printed on EVERY run including the no-change one.
+
+    A prose count drifts as pins move and nothing re-derives it. This gate's own header said "SEVEN
+    registries" long after the real figure was six; I quoted that comment to another session as a
+    measurement and they put it in their repo's documentation, attributed, before I had counted it.
+
+    A COUNT IN A COMMENT IS WORSE THAN A CLAIM IN A COMMENT, because a number is quotable: it travels
+    into other people's files, arrives looking measured, and nothing it passes through can tell that
+    it was not. A stale claim stays where it was written and is arguable when read; a stale count
+    LEAVES.
+
+    It prints before the early return on purpose. The breakdown is a fact about the PINS FILE, not
+    about this PR's diff -- so a run that checks no floors must still report it, or the figure is
+    only available on the runs that happen to change a pin.
+    """
+    reg = {}
+    for c in (pins.values() if isinstance(pins, dict) else pins):
+        r = (c.get("repo") if isinstance(c, dict) else None) or DEFAULT_REPO
+        reg[r] = reg.get(r, 0) + 1
+    orgs = {r.split("/")[3] for r in reg if r.count("/") >= 3}
+    print("  registries in use: %d distinct path(s) across %d org(s) -- DERIVED on this run; "
+          "do not quote a figure from a comment" % (len(reg), len(orgs)))
+    for r, n in sorted(reg.items(), key=lambda kv: (-kv[1], kv[0])):
+        print("    %-54s %d pin(s)" % (r, n))
+
+
 def main(argv):
     if "--self-test" in argv:
         return self_test()
     pins = load_pins()
+    print_registry_breakdown(pins)
     sweep_all = "--all" in argv
     if sweep_all:
         scope = set(pins)

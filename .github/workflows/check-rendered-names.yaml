@@ -55,8 +55,10 @@ jobs:
         run: pip install --quiet pyyaml
 
       # A LATENT GAP, EXPOSED BY THE FIRST PRIVATE-REGISTRY PIN RATHER THAN INTRODUCED BY IT. This gate
-      # PULLS each changed chart to render it, and the pins span seven registries of which three are
-      # private to an unauthenticated runner. Until a changed pin lived in one of them, every run
+      # PULLS each changed chart to render it, and the pins span several registries of which three
+      # are private to an unauthenticated runner -- see check-chart-requires-floors' derived
+      # breakdown for the current figure; I wrote "seven" here an hour after the real count became
+      # six, by copying the stale line from that workflow. Until a changed pin lived in one, every run
       # happened to touch only public charts and the missing login never showed.
       #
       # It surfaced on incident-agent 0.3.7 -> 0.3.8, whose pin repo is
