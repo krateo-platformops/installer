@@ -55,7 +55,38 @@ jobs:
           echo "cases run: ${N}"
           # A floor, not an equality: new cases are welcome, a harness that quietly stops building
           # them is not. 21 is the count at the time this job landed.
-          if [ -z "${N}" ] || [ "${N}" -lt 21 ]; then
-            echo "::error::roll-snapshot self-test ran ${N:-0} case(s), fewer than the floor of 21"
+          if [ -z "${N}" ] || [ "${N}" -lt 25 ]; then
+            echo "::error::roll-snapshot self-test ran ${N:-0} case(s), fewer than the floor of 25"
             exit 1
           fi
+      - name: Install PyYAML for the classification cross-check only
+        run: pip install --quiet pyyaml
+      - name: roll-snapshot's FAILED_REASONS equals ready-reasons.yaml's failed list
+        # roll-snapshot.py must stay DEPENDENCY-FREE -- it runs under `python3 -I` with no PyYAML,
+        # during a roll, on whatever machine is holding it. So the failed-reason classification is
+        # duplicated there as a literal tuple while hack/ready-reasons.yaml remains the source of
+        # truth (and check-ready-reasons-current.py keeps THAT from drifting out of
+        # core-provider's generated table).
+        #
+        # A duplicated classification that nothing compares is a classification that will drift,
+        # and the drift would be silent and in the dangerous direction: a reason that becomes
+        # `failed` upstream but stays absent from the tuple means a failed composition is reported
+        # as an ordinary changed field. This step is why the duplication is acceptable.
+        run: |
+          python3 - <<'PY'
+          import re, sys, yaml
+          src = open("hack/roll-snapshot.py", encoding="utf-8").read()
+          m = re.search(r"^FAILED_REASONS = \((.*?)\)$", src, re.M | re.S)
+          assert m, "FAILED_REASONS not found in hack/roll-snapshot.py"
+          tool = sorted(re.findall(r'"([^"]+)"', m.group(1)))
+          vendored = sorted(yaml.safe_load(open("hack/ready-reasons.yaml", encoding="utf-8"))["failed"])
+          print("roll-snapshot.py FAILED_REASONS : %s" % tool)
+          print("ready-reasons.yaml failed       : %s" % vendored)
+          assert tool, "FAILED_REASONS parsed as EMPTY -- the regex matched nothing useful, which "\
+                       "would make this check pass vacuously"
+          if tool != vendored:
+              print("::error::classification drift: roll-snapshot.py has %s, "
+                    "hack/ready-reasons.yaml has %s" % (tool, vendored))
+              sys.exit(1)
+          print("aligned: %d reason(s)" % len(tool))
+          PY
