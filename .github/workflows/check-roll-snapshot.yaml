@@ -55,8 +55,8 @@ jobs:
           echo "cases run: ${N}"
           # A floor, not an equality: new cases are welcome, a harness that quietly stops building
           # them is not. 21 is the count at the time this job landed.
-          if [ -z "${N}" ] || [ "${N}" -lt 25 ]; then
-            echo "::error::roll-snapshot self-test ran ${N:-0} case(s), fewer than the floor of 25"
+          if [ -z "${N}" ] || [ "${N}" -lt 29 ]; then
+            echo "::error::roll-snapshot self-test ran ${N:-0} case(s), fewer than the floor of 29"
             exit 1
           fi
       - name: Install PyYAML for the classification cross-check only
