@@ -133,6 +133,25 @@ sources:
     charts:
       - snowplow
       - snowplow-crds
+  - repo: krateo-blueprints/krateo-keycloak-realm
+    # THE FIRST krateo-blueprints SOURCE. Added 2026-11-17 AFTER their retracted-versions.yaml
+    # went live at their repo root and not before -- verified by fetching and parsing it in this
+    # same change. A listed repo whose list 404s fails closed and blocks EVERY pull request here,
+    # so the order was publisher-first, exactly as it was for oasgen-provider and portal.
+    #
+    # THE ENTRY IT CARRIES: 0.6.0, use 0.6.1. 0.6.0 names a KeycloakUser object
+    # <realm>-<username>, and on demo the four film personas are OBJECTS persona-ada/-bob/-acme/
+    # -globex whose USERNAMES are ada/bob/acme/globex. So 0.6.0 would create a second CR beside
+    # each existing one, and the originals carry the default DELETE policy -- a later tidy-up of
+    # "the duplicates" would delete the Keycloak user the personas authenticate through.
+    # ACTIVELY HARMFUL rather than merely superseded, on the asymmetry keycloak-provider-kog
+    # named: without `name` the duplicates are SILENT, while with `name` 0.6.0's own closed
+    # schema refuses the render, which is at least loud.
+    #
+    # Nothing pins 0.6.0 here: main pins 0.5.3 and the pending pin goes to 0.6.1. So this entry
+    # protects the NEXT pinning session rather than fixing a current state.
+    charts:
+      - krateo-keycloak-realm
   - repo: krateo-platformops/observability
     charts:
       - clickhouse-operator
