@@ -16967,33 +16967,6 @@
                     }
                   }
                 },
-                "autoscaling": {
-                  "type": "object",
-                  "title": "Autoscaling",
-                  "additionalProperties": false,
-                  "properties": {
-                    "enabled": {
-                      "type": "boolean",
-                      "title": "Autoscaling enabled"
-                    },
-                    "minReplicas": {
-                      "type": "integer",
-                      "title": "Minimum replicas"
-                    },
-                    "maxReplicas": {
-                      "type": "integer",
-                      "title": "Maximum replicas"
-                    },
-                    "targetCPUUtilizationPercentage": {
-                      "type": "integer",
-                      "title": "Target CPU utilization percentage"
-                    },
-                    "targetMemoryUtilizationPercentage": {
-                      "type": "integer",
-                      "title": "Target memory utilization percentage"
-                    }
-                  }
-                },
                 "volumes": {
                   "type": "array",
                   "title": "Additional volumes",
