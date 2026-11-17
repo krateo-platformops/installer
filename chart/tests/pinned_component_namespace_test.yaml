@@ -1,0 +1,55 @@
+# `namespace` is a PIN-LEVEL fact. It may come from files/component-pins.yaml; it may NOT be
+# supplied per cluster through .Values.components.
+#
+# WHY THIS SUITE EXISTS. On 2026-11-17 definitions.yaml stopped refusing `namespace` on a pinned,
+# non-registerOnly component, because Diego decided the installer must ADOPT demo's hand-installed
+# Kyverno in place -- the pin targets helm release `kyverno` in namespace `kyverno`, so the
+# installer upgrades that release rather than standing a second one up in krateo-system. Two
+# complete Kyverno installations sharing 22 cluster-scoped CRDs and 10 webhook configurations is
+# the failure that change avoids.
+#
+# THAT CHANGE MUST NOT LEAK INTO THE OVERRIDE PATH, and this suite is what holds the line. A
+# SEPARATE guard at _helpers.tpl:781 refuses `namespace` and `readerGroups` on a pinned component
+# arriving via .Values.components, and it is deliberately untouched. The property it protects is
+# that both clusters read the same namespace from the same pins file -- "same files, different
+# flags". If `namespace` were overridable per cluster, 057 and demo could disagree about where a
+# component lives while every other gate passed.
+#
+# WHAT THIS SUITE DOES NOT COVER, said plainly rather than left to be discovered: the pins-file
+# path itself. No pinned component declares `namespace` yet, and a test cannot inject one -- the
+# override whitelist is exactly what case 1 asserts is closed, and the pins file is read through
+# .Files rather than values. The render-level test of a composition landing in a non-default
+# namespace therefore lands with the FIRST PIN that uses the field, not here. Until then this
+# suite proves the blast radius of the change was bounded, not that the new path works.
+suite: namespace stays a pin-level fact, not a per-cluster override
+templates:
+  - templates/compositions.yaml
+tests:
+  - it: refuses `namespace` on a PINNED component supplied through .Values.components
+    set:
+      components:
+        - name: kyverno
+          namespace: kyverno
+    asserts:
+      - failedTemplate:
+          errorMessage: "components[kyverno]: `namespace`/`readerGroups` apply only to appended registerOnly catalog blueprints, not to a pinned component"
+
+  - it: refuses `readerGroups` on a PINNED component the same way
+    set:
+      components:
+        - name: kyverno
+          readerGroups:
+            - platform-admins
+    asserts:
+      - failedTemplate:
+          errorMessage: "components[kyverno]: `namespace`/`readerGroups` apply only to appended registerOnly catalog blueprints, not to a pinned component"
+
+  # CONTROL. Without this case the two above would pass just as well if EVERY .Values.components
+  # entry were refused -- which would be a different, much larger bug reported as success.
+  - it: CONTROL accepts a whitelisted override on the same pinned component
+    set:
+      components:
+        - name: kyverno
+          version: 3.9.2
+    asserts:
+      - notFailedTemplate: {}
