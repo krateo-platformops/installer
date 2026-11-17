@@ -9790,7 +9790,7 @@ components:
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   upstream: true
-  version: 3.9.3
+  version: 3.9.4
 - name: identity-lifecycle
   # NEW COMPONENT, wired 2026-11-04. Reconciles downstream identity CRs for a user's lifecycle.
   #
