@@ -53,6 +53,97 @@ CRD_SPEC_FIELDS = {"apiRef", "chart", "controller", "deploy", "statusDataTemplat
 REQUIRED = {("requests", "cpu"), ("requests", "memory"), ("limits", "memory")}
 FORBIDDEN = {("limits", "cpu")}
 
+VALUES = "chart/values.yaml"
+
+# ---- the POOL path, a SECOND resources contract with DIFFERENT merge semantics ----
+#
+# core-provider's pool step 5 adds core-provider.cdc.pool.default.{resources,workers} and
+# core-provider.cdc.pool.overrides.<poolName>.{resources,workers}, sizing the Deployment
+# `cdc-pool-<name>`. core-provider stated the semantics on 2026-11-17, and they are NOT the same
+# as the dedicated-controller path above:
+#
+#   cdc.pool.default.resources            REPLACES cdc.resources. A pool never inherits the
+#                                         per-controller default, because a pool is not a
+#                                         controller-sized process. So the DEFAULT must be whole,
+#                                         exactly like a spec.controller.resources pin.
+#   cdc.pool.overrides.<name>.resources   MERGES over cdc.pool.default.resources, deep, key by
+#                                         key. So an OVERRIDE may be partial: omitting
+#                                         limits.memory keeps the default's, it does not drop it.
+#                                         Same for workers.
+#
+# limits.cpu is forbidden on BOTH, for the reason in rule 3: a cpu limit throttled the engine in
+# ~99.8% of CFS periods on cold start, and core-provider omits it deliberately (values.yaml:416).
+#
+# WHY THIS GATE EXISTS BEFORE THE KEYS DO. The block is not in chart/values.yaml yet -- pool step
+# 5 has not merged. A rule with no population passes vacuously, which reads exactly like a clean
+# result, so the falsifiers below plant each violation and assert it is caught. The rule is inert
+# today and ARMED today, and those are different things.
+#
+# AND A NAME COLLISION, recorded because it is the kind I keep getting wrong:
+# cdc.pool.*.workers is the pool's TOTAL across its members. spec.controller.workers is PER
+# member and is capped by it. Same word, different denominator. The cap is not enforced yet --
+# it needs an unstructured-runtime change (core-provider#561), which also blocks pool step 6.
+POOL_DEFAULT_REQUIRED = {("requests", "cpu"), ("requests", "memory"), ("limits", "memory")}
+POOL_FORBIDDEN = {("limits", "cpu")}
+
+
+def _res_pairs(res):
+    """The (section, key) pairs a resources block sets, e.g. {("requests","cpu")}."""
+    if not isinstance(res, dict):
+        return None
+    return {(k, kk) for k, v in res.items() if isinstance(v, dict) for kk in v}
+
+
+def pool_violations(pool):
+    """The pool contract, as a pure function so the falsifiers need no chart.
+
+    Returns a list of human-readable violations. An absent or empty block is NOT a violation --
+    it is the state before pool step 5 merges -- and the caller reports the population size so a
+    vacuous pass cannot be mistaken for a checked one.
+    """
+    out = []
+    if not isinstance(pool, dict):
+        return out
+
+    default = (pool.get("default") or {})
+    dres = default.get("resources")
+    if dres is not None:
+        pairs = _res_pairs(dres)
+        if pairs is None:
+            out.append("cdc.pool.default.resources is not a mapping")
+        else:
+            missing = POOL_DEFAULT_REQUIRED - pairs
+            if missing:
+                out.append(
+                    "cdc.pool.default.resources is missing %s -- it REPLACES cdc.resources for a "
+                    "pool's Deployment, so an omitted field is a DROPPED default, not an "
+                    "inherited one" % sorted(".".join(m) for m in missing))
+            bad = POOL_FORBIDDEN & pairs
+            if bad:
+                out.append(
+                    "cdc.pool.default.resources sets %s -- a cpu limit throttled the engine in "
+                    "~99.8%% of CFS periods on cold start; core-provider omits it deliberately"
+                    % sorted(".".join(b) for b in bad))
+
+    for pname, ov in sorted((pool.get("overrides") or {}).items()):
+        ores = (ov or {}).get("resources")
+        if ores is None:
+            continue
+        pairs = _res_pairs(ores)
+        if pairs is None:
+            out.append("cdc.pool.overrides.%s.resources is not a mapping" % pname)
+            continue
+        # PARTIAL IS LEGAL HERE. An override merges over the default key by key, so the
+        # completeness rule deliberately does NOT apply -- asserting it would reject the exact
+        # shape core-provider shipped (an override setting only requests.memory).
+        bad = POOL_FORBIDDEN & pairs
+        if bad:
+            out.append(
+                "cdc.pool.overrides.%s.resources sets %s -- forbidden on every path, including an "
+                "override that merges over a compliant default"
+                % (pname, sorted(".".join(b) for b in bad)))
+    return out
+
 
 def die(msg):
     print(f"::error::check-cdc-resources-contract: {msg}")
@@ -199,8 +290,55 @@ def main():
         die("FALSIFIER FAILED: a planted cpu limit was not seen by the contract check.")
     print(f"  ok   FALSIFIER: a planted limits.cpu on {c['name']} is caught by the contract rule")
 
+    # ---- RULE 4: the POOL path, whose default must be whole and whose override may be partial ----
+    pool = {}
+    if os.path.exists(VALUES):
+        vals = yaml.safe_load(open(VALUES, encoding="utf-8")) or {}
+        pool = (((vals.get("core-provider") or {}).get("cdc") or {}).get("pool") or {})
+    pv = pool_violations(pool)
+    if pv:
+        die("pool contract violated:\n  " + "\n  ".join(pv))
+    n_pool = (1 if (pool.get("default") or {}).get("resources") is not None else 0) \
+             + sum(1 for o in (pool.get("overrides") or {}).values()
+                   if (o or {}).get("resources") is not None)
+    if n_pool:
+        print(f"  ok   {n_pool} pool resources block(s) satisfy the contract "
+              f"(default whole, overrides may be partial, no cpu limit anywhere)")
+    else:
+        print("  ok   0 pool resources block(s) present -- pool step 5 has not merged, so RULE 4 "
+              "has no population. The falsifiers below prove it is armed anyway.")
+
+    # ---- FALSIFIER: a pool DEFAULT missing limits.memory MUST be refused ----
+    probe = {"default": {"resources": {"requests": {"cpu": "100m", "memory": "660Mi"}}}}
+    if not pool_violations(probe):
+        die("FALSIFIER FAILED: a pool default with no limits.memory was accepted, so the "
+            "completeness half of rule 4 proves nothing.")
+    print("  ok   FALSIFIER: a pool default missing limits.memory is refused")
+
+    # ---- FALSIFIER: limits.cpu MUST be refused on the default AND on an override ----
+    whole = {"requests": {"cpu": "100m", "memory": "660Mi"}, "limits": {"memory": "1Gi"}}
+    if not pool_violations({"default": {"resources": dict(whole, limits={"memory": "1Gi",
+                                                                         "cpu": "500m"})}}):
+        die("FALSIFIER FAILED: a planted limits.cpu on the pool default was not caught.")
+    if not pool_violations({"default": {"resources": whole},
+                            "overrides": {"p": {"resources": {"limits": {"cpu": "500m"}}}}}):
+        die("FALSIFIER FAILED: a planted limits.cpu on a pool override was not caught -- an "
+            "override merges over a compliant default, so this is the path most likely to "
+            "reintroduce the throttle unnoticed.")
+    print("  ok   FALSIFIER: a planted limits.cpu is refused on the pool default AND on an override")
+
+    # ---- CONTROL: core-provider's own shipped shapes MUST pass, or rule 4 is too strict ----
+    # The default Diego picked, and the partial override they gave as its example.
+    shipped = {"default": {"resources": whole, "workers": 10},
+               "overrides": {"example": {"resources": {"requests": {"memory": "900Mi"}}}}}
+    strict = pool_violations(shipped)
+    if strict:
+        die("CONTROL FAILED: rule 4 rejects the shape core-provider is shipping, so it would "
+            "block pool step 5 rather than guard it: %s" % strict)
+    print("  ok   CONTROL: core-provider's shipped default and its partial override both pass")
+
     print(f"check-cdc-resources-contract: OK — {len(pinned)} pin(s), {len(cds)} CD(s) rendered, "
-          f"3 rules + 2 falsifiers")
+          f"{n_pool} pool block(s), 4 rules + 4 falsifiers + 1 control")
     return 0
 
 
