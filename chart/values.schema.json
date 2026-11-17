@@ -21034,6 +21034,14 @@
           "title": "Service account",
           "description": "DECLARED ONLY TO WITHHOLD `create`. Everything else under core-provider still passes through untouched; this one node is closed because a chart whose RoleBinding subjects follow a serviceAccountName helper binds the namespace's `default` ServiceAccount when create=false and name is empty -- and in krateo-system 12 pods already run as `default`. The same hazard is closed for oasgen-provider and snowplow in this change. Set `name` to use a pre-created ServiceAccount; the subchart still creates one by default.",
           "properties": {
+            "create": {
+              "type": "boolean",
+              "enum": [
+                true
+              ],
+              "title": "Create service account (must stay true)",
+              "description": "PINNED TO true, not removed. The subchart's own values.yaml sets {create: true, automount: true, annotations: {}, name: ''}, and helm validates this schema against COALESCED values -- coalesceDeps always merges a dependency's defaults in -- so a node omitting `create` can NEVER render. CI refused exactly that. `enum: [true]` instead refuses only the dangerous value: with create=false and an empty name this chart's RoleBinding subjects resolve to the namespace's `default` ServiceAccount, and 12 pods in krateo-system already run as `default`. Plain JSON Schema, so no CEL and no cost budget."
+            },
             "name": {
               "type": "string"
             },
