@@ -154,11 +154,61 @@ def _age_seconds(ts, now=None):
 NEVER_EVALUATED_GRACE_S = 60
 
 
+def never_evaluated_by_coverage(c):
+    """True / False / None: did the rollup assess NOTHING for this composition?
+
+    Returns None when the coverage scalars cannot answer, so the caller falls back.
+
+    THE PREDICATE, from core-provider (cdc childhealth.go:1473, coverageScalars):
+        healthEvaluatedChildren = managedChildrenCount - unevaluated - unreadableChildrenCount
+    every child lands in EXACTLY ONE bucket. So managed > 0 with evaluated == 0 and
+    unreadable == 0 means every named child was unevaluated -- a kind with no readiness model,
+    or asserted-ready. No timestamps involved.
+
+    WHY THIS REPLACES A TIME WINDOW. The old test compared readyAt to createdAt within
+    NEVER_EVALUATED_GRACE_S. Measured on demo 2026-11-17: selfservice-status took 111 s from
+    creation to its first and only Ready write, fell outside the window, and was reported as
+    STALLED FOR 226 HOURS -- a nine-day stall that never happened, which would have gone into a
+    roll report as a reason not to roll. The window was always a stand-in for the thing I could
+    not measure. Now I can measure it.
+
+    THREE WAYS TO GET THIS WRONG, each named by core-provider and each guarded here:
+
+    1. evaluated > 0 does NOT mean any child is healthy. A child recorded in status.managed but
+       MISSING from the cluster counts as EVALUATED -- absent is a subset of converging
+       (childhealth.go:178). So this returns False for an all-absent composition, which is
+       correct: it is genuinely converging, not unevaluable.
+    2. Do NOT key on the Ready reason. evaluated == 0 does not fix Ready to ZeroEvidence: a
+       blueprint projecting its own status.health ready=true reads Available on that projection
+       with zero rollup evidence. unreadable > 0 with evaluated == 0 is ChildrenForbidden, and
+       managed == 0 is InventoryNotRecorded. The scalars decide, not the reason.
+    3. Do NOT pair these scalars with a timestamp from the same pass. They are written only on
+       passes where the rollup actually ran (support.go:455, `if rollupRan`) and otherwise keep
+       their previous values, so they describe the LAST rollup rather than this moment. This
+       predicate therefore uses them ALONE and never alongside readyAt.
+
+    managed == 0 returns None rather than True: with no inventory recorded there is no coverage
+    evidence in either direction, and calling that "never evaluated" would state a fact about the
+    composition from the absence of one.
+    """
+    cov = c.get("coverage") or {}
+    total = cov.get("managedChildrenCount")
+    evaluated = cov.get("healthEvaluatedChildren")
+    unread = cov.get("unreadableChildrenCount")
+    if total is None or evaluated is None or unread is None:
+        return None
+    if total <= 0:
+        return None
+    return evaluated == 0 and unread == 0
+
+
 def stuck_converging(snap, budget_s=CONVERGING_BUDGET_S, now=None):
     """Not-converged compositions, split into (stalled, never_evaluated).
 
-    Each list holds (key, Ready, readyAt, age_seconds). A composition is NEVER EVALUATED when its
-    readyAt is within NEVER_EVALUATED_GRACE_S of its createdAt.
+    Each list holds (key, Ready, readyAt, age_seconds). A composition is NEVER EVALUATED when
+    never_evaluated_by_coverage() says so from core-provider's coverage scalars; only when those
+    cannot answer does it fall back to the old heuristic, readyAt within NEVER_EVALUATED_GRACE_S
+    of createdAt. The scalars are evidence, the window was a guess.
 
     Without a createdAt it is classed STALLED -- the conservative side on purpose, because
     under-reporting a real stall is the failure this bound exists to prevent, and a snapshot taken
@@ -187,8 +237,18 @@ def stuck_converging(snap, budget_s=CONVERGING_BUDGET_S, now=None):
         age = (now - t).total_seconds()
         if age <= budget_s:
             continue
-        born = _parse(c.get("createdAt"))
         row = (key, ready, c.get("readyAt"), age)
+        # THE SCALARS DECIDE WHEN THEY CAN. They are direct evidence about whether the rollup
+        # assessed anything; the timestamp comparison below is a heuristic that stood in for them
+        # and got selfservice-status wrong by nine days. Fallback order, not a blend.
+        by_cov = never_evaluated_by_coverage(c)
+        if by_cov is True:
+            never.append(row)
+            continue
+        if by_cov is False:
+            stalled.append(row)
+            continue
+        born = _parse(c.get("createdAt"))
         if born is not None and abs((t - born).total_seconds()) <= NEVER_EVALUATED_GRACE_S:
             never.append(row)
         else:
@@ -762,10 +822,29 @@ def _self_test():
          post(comp_ready="True/ReconcilePaused"), None, None, 0),
         ("a composition converging for 2h IS a problem -- the demo OOM case",
          post(comp_ready="False/Creating", comp_readyat=_ago(7200)), None, None, 1),
+        # THE FIXTURE CARRIED FULL COVERAGE while describing a never-evaluated composition, so
+        # once the scalars took precedence it failed. The fixture was incoherent, not the code:
+        # a composition the rollup never assessed reads evaluated == 0, not 64 of 64.
         ("a composition converging 2h but born 2h ago is NEVER EVALUATED, not a problem -- the "
          "internal-ca-bundle case, installer#1017",
          post(comp_ready="Unknown/ZeroEvidence", comp_readyat=_ago(7200),
-              comp_createdat=_ago(7206)), None, None, 0),
+              comp_createdat=_ago(7206),
+              cov={"managedChildrenCount": 1, "healthEvaluatedChildren": 0, "unreadableChildrenCount": 0}), None, None, 0),
+        # THE TWO CASES THAT PROVE THE PRECEDENCE, one per direction. Without them the fallback
+        # order is untested and either signal could silently become the only one consulted.
+        ("PRECEDENCE: timestamps say STALLED (born 2h before Ready moved) but the scalars say the "
+         "rollup assessed NOTHING -> NEVER EVALUATED, not a problem. This is selfservice-status "
+         "on demo: 111 s outside a 60 s window, reported as a 226-hour stall that never happened",
+         post(comp_ready="Unknown/ZeroEvidence", comp_readyat=_ago(7200),
+              comp_createdat=_ago(14400),
+              cov={"managedChildrenCount": 1, "healthEvaluatedChildren": 0, "unreadableChildrenCount": 0}), None, None, 0),
+        ("PRECEDENCE, the other way: timestamps say NEVER EVALUATED (born with Ready) but the "
+         "scalars say children WERE evaluated -> a problem. Evidence beats the heuristic in both "
+         "directions, and per core-provider evaluated>0 can be all-ABSENT children, since absent "
+         "is a subset of converging -- which is a real stall, not an unevaluable composition",
+         post(comp_ready="False/Creating", comp_readyat=_ago(7200),
+              comp_createdat=_ago(7206),
+              cov={"managedChildrenCount": 64, "healthEvaluatedChildren": 64, "unreadableChildrenCount": 0}), None, None, 1),
         ("the SAME age, but born long before Ready moved, IS a problem -- it converged once and "
          "regressed",
          post(comp_ready="False/Creating", comp_readyat=_ago(7200),
@@ -822,6 +901,42 @@ def _self_test():
          {"managedChildrenCount": None, "healthEvaluatedChildren": None,
           "unreadableChildrenCount": None}),
     ]
+    # never_evaluated_by_coverage() NEEDS ITS OWN ASSERTIONS. Mutation testing showed the case
+    # list cannot reach its `unread == 0` guard: dropping that guard left all 43 cases passing,
+    # because a composition with unreadable children raises the CHILDREN UNREADABLE problem
+    # independently, and the runner judges only problems>0 vs ==0. So the misclassification was
+    # invisible at that level. These assert the predicate directly.
+    ne_unit = [
+        ("managed>0, evaluated 0, unreadable 0 -> True (the rollup assessed nothing)",
+         {"managedChildrenCount": 1, "healthEvaluatedChildren": 0, "unreadableChildrenCount": 0},
+         True),
+        ("evaluated 0 but unreadable 5 -> FALSE. core-provider: that is ChildrenForbidden, an "
+         "actionable RBAC defect, NOT an unevaluable composition. THE GUARD.",
+         {"managedChildrenCount": 5, "healthEvaluatedChildren": 0, "unreadableChildrenCount": 5},
+         False),
+        ("evaluated 64 of 64 -> False",
+         {"managedChildrenCount": 64, "healthEvaluatedChildren": 64, "unreadableChildrenCount": 0},
+         False),
+        ("evaluated>0 may be ALL-ABSENT children (absent is a subset of converging) -> still "
+         "False: genuinely converging, not unevaluable",
+         {"managedChildrenCount": 3, "healthEvaluatedChildren": 3, "unreadableChildrenCount": 0},
+         False),
+        ("managed 0 -> None, not True. InventoryNotRecorded carries no coverage evidence either "
+         "way, and calling it never-evaluated would state a fact from the absence of one.",
+         {"managedChildrenCount": 0, "healthEvaluatedChildren": 0, "unreadableChildrenCount": 0},
+         None),
+        ("a missing scalar -> None (absent is not zero, same rule as _coverage)",
+         {"managedChildrenCount": 5, "healthEvaluatedChildren": 0},
+         None),
+    ]
+    bad_ne = 0
+    for label, cov, want in ne_unit:
+        got = never_evaluated_by_coverage({"coverage": cov})
+        ok = got is want
+        bad_ne += 0 if ok else 1
+        print("  %-4s never_evaluated: %s" % ("ok" if ok else "FAIL", label))
+        if not ok:
+            print("        want=%r got=%r" % (want, got))
     bad_unit = 0
     for label, st, want in cov_unit:
         got = _coverage(st)
@@ -840,8 +955,8 @@ def _self_test():
         if not ok:
             print("        want_problems=%s got=%s" % (want, d["problems"]))
     print("self-test: %d case(s), %d failure(s)"
-          % (len(cases) + len(cov_unit), bad + bad_unit))
-    return 1 if (bad or bad_unit) else 0
+          % (len(cases) + len(cov_unit) + len(ne_unit), bad + bad_unit + bad_ne))
+    return 1 if (bad or bad_unit or bad_ne) else 0
 
 
 def main():
