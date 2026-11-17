@@ -21025,7 +21025,27 @@
       }
     },
     "core-provider": {
-      "type": "object"
+      "type": "object",
+      "description": "Values passed to the core-provider subchart. Deliberately FREE-FORM apart from the node below: core-provider is a Chart.yaml dependency, so its whole values surface must pass through, and crdgen renders a property-less object as x-kubernetes-preserve-unknown-fields, which is why an Installer CR can carry anything here and nothing prunes it.",
+      "properties": {
+        "serviceAccount": {
+          "type": "object",
+          "additionalProperties": false,
+          "title": "Service account",
+          "description": "DECLARED ONLY TO WITHHOLD `create`. Everything else under core-provider still passes through untouched; this one node is closed because a chart whose RoleBinding subjects follow a serviceAccountName helper binds the namespace's `default` ServiceAccount when create=false and name is empty -- and in krateo-system 12 pods already run as `default`. The same hazard is closed for oasgen-provider and snowplow in this change. Set `name` to use a pre-created ServiceAccount; the subchart still creates one by default.",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "annotations": {
+              "type": "object"
+            },
+            "automount": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
     },
     "core-provider-crds": {
       "type": "object"
