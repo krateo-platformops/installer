@@ -37,7 +37,16 @@ import yaml
 
 VENDORED = "hack/ready-reasons.yaml"
 UPSTREAM_REPO = "krateo-platformops/core-provider"
-UPSTREAM_PATH = "docs/ready-reasons.md"
+# ONE UPSTREAM FILE PER NAMESPACE. The vendored file carries two since 2026-11-17, and they are
+# generated from DIFFERENT code on core-provider's side (internal/readyreason and internal/cdreason)
+# with their own tests refusing a condition constructed elsewhere. A reason string can appear in
+# both and mean different things -- ReconcilePaused is a composition READY reason and a definition
+# SYNCED reason -- so comparing a merged set against a merged table would hide a misclassification
+# rather than catch it. Each namespace is compared against its own table, independently.
+UPSTREAM_PATHS = {
+    "composition": "docs/ready-reasons.md",
+    "compositionDefinition": "docs/cd-ready-reasons.md",
+}
 
 # core-provider's `parent verdict` -> the class this repo files the reason under.
 # The two "unevaluated" rows are a DELIBERATE difference, documented in the vendored file: their
@@ -209,12 +218,31 @@ def compare(upstream_rows, vendored):
     return bad
 
 
-def fetch_upstream():
-    r = subprocess.run(["gh", "api", "repos/%s/contents/%s" % (UPSTREAM_REPO, UPSTREAM_PATH),
+def namespace_problems(doc_namespaces, known_namespaces):
+    """Refusals when the vendored file's namespaces and the gate's checkable set disagree.
+
+    A pure function so it has falsifiers. The dangerous direction is a namespace present in the
+    FILE and absent from the gate: it would go unchecked while the gate printed success, which is
+    the exact shape every other refusal in this file exists to prevent.
+    """
+    out = []
+    missing = set(doc_namespaces) - set(known_namespaces)
+    if missing:
+        out.append("%s declares namespace(s) %s that this gate does not know how to check. Add "
+                   "them to UPSTREAM_PATHS -- an unchecked namespace reads exactly like a checked "
+                   "one." % (VENDORED, sorted(missing)))
+    absent = set(known_namespaces) - set(doc_namespaces)
+    if absent:
+        out.append("%s is missing namespace(s) %s" % (VENDORED, sorted(absent)))
+    return out
+
+
+def fetch_upstream(path):
+    r = subprocess.run(["gh", "api", "repos/%s/contents/%s" % (UPSTREAM_REPO, path),
                         "--jq", ".content"], capture_output=True, text=True, timeout=180)
     if r.returncode or not r.stdout.strip():
         return None, "could not fetch %s:%s -- %s" % (
-            UPSTREAM_REPO, UPSTREAM_PATH, (r.stderr or r.stdout).strip()[:200])
+            UPSTREAM_REPO, path, (r.stderr or r.stdout).strip()[:200])
     try:
         return base64.b64decode(r.stdout.strip()).decode("utf-8"), None
     except Exception as e:  # noqa: BLE001
@@ -282,6 +310,22 @@ SELF_TESTS = [
 ]
 
 
+NAMESPACE_SELF_TESTS = [
+    ("the two namespaces agree", ["composition", "compositionDefinition"],
+     ["composition", "compositionDefinition"], 0),
+    ("THE DANGEROUS DIRECTION: a namespace in the FILE the gate cannot check is REFUSED",
+     ["composition", "compositionDefinition", "somethingNew"],
+     ["composition", "compositionDefinition"], 1),
+    ("a namespace the gate expects but the file lacks is REFUSED",
+     ["composition"], ["composition", "compositionDefinition"], 1),
+    ("both directions wrong at once reports BOTH",
+     ["composition", "extra"], ["composition", "compositionDefinition"], 2),
+    ("FALSIFIER: order and type do not matter, only the SET",
+     ("compositionDefinition", "composition"),
+     {"composition": "a", "compositionDefinition": "b"}, 0),
+]
+
+
 def self_test():
     fails = 0
     for label, up, vend, want_refused in SELF_TESTS:
@@ -300,34 +344,65 @@ def self_test():
     except ValueError:
         print("ok    %-62s refused" % "a reason filed under two classes")
     print()
-    print("check-ready-reasons-current: %s" % ("OK -- %d cases" % (len(SELF_TESTS) + 1)
+    for label, doc_ns, known_ns, want in NAMESPACE_SELF_TESTS:
+        got = len(namespace_problems(doc_ns, known_ns))
+        if got != want:
+            failures += 1
+            print("FAIL  %-62s want %d refusal(s), got %d" % (label, want, got))
+        else:
+            print("ok    %-62s %s" % (label, "accepted" if not want else "%d refusal(s)" % want))
+
+    print("check-ready-reasons-current: %s" % ("OK -- %d cases" % (len(SELF_TESTS) + 1 + len(NAMESPACE_SELF_TESTS))
                                                if not fails else "%d FAILURE(S)" % fails))
     return 1 if fails else 0
 
 
 def main(argv):
-    vendored = yaml.safe_load(open(VENDORED, encoding="utf-8"))
     if "--self-test" in argv:
         return self_test()
-    text, err = fetch_upstream()
-    if err:
-        # FAIL, never skip: an unreachable source reads exactly like a clean comparison.
-        print("::error::check-ready-reasons-current: %s" % err)
+    doc = yaml.safe_load(open(VENDORED, encoding="utf-8"))
+
+    # The namespaces in the vendored file and the ones this gate knows how to check must be the
+    # SAME SET. A namespace present in the file but absent here would go unchecked while the gate
+    # reported success -- the shape every other refusal in this file exists to prevent.
+    nsbad = namespace_problems(doc, UPSTREAM_PATHS)
+    if nsbad:
+        for b in nsbad:
+            print("::error::check-ready-reasons-current: %s" % b)
         return 2
-    rows = parse_table(text)
-    if not rows:
-        print("::error::check-ready-reasons-current: parsed ZERO rows from %s:%s. The table's "
-              "format changed, and a gate that compares against an empty set would pass "
-              "everything." % (UPSTREAM_REPO, UPSTREAM_PATH))
-        return 2
-    print("  upstream %s:%s -> %d distinct reason(s)" % (UPSTREAM_REPO, UPSTREAM_PATH, len(rows)))
-    bad = compare(rows, vendored)
-    for b in bad:
-        print("::error::check-ready-reasons-current: %s" % b)
-    if bad:
+
+    total = 0
+    worst = 0
+    for ns in sorted(UPSTREAM_PATHS):
+        path = UPSTREAM_PATHS[ns]
+        vendored = doc[ns]
+        text, err = fetch_upstream(path)
+        if err:
+            # FAIL, never skip: an unreachable source reads exactly like a clean comparison.
+            print("::error::check-ready-reasons-current: [%s] %s" % (ns, err))
+            return 2
+        rows = parse_table(text)
+        if not rows:
+            print("::error::check-ready-reasons-current: [%s] parsed ZERO rows from %s:%s. The "
+                  "table's format changed, and a gate that compares against an empty set would "
+                  "pass everything." % (ns, UPSTREAM_REPO, path))
+            return 2
+        print("  [%s] upstream %s:%s -> %d distinct reason(s)"
+              % (ns, UPSTREAM_REPO, path, len(rows)))
+        bad = compare(rows, vendored)
+        for b in bad:
+            print("::error::check-ready-reasons-current: [%s] %s" % (ns, b))
+        if bad:
+            worst = 1
+        else:
+            print("  [%s] OK -- %d reason(s), classification agrees with the generated table"
+                  % (ns, len(rows)))
+        total += len(rows)
+    if worst:
         return 1
-    print("  OK -- %d reason(s), classification agrees with the generated table "
-          "(2 deliberate 'unevaluated' differences mapped explicitly)" % len(rows))
+    print("check-ready-reasons-current: OK -- %d namespace(s), %d reason(s) total, each compared "
+          "against its OWN generated table (the 'unevaluated' differences are mapped explicitly)"
+          % (len(UPSTREAM_PATHS), total))
     return 0
 
 

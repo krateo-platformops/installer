@@ -65,7 +65,9 @@ jobs:
         # roll-snapshot.py must stay DEPENDENCY-FREE -- it runs under `python3 -I` with no PyYAML,
         # during a roll, on whatever machine is holding it. So the failed-reason classification is
         # duplicated there as a literal tuple while hack/ready-reasons.yaml remains the source of
-        # truth (and check-ready-reasons-current.py keeps THAT from drifting out of
+        # truth -- specifically its `composition` NAMESPACE, since 2026-11-17 that file carries
+        # a `compositionDefinition` namespace too and roll-snapshot classifies COMPOSITIONS
+        # (and check-ready-reasons-current.py keeps THAT from drifting out of
         # core-provider's generated table).
         #
         # A duplicated classification that nothing compares is a classification that will drift,
@@ -79,7 +81,7 @@ jobs:
           m = re.search(r"^FAILED_REASONS = \((.*?)\)$", src, re.M | re.S)
           assert m, "FAILED_REASONS not found in hack/roll-snapshot.py"
           tool = sorted(re.findall(r'"([^"]+)"', m.group(1)))
-          vendored = sorted(yaml.safe_load(open("hack/ready-reasons.yaml", encoding="utf-8"))["failed"])
+          vendored = sorted(yaml.safe_load(open("hack/ready-reasons.yaml", encoding="utf-8"))["composition"]["failed"])
           print("roll-snapshot.py FAILED_REASONS : %s" % tool)
           print("ready-reasons.yaml failed       : %s" % vendored)
           assert tool, "FAILED_REASONS parsed as EMPTY -- the regex matched nothing useful, which "\
