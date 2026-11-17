@@ -172,6 +172,63 @@
 {{- include "inst.forcePath" (dict "target" $spec "path" (splitList "." $iu.path) "value" $url) }}
 {{- end }}
 {{- end }}
+{{/* In-cluster BASELINE peer URLs (installer#578). The missing THIRD mechanism, and the only
+     one of the three that SUPPLIES a value rather than deriving a browser address or correcting a
+     port:
+       configKeys      derives a BROWSER-reachable base URL (LB IP, node IP, external hostname).
+                       Wrong shape for a controller dialling from inside the cluster.
+       internalUrls    CORRECTS an already-present URL onto the shared port, gated on
+                       `$isLB && exposure.port`. Measured on 057 AND demo (both exposure.type
+                       Gateway): it NEVER FIRES, and snowplow's live composition carries no URL
+                       keys in spec.env at all -- those come from snowplow's own chart defaults.
+       internalPeerUrls (this)  writes the URL in EVERY exposure mode, for a chart that does not
+                       default it. oasgen-provider's rdc is the case that forced it: with
+                       `rdc.env.URL_SNOWPLOW` unset, mutate_restaction.go hard-errors
+                       "no snowplow client is configured" and *ApiRef delegation is silently
+                       inert -- which is exactly what demo's KeycloakServiceAccountRoleMapping
+                       hit on 2026-11-17.
+
+     SELECTION IS BY THE PEER'S DECLARED svcMatch, NEVER BY NAME. authn also publishes
+     `<release>-internal` on 8090, which serves ONLY POST /usernames/check and whose NetworkPolicy
+     admits identity-lifecycle alone. A derivation that "finds authn's Service" can pick it and
+     produce a URL that resolves, connects, and then 404s or is refused depending on the caller --
+     a failure that reads as a misconfigured consumer rather than a wrong derivation.
+
+     THE FQDN. authn stated the form as `http://authn.<ns>.svc:8082`; this writes
+     `.svc.cluster.local`, matching the existing internalUrls mechanism. Both resolve to the same
+     Service, and the fully-qualified form does not depend on the pod's DNS search list or ndots.
+     So a diff against a hand-wired value compares RESOLUTION, not bytes.
+
+     EVERY FAILURE IS A `fail`, NOT A SILENT SKIP. An unresolvable peer, a peer with no Service
+     name, or a peer with no port would otherwise write a URL like `http://.ns.svc:0` that
+     resolves to nothing and surfaces hours later as a consumer error. A pinned component that
+     declares this must render correctly or not at all. */}}
+{{- range $pu := ($c.internalPeerUrls | default list) }}
+{{- $peer := dict }}
+{{- range $d := $components }}
+{{- if eq $d.name $pu.peer }}
+{{- $peer = $d }}
+{{- end }}
+{{- end }}
+{{- if not (get $peer "name") }}
+{{- fail (printf "component %s declares internalPeerUrls path %s with peer %q, which is not a pinned component. The peer must be a component in component-pins.yaml so its svcMatch and exposePort can be resolved." $c.name $pu.path $pu.peer) }}
+{{- end }}
+{{- $svc := $pu.service | default $peer.svcMatch | default "" }}
+{{- if not $svc }}
+{{- fail (printf "component %s declares internalPeerUrls path %s with peer %s, which declares no svcMatch, and the entry supplies no explicit `service`. Add one or the URL would name an empty Service." $c.name $pu.path $pu.peer) }}
+{{- end }}
+{{- $port := 0 }}
+{{- if and $isLB $top.Values.exposure.port $peer.expose }}
+{{- $port = int $top.Values.exposure.port }}
+{{- else }}
+{{- $port = int ($pu.port | default $peer.exposePort | default 0) }}
+{{- end }}
+{{- if not $port }}
+{{- fail (printf "component %s declares internalPeerUrls path %s with peer %s, which declares no exposePort, and the entry supplies no explicit `port`. cmp-usage-collector's showback peer is the case this guards." $c.name $pu.path $pu.peer) }}
+{{- end }}
+{{- $url := printf "http://%s.%s.svc.cluster.local:%v" $svc $top.Values.namespaces.krateo $port }}
+{{- include "inst.forcePath" (dict "target" $spec "path" (splitList "." $pu.path) "value" $url) }}
+{{- end }}
 {{/* Internal service PORTS (the port-only sibling of internalUrls). A component declares
      `internalPorts: [{path: <dotted chart-values path>}]` for an INTEGER port it hardcodes at an
      exposed peer's per-component default — e.g. agentgateway-policies' `jwt.jwks.port` (the JWKS

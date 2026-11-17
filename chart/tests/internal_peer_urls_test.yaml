@@ -1,0 +1,168 @@
+# internalPeerUrls -- the in-cluster BASELINE peer URL derivation (installer#578).
+#
+# WHY THIS IS NOT A `helm template` CHECK. compositions.yaml LISTs every CRD with `lookup` at its
+# head and `helm template` DISABLES lookup, so that file renders ZERO composition objects. I
+# measured it while building this: `helm template t chart --set features.oasgenProvider=true`
+# produced no OasgenProvider at all, so a check built on it would report a derivation that never
+# ran. helm-unittest's kubernetesProvider serves the LIST and the per-dep by-name lookups.
+#
+# WHAT THE DERIVATION IS FOR. rest-dynamic-controller resolves *ApiRef delegation through
+# snowplow, authenticating via authn. With rdc.env.URL_SNOWPLOW unset, mutate_restaction.go
+# hard-errors "no snowplow client is configured" and every delegated observe/apply/delete is
+# SILENTLY INERT. Measured on demo 2026-11-17: KeycloakServiceAccountRoleMapping
+# krateo-identity-lifecycle-roles sat at Synced=False/ReconcileError with that exact message
+# while its parent composition read Ready=True/AvailablePartialCoverage, because the child was
+# one of 8 the rollup never health-evaluated. Nothing in the platform reported it.
+#
+# WHY A THIRD MECHANISM AND NOT internalUrls. internalUrls is gated on
+# `$isLB && exposure.port`, and BOTH 057 and demo run exposure.type Gateway -- so it never fires
+# on either, and snowplow's live composition carries no URL keys in spec.env at all (those come
+# from its own chart defaults). internalUrls CORRECTS an existing value; this one SUPPLIES a
+# missing one. CASE 1 is what internalUrls could not have done.
+suite: internalPeerUrls - in-cluster baseline peer URLs, in every exposure mode
+templates:
+  - templates/compositions.yaml
+tests:
+  - it: "CASE 1 -- Gateway mode: the URLs are SUPPLIED, at the peers' OWN ports"
+    set:
+      features.oasgenProvider: true
+      exposure.type: Gateway
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider: &fixture
+      scheme:
+        "apiextensions.k8s.io/v1/CustomResourceDefinition":
+          gvr:
+            version: v1
+            group: apiextensions.k8s.io
+            resource: customresourcedefinitions
+        "composition.krateo.io/v0-74-0/OasgenProviderCrds":
+          gvr:
+            group: composition.krateo.io
+            version: v0-74-0
+            resource: oasgenprovidercrdses
+          namespaced: true
+      objects:
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: oasgenproviders.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: OasgenProvider}
+            versions: [{name: v0-74-0, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: oasgenprovidercrdses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: OasgenProviderCrds}
+            versions: [{name: v0-74-0, served: true}]
+        # the dep must read Ready, or the umbrella OMITS its dependents entirely and the
+        # assertions below would fail on an empty render rather than on a wrong URL
+        - apiVersion: composition.krateo.io/v0-74-0
+          kind: OasgenProviderCrds
+          metadata: {name: oasgen-provider-crd, namespace: krateo-system}
+          status:
+            conditions:
+              - {type: Ready, status: "True"}
+              - {type: Synced, status: "True"}
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.rdc.env.URL_SNOWPLOW
+          value: http://snowplow.krateo-system.svc.cluster.local:8081
+        documentSelector:
+          path: kind
+          value: OasgenProvider
+      - equal:
+          path: spec.rdc.env.URL_AUTHN
+          value: http://authn.krateo-system.svc.cluster.local:8082
+        documentSelector:
+          path: kind
+          value: OasgenProvider
+  # THE CASE THAT JUSTIFIES THE MECHANISM OVER A LITERAL IN values.yaml. values.yaml is not
+  # templated, so a hardcoded http://authn.krateo-system.svc:8082 would be WRONG for any install
+  # using a different platform namespace -- and wrong silently, because the URL still parses and
+  # merely resolves to nothing. Without this case the derivation could be replaced by a literal
+  # and every other case here would still pass.
+  - it: "CASE 2 -- the namespace FOLLOWS namespaces.krateo, which a values.yaml literal could not"
+    set:
+      features.oasgenProvider: true
+      exposure.type: Gateway
+      namespaces.krateo: krateo-elsewhere
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider:
+      scheme:
+        "apiextensions.k8s.io/v1/CustomResourceDefinition":
+          gvr:
+            version: v1
+            group: apiextensions.k8s.io
+            resource: customresourcedefinitions
+        "composition.krateo.io/v0-74-0/OasgenProviderCrds":
+          gvr:
+            group: composition.krateo.io
+            version: v0-74-0
+            resource: oasgenprovidercrdses
+          namespaced: true
+      objects:
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: oasgenproviders.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: OasgenProvider}
+            versions: [{name: v0-74-0, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: oasgenprovidercrdses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: OasgenProviderCrds}
+            versions: [{name: v0-74-0, served: true}]
+        # in the MOVED namespace -- the dep gate resolves the dep BY NAMESPACE, so a fixture
+        # left at krateo-system makes the umbrella omit the dependent and the case fails with
+        # "document not found" rather than a wrong URL
+        - apiVersion: composition.krateo.io/v0-74-0
+          kind: OasgenProviderCrds
+          metadata: {name: oasgen-provider-crd, namespace: krateo-elsewhere}
+          status:
+            conditions:
+              - {type: Ready, status: "True"}
+              - {type: Synced, status: "True"}
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.rdc.env.URL_SNOWPLOW
+          value: http://snowplow.krateo-elsewhere.svc.cluster.local:8081
+        documentSelector:
+          path: kind
+          value: OasgenProvider
+      - equal:
+          path: spec.rdc.env.URL_AUTHN
+          value: http://authn.krateo-elsewhere.svc.cluster.local:8082
+        documentSelector:
+          path: kind
+          value: OasgenProvider
+  # Under an LB/NodePort port collapse the EXPOSED peers move to the shared port -- the same
+  # correction internalUrls exists for. So this mechanism stays correct in the mode the other was
+  # built for, instead of fighting it.
+  - it: "CASE 3 -- LoadBalancer + exposure.port: exposed peers follow the SHARED port"
+    set:
+      features.oasgenProvider: true
+      exposure.type: LoadBalancer
+      exposure.port: 8443
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider: *fixture
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.rdc.env.URL_SNOWPLOW
+          value: http://snowplow.krateo-system.svc.cluster.local:8443
+        documentSelector:
+          path: kind
+          value: OasgenProvider
+      - equal:
+          path: spec.rdc.env.URL_AUTHN
+          value: http://authn.krateo-system.svc.cluster.local:8443
+        documentSelector:
+          path: kind
+          value: OasgenProvider

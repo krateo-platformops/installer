@@ -289,6 +289,11 @@ components:
   - oasgen-provider-crd
   tier: platform
   feature: oasgenProvider
+  internalPeerUrls:
+  - path: rdc.env.URL_SNOWPLOW
+    peer: snowplow
+  - path: rdc.env.URL_AUTHN
+    peer: authn
 - name: clickhouse-operator
   kind: ClickhouseOperator
   version: 0.1.2
