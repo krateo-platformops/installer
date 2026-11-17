@@ -106,7 +106,29 @@ sources:
   #   `use: 1.12.70`. 057 runs 1.12.70 and main pins 1.12.70, so there are 0 hits today -- the
   #   snowplow session ran this repo's own check-retracted-versions.py against the file and got
   #   0 errors and 0 hits on main's pins, with a pin at 1.12.71-1.12.73 hitting both components.
-  #   Expected to shrink: if launch B passes, 1.12.71 is published and its entry removed.
+  #   THAT LIST DOES NOT SHRINK, and my earlier note here said it would. Diego ruled on
+  #   2026-11-17 that 1.12.71 is not released at all, and the next release is 1.12.74,
+  #   carrying everything since 1.12.70 and measured against 1.12.70 in ONE paired run after
+  #   the bench fix (snowplow#1511) and its rehearsal.
+  #   THE MERIT IS "UNMEASURED", NOT "DEFECTIVE" -- snowplow corrected my first wording here
+  #   and the distinction is theirs to set. They release only versions measured against the
+  #   current release, and these three were never measured: launch A (1.12.72) and launch B
+  #   (1.12.71) both ended INVALID because GKE resized the control planes mid-measure, and
+  #   1.12.73 was never run. After the 1.12.74 ruling they will never be measured. So they are
+  #   retracted for want of evidence, and NOT known to be defective.
+  #   WHICH IS A THIRD CATEGORY, distinct from both notes above it. observability's 0.1.47 was
+  #   SUPERSEDED -- fine to pin, so deliberately not listed. frontend's 1.8.24 was DEFECTIVE --
+  #   a measured enum regression. These three are UNMEASURED: nobody claims they are broken and
+  #   nobody can say they are not. They stay listed permanently, and the reason to honour the
+  #   retraction is the absence of evidence rather than the presence of a defect. Do not prune
+  #   them because 1.12.74 supersedes them, and do not describe them as broken either.
+  #   snowplow#1514 makes their own file say exactly this per reason; this gate picks it up when
+  #   it merges. That PR also corrects their header's description of this check's scope, which
+  #   matches what the script prints: on a PULL REQUEST it checks the CHANGED pins, and on a
+  #   push to main or a manual run it checks EVERY pin and Chart.yaml dependency.
+  #   Ordering that constrains this repo: 1.12.74 is cut BEFORE snowplow#1504 merges, so it
+  #   keeps the impersonateGroups CEL rule and works with any core-provider. The version
+  #   carrying #1504 comes after, behind the installer's own tag sequence.
   - repo: krateo-platformops/snowplow
     charts:
       - snowplow
