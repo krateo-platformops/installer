@@ -106,7 +106,21 @@ sources:
   #   `use: 1.12.70`. 057 runs 1.12.70 and main pins 1.12.70, so there are 0 hits today -- the
   #   snowplow session ran this repo's own check-retracted-versions.py against the file and got
   #   0 errors and 0 hits on main's pins, with a pin at 1.12.71-1.12.73 hitting both components.
-  #   Expected to shrink: if launch B passes, 1.12.71 is published and its entry removed.
+  #   THAT LIST DOES NOT SHRINK, and my earlier note here said it would. Diego ruled on
+  #   2026-11-17 that 1.12.71 is not released at all: the run measuring it ended INVALID
+  #   because GKE resized the control planes mid-measure. 1.12.71, 1.12.72 and 1.12.73 stay
+  #   retracted permanently and the next release is 1.12.74, carrying everything since
+  #   1.12.70 and measured against 1.12.70 in ONE paired run after the bench fix
+  #   (snowplow#1511) and its rehearsal. So expect four entries' worth of history here, not
+  #   three shrinking to two.
+  #   AND THESE THREE ARE NOT MERELY SUPERSEDED. The observability note above draws the right
+  #   distinction -- 0.1.47 was superseded, not defective, so it was deliberately NOT listed.
+  #   1.12.71-1.12.73 look like the same shape now that 1.12.74 supersedes them, and they are
+  #   not: they are retracted on their own merits and stay listed. Do not prune them from this
+  #   source's expectations just because a higher version exists.
+  #   Ordering that constrains this repo: 1.12.74 is cut BEFORE snowplow#1504 merges, so it
+  #   keeps the impersonateGroups CEL rule and works with any core-provider. The version
+  #   carrying #1504 comes after, behind the installer's own tag sequence.
   - repo: krateo-platformops/snowplow
     charts:
       - snowplow
