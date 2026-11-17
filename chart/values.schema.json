@@ -14257,6 +14257,45 @@
                   }
                 }
               }
+            },
+            "users": {
+              "type": "array",
+              "title": "Realm users",
+              "description": "Users the realm chart creates, as KeycloakUser objects reconciled through the chart's KeycloakUserConfiguration. NO PASSWORDS: a first password is set by the user through Keycloak's \"Forgot password?\" flow using realm SMTP. Kept on uninstall. Mirrors the realm chart's own schema, so a value this accepts cannot be one the chart then rejects at render.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "username"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255,
+                    "pattern": "^[A-Za-z0-9._@-]+$"
+                  },
+                  "firstName": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "lastName": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "email": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "pattern": "^[^@\\s]+@[^@\\s]+$"
+                  },
+                  "emailVerified": {
+                    "type": "boolean"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
             }
           }
         },
