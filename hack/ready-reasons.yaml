@@ -292,7 +292,7 @@ compositionDefinition:
   source:
     repo: krateo-platformops/core-provider
     path: docs/cd-ready-reasons.md
-    checked_against: 7da72488f779697fe22a55ebb73859713a9faaa5
+    checked_against: ded4da21785f2d8d13cc2036c59f44be3b2d5d9e
     checked_on: "2026-11-17"
     # THIS TABLE IS ON core-provider's MAIN AND IN NO RELEASE, which they pointed out after I
     # vendored it. So this namespace classifies behaviour that NOTHING RUNS YET: 057 is on
@@ -349,6 +349,10 @@ compositionDefinition:
     # when 7da7248 is tagged; the other two need no gate because they are already live.
     released_in:
       SchemaDefaultContradiction: null
+      # Merged to core-provider main as ded4da2 (PR #567) on 2026-11-17 and IN NO TAG. The next
+      # core-provider tag waits on this repo's 057 roll and on portal 1.8.133, so nothing emits
+      # this reason yet -- recorded so a reader does not expect to see it on a cluster.
+      ValuesSchemaMissing: null
       RemoteChartUnreachable: "already written by 2.13.105; its FAILED rollup verdict is what
         needs the 7da7248 release"
       ScaledToZero: "2.13.84"
@@ -456,6 +460,13 @@ compositionDefinition:
     # Both of these are definition-only and had no classification here before the split.
     - RemoteChartUnreachable
     - SchemaDefaultContradiction
+    # ValuesSchemaMissing: the chart ships no values.schema.json at its ROOT, so no typed CRD can
+    # be generated and nothing is applied; the message names the chart. Added after core-provider
+    # merged #566 as PR #567 (ded4da2), which this repo asked for: the kyverno pin sat at
+    # Ready=False/CREATING for ever on kc-roll057 with the schema missing -- a CONVERGING reason
+    # for a state that cannot change, so a time-bounded detector was the only thing that could
+    # ever have noticed. The new reason makes it FAILED, which is a verdict rather than a wait.
+    - ValuesSchemaMissing
   unevaluated:
     # NotObserved is core-provider's "unevaluated (rolls up as healthy)" -- a PARENT counts such
     # a child healthy. This repo files it unevaluated and its tooling counts it NOT converged,
