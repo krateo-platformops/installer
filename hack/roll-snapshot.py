@@ -72,6 +72,29 @@ CONVERGING_BUDGET_S = 900
 CONVERGED = ("True/Available", "True/AvailablePartialCoverage",
              "True/ReconcileGracefullyPaused", "True/ReconcilePaused")
 
+# The reasons that mean a COMPOSITION has FAILED, as opposed to not having converged yet.
+#
+# hack/ready-reasons.yaml IS THE SOURCE OF TRUTH for this classification, and
+# check-ready-reasons-current.py keeps it from drifting out of core-provider's generated table.
+# It is duplicated here as a literal because this tool must stay dependency-free -- it runs under
+# `python3 -I` with no PyYAML, during a roll, on whatever machine is holding the roll. The
+# check-roll-snapshot workflow asserts this tuple EQUALS that file's `failed` list, so the
+# duplication is gated rather than trusted.
+#
+# WHY NOT just reuse the definitions check, `Ready != "True/Available"`. Because compositions
+# legitimately sit at other converged states and a blunt copy would fire on healthy clusters:
+# measured on 057, 15 of 86 compositions read AvailablePartialCoverage and one read
+# ReconcilePaused. Reporting those as problems would train the reader to ignore the check, which
+# is worse than not having it.
+#
+# WHY IT MATTERS NOW. core-provider's #498 + #559 (decided 2026-11-17) move a crash-looping
+# workload child from converging to FAILED once the Deployment gives up its own
+# progressDeadlineSeconds, so the composition will read Ready=False/Unavailable with the pod
+# cause in the message. There is no new reason to classify -- Unavailable is already failed here
+# -- but there WAS no check that looked. A composition left failed after a roll was reported as a
+# changed field and nothing more.
+FAILED_REASONS = ("Unavailable", "CreateOutcomeUnknown")
+
 
 def stuck_converging(snap, budget_s=CONVERGING_BUDGET_S, now=None):
     """Compositions that are not converged and whose Ready last changed longer ago than budget_s.
@@ -264,6 +287,17 @@ def diff(pre, post, expect_delta=None, matching=None):
             % json.dumps(recreated, sort_keys=True))
     if out["compositions"]["gone"]:
         out["problems"].append("COMPOSITIONS DISAPPEARED: %s" % out["compositions"]["gone"])
+    # The composition counterpart of the definitions check below, which existed while this one did
+    # not. A composition whose Ready reason is in the FAILED class is not mid-convergence: it is
+    # the state krateoEval maps to failed, which the umbrella inherits.
+    failed = {k: v.get("Ready") for k, v in (post.get("compositions") or {}).items()
+              if str(v.get("Ready", "")).split("/", 1)[-1] in FAILED_REASONS}
+    if failed:
+        out["problems"].append(
+            "COMPOSITIONS FAILED: %d -- %s. These reasons are the FAILED class, not a state that "
+            "settles on its own, and the umbrella inherits them. After core-provider #498 this is "
+            "also what a crash-looping workload child reads as, with the pod cause in the message."
+            % (len(failed), json.dumps(failed, sort_keys=True)))
 
     pd, pod = pre.get("definitions", {}), post.get("definitions", {})
     out["definitions"]["gone"] = sorted(set(pd) - set(pod))
@@ -398,6 +432,15 @@ def _self_test():
         # CompositionDefinitions. The first case is the one that protects a roll verification:
         # a CD left at False/Unavailable is what krateoEval maps to FAILED and the umbrella
         # inherits, so it must be REPORTED rather than passed over.
+        ("a composition left at False/Unavailable IS a problem -- the post-#498 crash-loop signal",
+         post(comp_ready="False/Unavailable"), None, None, 1),
+        ("a composition at False/CreateOutcomeUnknown IS a problem too",
+         post(comp_ready="False/CreateOutcomeUnknown"), None, None, 1),
+        ("FALSIFIER: AvailablePartialCoverage is CONVERGED, not failed -- 15 of 86 on 057 read "
+         "this, and firing on them would train the reader to ignore the check",
+         post(comp_ready="True/AvailablePartialCoverage"), None, None, 0),
+        ("FALSIFIER: ReconcilePaused is CONVERGED too -- healthy-but-paused is not failed",
+         post(comp_ready="True/ReconcilePaused"), None, None, 0),
         ("a composition converging for 2h IS a problem -- the demo OOM case",
          post(comp_ready="False/Creating", comp_readyat=_ago(7200)), None, None, 1),
         ("FALSIFIER: converging for 60s is a NORMAL bump and must NOT trip",
