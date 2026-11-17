@@ -9674,7 +9674,7 @@ components:
   # Same shape as the nightly-review caveat observability raised: a static reference to a SETTABLE
   # name. agentiko-mcp-server's side is a value defaulting to "" that refuses to render in exchange
   # mode, so their half fails loudly at install; this half is the one that can drift quietly.
-  version: 0.5.3
+  version: 0.6.0
   # THE RENDER-TIME GATE THAT MATTERS. Every object this chart emits is a KOG-generated kind in
   # keycloak.ogen.krateo.io, and those CRDs do not exist until keycloak-config-kog's oasgen
   # RestDefinitions have been reconciled. requiresApiGroups is hard-ANDed outside the $exists
