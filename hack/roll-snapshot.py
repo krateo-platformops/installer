@@ -422,11 +422,23 @@ def diff(pre, post, expect_delta=None, matching=None):
             "CHILDREN UNREADABLE: %s reads %s with %d of %d children the rollup was refused a "
             "read of. The rollup is fail-safe, so this reads green; core-provider calls the "
             "refusal a defect in generated RBAC." % (key, ready, n, total))
-    # Reported, not a problem -- a kind with no readiness model is permanent, so this would fire
-    # on every roll for ever.
+    # GROWTH ONLY. The absolute count is a steady state on a healthy cluster (32 of 89
+    # compositions on 057), so reporting it per object every time is noise. A count that GREW
+    # across the window is the informative case: children appeared that the rollup cannot assess.
+    # Reported, not a problem -- new children of an unmodelled kind are normal.
+    _pre_gap = {}
+    for key, c in (pre.get("compositions") or {}).items():
+        cov = c.get("coverage") or {}
+        t, e, u = (cov.get("managedChildrenCount"), cov.get("healthEvaluatedChildren"),
+                   cov.get("unreadableChildrenCount"))
+        if None not in (t, e, u):
+            _pre_gap[key] = t - e - u
     for key, n, total, ready in _unevaluated:
-        out.setdefault("partial_coverage", []).append(
-            "%s reads %s with %d of %d children never health-evaluated" % (key, ready, n, total))
+        was = _pre_gap.get(key)
+        if was is not None and n > was:
+            out.setdefault("partial_coverage", []).append(
+                "%s reads %s with %d of %d children never health-evaluated, up from %d"
+                % (key, ready, n, total, was))
     if out["releases"]["gone"]:
         out["problems"].append("RELEASES DISAPPEARED: %s" % out["releases"]["gone"])
     bad_status = {k: v["status"] for k, v in po.items() if v.get("status") != "deployed"}
@@ -897,13 +909,31 @@ def main():
         # printed because its ABSENCE is the informative case -- 76 of 81 children unevaluated is
         # what AvailablePartialCoverage looks like from the inside, and I described that
         # population as "converging" to two sessions today when core-provider EXCLUDES it.
+        # AGGREGATE, NOT ONE LINE PER COMPOSITION. Measured on 057 2026-11-17: 32 of 89
+        # compositions carry at least one unevaluated child and 939 of 1914 named children are
+        # unevaluated fleet-wide. A per-object list is therefore 32 lines on EVERY capture of a
+        # healthy cluster -- which is precisely the "fires for ever and teaches the reader to
+        # skip the line" failure this script already warns about for NEVER EVALUATED. The
+        # per-object detail is in the JSON; the printed form is the denominator.
+        #
+        # Nor is a per-object list informative here: core-provider's reason already names the
+        # compositions where it matters most. childhealth.go availableReason() is
+        # `unevaluated*2 > total`, so AvailablePartialCoverage means the rollup assessed a
+        # MINORITY. Verified against all 88 compositions on the Available arm: 0 mismatches,
+        # with the predicate inverted giving 88 of 88, so the comparison can distinguish.
         if unevaluated:
-            print("\nPARTIAL COVERAGE: %d composition(s) with children the rollup never "
-                  "health-evaluated. NOT a finding -- core-provider treats a kind with no "
-                  "readiness model as existence-is-health and EXCLUDES it from the rollup "
-                  "rather than counting it as converging." % len(unevaluated))
-            for key, n, total, ready in unevaluated:
-                print("  %-56s %-20s %d of %d never evaluated" % (key, ready, n, total))
+            _u = sum(n for _, n, _, _ in unevaluated)
+            _t = sum(t for _, _, t, _ in unevaluated)
+            # THE DENOMINATOR NAMES ITS POPULATION. _t sums only the compositions that HAVE a
+            # gap, so it is not the fleet total: on 057 that is 939 of 1400 (67%) among the 32
+            # affected, where the fleet figure is 939 of 1914 (49%). Two different claims, and
+            # "939 of 1400 named children" reads as the second one.
+            print("\nPARTIAL COVERAGE: %d composition(s) carry %d of THEIR OWN %d named "
+                  "children unevaluated (%.0f%% of those, not of the fleet). NOT a finding -- "
+                  "a kind with no "
+                  "readiness model is existence-is-health and is EXCLUDED from the rollup, not "
+                  "counted as converging. Per-composition detail is in the JSON; a GROWING count "
+                  "is what `diff` reports." % (len(unevaluated), _u, _t, 100.0 * _u / _t))
         if stalled:
             print("\nFINDINGS: %d composition(s) converging longer than %ds, having previously "
                   "moved. CONVERGING IS NOT CONVERGED, and nothing in the platform bounds it yet "
