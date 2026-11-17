@@ -294,6 +294,90 @@ compositionDefinition:
     path: docs/cd-ready-reasons.md
     checked_against: 7da72488f779697fe22a55ebb73859713a9faaa5
     checked_on: "2026-11-17"
+    # THIS TABLE IS ON core-provider's MAIN AND IN NO RELEASE, which they pointed out after I
+    # vendored it. So this namespace classifies behaviour that NOTHING RUNS YET: 057 is on
+    # 2.13.105 and this repo's tag 1 carries 2.13.107, and neither has the CD Deployment watch,
+    # the rollout rule or the pod cause that #557 (7da7248) introduces.
+    #
+    # WHAT THAT MEANS FOR USING THIS NAMESPACE TODAY. MEASURED HERE, at both tags the fleet
+    # runs, using the method recorded under `how_to_measure_a_tag` below. core-provider corrected
+    # me twice before this -- I had said three reasons "may not be written at all" on
+    # 2.13.105/2.13.107, and two of the three are written today -- so these are their numbers
+    # reproduced independently rather than relayed:
+    #
+    #   reason                       written on 2.13.105 / 2.13.107   rollup verdict TODAY
+    #   RemoteChartUnreachable       YES  2 / 2   cd.go:1662           CONVERGING, not failed
+    #   ScaledToZero                 YES  6 / 6   scaletozero.go:76    healthy (Ready=True)
+    #   SchemaDefaultContradiction   NO   0 / 0                        n/a, cannot occur
+    #
+    #   krateoEval arms in childhealth.go, same tags: Unavailable 8, Available 7, Creating 8,
+    #   NotObserved 1, and ZERO for RemoteChartUnreachable, ScaledToZero and Deleting. A reason
+    #   with no arm falls to the default, and the default is childhealth.go:882
+    #   `default: return is(childConverging)` -- which is WHY RemoteChartUnreachable rolls up
+    #   converging on these versions rather than failed.
+    #
+    #   The control that makes a zero mean "absent" rather than "wrong path", core-provider's
+    #   suggestion and the reason I trust the zeros: SchemaDefaultContradiction is known absent
+    #   at 2.13.105 and returned 0, while ScaledToZero is known present and returned 6 at
+    #   scaletozero.go:76. Both at tag commits c62e4e7 (2.13.105) and 24051a7 (2.13.107).
+    #
+    # SO THE `failed` LIST BELOW IS CORRECT FOR THE TABLE AND WRONG FOR 057'S UMBRELLA. This
+    # file classifies a REASON; the cdc's rollup assigns a VERDICT to that reason, and the two
+    # can disagree by cdc version. RemoteChartUnreachable becomes a FAILED rollup only in the cdc
+    # of the release containing 7da7248. 057's umbrella is reconciled by 2.13.105's cdc, where it
+    # still rolls up as converging -- so a verification using this list would call such a
+    # definition failed while check-ready-gate, reading the umbrella, calls it converging.
+    # Neither is wrong; they are answering different questions.
+    #
+    # What is new in BEHAVIOUR rather than in reason strings, and all of it requires
+    # core-provider >= the release containing 7da7248: the rollout rule (Available requires the
+    # controller to have rolled out), the Ready-follows-status switch, the Deployment watch, and
+    # the pod cause. Before it, a CD reads Available from DECLARED REPLICAS and re-checks only at
+    # its 3m poll, so a green CD is NOT evidence that its controller is running.
+    #
+    # It is correct about the generated table, which is a different claim from being correct
+    # about 057.
+    #
+    # The drift gate compares against their MAIN deliberately, so this file tracks where the
+    # behaviour is going rather than where it has been. That is the right target for a drift
+    # check and the wrong one for a verification, and the distinction is the reason this note
+    # exists.
+    # Per-reason, since only one of them is actually new. core-provider will supply the version
+    # when 7da7248 is tagged; the other two need no gate because they are already live.
+    released_in:
+      SchemaDefaultContradiction: null
+      RemoteChartUnreachable: "already written by 2.13.105; its FAILED rollup verdict is what
+        needs the 7da7248 release"
+      ScaledToZero: "2.13.84"
+    # HOW TO MEASURE THIS AT A TAG, so it never has to be asked again. core-provider supplied
+    # the method; the repo is public and nothing is needed from them. Their tags carry NO "v".
+    #
+    #   git clone -q --depth 1 --branch <tag> \
+    #     https://github.com/krateo-platformops/core-provider /tmp/cp-<tag>
+    #
+    #   1) is the reason WRITTEN by that release? READ THE HIT -- a count alone does not
+    #      distinguish a write from a comment or a CRD description:
+    #      git -C /tmp/cp-<tag> grep -n '<Reason>' -- go/core-provider/internal go/core-provider/apis
+    #
+    #   2) what VERDICT does that release's cdc rollup give it? The arms are literal reason
+    #      strings in krateoEval:
+    #      git -C /tmp/cp-<tag> grep -n '"<Reason>"' -- \
+    #        go/composition-dynamic-controller/internal/composition/childhealth.go
+    #      no arm -> the default (converging for a False Ready); Ready=True -> healthy;
+    #      Unknown NotObserved -> unevaluated
+    #
+    #   ALWAYS RUN THE CONTROL: one reason known ABSENT at that tag and one known PRESENT, so a
+    #   zero means absent and not a wrong path. Every zero in the table above has that control
+    #   behind it.
+    #
+    # FROM the first release containing 7da7248 onward, step 2 is unnecessary: read the tables AT
+    # THE TAG, since they are generated from that release's code and checked against it by a test:
+    #   gh api 'repos/krateo-platformops/core-provider/contents/docs/cd-ready-reasons.md?ref=<tag>' \
+    #     -q .content | base64 -d
+    #
+    # THE TAG IS THE INPUT FOR "WHAT DOES 057 DO". The drift gate's comparison against MAIN
+    # answers a different question and stays right for it. The cdc image tag equals the
+    # core-provider tag, so the version to measure is readable from the cluster.
   condition_types:
     # Same shape as the composition namespace, because check-ready-reasons-current.py reads
     # condition_types[<cond>].healthy / .unhealthy to assert every NON-Ready upstream reason is
