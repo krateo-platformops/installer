@@ -166,3 +166,37 @@ tests:
         documentSelector:
           path: kind
           value: OasgenProvider
+  # PRECEDENCE AGAINST A componentValues OVERRIDE. keycloak-provider-kog asked which wins when a
+  # hand-set CR value and this derivation both write rdc.env.URL_*, because the answer decides
+  # whether a stale override left on a cluster is harmless or silently defeats the platform's
+  # wiring. compositions.yaml:451 already records the mechanism -- forcePath runs BEFORE the
+  # componentValues merge and that merge is `merge`, not `mergeOverwrite`, so the DESTINATION
+  # ($spec) wins -- and notes that both were measured, `merge` keeping FROM_FORCEPATH and
+  # `mergeOverwrite` keeping FROM_COMPONENTVALUES. This asserts it instead of quoting it, because
+  # a rehearsal is about to depend on it and a comment claiming more than its code is exactly the
+  # failure I hit elsewhere today.
+  #
+  # CONSEQUENCE, which is the reassuring direction: an override left behind by mistake is INERT.
+  # It cannot mask the derivation.
+  - it: "CASE 4 -- a componentValues override of the same path is IGNORED; the derivation wins"
+    set:
+      features.oasgenProvider: true
+      exposure.type: Gateway
+      bootstrap.coreProvider.enabled: false
+      componentValues.oasgen-provider.rdc.env.URL_AUTHN: http://STALE-OVERRIDE.example:1
+      componentValues.oasgen-provider.rdc.env.URL_SNOWPLOW: http://STALE-OVERRIDE.example:2
+    kubernetesProvider: *fixture
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.rdc.env.URL_AUTHN
+          value: http://authn.krateo-system.svc.cluster.local:8082
+        documentSelector:
+          path: kind
+          value: OasgenProvider
+      - equal:
+          path: spec.rdc.env.URL_SNOWPLOW
+          value: http://snowplow.krateo-system.svc.cluster.local:8081
+        documentSelector:
+          path: kind
+          value: OasgenProvider
