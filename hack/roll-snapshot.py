@@ -288,15 +288,51 @@ def diff(pre, post, expect_delta=None, matching=None):
     if out["compositions"]["gone"]:
         out["problems"].append("COMPOSITIONS DISAPPEARED: %s" % out["compositions"]["gone"])
     # The composition counterpart of the definitions check below, which existed while this one did
-    # not. A composition whose Ready reason is in the FAILED class is not mid-convergence: it is
-    # the state krateoEval maps to failed, which the umbrella inherits.
+    # not. A composition whose Ready reason is in the FAILED class is the state krateoEval maps to
+    # failed, which the umbrella inherits.
+    #
+    # CORRECTED 2026-11-17, same day it was written. I first said this is "not a state that
+    # settles on its own". core-provider then read the Deployment controller's source
+    # (k8s.io/kubernetes v1.36.4 pkg/controller/deployment/progress.go:40-100) and one arm of it
+    # DOES settle: the progress switch runs on every sync while the rollout is incomplete, and
+    # DeploymentProgressing -- any gain in updated, ready or available replicas -- is evaluated
+    # BEFORE DeploymentTimedOut. So ProgressDeadlineExceeded flaps back to Progressing=True on
+    # the next bit of progress, even before completion. A slow rollout therefore produces a
+    # TRANSIENT failed reading inside the very window a roll samples.
+    #
+    # AND THE TWO LAYERS DISAGREE FOR UP TO ONE RESYNC, neither being wrong -- BUT ONLY FROM A
+    # VERSION NOTHING RUNS YET. core-provider corrected this after I first wrote it, and the
+    # correction matters because the sentence states a behaviour BY VERSION:
+    #
+    #   core-provider#557 (7da7248) is on their MAIN and in NO RELEASE. 057 runs 2.13.105 and
+    #   tag 1 carries 2.13.107; NEITHER has the CD Deployment watch, the rollout rule, or the pod
+    #   cause. The requirement is "core-provider >= the first release containing 7da7248", and
+    #   that version does not exist yet -- it is held behind this repo's roll and frontend's #457.
+    #
+    # FROM that release: a CD's controller watches its Deployment, so the CD heals on the
+    # Deployment's own event while a COMPOSITION heals only at its next reconcile (3m default).
+    # Expect a CD Available while its composition still reads failed, and do not treat it as a
+    # contradiction.
+    #
+    # BEFORE that release, which is TODAY on both clusters, the asymmetry is WORSE and in the
+    # opposite direction: a CD reads Available from DECLARED REPLICAS and only re-checks at its
+    # 3m poll, so **a CD can read Available while its own controller is not up at all**. So on
+    # 2.13.105 and 2.13.107 a green CD is not evidence that its controller is running, and the
+    # composition is the better of the two signals -- the reverse of the advice above.
     failed = {k: v.get("Ready") for k, v in (post.get("compositions") or {}).items()
               if str(v.get("Ready", "")).split("/", 1)[-1] in FAILED_REASONS}
     if failed:
         out["problems"].append(
-            "COMPOSITIONS FAILED: %d -- %s. These reasons are the FAILED class, not a state that "
-            "settles on its own, and the umbrella inherits them. After core-provider #498 this is "
-            "also what a crash-looping workload child reads as, with the pod cause in the message."
+            "COMPOSITIONS FAILED: %d -- %s. The umbrella inherits these. RE-SNAPSHOT BEFORE "
+            "CONCLUDING: after core-provider #498 one arm of Unavailable HEALS ON ITS OWN. A "
+            "workload that overran its progressDeadlineSeconds (600s default) reads Unavailable "
+            "until its next pod becomes ready, then Creating, then Available -- Kubernetes' "
+            "Deployment controller re-evaluates Progressing on ANY gain in updated, ready or "
+            "available replicas, so ProgressDeadlineExceeded does NOT latch. The other arm, "
+            "availability lost after a COMPLETED rollout, is the crash loop and does not heal. "
+            "Only the child message distinguishes them and this tool does not read messages, so "
+            "the rule is a SECOND SNAPSHOT after the composition's resync interval (3m default) "
+            "plus slack -- the 900s stuck bound above is that slack."
             % (len(failed), json.dumps(failed, sort_keys=True)))
 
     pd, pod = pre.get("definitions", {}), post.get("definitions", {})
