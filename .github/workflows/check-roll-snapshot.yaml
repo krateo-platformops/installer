@@ -82,6 +82,21 @@ jobs:
           assert m, "FAILED_REASONS not found in hack/roll-snapshot.py"
           tool = sorted(re.findall(r'"([^"]+)"', m.group(1)))
           vendored = sorted(yaml.safe_load(open("hack/ready-reasons.yaml", encoding="utf-8"))["composition"]["failed"])
+          # The CD namespace is cross-checked TOO, against its OWN lists. Added 2026-11-17 with
+          # CD_FAILED_REASONS and CD_CONVERGING_REASONS: the CD check classifies by reason now, so
+          # a reason moving between `failed` and `converging` upstream silently changes whether a
+          # roll is reported as broken or as settling. Mixing the two namespaces is the mistake
+          # core-provider and I both nearly made on ValuesSchemaMissing.
+          cdy = yaml.safe_load(open("hack/ready-reasons.yaml", encoding="utf-8"))["compositionDefinition"]
+          for const, key in (("CD_FAILED_REASONS", "failed"), ("CD_CONVERGING_REASONS", "converging")):
+              m2 = re.search(r"^%s = \((.*?)\)$" % const, src, re.M | re.S)
+              assert m2, "%s not found in hack/roll-snapshot.py" % const
+              got = sorted(re.findall(r'"([^"]+)"', m2.group(1)))
+              want = sorted(cdy[key])
+              assert got == want, (
+                  "%s is %s but ready-reasons.yaml compositionDefinition.%s is %s"
+                  % (const, got, key, want))
+          print("cross-check: CD_FAILED_REASONS and CD_CONVERGING_REASONS match the CD namespace")
           print("roll-snapshot.py FAILED_REASONS : %s" % tool)
           print("ready-reasons.yaml failed       : %s" % vendored)
           assert tool, "FAILED_REASONS parsed as EMPTY -- the regex matched nothing useful, which "\
