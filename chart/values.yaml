@@ -680,8 +680,17 @@ componentValues:
   # destroyed, the oldest resolved 1010h ago. Open and Verifying are never touched.
   # "0s" keeps everything. Diego decided 2026-11-16: roll with everything kept and choose a
   # retention period as its own decision later.
-  incident-provider:
-    retention: "0s"
+  # incident-provider: NO retention override. Diego decided 2026-11-16 to use the chart's own
+  #   default of 720h (30 days), so the key is absent here DELIBERATELY rather than set to 720h --
+  #   setting a value equal to the default adds a second place to maintain it. The previous "0s"
+  #   override is removed with his confirmation.
+  #   WHAT THIS DELETES, and it is irreversible: the retention sweep is a PERMANENT DELETE on the
+  #   first reconcile after the component reaches >=0.12.0. Measured on krateo-057: 232 incidents
+  #   (96 Closed, 86 Resolved, 49 Open, 1 Verifying); 31 have status.resolution.at older than 720h,
+  #   oldest resolved 1010h ago. Open and Verifying are NEVER touched. RECOUNT IMMEDIATELY BEFORE
+  #   THE ROLL rather than trusting that 31 -- it grows as incidents resolve.
+  #   SHORTENING IT LATER deletes immediately and irreversibly on the next reconcile, so any future
+  #   change to this is its own decision and its own roll.
   incident-agent:
     modelConfig:
       name: gemini-flash

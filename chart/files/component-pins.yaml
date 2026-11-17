@@ -5641,7 +5641,47 @@ components:
   # provenance from appVersion at all. Do NOT unblock this by deleting `sources` or the appVersion.
   # 0.1.36: every default alert carries a one-sentence description, not message. NEEDS
   # alert-provider-crd 0.2.68: an older CRD drops the field.
-  version: 0.1.48
+  # 0.1.50 (2026-11-16, replacing the 0.1.49 that was verified but never pinned). Combined
+  #   0.1.45 -> 0.1.50 against what krateo-057 runs. VERIFIED BY NAME, not by list index:
+  #   defaultAlerts.alerts goes 31 -> 32, ONE alert added (`sre-rest-controller-vendor-5xx`),
+  #   NONE removed or renamed. An index-keyed diff of this list reports that single insertion
+  #   as 67 modified and 8 removed paths, because the new entry lands at index 18 and shifts
+  #   every later one -- a named list must be diffed by NAME. The one genuine index-stable
+  #   change is clickstack.hyperdx.deployment.initContainers[0].image 2.35.0 -> 2.39.1, which
+  #   is in 0.1.48 -> 0.1.49, NOT in the alert change.
+  #   The new alert fires when generated REST controllers keep failing to observe their vendor
+  #   with HTTP 5xx: >= 20 in 15 min for 2 consecutive windows. Replayed by the observability
+  #   session against 057's real 11-12 GitHub 503 outage: fires 15:00Z, clears 15:45Z, silent
+  #   on isolated 5xx blips and quiet days. NEEDS alert-provider >= 0.2.69; 057 runs 0.2.85.
+  #   PRECONDITION CHECKED, not assumed: 0.1.46's render guard needs the
+  #   `mongodb-hyperdx-credentials` Secret that 0.1.45 creates, so a jump from 0.1.42 would
+  #   skip its creator. 057 is at 0.1.45 and that Secret is present, so 0.1.50 is safe HERE --
+  #   it would NOT be safe from demo's 0.1.42.
+  #   DEMO IS UNAFFECTED: it is held at 0.1.42 by the film freeze via a components[] override
+  #   in its own values, so this pin does not reach it (see the note at the top of this entry).
+  #   NEITHER FILE OVERRIDES defaultAlerts -- chart componentValues.krateo-observability is
+  #   null and 057's CR overrides only clickstack.clickhouse extraUsersConfig and
+  #   hyperdxLoadBalancer. An override of defaultAlerts.alerts REPLACES the whole list and
+  #   would silently not get the new alert.
+  # 0.1.51 (2026-11-16, replacing the 0.1.50 pinned hours earlier and never tagged). Adds a
+  #   SECOND alert, `sre-rest-controller-vendor-5xx-persistent`: same `where` as the fast one,
+  #   threshold >= 4 over 15m for 4 consecutive windows. It exists because the fast alert has a
+  #   FLOOR: one failed pass logs 1-6 lines depending on the controller's error retries, so
+  #   `>= 20 in 15m` needs about 4 failing resources at worst. The persistent one catches a
+  #   vendor 5xx lasting about an hour on as little as ONE resource. In a large outage it fires
+  #   one window after the fast alert, and its runbook says to work the outage under the fast
+  #   one. Diego approved it; oasgen-provider found the floor.
+  #   VERIFIED BY ALERT NAME: 32 -> 33, one added, none removed or renamed, and exactly one
+  #   field changed on an existing alert -- `sre-rest-controller-vendor-5xx.runbook`, floor text
+  #   only, its spec untouched. Schema `required` identical again: no root, two items-level.
+  #   My probes: 0.1.51 resolves, 0.1.50 and 0.1.45 resolve as controls, 9.9.9 absent.
+  #   observability#189, merge 6e9a38f, tag 3.1.101, 17 check-runs 0 bad, release-oci succeeded.
+  #   Provenance from the observability session: observability#188, merge 2c28bae, tag 3.1.100,
+  #   18 check-runs 0 bad, release-oci succeeded. My own registry probes: 0.1.50 resolves,
+  #   0.1.48 resolves (positive control), 0.1.45 resolves (second control), 9.9.9 absent.
+  #   Schema `required` read AT PIN TIME: identical to 0.1.48 -- no root `required`, two
+  #   items-level blocks (defaultAlerts.alerts.items, defaultMetrics.items). No umbrella wedge.
+  version: 0.1.51
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -5817,7 +5857,25 @@ components:
   # dark is what makes that acceptable -- nothing installs until someone enables the feature,
   # which is a CR edit rather than a values change.
   kind: KrateoSloRollup
-  version: 0.1.2
+  # 0.1.3 (2026-11-16, replacing the 0.1.2 pinned in #985 and never tagged).
+  #   ONE VALUES-CONTRACT CHANGE, and it needed a matching change HERE: the chart's own
+  #   rollup.ttlDays minimum goes 29 -> 31, because the 30d statements in
+  #   ops/slo-alert/sli-span-metrics.sql read 30 whole UTC days before today, so a TTL of 29
+  #   or 30 could expire the window's first day before it is read.
+  #   THE INSTALLER'S SCHEMA SAID 29 AND IS RAISED TO 31 IN THIS PR. Left alone it would have
+  #   been drift in the PERMISSIVE direction -- the Installer CRD accepts 29 or 30, the
+  #   apiserver stores it, and the chart then refuses to render. Measured:
+  #     --set rollup.ttlDays=30   0.1.2 OK   0.1.3 REFUSED "minimum: got 30, want 31"
+  #     --set rollup.ttlDays=31   0.1.2 OK   0.1.3 OK
+  #   Latent, not live: chart values set no krateo-slo-rollup block and 057's CR carries none,
+  #   so nothing stored is newly refused. The chart default 40 satisfies both minimums.
+  #   EVERYTHING ELSE IS DOCUMENTATION AND TESTS: the README and kind e2e now read the table
+  #   by the canonical SLI rules (bucket intervals, no interpolation) and the interpolating
+  #   tests/rollup-query.sql is gone. No values path added, removed or renamed. Rendered output
+  #   is identical to 0.1.2 except the helm.sh/chart label, for any accepted value.
+  #   observability#190, merge a7db924, tag 3.1.102, 13 check-runs 0 bad, release-oci OK.
+  #   My probes: 0.1.3, 0.1.2 and 0.1.1 resolve; 9.9.9 absent.
+  version: 0.1.3
   deps:
   - otel-collector-daemonset
   tier: observability
@@ -7803,7 +7861,36 @@ components:
   # NOT block this cutover -- it means that until it lands, incident-provider's own reconcile errors
   # can open Incidents ABOUT incident-provider. A known cost, not a surprise.
   kind: IncidentProvider
-  version: 0.11.0
+  # 0.14.0 (2026-11-16). TAKEN TOGETHER WITH A FIX, because the two cannot be separated:
+  #   the installer was sending componentValues.incident-provider.retention at the TOP of
+  #   that node, and the chart reads `.Values.controller.retention`. Its own
+  #   values.schema.json is additionalProperties:false at BOTH levels, so the top-level key
+  #   is REJECTED rather than ignored -- `helm template --set retention=0s` fails on 0.11.0
+  #   and on 0.14.0 with "additional properties 'retention' not allowed". So the retention
+  #   guard was inert AND the next roll would have wedged this composition.
+  #   0.11.0 accepts NEITHER path (`controller.retention` is undeclared there too), so the
+  #   path fix and this pin have to land in one change.
+  #   WHY THE GUARD MATTERS: the retention sweep is a PERMANENT DELETE on the first
+  #   reconcile at >=0.12.0. Measured on 057 before the guard was written: 232 incidents,
+  #   31 with status.resolution.at older than the chart's 720h default, oldest 1010h --
+  #   all of which the chart default would delete. `0s` keeps everything, and Diego decided
+  #   on 2026-11-16 to roll with everything kept and choose a period separately.
+  #   0.14.0 ITSELF (acmp, closes incident-provider#28): a stale applyAction whose target
+  #   version is no longer served is RE-TARGETED to the CRD's storage version with no agent
+  #   run, but only when every field the payload sets is declared there and no howToFix
+  #   script names the old version; the condition goes False/Retargeted and a person
+  #   re-applies. Otherwise reanalysis is requested as before, now capped at 3 per incident
+  #   (annotation observability.krateo.io/stale-reanalyses), then
+  #   ReanalysisBudgetExhausted. Incidents on 057 already carrying the old episode record
+  #   count as 1 request, so each can take 2 more agent runs at most.
+  #   NEW RBAC: the chart's ClusterRole gains `get` on
+  #   apiextensions.k8s.io/customresourcedefinitions (needed to read the storage version).
+  #   Verified: 0 templates mention it at 0.11.0, 1 at 0.14.0.
+  #   CRD change is descriptions only, no new fields. The only values key added across
+  #   0.11.0 -> 0.14.0 is `controller.retention` -- measured on the charts, not taken from a
+  #   per-release note, because 0.12.0 and 0.13.0 are skipped by this jump.
+  #   Probes: 0.14.0, 0.13.0, 0.12.0 and 0.11.0 all resolve for both charts; 9.9.9 absent.
+  version: 0.14.0
   deps:
   - incident-provider-crd
   tier: observability
@@ -7837,7 +7924,36 @@ components:
   # The OCI repo does not change: both charts resolve at ghcr.io/krateo-platformops/charts.
   kind: IncidentProviderCrds
   chart: incident-provider-crds
-  version: 0.11.0
+  # 0.14.0 (2026-11-16). TAKEN TOGETHER WITH A FIX, because the two cannot be separated:
+  #   the installer was sending componentValues.incident-provider.retention at the TOP of
+  #   that node, and the chart reads `.Values.controller.retention`. Its own
+  #   values.schema.json is additionalProperties:false at BOTH levels, so the top-level key
+  #   is REJECTED rather than ignored -- `helm template --set retention=0s` fails on 0.11.0
+  #   and on 0.14.0 with "additional properties 'retention' not allowed". So the retention
+  #   guard was inert AND the next roll would have wedged this composition.
+  #   0.11.0 accepts NEITHER path (`controller.retention` is undeclared there too), so the
+  #   path fix and this pin have to land in one change.
+  #   WHY THE GUARD MATTERS: the retention sweep is a PERMANENT DELETE on the first
+  #   reconcile at >=0.12.0. Measured on 057 before the guard was written: 232 incidents,
+  #   31 with status.resolution.at older than the chart's 720h default, oldest 1010h --
+  #   all of which the chart default would delete. `0s` keeps everything, and Diego decided
+  #   on 2026-11-16 to roll with everything kept and choose a period separately.
+  #   0.14.0 ITSELF (acmp, closes incident-provider#28): a stale applyAction whose target
+  #   version is no longer served is RE-TARGETED to the CRD's storage version with no agent
+  #   run, but only when every field the payload sets is declared there and no howToFix
+  #   script names the old version; the condition goes False/Retargeted and a person
+  #   re-applies. Otherwise reanalysis is requested as before, now capped at 3 per incident
+  #   (annotation observability.krateo.io/stale-reanalyses), then
+  #   ReanalysisBudgetExhausted. Incidents on 057 already carrying the old episode record
+  #   count as 1 request, so each can take 2 more agent runs at most.
+  #   NEW RBAC: the chart's ClusterRole gains `get` on
+  #   apiextensions.k8s.io/customresourcedefinitions (needed to read the storage version).
+  #   Verified: 0 templates mention it at 0.11.0, 1 at 0.14.0.
+  #   CRD change is descriptions only, no new fields. The only values key added across
+  #   0.11.0 -> 0.14.0 is `controller.retention` -- measured on the charts, not taken from a
+  #   per-release note, because 0.12.0 and 0.13.0 are skipped by this jump.
+  #   Probes: 0.14.0, 0.13.0, 0.12.0 and 0.11.0 all resolve for both charts; 9.9.9 absent.
+  version: 0.14.0
   tier: observability
   feature: portal
 - name: alert-provider-crd
@@ -9762,10 +9878,30 @@ components:
   # demo runs CHART DEFAULTS (helm get values returns null), and the default is
   # tenantReader.enabled=true — which works there only because kyverno is hand-installed (20 CRDs).
   # Enabling this feature on 057 therefore requires componentValues tenantReader.enabled=false until
-  # kyverno is itself an installer component; kyverno is deliberately NOT adopted, because its
-  # release owns the 22 CRDs behind the tenant-namespace-on-login ClusterPolicy, whose generate rules
-  # are immutable and whose deletion removes every tenant namespace it generated (the chart's own
-  # tenant-reader-policies.yaml header says so).
+  # kyverno serves policies.kyverno.io there.
+  #
+  # SUPERSEDED 2026-11-16, and the reason is recorded because the sentence it replaces was right
+  # when written. This entry used to say "kyverno is deliberately NOT adopted". It IS now: kyverno
+  # is a pinned component (#977), and Diego decided on 2026-11-16 that the installer ADOPTS demo's
+  # existing Kyverno IN PLACE -- the pin gains `namespace: kyverno` so a roll upgrades release
+  # kyverno/kyverno rather than standing up a second release and adopting its CRDs into
+  # krateo-system. Scoped in installer#999, which needs two renderer changes first: a pinned
+  # non-registerOnly component declaring `namespace` currently ABORTS the umbrella render
+  # (definitions.yaml:30), and compositions.yaml:917 hardcodes the instance namespace.
+  #
+  # The hazard that sentence named has NOT gone away, it has moved. Kyverno's CRDs carry NO
+  # helm.sh/resource-policy: keep -- measured on the 3.9.2 chart, 22 of 22 without it, while
+  # cert-manager's 6 DO carry it, which is why that adoption is survivable and this one is not by
+  # default. And when the installer STOPS rendering an adopted component, core-provider uninstalls
+  # its release and deletes everything it owns (measured on kc-roll057 by keycloak-provider-kog).
+  # So after adoption, turning features.identityLifecycle OFF deletes the 22 CRDs and every
+  # instance of them: tenant-namespace-on-login, and also THIS component's two tenant-reader
+  # policies. With the GeneratingPolicy's evaluation.synchronize.enabled=true and
+  # orphanDownstreamOnPolicyDelete unset, deleting it is expected to delete the RoleBindings it
+  # generated in every tenant namespace (acmp's reading, not measured on Kyverno 1.19).
+  #
+  # CORRECTION: the count above said 20 CRDs. It is 22 -- acmp counted them on demo by
+  # meta.helm.sh/release-name, and the 3.9.2 chart renders 22 as templates.
   kind: KrateoCapabilityRoles
   chart: krateo-capability-roles
   repo: oci://ghcr.io/krateo-platformops/krateo-saas

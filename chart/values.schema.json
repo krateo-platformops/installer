@@ -12892,6 +12892,11 @@
                   "pattern": "^[0-9]+(ns|us|ms|s|m|h)$",
                   "title": "Alert-gone grace",
                   "description": "incident-provider 0.8.0+ (#18). How long the Alert must stay NotFound before an Open or Verifying Incident is closed with resolution.by=alert-gone. The chart's own default is 10m."
+                },
+                "retention": {
+                  "type": "string",
+                  "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+                  "description": "How long a Closed or Resolved incident is kept after status.resolution.at, as a Go duration. NO DEFAULT HERE, DELIBERATELY, and that is a change from how this key was first added in #990. This node's own description states the rule: a default on a componentValues leaf is applied into the live composition spec by core-provider, so it is a SILENT OVERRIDE rather than documentation. #990 gave this key `default: \"0s\"` and that broke the rule -- it would have kept injecting 0s into every cluster's CR even after the values entry was removed, so removing the override alone would NOT have produced the 720h Diego chose, and I would have reported a change that had not happened. With no default here and no entry in values.yaml, the chart's own default applies: 720h, 30 days. Diego decided 2026-11-16, confirmed directly. THE SWEEP IS A PERMANENT DELETE on the first reconcile at component >=0.12.0. Measured on krateo-057: 232 incidents (96 Closed, 86 Resolved, 49 Open, 1 Verifying); 31 have status.resolution.at older than 720h, oldest resolved 1010h ago. Open and Verifying are never touched. RECOUNT BEFORE THE ROLL -- it grows as incidents resolve. Shortening this later deletes immediately and irreversibly on the next reconcile, so any change is its own decision and roll. The chart's path is controller.retention; see #1004 for why the top-level `retention` this repo used to send was rejected rather than ignored."
                 }
               }
             },
@@ -13242,12 +13247,6 @@
                   }
                 }
               }
-            },
-            "retention": {
-              "type": "string",
-              "default": "0s",
-              "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
-              "description": "How long a Closed or Resolved incident is kept after status.resolution.at, as a Go duration. \"0s\" KEEPS EVERYTHING and is the DEFAULT HERE DELIBERATELY, which differs from incident-provider's own chart default of 720h (30 days). WHY: the retention sweep is a PERMANENT DELETE on the first reconcile after the component moves to >=0.12.0. Measured on krateo-057 before this was written: 232 incidents (96 Closed, 49 Open, 86 Resolved, 1 Verifying), of which 31 have status.resolution.at older than 720h and WOULD HAVE BEEN DELETED, oldest resolved 1010h ago. Open and Verifying are never touched. A DEFAULT IS THE ONLY SAFE SHAPE. Declaring the key without one leaves a cluster that does not set it on the CHART's 720h, so the dangerous value would be what you get by doing nothing -- and the installer's job here is to make the safe value the one that needs no action. Diego decided 2026-11-16: roll with everything kept, choose a retention period as its own decision later. Set a real period only with that decision, and know that shortening it deletes immediately and irreversibly on the next reconcile."
             }
           }
         },
@@ -15561,8 +15560,8 @@
                   "type": "string"
                 },
                 "ttlDays": {
-                  "description": "Must exceed the 28-day SLO window.",
-                  "minimum": 29,
+                  "description": "Must exceed the 30-day SLO window by at least a day. RAISED 29 -> 31 WITH THE 0.1.3 PIN, to match the chart: krateo-slo-rollup 0.1.3's own values.schema.json sets minimum 31, because the 30d statements in ops/slo-alert/sli-span-metrics.sql read 30 whole UTC days before today, so a TTL of 29 or 30 could expire the window's first day before it is read. LEAVING THIS AT 29 WOULD HAVE BEEN A DRIFT IN THE PERMISSIVE DIRECTION: the Installer CRD would accept 29 or 30, the apiserver would store it, and the chart would then refuse to render -- measured, `--set rollup.ttlDays=30` on 0.1.3 fails with \"at '/rollup/ttlDays': minimum: got 30, want 31\" while 0.1.2 accepted it. Nothing sets it today (chart values null, and 057's CR carries no krateo-slo-rollup values at all), so this closes a latent trap rather than fixing a live break. The chart default of 40 is unchanged and satisfies both.",
+                  "minimum": 31,
                   "type": "integer"
                 }
               },

@@ -89,3 +89,36 @@ sources:
       - search-page
       - service-desk-page
       - settings-page
+
+  # observability publishes nine charts and had no retracted-versions.yaml until today
+  # (krateo-platformops/observability#183, merged 5d86fc6). Declared the same day the file
+  # landed and NOT before: a declared source with no file is a gate that passes VACUOUSLY --
+  # it reads as covered while nothing is being read, which is worse than an honest gap.
+  # Its one entry is krateo-slo-rollup 0.1.1 -> use 0.1.2, the writer-identity default that
+  # was never enabled anywhere. observability deliberately did NOT list 0.1.47, which they
+  # superseded with 0.1.48: superseded is not defective, and pinning it would put nothing
+  # wrong on a cluster. That distinction is theirs and it is the right one.
+  # snowplow's retracted-versions.yaml landed on main 2026-11-16 (snowplow#1497, merge
+  #   5c1dab56e55229225ae8aad6e638c8ae34d6acd5, file at the repo root). Declared only after that
+  #   merge commit, because the gate FAILS CLOSED on a 404 and declaring a source whose file does
+  #   not exist yet would have blocked every PR that changes a snowplow pin.
+  #   Content at declaration time: 1.12.71, 1.12.72 and 1.12.73 retracted for both charts, with
+  #   `use: 1.12.70`. 057 runs 1.12.70 and main pins 1.12.70, so there are 0 hits today -- the
+  #   snowplow session ran this repo's own check-retracted-versions.py against the file and got
+  #   0 errors and 0 hits on main's pins, with a pin at 1.12.71-1.12.73 hitting both components.
+  #   Expected to shrink: if launch B passes, 1.12.71 is published and its entry removed.
+  - repo: krateo-platformops/snowplow
+    charts:
+      - snowplow
+      - snowplow-crds
+  - repo: krateo-platformops/observability
+    charts:
+      - clickhouse-operator
+      - krateo-audit-worm
+      - krateo-observability
+      - krateo-slo-rollup
+      - krateo-sse-proxy
+      - mongodb-operator
+      - otel-collector-daemonset
+      - otel-collector-deployment
+      - otel-collector-tailsampling
