@@ -157,9 +157,24 @@ def main():
             # THE #526 ASSERTION, the other direction: if a component goes, its declared
             # companions must go with it. A companion left behind is a component deployed
             # without the object it cannot start without.
+            # MATCHED WITHOUT THE NAMESPACE, DELIBERATELY. This read `(k, "krateo-system", n)`
+            # until 2026-11-17, which was correct only while every component rendered into
+            # namespaces.krateo. A pinned component may now declare its own `namespace` (the
+            # kyverno adopt-in-place change), and a companion rendered anywhere else would not
+            # match the hardcoded tuple even when it HAD been removed -- so a correctly-removed
+            # companion would be reported as having SURVIVED. A false positive on the #526
+            # assertion, which is the direction that teaches an operator to ignore this gate.
+            #
+            # Namespace is not part of the question being asked: the assertion is "did this
+            # companion go when its owner went", and an object's identity for that purpose is
+            # its kind and name. A companion that moved namespace instead of being removed would
+            # still be caught, because `removed` is computed from the baseline rendering and a
+            # move appears there as a removal plus an addition -- and anything ADDED by turning a
+            # feature off already fails above.
+            removed_kn = {(k, n) for (k, _ns, n) in removed}
             orphaned = sorted(
                 (k, n) for (k, n), owner in COMPANIONS.items()
-                if owner in present and (k, "krateo-system", n) not in removed
+                if owner in present and (k, n) not in removed_kn
                 and any(n2 == n for (_k2, _ns2, n2) in base)
             )
             if orphaned:
