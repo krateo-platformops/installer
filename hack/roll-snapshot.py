@@ -96,31 +96,70 @@ CONVERGED = ("True/Available", "True/AvailablePartialCoverage",
 FAILED_REASONS = ("Unavailable", "CreateOutcomeUnknown")
 
 
-def stuck_converging(snap, budget_s=CONVERGING_BUDGET_S, now=None):
-    """Compositions that are not converged and whose Ready last changed longer ago than budget_s.
+# A composition whose Ready has NEVER moved off its initial value is not stalled, and an age
+# alone cannot tell the two apart. MEASURED 2026-11-17 on krateo-057, on this bound's first real
+# run, while taking a pre-roll baseline:
+#
+#   internalcabundles/krateo-system/internal-ca-bundle
+#     created                    2026-11-15T21:36:50Z
+#     Ready Unknown/ZeroEvidence 2026-11-15T21:36:56Z   <- SIX SECONDS after creation
+#     reported as                "converging longer than 900s ... (34.7 h)"
+#     message: none of its 1 managed children could be health-evaluated (no readiness semantics
+#              this controller knows how to read)
+#
+# It renders, its RBAC is applied, it is Synced, its apiRef resolved. Its single managed child has
+# a kind whose readiness the cdc has no semantics for, so ZeroEvidence is the honest answer and
+# will be the answer for ever. "Stuck for 34.7 h" is true as arithmetic and misleading as a
+# finding: it reads as WAS FINE, NOW STUCK, when the truth is NEVER EVALUABLE.
+#
+# WHY THE SPLIT MATTERS MORE THAN THE WORDING. This bound exists because a crash-looping workload
+# reads as converging indefinitely and hid an 8.5-hour outage on demo. A bound that ALSO fires,
+# permanently, on an unevaluable composition trains its reader to skip the line -- which is how
+# the real case gets missed. Same reason the FAILED check fires on the failed class only rather
+# than on everything that is not True/Available. installer#1017.
+NEVER_EVALUATED_GRACE_S = 60
 
-    Returns [(key, Ready, readyAt, age_seconds)]. A composition with no readyAt is NOT reported:
-    absence of the field is not evidence of staleness, and guessing would turn a gap in the
-    capture into a false finding about the cluster.
+
+def stuck_converging(snap, budget_s=CONVERGING_BUDGET_S, now=None):
+    """Not-converged compositions, split into (stalled, never_evaluated).
+
+    Each list holds (key, Ready, readyAt, age_seconds). A composition is NEVER EVALUATED when its
+    readyAt is within NEVER_EVALUATED_GRACE_S of its createdAt.
+
+    Without a createdAt it is classed STALLED -- the conservative side on purpose, because
+    under-reporting a real stall is the failure this bound exists to prevent, and a snapshot taken
+    before createdAt was captured (anything before installer#1017) has none.
+
+    A composition with no readyAt is in NEITHER list: absence of the field is not evidence of
+    staleness, and guessing would turn a gap in the capture into a false finding about the cluster.
     """
     import datetime as _dt
+
+    def _parse(v):
+        try:
+            return _dt.datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return None
+
     now = now or _dt.datetime.now(_dt.timezone.utc)
-    out = []
+    stalled, never = [], []
     for key, c in sorted((snap.get("compositions") or {}).items()):
         ready = c.get("Ready")
         if ready in CONVERGED or ready is None:
             continue
-        at = c.get("readyAt")
-        if not at:
-            continue
-        try:
-            t = _dt.datetime.fromisoformat(str(at).replace("Z", "+00:00"))
-        except ValueError:
+        t = _parse(c.get("readyAt"))
+        if t is None:
             continue
         age = (now - t).total_seconds()
-        if age > budget_s:
-            out.append((key, ready, at, age))
-    return out
+        if age <= budget_s:
+            continue
+        born = _parse(c.get("createdAt"))
+        row = (key, ready, c.get("readyAt"), age)
+        if born is not None and abs((t - born).total_seconds()) <= NEVER_EVALUATED_GRACE_S:
+            never.append(row)
+        else:
+            stalled.append(row)
+    return stalled, never
 
 
 def capture(ctx, secrets=()):
@@ -160,6 +199,11 @@ def capture(ctx, secrets=()):
                 # what a composition reads AT SNAPSHOT TIME; lastTransitionTime says WHEN it last
                 # changed, and that is the only thing that can bound how long it has been stuck.
                 "readyAt": (cmap.get("Ready") or {}).get("lastTransitionTime"),
+                # createdAt, so NEVER EVALUATED can be told from STALLED. See
+                # stuck_converging(): a readyAt within seconds of creation means the Ready
+                # condition has not moved since the object appeared, so its age measures the
+                # object's lifetime and not a stall. installer#1017.
+                "createdAt": o["metadata"].get("creationTimestamp"),
                 "Synced": conds.get("Synced"),
                 "uid": o["metadata"].get("uid"),
             }
@@ -240,11 +284,17 @@ def diff(pre, post, expect_delta=None, matching=None):
             moved[k] = {f: [a.get(f), b.get(f)] for f in ("chart", "revision", "status")
                         if a.get(f) != b.get(f)}
     out["releases"]["moved"] = moved
-    for key, ready, at, age in stuck_converging(post):
+    _stalled, _never = stuck_converging(post)
+    for key, ready, at, age in _stalled:
         out["problems"].append(
             "STUCK CONVERGING: %s reads %s since %s (%.1f h). Converging is not converged; a "
             "crash-looping workload child caps at converging, so this never becomes a failure "
             "on its own." % (key, ready, at, age / 3600.0))
+    # NEVER EVALUATED is reported, not a problem: its age is the object's lifetime. Putting it in
+    # problems would fire on every roll for ever and teach the reader to skip the list.
+    for key, ready, at, age in _never:
+        out.setdefault("never_evaluated", []).append(
+            "%s reads %s and has not moved since creation (%.1f h)" % (key, ready, age / 3600.0))
     if out["releases"]["gone"]:
         out["problems"].append("RELEASES DISAPPEARED: %s" % out["releases"]["gone"])
     bad_status = {k: v["status"] for k, v in po.items() if v.get("status") != "deployed"}
@@ -442,6 +492,8 @@ def _self_test():
             if k == "comp_ready": p["compositions"]["portals/krateo-system/portal"]["Ready"] = v
             if k == "comp_readyat":
                 p["compositions"]["portals/krateo-system/portal"]["readyAt"] = v
+            if k == "comp_createdat":
+                p["compositions"]["portals/krateo-system/portal"]["createdAt"] = v
             if k == "secret_rv": p["secrets"]["krateo-system/cj"]["resourceVersion"] = v
             if k == "secret_keys": p["secrets"]["krateo-system/cj"]["dataKeys"] = v
         return p
@@ -479,6 +531,20 @@ def _self_test():
          post(comp_ready="True/ReconcilePaused"), None, None, 0),
         ("a composition converging for 2h IS a problem -- the demo OOM case",
          post(comp_ready="False/Creating", comp_readyat=_ago(7200)), None, None, 1),
+        ("a composition converging 2h but born 2h ago is NEVER EVALUATED, not a problem -- the "
+         "internal-ca-bundle case, installer#1017",
+         post(comp_ready="Unknown/ZeroEvidence", comp_readyat=_ago(7200),
+              comp_createdat=_ago(7206)), None, None, 0),
+        ("the SAME age, but born long before Ready moved, IS a problem -- it converged once and "
+         "regressed",
+         post(comp_ready="False/Creating", comp_readyat=_ago(7200),
+              comp_createdat=_ago(600000)), None, None, 1),
+        ("FALSIFIER: no createdAt -> classed STALLED, the conservative side, so a pre-#1017 "
+         "snapshot still reports real stalls",
+         post(comp_ready="False/Creating", comp_readyat=_ago(7200)), None, None, 1),
+        ("FALSIFIER: never-evaluated but WITHIN the budget is in neither list",
+         post(comp_ready="Unknown/ZeroEvidence", comp_readyat=_ago(60),
+              comp_createdat=_ago(66)), None, None, 0),
         ("FALSIFIER: converging for 60s is a NORMAL bump and must NOT trip",
          post(comp_ready="False/Creating", comp_readyat=_ago(60)), None, None, 0),
         ("FALSIFIER: an OLD readyAt while CONVERGED is not a problem -- age alone proves nothing",
@@ -547,12 +613,19 @@ def main():
         # REPORTED ON A SINGLE READ, not only in the diff. demo's 8.5-hour outage needed no
         # "before": one capture carrying readyAt would have shown it outright. A finding that
         # only a diff can surface is a finding you cannot make during an incident.
-        stuck = stuck_converging(snap)
-        if stuck:
-            print("\nFINDINGS: %d composition(s) converging longer than %ds. CONVERGING IS NOT "
-                  "CONVERGED, and nothing in the platform bounds it yet (core-provider#498)."
-                  % (len(stuck), CONVERGING_BUDGET_S))
-            for key, ready, at, age in stuck:
+        stalled, never = stuck_converging(snap)
+        if never:
+            print("\nNEVER EVALUATED: %d composition(s) whose Ready has not moved since the "
+                  "object was created. NOT a finding -- the age measures their lifetime, not a "
+                  "stall, and this state can be permanent (e.g. a managed child whose kind has "
+                  "no readiness semantics the cdc can read)." % len(never))
+            for key, ready, at, age in never:
+                print("  %-56s %-20s since creation %s  (%.1f h)" % (key, ready, at, age / 3600.0))
+        if stalled:
+            print("\nFINDINGS: %d composition(s) converging longer than %ds, having previously "
+                  "moved. CONVERGING IS NOT CONVERGED, and nothing in the platform bounds it yet "
+                  "(core-provider#498)." % (len(stalled), CONVERGING_BUDGET_S))
+            for key, ready, at, age in stalled:
                 print("  %-56s %-20s since %s  (%.1f h)" % (key, ready, at, age / 3600.0))
             print("A workload crash loop reads as Creating, not failed, so this is what an "
                   "8.5-hour OOM outage looked like from the conditions. Decide before rolling "
