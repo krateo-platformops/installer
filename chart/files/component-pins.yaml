@@ -9786,6 +9786,7 @@ components:
   chart: kyverno
   feature: identityLifecycle
   kind: Kyverno
+  namespace: kyverno
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   upstream: true
