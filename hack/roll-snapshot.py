@@ -288,15 +288,38 @@ def diff(pre, post, expect_delta=None, matching=None):
     if out["compositions"]["gone"]:
         out["problems"].append("COMPOSITIONS DISAPPEARED: %s" % out["compositions"]["gone"])
     # The composition counterpart of the definitions check below, which existed while this one did
-    # not. A composition whose Ready reason is in the FAILED class is not mid-convergence: it is
-    # the state krateoEval maps to failed, which the umbrella inherits.
+    # not. A composition whose Ready reason is in the FAILED class is the state krateoEval maps to
+    # failed, which the umbrella inherits.
+    #
+    # CORRECTED 2026-11-17, same day it was written. I first said this is "not a state that
+    # settles on its own". core-provider then read the Deployment controller's source
+    # (k8s.io/kubernetes v1.36.4 pkg/controller/deployment/progress.go:40-100) and one arm of it
+    # DOES settle: the progress switch runs on every sync while the rollout is incomplete, and
+    # DeploymentProgressing -- any gain in updated, ready or available replicas -- is evaluated
+    # BEFORE DeploymentTimedOut. So ProgressDeadlineExceeded flaps back to Progressing=True on
+    # the next bit of progress, even before completion. A slow rollout therefore produces a
+    # TRANSIENT failed reading inside the very window a roll samples.
+    #
+    # AND THE TWO LAYERS DISAGREE FOR UP TO ONE RESYNC, neither being wrong. A
+    # CompositionDefinition's controller watches its Deployment (core-provider#557) so the CD
+    # heals on the Deployment's own event. The cdc does NOT watch its children's Deployments, so
+    # a COMPOSITION's healed state appears only at its next reconcile -- resync interval, 3m
+    # default. Expect to see a CD Available while its composition still reads failed, and do not
+    # treat that as a contradiction.
     failed = {k: v.get("Ready") for k, v in (post.get("compositions") or {}).items()
               if str(v.get("Ready", "")).split("/", 1)[-1] in FAILED_REASONS}
     if failed:
         out["problems"].append(
-            "COMPOSITIONS FAILED: %d -- %s. These reasons are the FAILED class, not a state that "
-            "settles on its own, and the umbrella inherits them. After core-provider #498 this is "
-            "also what a crash-looping workload child reads as, with the pod cause in the message."
+            "COMPOSITIONS FAILED: %d -- %s. The umbrella inherits these. RE-SNAPSHOT BEFORE "
+            "CONCLUDING: after core-provider #498 one arm of Unavailable HEALS ON ITS OWN. A "
+            "workload that overran its progressDeadlineSeconds (600s default) reads Unavailable "
+            "until its next pod becomes ready, then Creating, then Available -- Kubernetes' "
+            "Deployment controller re-evaluates Progressing on ANY gain in updated, ready or "
+            "available replicas, so ProgressDeadlineExceeded does NOT latch. The other arm, "
+            "availability lost after a COMPLETED rollout, is the crash loop and does not heal. "
+            "Only the child message distinguishes them and this tool does not read messages, so "
+            "the rule is a SECOND SNAPSHOT after the composition's resync interval (3m default) "
+            "plus slack -- the 900s stuck bound above is that slack."
             % (len(failed), json.dumps(failed, sort_keys=True)))
 
     pd, pod = pre.get("definitions", {}), post.get("definitions", {})
