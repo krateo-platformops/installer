@@ -67,11 +67,19 @@ except ImportError:
 # An entry here is a KNOWN, TRACKED gap, not a pardon. The value is why it cannot comply yet. The
 # exemption reports its own staleness: once the chart grows a root schema, this gate REFUSES until
 # the entry is removed, so a carve-out cannot outlive its reason in silence.
-MISSING_SCHEMA_EXEMPT = {
-    "kyverno": "upstream kyverno/charts ships no root values.schema.json at any version (checked "
-               "against repos/kyverno/kyverno charts/kyverno on 2026-11-17); being republished as "
-               "a krateo-blueprints wrapper that adds one",
-}
+MISSING_SCHEMA_EXEMPT = {}
+# DELIBERATELY EMPTY, and that is the point. This table was written for kyverno, whose upstream
+# chart ships no root schema at any version -- and the answer turned out to be to republish it as
+# a krateo-blueprints wrapper that HAS one, not to exempt it. So the one case it existed for was
+# fixed at the source instead.
+#
+# IT MUST THEREFORE MERGE AFTER THE KYVERNO PIN REPOINT, not before. While main's pin still points
+# at upstream kyverno/charts, this gate would refuse it, so merging this first would require an
+# entry here that the pin then makes stale -- the staleness check below would refuse the pin, and
+# the pin PR would have to delete the entry in the same change. Pin first and neither ever exists.
+#
+# The mechanism stays because the next upstream chart without a root schema will need it, and its
+# behaviour is pinned by fixtures that inject their own entry rather than relying on this table.
 
 
 def verdict(schema, defaults=None, cv_props=None, name=None):

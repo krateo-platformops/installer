@@ -47,6 +47,14 @@ gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 
 # (label, schema, defaults, expected_ok, cv_props)
+# The exemption fixtures inject their OWN entry rather than naming a real one. MISSING_SCHEMA_EXEMPT
+# is deliberately empty in the gate, and a suite that asserted behaviour through a production entry
+# would have broken the moment that entry was removed -- which is a test depending on configuration
+# rather than on the code it covers.
+EXEMPT_PROBE = "exempt-probe-not-a-real-component"
+gate.MISSING_SCHEMA_EXEMPT[EXEMPT_PROBE] = "injected by this suite; not a real exemption"
+
+
 CASES = [
     # the global conjunction, both directions
     ("closed root, no global -> REFUSE",
@@ -97,11 +105,11 @@ CASES = [
     ("no schema at all -> REFUSE (crdgen has nothing to build a CRD from)",
      None, {}, False, set()),
     ("no schema but on the exempt list -> ok, as a TRACKED gap",
-     None, {}, True, set(), "kyverno"),
+     None, {}, True, set(), EXEMPT_PROBE),
     # The exemption must not outlive its reason. If an exempt chart grows a root schema, the gate
     # refuses until the entry is removed -- otherwise a carve-out becomes permanent in silence.
     ("exempt component that NOW has a schema -> REFUSE (stale exemption)",
-     {"properties": {"global": {}}}, {}, False, set(), "kyverno"),
+     {"properties": {"global": {}}}, {}, False, set(), EXEMPT_PROBE),
     ("unspecified additionalProperties -> ok", {"properties": {}}, {}, True, set()),
 
     # both defects at once must still refuse
