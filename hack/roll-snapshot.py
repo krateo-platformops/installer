@@ -93,7 +93,41 @@ CONVERGED = ("True/Available", "True/AvailablePartialCoverage",
 # cause in the message. There is no new reason to classify -- Unavailable is already failed here
 # -- but there WAS no check that looked. A composition left failed after a roll was reported as a
 # changed field and nothing more.
-FAILED_REASONS = ("Unavailable", "CreateOutcomeUnknown")
+FAILED_REASONS = ("Unavailable", "CreateOutcomeUnknown", "HooksMayNotHaveRun")
+
+# The COMPOSITIONDEFINITION failed set, which is a DIFFERENT namespace from the one above.
+# ready-reasons.yaml carries both and check-roll-snapshot.yaml cross-checks each against its own
+# list; mixing them is the mistake core-provider and I both nearly made on ValuesSchemaMissing.
+#
+# WHY THIS EXISTS AT ALL. The CD check below used to report every CD not reading True/Available as
+# a problem. That was right while a non-Available CD meant "Observe has not caught up". From
+# core-provider 2.13.108 `Available` REQUIRES A COMPLETED ROLLOUT, so a CD whose controller
+# Deployment is still rolling reads Ready=False/CREATING -- a converging verdict, not a failure.
+# A blanket check would then report ~70 problems during a normal roll, and an operator who sees
+# that learns to ignore the list. core-provider pointed out the fix: classify by the REASON, whose
+# verdict the registry already gives, rather than by reading each child Deployment.
+CD_FAILED_REASONS = ("Unavailable", "RemoteChartUnreachable", "SchemaDefaultContradiction",
+                     "ValuesSchemaMissing")
+
+# compositionDefinition.converging, mirrored for the same dependency-free reason.
+CD_CONVERGING_REASONS = ("Creating", "Deleting")
+
+
+def _age_seconds(ts, now=None):
+    """Seconds since an RFC 3339 timestamp, or None if it cannot be parsed or is absent.
+
+    None means "do not judge": a missing or unparseable readyAt is a gap in the capture, and
+    turning that into a finding about the cluster is the failure mode this returns None to avoid.
+    """
+    import datetime as _dt
+    try:
+        t = _dt.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    ref = now or _dt.datetime.now(_dt.timezone.utc)
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=_dt.timezone.utc)
+    return (ref - t).total_seconds()
 
 
 # A composition whose Ready has NEVER moved off its initial value is not stalled, and an age
@@ -190,8 +224,16 @@ def capture(ctx, secrets=()):
             conds = {t: "%s/%s" % (x["status"], x.get("reason", ""))
                      for t, x in cmap.items()}
             key = "%s/%s/%s" % (plural, o["metadata"]["namespace"], o["metadata"]["name"])
+            # krateo.io/hooks-unverified (an RFC 3339 time) is what HooksMayNotHaveRun is set
+            # FROM, and it outlives the condition: a human or the next real helm install/upgrade
+            # clears the reason, and the annotation is the only record that the hooks were never
+            # verified. Captured as a value, not a boolean, so a pre/post pair shows whether it is
+            # the SAME unverified episode or a new one.
+            hooks_unverified = (o["metadata"].get("annotations") or {}).get(
+                "krateo.io/hooks-unverified")
             snap["compositions"][key] = {
                 "apiVersion": o["apiVersion"],
+                "hooksUnverified": hooks_unverified,
                 "managed": len(st.get("managed") or []) if st.get("managed") is not None else None,
                 "Ready": conds.get("Ready"),
                 # readyAt, ADDED 2026-11-17, for the same reason it was added to definitions on
@@ -404,13 +446,58 @@ def diff(pre, post, expect_delta=None, matching=None):
     # check-ready-gate blocks on. Not-yet-settled and genuinely broken look identical in a single
     # sample, so this is reported as a problem and the caller re-snapshots rather than treating it
     # as a verdict. readyAt is in the changed set above so the window is bounded, not just sampled.
-    not_ready = {k: v.get("Ready") for k, v in pod.items() if v.get("Ready") != "True/Available"}
-    if not_ready:
+    # CLASSIFIED BY REASON, AND CONVERGING IS BOUNDED BY TIME RATHER THAN REPORTED OUTRIGHT.
+    # Changed 2026-11-17, and the previous behaviour was defensible rather than wrong: it reported
+    # every CD not reading True/Available, because Creating has NO DEADLINE and a CD stuck in it
+    # forever would otherwise be invisible. That is still true. What changed is the base rate --
+    # from core-provider 2.13.108 `Available` requires a COMPLETED ROLLOUT, so Creating is the
+    # normal state of every CD whose controller Deployment is rolling. Reporting it outright would
+    # make the list ~70 long on a healthy roll, and a list that is always long is never read.
+    #
+    # So the three buckets differ in what they mean, not just in wording:
+    #   failed       classified `failed` by the registry -> a problem NOW, do not wait it out
+    #   converging   Creating/Deleting -> a problem ONLY past CONVERGING_BUDGET_S, measured from
+    #                readyAt, the same bound stuck_converging() applies to compositions. This is
+    #                what keeps the old concern (no deadline) without the new noise.
+    #   unclassified neither Available nor either of the above -> a problem, because an unknown
+    #                reason is where this file having drifted from core-provider's table shows up
+    cd_failed, cd_conv_late, cd_other = {}, {}, {}
+    for k, v in pod.items():
+        ready = str(v.get("Ready", ""))
+        if ready == "True/Available":
+            continue
+        reason = ready.split("/", 1)[-1]
+        if reason in CD_FAILED_REASONS:
+            cd_failed[k] = v.get("Ready")
+        elif reason in CD_CONVERGING_REASONS:
+            age = _age_seconds(v.get("readyAt"))
+            # No readyAt means NEITHER list: a gap in the capture must not become a finding
+            # about the cluster. Same rule as stuck_converging().
+            if age is not None and age > CONVERGING_BUDGET_S:
+                cd_conv_late[k] = "%s for %.0fs" % (v.get("Ready"), age)
+        else:
+            cd_other[k] = v.get("Ready")
+    if cd_failed:
         out["problems"].append(
-            "COMPOSITIONDEFINITIONS NOT True/Available: %d of %d -- %s. A chart-version bump is "
-            "EXPECTED to show this until the next Observe (poll interval, 3m default): re-snapshot "
-            "before concluding, and compare readyAt to bound the window."
-            % (len(not_ready), len(pod), json.dumps(not_ready, sort_keys=True)))
+            "COMPOSITIONDEFINITIONS FAILED: %d of %d -- %s. These reasons are classified `failed`"
+            " in ready-reasons.yaml's compositionDefinition namespace, so this is NOT a settling"
+            " roll and waiting will not clear it."
+            % (len(cd_failed), len(pod), json.dumps(cd_failed, sort_keys=True)))
+    if cd_conv_late:
+        out["problems"].append(
+            "COMPOSITIONDEFINITIONS CONVERGING PAST %ds: %d of %d -- %s. Creating/Deleting is"
+            " EXPECTED during a roll (from 2.13.108 `Available` requires a completed rollout), so"
+            " this is reported only past the budget. Creating has no deadline of its own, which is"
+            " why the bound exists at all."
+            % (CONVERGING_BUDGET_S, len(cd_conv_late), len(pod),
+               json.dumps(cd_conv_late, sort_keys=True)))
+    if cd_other:
+        out["problems"].append(
+            "COMPOSITIONDEFINITIONS with an UNCLASSIFIED reason: %d of %d -- %s. Not Available,"
+            " not a known failure, not a known converging state -- so check it against"
+            " core-provider's docs/cd-ready-reasons.md rather than assuming it is benign. This is"
+            " where a drift between that table and ready-reasons.yaml surfaces."
+            % (len(cd_other), len(pod), json.dumps(cd_other, sort_keys=True)))
 
     ps, pos = pre.get("secrets", {}), post.get("secrets", {})
     for k in sorted(set(ps) | set(pos)):
@@ -554,8 +641,18 @@ def _self_test():
          post(comp_ready="False/Creating", comp_readyat=None), None, None, 0),
         ("a CD left at False/Unavailable IS a problem",
          post(cd_ready="False/Unavailable"), None, None, 1),
-        ("a CD at False/Creating IS a problem too -- converging is not converged, and Creating\n          has no deadline on either the composition or the CD side",
+        # The four cases below are a SET. Creating alone no longer decides anything: from
+        # core-provider 2.13.108 `Available` requires a completed rollout, so Creating is the
+        # normal state of a CD whose controller is rolling. What decides is the reason's verdict
+        # and, for converging, how long it has been there.
+        ("a CD at False/Creating PAST the budget is a problem -- the fixture's readyAt is a day\n          old, so this is the time bound catching it, not Creating by itself",
          post(cd_ready="False/Creating"), None, None, 1),
+        ("a CD at False/Creating WITHIN the budget is NOT a problem -- without this case the one\n          above would pass equally if Creating were still reported outright, which is the noise\n          this change exists to remove",
+         post(cd_ready="False/Creating", cd_readyat=_ago(60)), None, None, 0),
+        ("a CD at False/ValuesSchemaMissing is a problem IMMEDIATELY, with no budget -- it is\n          classified `failed`, and waiting cannot clear a chart that ships no root schema",
+         post(cd_ready="False/ValuesSchemaMissing", cd_readyat=_ago(5)), None, None, 1),
+        ("a CD at an UNCLASSIFIED reason is a problem even when fresh -- an unknown reason is\n          where drift from core-provider's table shows up, so it must not be read as benign",
+         post(cd_ready="False/SomeReasonNobodyClassified", cd_readyat=_ago(5)), None, None, 1),
         ("a CD DISAPPEARING is always a problem", post(cd_drop=True), None, None, 1),
         ("FALSIFIER: a CD chartVersion moving is REPORTED but is not by itself a problem --\n          that is exactly what a pin bump is supposed to do",
          post(cd_chart="1.8.130"), None, None, 0),
