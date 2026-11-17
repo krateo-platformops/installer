@@ -154,6 +154,87 @@ def _age_seconds(ts, now=None):
 NEVER_EVALUATED_GRACE_S = 60
 
 
+# CHILDREN'S OWN `Synced`, BECAUSE THE PARENT DOES NOT CARRY IT. The gap this closes was found
+# the expensive way on krateo-demo 2026-11-17: KeycloakServiceAccountRoleMapping
+# krateo-identity-lifecycle-roles sat at Ready=Unknown/ObserveFailed AND
+# Synced=False/ReconcileError -- it could not reconcile at all -- while its parent composition read
+# Ready=True/AvailablePartialCoverage. The child was one of 8 the rollup never health-evaluated, so
+# it was EXCLUDED from the verdict rather than counted against it. Every instrument I had read that
+# cluster as healthy. acmp found it by reading the child directly.
+#
+# core-provider's #575 (merged, not yet in a tag) will name unobservable children in the parent's
+# message and count them in status.unevaluatedChildren.notObserved. That covers ObserveFailed and
+# NotObserved. It does NOT cover a child failing for any other reason, and demo's child was ALSO
+# Synced=False/ReconcileError -- a signal its own controller wrote and nothing aggregated. So this
+# stays mine.
+#
+# ONLY KRATEO-GROUP CHILDREN ARE CHECKED. A Deployment or a Role has no `Synced` condition, so
+# asking for one would produce noise, not findings; the children that carry it are the krateo CRs
+# a composition owns. On demo's realm composition that is 13 of 15 managed children.
+#
+# ONE LIST PER KIND, NOT ONE GET PER CHILD. The distinct (group, resource) pairs across every
+# composition are collected first and listed once each -- on 057 that is tens of LISTs rather than
+# ~1800 GETs. Children are then attributed back by namespace and name.
+#
+# ONLY THE FAILING CHILDREN ARE STORED, with the denominator beside them. Capturing all ~1800 would
+# bloat every snapshot for no gain, and a bare list of failures with no denominator cannot
+# distinguish "none failing" from "none checked" -- the distinction this file keeps making.
+KRATEO_GROUP_SUFFIX = ".krateo.io"
+
+# A child that EXISTS and carries no `Synced` condition. Distinct from None, which means the
+# capture could not resolve the child at all.
+NO_SYNCED = "<no-synced-condition>"
+
+
+def _child_kinds(compositions):
+    """The distinct (group, resource) pairs among krateo-group managed children."""
+    kinds = set()
+    for c in compositions.values():
+        for m in (c.get("managedRefs") or []):
+            av = m.get("apiVersion") or ""
+            if "/" not in av:
+                continue                      # a core-group child (v1) has no Synced condition
+            group = av.split("/", 1)[0]
+            if not group.endswith(KRATEO_GROUP_SUFFIX):
+                continue
+            res = m.get("resource")
+            if res:
+                kinds.add((group, res))
+    return sorted(kinds)
+
+
+def unsynced_children(snap):
+    """Compositions with a krateo-group child whose own `Synced` is not True.
+
+    Returns (findings, checked, no_cond, unknown). `checked` is the DENOMINATOR: children that
+    exist AND carry a `Synced` condition. The other two are reported separately and never folded
+    into it, because they mean different things:
+
+      no_cond   the child exists and its KIND has no `Synced` condition -- portal widgets
+                (flexes, cards, buttons, tables, ...) and similar rendered objects. A FACT about
+                the kind. On demo this is the large majority.
+      unknown   the capture could not resolve the child at all. A GAP in the capture. A child
+                that could not be read is not healthy and is not a finding either.
+
+    Collapsing those two made this check report 80% blind on its first run against demo when it
+    was fully sighted on every kind that actually carries the condition.
+    """
+    findings, checked, no_cond, unknown = [], 0, 0, 0
+    for key, c in sorted((snap.get("compositions") or {}).items()):
+        for ch in (c.get("childrenSynced") or []):
+            st = ch.get("synced")
+            if st is None:
+                unknown += 1            # the capture could not resolve it: a GAP, not a state
+                continue
+            if st == NO_SYNCED:
+                no_cond += 1            # the kind carries no such condition: a FACT, not a gap
+                continue
+            checked += 1
+            if not str(st).startswith("True/"):
+                findings.append((key, ch.get("child"), st))
+    return findings, checked, no_cond, unknown
+
+
 def never_evaluated_by_coverage(c):
     """True / False / None: did the rollup assess NOTHING for this composition?
 
@@ -368,6 +449,16 @@ def capture(ctx, secrets=()):
                 "apiVersion": o["apiVersion"],
                 "hooksUnverified": hooks_unverified,
                 "coverage": _coverage(st),
+                # Only the KRATEO-GROUP refs, which are the ones carrying a `Synced`
+                # condition. A Deployment or Role has none, so storing them would add rows that
+                # can never produce a finding. On demo's realm composition this is 13 of 15.
+                "managedRefs": [
+                    {"apiVersion": m.get("apiVersion"), "resource": m.get("resource"),
+                     "namespace": m.get("namespace"), "name": m.get("name")}
+                    for m in (st.get("managed") or [])
+                    if "/" in (m.get("apiVersion") or "")
+                    and (m["apiVersion"].split("/", 1)[0]).endswith(KRATEO_GROUP_SUFFIX)
+                ],
                 "managed": len(st.get("managed") or []) if st.get("managed") is not None else None,
                 "Ready": conds.get("Ready"),
                 # readyAt, ADDED 2026-11-17, for the same reason it was added to definitions on
@@ -425,6 +516,46 @@ def capture(ctx, secrets=()):
 
     # Secrets: metadata only. Never a value, and the data KEY NAMES only so a key appearing or
     # disappearing is visible.
+    # CHILDREN'S OWN `Synced`. One LIST per distinct (group, resource), then attribute by
+    # namespace+name -- tens of calls rather than ~1800. A kind that cannot be listed leaves its
+    # children with synced=None, which unsynced_children() counts as UNKNOWN and never as healthy:
+    # a read that failed is not a fact about the cluster.
+    _index = {}
+    for group, resource in _child_kinds(snap["compositions"]):
+        out = _run(["kubectl", "--context", ctx, "get",
+                    "%s.%s" % (resource, group), "-A", "-o", "json"])
+        if out is None:
+            continue
+        try:
+            items = json.loads(out).get("items", [])
+        except ValueError:
+            continue
+        for o in items:
+            conds = {c["type"]: "%s/%s" % (c["status"], c.get("reason", ""))
+                     for c in ((o.get("status") or {}).get("conditions") or [])}
+            # NO_SYNCED is NOT the same as unresolved. Measured on demo 2026-11-17: 768 of 953
+            # krateo-group children came back "unknown", and almost all were portal WIDGET kinds
+            # -- flexes, cards, buttons, paragraphs, listies, tables, pageheaders -- which are
+            # rendered objects carrying no `Synced` condition at all. Folding those into "unknown"
+            # made the check read 80% blind when it was in fact fully sighted on every kind that
+            # has the condition. A kind without the condition is a FACT about the kind; a kind that
+            # could not be listed is a gap in the capture. They must not share a bucket.
+            _index[(group, resource, o["metadata"].get("namespace"), o["metadata"]["name"])] = \
+                conds.get("Synced") or NO_SYNCED
+    for key, c in snap["compositions"].items():
+        rows = []
+        for m in (c.get("managedRefs") or []):
+            av = m.get("apiVersion") or ""
+            group = av.split("/", 1)[0] if "/" in av else ""
+            k = (group, m.get("resource"), m.get("namespace"), m.get("name"))
+            rows.append({"child": "%s/%s/%s" % (m.get("resource"), m.get("namespace"),
+                                                m.get("name")),
+                         "synced": _index.get(k)})
+        c["childrenSynced"] = rows
+        # managedRefs served their purpose; dropping them keeps the snapshot small and leaves
+        # exactly one place where a child's state lives.
+        c.pop("managedRefs", None)
+
     for ref in secrets:
         ns, _, name = ref.partition("/")
         out = _run(["kubectl", "--context", ctx, "get", "secret", name, "-n", ns,
@@ -472,6 +603,20 @@ def diff(pre, post, expect_delta=None, matching=None):
         out.setdefault("never_evaluated", []).append(
             "%s reads %s and has not moved since creation (%.1f h)" % (key, ready, age / 3600.0))
     _unreadable, _unevaluated, _broken = coverage_problems(post)
+    _unsynced, _ch_checked, _ch_nocond, _ch_unknown = unsynced_children(post)
+    # ABSOLUTE, not a delta: a child that cannot reconcile is a problem whatever the pre-state
+    # said. And the denominator goes in the output so a zero can be told from a blind run.
+    out["child_synced"] = {"checked": _ch_checked, "no_condition": _ch_nocond,
+                           "unresolved": _ch_unknown}
+    for key, child, st in _unsynced:
+        out["problems"].append(
+            "CHILD NOT SYNCED: %s reads %s, under composition %s which reads %s. The parent's "
+            "rollup EXCLUDES a child it never health-evaluated, so this does not surface there."
+            % (child, st, key, (post.get("compositions", {}).get(key) or {}).get("Ready")))
+    if _ch_unknown:
+        out["problems"].append(
+            "CHILD SYNCED INCOMPLETE: %d managed child(ren) could not be resolved, so the "
+            "child-synced result above is not complete." % _ch_unknown)
     for key, total, evaluated, unread in _broken:
         out["problems"].append(
             "COVERAGE INVARIANT BROKEN: %s has managed=%d evaluated=%d unreadable=%d, so "
@@ -702,6 +847,11 @@ def _self_test():
         "compositions": {
             "portals/krateo-system/portal": {"apiVersion": "composition.krateo.io/v1-8-128",
                                              "managed": 64, "Ready": "True/Available",
+                                             "childrenSynced": [
+                                                 {"child": "keycloakclients/krateo-system/a",
+                                                  "synced": "True/ReconcileSuccess"},
+                                                 {"child": "flexes/krateo-system/w",
+                                                  "synced": "<no-synced-condition>"}],
                                              "coverage": {"managedChildrenCount": 64,
                                                           "healthEvaluatedChildren": 64,
                                                           "unreadableChildrenCount": 0},
@@ -738,6 +888,7 @@ def _self_test():
             if k == "av": p["compositions"]["portals/krateo-system/portal"]["apiVersion"] = v
             if k == "managed": p["compositions"]["portals/krateo-system/portal"]["managed"] = v
             if k == "cov": p["compositions"]["portals/krateo-system/portal"]["coverage"] = v
+            if k == "kids": p["compositions"]["portals/krateo-system/portal"]["childrenSynced"] = v
             if k == "cd_ready": p["definitions"]["krateo-system/portal"]["Ready"] = v
             if k == "cd_readyat": p["definitions"]["krateo-system/portal"]["readyAt"] = v
             if k == "cd_chart": p["definitions"]["krateo-system/portal"]["chartVersion"] = v
@@ -753,6 +904,29 @@ def _self_test():
 
     cases = [
         ("identical snapshots -> no problems", PRE, None, None, 0),
+        # CHILD-SYNCED CASES, 2026-11-17. The gap: demo's KeycloakServiceAccountRoleMapping sat
+        # at Synced=False/ReconcileError under a parent reading Ready=True/AvailablePartialCoverage,
+        # because the rollup EXCLUDES a child it never health-evaluated. Validated end-to-end
+        # against that live object before these were written.
+        ("a managed child at Synced=False/ReconcileError IS a problem, whatever the parent reads",
+         post(kids=[{"child": "keycloakserviceaccountrolemappings/krateo-system/r",
+                     "synced": "False/ReconcileError"}]), None, None, 1),
+        ("a child at Synced=True/ReconcileSuccess is NOT a problem",
+         post(kids=[{"child": "keycloakclients/krateo-system/a",
+                     "synced": "True/ReconcileSuccess"}]), None, None, 0),
+        # THE LOAD-BEARING DISTINCTION. A kind with no `Synced` condition and a child that could
+        # not be READ are both "not True", and treating them alike made the first run against demo
+        # report 768 of 953 children as unknown -- 80% blind -- when every kind that actually
+        # carries the condition had resolved. Without BOTH cases, one bucket could silently absorb
+        # the other.
+        ("a child of a kind with NO `Synced` condition is NOT a problem -- portal widgets are "
+         "rendered objects and never carry one",
+         post(kids=[{"child": "flexes/krateo-system/w", "synced": "<no-synced-condition>"}]),
+         None, None, 0),
+        ("a child the capture could NOT RESOLVE is a problem -- not because the child is broken "
+         "but because the result is INCOMPLETE and must not read as a clean pass",
+         post(kids=[{"child": "keycloakclients/krateo-system/a", "synced": None}]),
+         None, None, 1),
         # COVERAGE CASES, 2026-11-17. `coverage` is deliberately NOT in the compared field list
         # above, so these exercise the coverage checks and nothing else -- a case that passed
         # because the dict differed would prove nothing about the checks.
@@ -997,6 +1171,7 @@ def main():
         # only a diff can surface is a finding you cannot make during an incident.
         stalled, never = stuck_converging(snap)
         unreadable, unevaluated, broken = coverage_problems(snap)
+        unsynced, ch_checked, ch_nocond, ch_unknown = unsynced_children(snap)
         # THE INSTRUMENT MUST SAY WHEN IT SAW NOTHING. coverage_problems() skips any composition
         # missing the three scalars, which is correct -- absence is not zero -- but it means a
         # FIELD RENAME upstream turns every object into a skip and the coverage lines fall silent.
@@ -1077,7 +1252,25 @@ def main():
                   "DEFECT IN GENERATED RBAC -- ours, and actionable\"." % len(unreadable))
             for key, n, total, ready in unreadable:
                 print("  %-56s %-20s %d of %d UNREADABLE" % (key, ready, n, total))
-        return 3 if (stalled or unreadable or broken) else 0
+        # THE DENOMINATOR IS PRINTED EVEN WHEN THERE ARE NO FINDINGS, because "no child is
+        # out of sync" and "no child was checked" are different claims and this is the only
+        # place that can tell them apart.
+        print("\nCHILD SYNCED: %d krateo-group child(ren) checked, %d of a kind with no "
+              "`Synced` condition, %d unresolved."
+              % (ch_checked, ch_nocond, ch_unknown))
+        if ch_unknown:
+            print("  %d child(ren) could NOT be resolved. That is a gap in this capture, not a "
+                  "statement about the cluster -- do not read the findings below as complete."
+                  % ch_unknown)
+        if unsynced:
+            print("\nFINDINGS: %d managed child(ren) whose OWN `Synced` is not True. THE PARENT "
+                  "DOES NOT CARRY THIS: a child the rollup never health-evaluated is EXCLUDED "
+                  "from the verdict, so its composition can read Ready=True while the child "
+                  "cannot reconcile at all." % len(unsynced))
+            for key, child, st in unsynced:
+                print("  %-52s %s" % (child, st))
+                print("      parent %s reads %s" % (key, (snap["compositions"].get(key) or {}).get("Ready")))
+        return 3 if (stalled or unreadable or broken or unsynced) else 0
     if a.cmd == "diff":
         pre = json.load(open(a.pre, encoding="utf-8"))
         post = json.load(open(a.post, encoding="utf-8"))
