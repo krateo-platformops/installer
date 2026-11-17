@@ -300,12 +300,25 @@ def diff(pre, post, expect_delta=None, matching=None):
     # the next bit of progress, even before completion. A slow rollout therefore produces a
     # TRANSIENT failed reading inside the very window a roll samples.
     #
-    # AND THE TWO LAYERS DISAGREE FOR UP TO ONE RESYNC, neither being wrong. A
-    # CompositionDefinition's controller watches its Deployment (core-provider#557) so the CD
-    # heals on the Deployment's own event. The cdc does NOT watch its children's Deployments, so
-    # a COMPOSITION's healed state appears only at its next reconcile -- resync interval, 3m
-    # default. Expect to see a CD Available while its composition still reads failed, and do not
-    # treat that as a contradiction.
+    # AND THE TWO LAYERS DISAGREE FOR UP TO ONE RESYNC, neither being wrong -- BUT ONLY FROM A
+    # VERSION NOTHING RUNS YET. core-provider corrected this after I first wrote it, and the
+    # correction matters because the sentence states a behaviour BY VERSION:
+    #
+    #   core-provider#557 (7da7248) is on their MAIN and in NO RELEASE. 057 runs 2.13.105 and
+    #   tag 1 carries 2.13.107; NEITHER has the CD Deployment watch, the rollout rule, or the pod
+    #   cause. The requirement is "core-provider >= the first release containing 7da7248", and
+    #   that version does not exist yet -- it is held behind this repo's roll and frontend's #457.
+    #
+    # FROM that release: a CD's controller watches its Deployment, so the CD heals on the
+    # Deployment's own event while a COMPOSITION heals only at its next reconcile (3m default).
+    # Expect a CD Available while its composition still reads failed, and do not treat it as a
+    # contradiction.
+    #
+    # BEFORE that release, which is TODAY on both clusters, the asymmetry is WORSE and in the
+    # opposite direction: a CD reads Available from DECLARED REPLICAS and only re-checks at its
+    # 3m poll, so **a CD can read Available while its own controller is not up at all**. So on
+    # 2.13.105 and 2.13.107 a green CD is not evidence that its controller is running, and the
+    # composition is the better of the two signals -- the reverse of the advice above.
     failed = {k: v.get("Ready") for k, v in (post.get("compositions") or {}).items()
               if str(v.get("Ready", "")).split("/", 1)[-1] in FAILED_REASONS}
     if failed:

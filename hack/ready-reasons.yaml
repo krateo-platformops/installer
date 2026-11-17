@@ -294,6 +294,24 @@ compositionDefinition:
     path: docs/cd-ready-reasons.md
     checked_against: 7da72488f779697fe22a55ebb73859713a9faaa5
     checked_on: "2026-11-17"
+    # THIS TABLE IS ON core-provider's MAIN AND IN NO RELEASE, which they pointed out after I
+    # vendored it. So this namespace classifies behaviour that NOTHING RUNS YET: 057 is on
+    # 2.13.105 and this repo's tag 1 carries 2.13.107, and neither has the CD Deployment watch,
+    # the rollout rule or the pod cause that #557 (7da7248) introduces.
+    #
+    # WHAT THAT MEANS FOR USING THIS NAMESPACE TODAY. Three of its reasons --
+    # RemoteChartUnreachable, SchemaDefaultContradiction and ScaledToZero -- may not be written
+    # at all by 2.13.105/2.13.107, and on those versions a CD reads Available from DECLARED
+    # REPLICAS and re-checks only at its 3m poll, so a green CD is NOT evidence that its
+    # controller is running. Do not use this classification to assert a definition is healthy on
+    # the fleet's current versions; it is correct about the generated table, which is a different
+    # claim from being correct about 057.
+    #
+    # The drift gate compares against their MAIN deliberately, so this file tracks where the
+    # behaviour is going rather than where it has been. That is the right target for a drift
+    # check and the wrong one for a verification, and the distinction is the reason this note
+    # exists.
+    released_in: null   # core-provider will supply the version when 7da7248 is tagged
   condition_types:
     # Same shape as the composition namespace, because check-ready-reasons-current.py reads
     # condition_types[<cond>].healthy / .unhealthy to assert every NON-Ready upstream reason is
