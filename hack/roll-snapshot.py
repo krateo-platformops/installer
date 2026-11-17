@@ -196,6 +196,79 @@ def stuck_converging(snap, budget_s=CONVERGING_BUDGET_S, now=None):
     return stalled, never
 
 
+# COVERAGE SCALARS. ADDED 2026-11-17, and the reason is that `Ready` CANNOT carry this.
+# core-provider's childhealth.go is explicit about the rollup's direction of failure:
+#
+#     "The rollup is itself fail-safe (unreadable / unmodeled children count healthy), so this
+#      can only surface failures it can positively observe -- it never flips a working
+#      composition to NotReady."
+#
+# So a composition whose ServiceAccount was REFUSED a read of some of its children still reads
+# Ready=True/Available. childhealth.go calls that refusal "a DEFECT IN GENERATED RBAC -- ours,
+# and actionable", which is exactly the class a green roll verification must not swallow. The
+# count reaches consumers as a STRUCTURED FIELD rather than prose, for the reason their own
+# comment gives: "because prose is not an" API.
+#
+# WHAT I HAD WRONG BEFORE THIS. I had been carrying a held item called `UnmodelledKeysPresent`,
+# believing it a condition reason I watched nothing for. It does not exist. `unmodelled` in
+# core-provider means a child KIND with no readiness model, which falls through to
+# existence-is-health -- a rollup concept, nothing to do with schema keys. The thing I actually
+# wanted was never a condition at all: these three scalars are.
+def _coverage(st):
+    """The rollup's coverage scalars, PRESERVING ABSENCE.
+
+    ABSENT IS NOT ZERO, and this is the trap core-provider's own test guards. They assert these
+    fields are NOT written when the rollup never ran, with the reason spelled out:
+
+        "a zero here is a fact about the instrument published as a fact about the composition,
+         and a consumer reading healthEvaluatedChildren == managedChildrenCount would conclude
+         FULL COVERAGE from 0 == 0"
+
+    So a missing field stays None here and is never defaulted. Reading it as 0 would make a
+    never-assessed composition look fully covered -- the precise inversion of what this capture
+    is for.
+    """
+    return {k: st.get(k) for k in ("managedChildrenCount",
+                                   "healthEvaluatedChildren",
+                                   "unreadableChildrenCount")}
+
+
+def coverage_problems(snap):
+    """Compositions the rollup could not fully see: (unreadable, unevaluated, broken).
+
+    unreadable   children the rollup was REFUSED a read of. A FINDING: fail-open by design,
+                 so the composition reads green, and the cause is our own generated RBAC.
+    unevaluated  children neither evaluated nor unreadable, derived with core-provider's OWN
+                 invariant, which their test states as
+                 managedChildrenCount - healthEvaluatedChildren - unreadableChildrenCount.
+                 REPORTED, NOT A FINDING: these are kinds with no readiness model, and they are
+                 EXCLUDED from the rollup rather than counted as converging -- which I got
+                 backwards earlier today and told two sessions.
+    broken       the invariant goes NEGATIVE. A FINDING about THIS SCRIPT or the contract, not
+                 about the cluster; the other two lists are untrustworthy until it is resolved.
+
+    A composition missing any of the three fields appears in NONE of the lists -- the same rule
+    stuck_converging() uses for a missing readyAt: absence of a field is not evidence of a state.
+    """
+    unreadable, unevaluated, broken = [], [], []
+    for key, c in sorted((snap.get("compositions") or {}).items()):
+        cov = c.get("coverage") or {}
+        total = cov.get("managedChildrenCount")
+        evaluated = cov.get("healthEvaluatedChildren")
+        unread = cov.get("unreadableChildrenCount")
+        if total is None or evaluated is None or unread is None:
+            continue
+        gap = total - evaluated - unread
+        if gap < 0:
+            broken.append((key, total, evaluated, unread))
+            continue
+        if unread > 0:
+            unreadable.append((key, unread, total, c.get("Ready")))
+        if gap > 0:
+            unevaluated.append((key, gap, total, c.get("Ready")))
+    return unreadable, unevaluated, broken
+
+
 def capture(ctx, secrets=()):
     snap = {"context": ctx, "releases": {}, "compositions": {},
             "definitions": {}, "secrets": {}}
@@ -234,6 +307,7 @@ def capture(ctx, secrets=()):
             snap["compositions"][key] = {
                 "apiVersion": o["apiVersion"],
                 "hooksUnverified": hooks_unverified,
+                "coverage": _coverage(st),
                 "managed": len(st.get("managed") or []) if st.get("managed") is not None else None,
                 "Ready": conds.get("Ready"),
                 # readyAt, ADDED 2026-11-17, for the same reason it was added to definitions on
@@ -337,6 +411,22 @@ def diff(pre, post, expect_delta=None, matching=None):
     for key, ready, at, age in _never:
         out.setdefault("never_evaluated", []).append(
             "%s reads %s and has not moved since creation (%.1f h)" % (key, ready, age / 3600.0))
+    _unreadable, _unevaluated, _broken = coverage_problems(post)
+    for key, total, evaluated, unread in _broken:
+        out["problems"].append(
+            "COVERAGE INVARIANT BROKEN: %s has managed=%d evaluated=%d unreadable=%d, so "
+            "managed-evaluated-unreadable is negative. A finding about this script or about "
+            "core-provider's contract, not about the cluster." % (key, total, evaluated, unread))
+    for key, n, total, ready in _unreadable:
+        out["problems"].append(
+            "CHILDREN UNREADABLE: %s reads %s with %d of %d children the rollup was refused a "
+            "read of. The rollup is fail-safe, so this reads green; core-provider calls the "
+            "refusal a defect in generated RBAC." % (key, ready, n, total))
+    # Reported, not a problem -- a kind with no readiness model is permanent, so this would fire
+    # on every roll for ever.
+    for key, n, total, ready in _unevaluated:
+        out.setdefault("partial_coverage", []).append(
+            "%s reads %s with %d of %d children never health-evaluated" % (key, ready, n, total))
     if out["releases"]["gone"]:
         out["problems"].append("RELEASES DISAPPEARED: %s" % out["releases"]["gone"])
     bad_status = {k: v["status"] for k, v in po.items() if v.get("status") != "deployed"}
@@ -540,6 +630,9 @@ def _self_test():
         "compositions": {
             "portals/krateo-system/portal": {"apiVersion": "composition.krateo.io/v1-8-128",
                                              "managed": 64, "Ready": "True/Available",
+                                             "coverage": {"managedChildrenCount": 64,
+                                                          "healthEvaluatedChildren": 64,
+                                                          "unreadableChildrenCount": 0},
                                              "Synced": "True/ReconcileSuccess", "uid": "u-portal"},
         },
         "definitions": {
@@ -572,6 +665,7 @@ def _self_test():
             if k == "uid": p["compositions"]["portals/krateo-system/portal"]["uid"] = v
             if k == "av": p["compositions"]["portals/krateo-system/portal"]["apiVersion"] = v
             if k == "managed": p["compositions"]["portals/krateo-system/portal"]["managed"] = v
+            if k == "cov": p["compositions"]["portals/krateo-system/portal"]["coverage"] = v
             if k == "cd_ready": p["definitions"]["krateo-system/portal"]["Ready"] = v
             if k == "cd_readyat": p["definitions"]["krateo-system/portal"]["readyAt"] = v
             if k == "cd_chart": p["definitions"]["krateo-system/portal"]["chartVersion"] = v
@@ -587,6 +681,44 @@ def _self_test():
 
     cases = [
         ("identical snapshots -> no problems", PRE, None, None, 0),
+        # COVERAGE CASES, 2026-11-17. `coverage` is deliberately NOT in the compared field list
+        # above, so these exercise the coverage checks and nothing else -- a case that passed
+        # because the dict differed would prove nothing about the checks.
+        #
+        # The checks are ABSOLUTE, not deltas: unreadable>0 is a finding whatever the pre-state
+        # said. A delta would attribute the condition to the window, and children legitimately
+        # come and go across a roll.
+        ("coverage: 3 of 64 children UNREADABLE while Ready reads True/Available -> problem, "
+         "because the rollup is fail-open and this is the state it hides",
+         post(cov={"managedChildrenCount": 64, "healthEvaluatedChildren": 61,
+                   "unreadableChildrenCount": 3}), None, None, 1),
+        ("coverage: 5 of 64 never health-evaluated -> NO problem; reported, not a finding, "
+         "because a kind with no readiness model is a permanent state",
+         post(cov={"managedChildrenCount": 64, "healthEvaluatedChildren": 59,
+                   "unreadableChildrenCount": 0}), None, None, 0),
+        ("coverage: full (64 = 64 + 0) -> no problem",
+         post(cov={"managedChildrenCount": 64, "healthEvaluatedChildren": 64,
+                   "unreadableChildrenCount": 0}), None, None, 0),
+        # unread is 0 DELIBERATELY. My first version of this case used unreadable=5, which
+        # reported via the unreadable path instead -- so deleting the invariant branch entirely
+        # left the case passing. Measured, not reasoned: mutation testing caught it.
+        ("coverage: invariant NEGATIVE (5 - 8 - 0) with NO unreadable children -> problem ABOUT "
+         "THIS SCRIPT or about core-provider's contract, not about the cluster",
+         post(cov={"managedChildrenCount": 5, "healthEvaluatedChildren": 8,
+                   "unreadableChildrenCount": 0}), None, None, 1),
+        ("coverage: all three fields ABSENT (the rollup never ran) -> NO problem",
+         post(cov={}), None, None, 0),
+        # THE CASE THAT DISCRIMINATES. The all-absent case above passes identically whether
+        # absence is preserved or defaulted to 0 (0-0-0 is a clean full-coverage read), so on its
+        # own it proves nothing. Here unreadable=3 is present while managedChildrenCount is NOT:
+        # preserving absence skips the object, while defaulting to 0 computes 0-0-3 = -3 and
+        # reports a FALSE broken invariant. This is the case that fails if _coverage() ever grows
+        # a `or 0`.
+        ("CONTROL: unreadableChildrenCount present but managedChildrenCount ABSENT -> NO "
+         "problem. Defaulting absence to 0 would compute 0-0-3 and report a FALSE broken "
+         "invariant, so this case is what makes ABSENT-IS-NOT-ZERO testable",
+         post(cov={"healthEvaluatedChildren": 0, "unreadableChildrenCount": 3}),
+         None, None, 0),
         ("both releases +1, expect 1 -> PASS", post(rev_a="73", rev_b="81"), 1, "publish-", 0),
         ("one release +2, expect 1 -> REFUSED", post(rev_a="74", rev_b="81"), 1, "publish-", 1),
         ("one release unmoved, expect 1 -> REFUSED", post(rev_a="72", rev_b="81"), 1, "publish-", 1),
@@ -661,6 +793,31 @@ def _self_test():
         ("FALSIFIER: identical definitions raise nothing, so the check above is not raising\n          unconditionally",
          post(), None, None, 0),
     ]
+    # _coverage() IS NOT REACHED BY THE CASES ABOVE. It runs only inside capture(), against live
+    # status; the fixtures set `coverage` directly. I discovered that by mutating _coverage() to
+    # default absence to 0 and watching all 38 cases still pass -- the mutation could not reach
+    # them. So the layer where an `or 0` would actually be written needs its own assertion.
+    cov_unit = [
+        ("absent stays None, never 0",
+         {"unreadableChildrenCount": 3},
+         {"managedChildrenCount": None, "healthEvaluatedChildren": None,
+          "unreadableChildrenCount": 3}),
+        ("a REAL zero is preserved as 0, not confused with absence",
+         {"managedChildrenCount": 7, "healthEvaluatedChildren": 7, "unreadableChildrenCount": 0},
+         {"managedChildrenCount": 7, "healthEvaluatedChildren": 7, "unreadableChildrenCount": 0}),
+        ("an empty status yields all three as None",
+         {},
+         {"managedChildrenCount": None, "healthEvaluatedChildren": None,
+          "unreadableChildrenCount": None}),
+    ]
+    bad_unit = 0
+    for label, st, want in cov_unit:
+        got = _coverage(st)
+        ok = got == want
+        bad_unit += 0 if ok else 1
+        print("  %-4s _coverage: %s" % ("ok" if ok else "FAIL", label))
+        if not ok:
+            print("        want=%s got=%s" % (want, got))
     bad = 0
     for label, po, delta, match, want in cases:
         d = diff(PRE, po, expect_delta=delta, matching=match)
@@ -670,8 +827,9 @@ def _self_test():
         print("  %-4s %s" % ("ok" if ok else "FAIL", label))
         if not ok:
             print("        want_problems=%s got=%s" % (want, d["problems"]))
-    print("self-test: %d case(s), %d failure(s)" % (len(cases), bad))
-    return 1 if bad else 0
+    print("self-test: %d case(s), %d failure(s)"
+          % (len(cases) + len(cov_unit), bad + bad_unit))
+    return 1 if (bad or bad_unit) else 0
 
 
 def main():
@@ -711,6 +869,22 @@ def main():
         # "before": one capture carrying readyAt would have shown it outright. A finding that
         # only a diff can surface is a finding you cannot make during an incident.
         stalled, never = stuck_converging(snap)
+        unreadable, unevaluated, broken = coverage_problems(snap)
+        # THE INSTRUMENT MUST SAY WHEN IT SAW NOTHING. coverage_problems() skips any composition
+        # missing the three scalars, which is correct -- absence is not zero -- but it means a
+        # FIELD RENAME upstream turns every object into a skip and the coverage lines fall silent.
+        # Silence would then read as full coverage, which is the exact inversion this capture
+        # exists to prevent. So the denominator is printed whenever it is zero: a fleet on an
+        # older core-provider legitimately has none, and that is worth knowing rather than
+        # assuming.
+        _with_cov = sum(1 for c in (snap.get("compositions") or {}).values()
+                        if any(v is not None for v in (c.get("coverage") or {}).values()))
+        if not _with_cov and snap.get("compositions"):
+            print("\nCOVERAGE NOT READABLE: 0 of %d composition(s) carry any of "
+                  "managedChildrenCount / healthEvaluatedChildren / unreadableChildrenCount, so "
+                  "the coverage checks below examined NOTHING. Either this fleet predates the "
+                  "fields or core-provider renamed them -- do not read the absence of coverage "
+                  "findings as full coverage." % len(snap["compositions"]))
         if never:
             print("\nNEVER EVALUATED: %d composition(s) whose Ready has not moved since the "
                   "object was created. NOT a finding -- the age measures their lifetime, not a "
@@ -718,6 +892,18 @@ def main():
                   "no readiness semantics the cdc can read)." % len(never))
             for key, ready, at, age in never:
                 print("  %-56s %-20s since creation %s  (%.1f h)" % (key, ready, at, age / 3600.0))
+        # REPORTED, NOT A FINDING, for the same reason as NEVER EVALUATED: a kind with no
+        # readiness model is a permanent state, so this would fire on every roll for ever. It is
+        # printed because its ABSENCE is the informative case -- 76 of 81 children unevaluated is
+        # what AvailablePartialCoverage looks like from the inside, and I described that
+        # population as "converging" to two sessions today when core-provider EXCLUDES it.
+        if unevaluated:
+            print("\nPARTIAL COVERAGE: %d composition(s) with children the rollup never "
+                  "health-evaluated. NOT a finding -- core-provider treats a kind with no "
+                  "readiness model as existence-is-health and EXCLUDES it from the rollup "
+                  "rather than counting it as converging." % len(unevaluated))
+            for key, n, total, ready in unevaluated:
+                print("  %-56s %-20s %d of %d never evaluated" % (key, ready, n, total))
         if stalled:
             print("\nFINDINGS: %d composition(s) converging longer than %ds, having previously "
                   "moved. CONVERGING IS NOT CONVERGED, and nothing in the platform bounds it yet "
@@ -727,8 +913,26 @@ def main():
             print("A workload crash loop reads as Creating, not failed, so this is what an "
                   "8.5-hour OOM outage looked like from the conditions. Decide before rolling "
                   "on top of it: a pin bump onto an unhealthy dependency is not safe.")
-            return 3
-        return 0
+        # FINDINGS ACCUMULATE. Before 2026-11-17 the stalled block returned 3 directly, so a
+        # coverage finding printed after it could never be reached -- the same shape of bug as a
+        # wait loop that treats an empty list as settled.
+        if broken:
+            print("\nFINDINGS: %d composition(s) whose coverage scalars break core-provider's "
+                  "OWN invariant, managed - evaluated - unreadable < 0. This is a finding about "
+                  "THIS SCRIPT or about their contract, not about the cluster: do not trust the "
+                  "coverage lines above until it is resolved." % len(broken))
+            for key, total, evaluated, unread in broken:
+                print("  %-56s managed=%d evaluated=%d unreadable=%d"
+                      % (key, total, evaluated, unread))
+        if unreadable:
+            print("\nFINDINGS: %d composition(s) the rollup was REFUSED a read of children for. "
+                  "THESE READ GREEN: core-provider's childhealth.go says the rollup is "
+                  "\"fail-safe (unreadable / unmodeled children count healthy)\" and \"never "
+                  "flips a working composition to NotReady\", and it calls the refusal \"a "
+                  "DEFECT IN GENERATED RBAC -- ours, and actionable\"." % len(unreadable))
+            for key, n, total, ready in unreadable:
+                print("  %-56s %-20s %d of %d UNREADABLE" % (key, ready, n, total))
+        return 3 if (stalled or unreadable or broken) else 0
     if a.cmd == "diff":
         pre = json.load(open(a.pre, encoding="utf-8"))
         post = json.load(open(a.post, encoding="utf-8"))
