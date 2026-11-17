@@ -14269,6 +14269,13 @@
                   "username"
                 ],
                 "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 63,
+                    "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+                    "title": "KeycloakUser object name",
+                    "description": "The KeycloakUser object's own name, when it must differ from the chart's default of <realm>-<username>. Needed to ADOPT a pre-existing object rather than create a second one beside it: demo's personas are objects named persona-ada/-bob/-acme/-globex whose usernames are ada/bob/acme/globex, and the originals carry the default delete policy, so a duplicate pair per user is not a cosmetic problem. Optional; omit it on a fresh install."
+                  },
                   "username": {
                     "type": "string",
                     "minLength": 1,
