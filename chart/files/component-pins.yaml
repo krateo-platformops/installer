@@ -7866,7 +7866,7 @@ components:
   #   0.11.0 -> 0.14.0 is `controller.retention` -- measured on the charts, not taken from a
   #   per-release note, because 0.12.0 and 0.13.0 are skipped by this jump.
   #   Probes: 0.14.0, 0.13.0, 0.12.0 and 0.11.0 all resolve for both charts; 9.9.9 absent.
-  version: 0.14.0
+  version: 0.11.0
   deps:
   - incident-provider-crd
   tier: observability
@@ -7929,7 +7929,7 @@ components:
   #   0.11.0 -> 0.14.0 is `controller.retention` -- measured on the charts, not taken from a
   #   per-release note, because 0.12.0 and 0.13.0 are skipped by this jump.
   #   Probes: 0.14.0, 0.13.0, 0.12.0 and 0.11.0 all resolve for both charts; 9.9.9 absent.
-  version: 0.14.0
+  version: 0.11.0
   tier: observability
   feature: portal
 - name: alert-provider-crd
