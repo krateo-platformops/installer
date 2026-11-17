@@ -299,19 +299,44 @@ compositionDefinition:
     # 2.13.105 and this repo's tag 1 carries 2.13.107, and neither has the CD Deployment watch,
     # the rollout rule or the pod cause that #557 (7da7248) introduces.
     #
-    # WHAT THAT MEANS FOR USING THIS NAMESPACE TODAY. Three of its reasons --
-    # RemoteChartUnreachable, SchemaDefaultContradiction and ScaledToZero -- may not be written
-    # at all by 2.13.105/2.13.107, and on those versions a CD reads Available from DECLARED
-    # REPLICAS and re-checks only at its 3m poll, so a green CD is NOT evidence that its
-    # controller is running. Do not use this classification to assert a definition is healthy on
-    # the fleet's current versions; it is correct about the generated table, which is a different
-    # claim from being correct about 057.
+    # WHAT THAT MEANS FOR USING THIS NAMESPACE TODAY, corrected twice by core-provider, who
+    # measured it PER TAG rather than reasoning about the release boundary as I did. My first
+    # version said three reasons "may not be written at all" by 2.13.105/2.13.107. Two of the
+    # three are written today, and the real split is finer:
+    #
+    #   reason                       written on 2.13.105 / 2.13.107   rollup verdict TODAY
+    #   RemoteChartUnreachable       YES, the remote-seed path         CONVERGING, not failed
+    #   ScaledToZero                 YES, since 2.13.84                healthy, already
+    #   SchemaDefaultContradiction   NO -- new in #557                 n/a, cannot occur
+    #
+    # SO THE `failed` LIST BELOW IS CORRECT FOR THE TABLE AND WRONG FOR 057'S UMBRELLA. This
+    # file classifies a REASON; the cdc's rollup assigns a VERDICT to that reason, and the two
+    # can disagree by cdc version. RemoteChartUnreachable becomes a FAILED rollup only in the cdc
+    # of the release containing 7da7248. 057's umbrella is reconciled by 2.13.105's cdc, where it
+    # still rolls up as converging -- so a verification using this list would call such a
+    # definition failed while check-ready-gate, reading the umbrella, calls it converging.
+    # Neither is wrong; they are answering different questions.
+    #
+    # What is new in BEHAVIOUR rather than in reason strings, and all of it requires
+    # core-provider >= the release containing 7da7248: the rollout rule (Available requires the
+    # controller to have rolled out), the Ready-follows-status switch, the Deployment watch, and
+    # the pod cause. Before it, a CD reads Available from DECLARED REPLICAS and re-checks only at
+    # its 3m poll, so a green CD is NOT evidence that its controller is running.
+    #
+    # It is correct about the generated table, which is a different claim from being correct
+    # about 057.
     #
     # The drift gate compares against their MAIN deliberately, so this file tracks where the
     # behaviour is going rather than where it has been. That is the right target for a drift
     # check and the wrong one for a verification, and the distinction is the reason this note
     # exists.
-    released_in: null   # core-provider will supply the version when 7da7248 is tagged
+    # Per-reason, since only one of them is actually new. core-provider will supply the version
+    # when 7da7248 is tagged; the other two need no gate because they are already live.
+    released_in:
+      SchemaDefaultContradiction: null
+      RemoteChartUnreachable: "already written by 2.13.105; its FAILED rollup verdict is what
+        needs the 7da7248 release"
+      ScaledToZero: "2.13.84"
   condition_types:
     # Same shape as the composition namespace, because check-ready-reasons-current.py reads
     # condition_types[<cond>].healthy / .unhealthy to assert every NON-Ready upstream reason is
