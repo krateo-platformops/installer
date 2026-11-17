@@ -49,4 +49,6 @@ jobs:
       - name: Install PyYAML
         run: pip install --quiet pyyaml
       - name: Assert each feature removes only its own objects when disabled
-        run: python3 .github/scripts/check-feature-render.py
+        run: |
+          python3 .github/scripts/check-feature-render-selftest.py
+          python3 .github/scripts/check-feature-render.py
