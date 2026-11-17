@@ -54,6 +54,52 @@ def _run(args):
     return r.stdout if r.returncode == 0 else ""
 
 
+# A composition that is CONVERGING is normal. A composition that has been converging for a long
+# time is a finding, and until core-provider#498 (ChildStalled) exists nothing in the platform
+# says so. Measured motivation, 2026-11-17 on demo: incident-provider's workload was OOMKilled
+# every ~45s for 8.5 HOURS. core-provider confirmed the composition's own door was open the whole
+# time -- an apps/v1 Deployment child goes to workloadReady, which caps at boolState(false) =
+# CONVERGING because a Deployment self-progresses -- so the composition read
+# Ready=False/Creating, naming the child, and NOTHING BOUNDED IT. A roll verification that treats
+# converging as "keep waiting" waits for ever, and "still installing" is the single most
+# reassuring thing a broken component can say.
+#
+# THE THRESHOLD IS NOT INVENTED. The convergence window agreed across sessions is
+# [helm start, +10 min], and snowplow's seed ceiling of 480s is structural inside it. So 10
+# minutes is what a legitimate convergence is allowed to take, and the default here is 900s --
+# 1.5x that -- so a normal bump never trips it.
+CONVERGING_BUDGET_S = 900
+CONVERGED = ("True/Available", "True/AvailablePartialCoverage",
+             "True/ReconcileGracefullyPaused", "True/ReconcilePaused")
+
+
+def stuck_converging(snap, budget_s=CONVERGING_BUDGET_S, now=None):
+    """Compositions that are not converged and whose Ready last changed longer ago than budget_s.
+
+    Returns [(key, Ready, readyAt, age_seconds)]. A composition with no readyAt is NOT reported:
+    absence of the field is not evidence of staleness, and guessing would turn a gap in the
+    capture into a false finding about the cluster.
+    """
+    import datetime as _dt
+    now = now or _dt.datetime.now(_dt.timezone.utc)
+    out = []
+    for key, c in sorted((snap.get("compositions") or {}).items()):
+        ready = c.get("Ready")
+        if ready in CONVERGED or ready is None:
+            continue
+        at = c.get("readyAt")
+        if not at:
+            continue
+        try:
+            t = _dt.datetime.fromisoformat(str(at).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        age = (now - t).total_seconds()
+        if age > budget_s:
+            out.append((key, ready, at, age))
+    return out
+
+
 def capture(ctx, secrets=()):
     snap = {"context": ctx, "releases": {}, "compositions": {},
             "definitions": {}, "secrets": {}}
@@ -78,13 +124,19 @@ def capture(ctx, secrets=()):
             continue
         for o in json.loads(out).get("items", []):
             st = o.get("status") or {}
-            conds = {x["type"]: "%s/%s" % (x["status"], x.get("reason", ""))
-                     for x in (st.get("conditions") or [])}
+            cmap = {x["type"]: x for x in (st.get("conditions") or [])}
+            conds = {t: "%s/%s" % (x["status"], x.get("reason", ""))
+                     for t, x in cmap.items()}
             key = "%s/%s/%s" % (plural, o["metadata"]["namespace"], o["metadata"]["name"])
             snap["compositions"][key] = {
                 "apiVersion": o["apiVersion"],
                 "managed": len(st.get("managed") or []) if st.get("managed") is not None else None,
                 "Ready": conds.get("Ready"),
+                # readyAt, ADDED 2026-11-17, for the same reason it was added to definitions on
+                # 2026-11-16 and which I failed to apply here at the time: Ready status+reason says
+                # what a composition reads AT SNAPSHOT TIME; lastTransitionTime says WHEN it last
+                # changed, and that is the only thing that can bound how long it has been stuck.
+                "readyAt": (cmap.get("Ready") or {}).get("lastTransitionTime"),
                 "Synced": conds.get("Synced"),
                 "uid": o["metadata"].get("uid"),
             }
@@ -165,6 +217,11 @@ def diff(pre, post, expect_delta=None, matching=None):
             moved[k] = {f: [a.get(f), b.get(f)] for f in ("chart", "revision", "status")
                         if a.get(f) != b.get(f)}
     out["releases"]["moved"] = moved
+    for key, ready, at, age in stuck_converging(post):
+        out["problems"].append(
+            "STUCK CONVERGING: %s reads %s since %s (%.1f h). Converging is not converged; a "
+            "crash-looping workload child caps at converging, so this never becomes a failure "
+            "on its own." % (key, ready, at, age / 3600.0))
     if out["releases"]["gone"]:
         out["problems"].append("RELEASES DISAPPEARED: %s" % out["releases"]["gone"])
     bad_status = {k: v["status"] for k, v in po.items() if v.get("status") != "deployed"}
@@ -256,6 +313,16 @@ def diff(pre, post, expect_delta=None, matching=None):
     return out
 
 
+def _ago(seconds):
+    """An RFC3339 timestamp `seconds` in the past. Self-test timestamps are RELATIVE so the cases
+    exercise the real `stuck_converging` against the real clock rather than a frozen one -- a
+    fixed date would silently stop testing the budget as it receded into the past, which is the
+    same class of rot as a gate whose fixture outlives the thing it describes."""
+    import datetime as _dt
+    return (_dt.datetime.now(_dt.timezone.utc)
+            - _dt.timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _self_test():
     PRE = {
         "releases": {
@@ -283,6 +350,10 @@ def _self_test():
         "secrets": {"krateo-system/cj": {"present": True, "dataKeys": ["password"],
                                          "resourceVersion": "100", "writes": []}},
     }
+    # The fixture's composition must be CONVERGED and carry a readyAt, or every case below
+    # inherits a missing field and the new falsifiers would pass for the wrong reason.
+    PRE["compositions"]["portals/krateo-system/portal"]["Ready"] = "True/Available"
+    PRE["compositions"]["portals/krateo-system/portal"]["readyAt"] = _ago(3600)
 
     def post(**kw):
         import copy
@@ -298,6 +369,9 @@ def _self_test():
             if k == "cd_readyat": p["definitions"]["krateo-system/portal"]["readyAt"] = v
             if k == "cd_chart": p["definitions"]["krateo-system/portal"]["chartVersion"] = v
             if k == "cd_drop": del p["definitions"]["krateo-system/portal"]
+            if k == "comp_ready": p["compositions"]["portals/krateo-system/portal"]["Ready"] = v
+            if k == "comp_readyat":
+                p["compositions"]["portals/krateo-system/portal"]["readyAt"] = v
             if k == "secret_rv": p["secrets"]["krateo-system/cj"]["resourceVersion"] = v
             if k == "secret_keys": p["secrets"]["krateo-system/cj"]["dataKeys"] = v
         return p
@@ -324,6 +398,15 @@ def _self_test():
         # CompositionDefinitions. The first case is the one that protects a roll verification:
         # a CD left at False/Unavailable is what krateoEval maps to FAILED and the umbrella
         # inherits, so it must be REPORTED rather than passed over.
+        ("a composition converging for 2h IS a problem -- the demo OOM case",
+         post(comp_ready="False/Creating", comp_readyat=_ago(7200)), None, None, 1),
+        ("FALSIFIER: converging for 60s is a NORMAL bump and must NOT trip",
+         post(comp_ready="False/Creating", comp_readyat=_ago(60)), None, None, 0),
+        ("FALSIFIER: an OLD readyAt while CONVERGED is not a problem -- age alone proves nothing",
+         post(comp_ready="True/Available", comp_readyat=_ago(4000000)), None, None, 0),
+        ("FALSIFIER: converging with NO readyAt is NOT reported -- a gap in the capture must not "
+         "become a false finding about the cluster",
+         post(comp_ready="False/Creating", comp_readyat=None), None, None, 0),
         ("a CD left at False/Unavailable IS a problem",
          post(cd_ready="False/Unavailable"), None, None, 1),
         ("a CD at False/Creating IS a problem too -- converging is not converged, and Creating\n          has no deadline on either the composition or the CD side",
@@ -382,6 +465,20 @@ def main():
                   "Check the context and try again -- an empty capture read as a baseline is "
                   "worse than none, because the diff will later report everything as new.")
             return 2
+        # REPORTED ON A SINGLE READ, not only in the diff. demo's 8.5-hour outage needed no
+        # "before": one capture carrying readyAt would have shown it outright. A finding that
+        # only a diff can surface is a finding you cannot make during an incident.
+        stuck = stuck_converging(snap)
+        if stuck:
+            print("\nFINDINGS: %d composition(s) converging longer than %ds. CONVERGING IS NOT "
+                  "CONVERGED, and nothing in the platform bounds it yet (core-provider#498)."
+                  % (len(stuck), CONVERGING_BUDGET_S))
+            for key, ready, at, age in stuck:
+                print("  %-56s %-20s since %s  (%.1f h)" % (key, ready, at, age / 3600.0))
+            print("A workload crash loop reads as Creating, not failed, so this is what an "
+                  "8.5-hour OOM outage looked like from the conditions. Decide before rolling "
+                  "on top of it: a pin bump onto an unhealthy dependency is not safe.")
+            return 3
         return 0
     if a.cmd == "diff":
         pre = json.load(open(a.pre, encoding="utf-8"))

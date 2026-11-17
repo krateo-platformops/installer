@@ -1,0 +1,61 @@
+name: check-roll-snapshot
+
+# hack/roll-snapshot.py's OWN RULES MUST HOLD, and until now nothing checked that they did.
+#
+# WHY THIS EXISTS, and it is a gap I created rather than inherited. On 2026-11-17 I added four
+# self-test cases to roll-snapshot.py -- one detector and three falsifiers for a composition stuck
+# converging -- ran them locally, got 21 passing, and went to merge. Then I looked for the CI job
+# that would run them and there was none. `hack/tag-delta.py --self-test` has run in CI since
+# check-tag-delta landed, so the precedent was one file away; roll-snapshot was simply never wired
+# up. Its falsifiers had been decorative for as long as they had existed.
+#
+# THAT IS THE WORST SHAPE FOR THIS PARTICULAR TOOL. roll-snapshot is what produces the before/after
+# evidence for every roll I do, so its own correctness is the thing every roll verification rests
+# on, and "I ran it locally" is not the same claim as "it holds" -- a local run proves the file on
+# my disk passes, not the file that merged.
+#
+# The self-test is PURE: no cluster, no credentials, no network, no kubeconfig. It builds snapshot
+# fixtures in memory and runs the real compare() and stuck_converging() against them. So there is
+# no reason for it not to run on every pull request, and the only reason it did not is that nobody
+# asked the question.
+
+on:
+  pull_request:
+    # NO `branches:` filter: a branches: [main] here means the gate does not run on a STACKED pull
+    # request, which then shows "all checks passed" with every gate skipped.
+    #
+    # NO `paths:` filter either. A path-filtered workflow never STARTS on a PR that misses its
+    # paths, so if this is ever made a required context it would wait forever on "Expected". It is
+    # also the wrong filter in substance: this tool's fixtures encode what a composition and a
+    # CompositionDefinition look like, so a change to the CHART or the pins can invalidate them
+    # without touching hack/.
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  roll-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: The snapshot tool's own rules hold, including its falsifiers
+        # Exit 0 is not the whole assertion. The run must also REPORT the case count and zero
+        # failures, because a self-test harness that silently stopped building cases would exit 0
+        # having proved nothing -- the same vacuous pass this tool's own emptiness refusal exists
+        # to prevent.
+        run: |
+          set -o pipefail
+          python3 hack/roll-snapshot.py --self-test | tee /tmp/st.txt
+          grep -qE 'self-test: [0-9]+ case\(s\), 0 failure\(s\)' /tmp/st.txt
+          N=$(sed -nE 's/^self-test: ([0-9]+) case\(s\).*/\1/p' /tmp/st.txt)
+          echo "cases run: ${N}"
+          # A floor, not an equality: new cases are welcome, a harness that quietly stops building
+          # them is not. 21 is the count at the time this job landed.
+          if [ -z "${N}" ] || [ "${N}" -lt 21 ]; then
+            echo "::error::roll-snapshot self-test ran ${N:-0} case(s), fewer than the floor of 21"
+            exit 1
+          fi
