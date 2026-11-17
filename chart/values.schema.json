@@ -11782,6 +11782,32 @@
                   "items": {
                     "type": "string"
                   }
+                },
+                "secretRefs": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "title": "Identity-provider Secret references",
+                  "description": "Specific Secrets the identity-lifecycle controller may read, one Role per namespace with get and resourceNames. Prefer this over secretNamespaces, which grants get on EVERY Secret in a namespace -- krateo-system holds 183. Mirrors identity-lifecycle's own schema.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "namespace",
+                      "name"
+                    ],
+                    "properties": {
+                      "namespace": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+                        "maxLength": 63
+                      },
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$",
+                        "maxLength": 253
+                      }
+                    }
+                  }
                 }
               }
             },
