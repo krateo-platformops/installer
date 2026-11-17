@@ -185,6 +185,69 @@ def componentvalues_props(component, installer_schema_path="chart/values.schema.
     return out
 
 
+def dependency_key(dep):
+    """The name helm coalesces a dependency under: its ALIAS when it declares one, else its name.
+
+    Aliasing renames the subchart before coalescing, so a schema that declares the chart name
+    while the dependency is aliased is refused exactly as if it declared nothing.
+    """
+    dep = dep if isinstance(dep, dict) else {}
+    return dep.get("alias") or dep.get("name")
+
+
+def dependency_problems(schema, dependencies):
+    """(ok, reason). Dependency keys helm coalesces into the PARENT's values that a closed root
+    does not declare.
+
+    helm validates the parent's schema against COALESCED values, not against what a user supplied:
+    chartutil.ToRenderValues runs CoalesceValues first and ValidateAgainstSchema on the RESULT, and
+    coalesceDeps always creates dest[<subchart>] and merges that subchart's own defaults into it.
+    So a chart with dependencies ALWAYS has a key per coalesced dependency in its own values,
+    holding that dependency's full default set. A root with `additionalProperties: false` that does
+    not declare the key is refused by helm at install AND upgrade, whatever the chart's own
+    values.yaml says.
+
+    THIS IS INVISIBLE TO verdict(), WHICH IS WHY IT IS A SEPARATE CHECK. verdict() reasons about
+    the schema in isolation, so a closed root missing a dependency key PASSES it and then fails
+    every install. Reported by core-provider on 2026-11-17 from helm v3.21.3's source, and to be
+    confirmed by a real `helm template` with the refusal text.
+
+    WHAT THIS DOES NOT CLAIM. A dependency carrying a `condition` is reported with a DIFFERENT
+    predicate: helm processes dependencies before building render values, so a disabled one may
+    never be coalesced and a closed root omitting it may pass. Declaring it anyway costs nothing,
+    so it is still reported -- but as failing WHEN THE CONDITION IS TRUE, never as failing every
+    install, which is a claim this function cannot support. Keeping those two apart is the
+    difference between a gate that is right and one that cries wolf.
+    """
+    if schema is None or schema.get("additionalProperties") is not False:
+        return True, "root not closed, so an undeclared dependency key is accepted"
+    declared = set((schema.get("properties") or {}).keys())
+    always, conditional = [], []
+    for dep in (dependencies or []):
+        key = dependency_key(dep)
+        if not key or key in declared:
+            continue
+        d = dep if isinstance(dep, dict) else {}
+        if d.get("condition"):
+            conditional.append(f"{key} (condition {d['condition']})")
+        else:
+            always.append(key)
+    bad = []
+    if always:
+        bad.append(f"root is closed and does not declare the dependency key(s) helm ALWAYS "
+                   f"coalesces: {sorted(always)} -- helm refuses the chart at install and upgrade, "
+                   f"whatever values.yaml says")
+    if conditional:
+        bad.append(f"root is closed and does not declare conditionally-enabled dependency key(s): "
+                   f"{sorted(conditional)} -- refused WHEN THE CONDITION IS TRUE; declaring them "
+                   f"costs nothing")
+    if bad:
+        return False, "; ".join(bad)
+    n = len([d for d in (dependencies or []) if dependency_key(d)])
+    return True, f"root closed and declares all {n} dependency key(s)" if n else \
+           "root closed, chart has no dependencies"
+
+
 def pull(repo, name, version, into):
     r = subprocess.run(["helm", "pull", f"{repo}/{name}", "--version", version,
                         "-d", str(into), "--untar"], capture_output=True, text=True)
@@ -198,14 +261,23 @@ def pull(repo, name, version, into):
         d = found[0]
     f = d / "values.schema.json"
     vf = d / "values.yaml"
+    cf = d / "Chart.yaml"
     try:
         defaults = yaml.safe_load(vf.read_text()) if vf.is_file() else {}
     except Exception as e:
         return None, f"values.yaml is not valid YAML: {e}"
-    if not f.is_file():
-        return ("NO_SCHEMA", defaults or {}), None
+    # Dependencies decide which keys helm coalesces into THIS chart's values, which a closed root
+    # must declare. Read from the pulled archive's Chart.yaml, not from Chart.lock, because a
+    # dependency can be declared and unlocked.
     try:
-        return (json.loads(f.read_text()), defaults or {}), None
+        deps = ((yaml.safe_load(cf.read_text()) or {}).get("dependencies") or []) \
+            if cf.is_file() else []
+    except Exception as e:
+        return None, f"Chart.yaml is not valid YAML: {e}"
+    if not f.is_file():
+        return ("NO_SCHEMA", defaults or {}, deps), None
+    try:
+        return (json.loads(f.read_text()), defaults or {}, deps), None
     except Exception as e:
         return None, f"values.schema.json is not valid JSON: {e}"
 
@@ -319,7 +391,7 @@ def main(argv):
             if err:
                 unreadable.append((name, err))
                 continue
-            schema, defaults = got
+            schema, defaults, deps = got
             if schema == "NO_SCHEMA":
                 examined += 1
                 good, reason = verdict(None, defaults, componentvalues_props(name), name)
@@ -336,6 +408,13 @@ def main(argv):
             else:
                 print(f"  REFUSE {name:<24} {version:<10} {reason}")
                 refused.append((name, version, reason))
+            # Separate check: verdict() reasons about the schema alone and cannot see that helm
+            # validates it against COALESCED values. A closed root missing a dependency key
+            # passes above and then fails every install.
+            dgood, dreason = dependency_problems(schema, deps)
+            if not dgood:
+                print(f"  REFUSE {name:<24} {version:<10} {dreason}")
+                refused.append((name, version, dreason))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
