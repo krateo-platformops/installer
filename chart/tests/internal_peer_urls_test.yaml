@@ -200,3 +200,49 @@ tests:
         documentSelector:
           path: kind
           value: OasgenProvider
+  # THE TOKEN HALF. The URLs alone get the rdc as far as authn and no further: it then fails at
+  # `reading projected service account token ".../token": no such file or directory`
+  # (oasgen-provider#262 prerequisite 3) -- a different error at a later step, which reads like a
+  # broken mount rather than a missing one. These come from values.yaml rather than a derivation
+  # because they need no templating; the assertion is here so the two halves are verified
+  # together and neither can ship alone.
+  #
+  # THE AUDIENCE IS THE LOAD-BEARING FIELD. authn verifies the token with a Kubernetes
+  # TokenReview, which enforces the audience, so the pod's own default ServiceAccount token -- a
+  # perfectly valid token -- is REFUSED. An audience typo would leave a mounted, readable,
+  # well-formed token that authn rejects, and the symptom would be a 401 at the snowplow call,
+  # nowhere near the volume.
+  - it: "CASE 5 -- the projected authn token is mounted, with audience EXACTLY authn"
+    set:
+      features.oasgenProvider: true
+      exposure.type: Gateway
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider: *fixture
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.rdc.volumes[0].projected.sources[0].serviceAccountToken.audience
+          value: authn
+        documentSelector:
+          path: kind
+          value: OasgenProvider
+      - equal:
+          path: spec.rdc.volumeMounts[0].mountPath
+          value: /var/run/secrets/krateo.io/serviceaccount
+        documentSelector:
+          path: kind
+          value: OasgenProvider
+      - equal:
+          path: spec.rdc.volumeMounts[0].readOnly
+          value: true
+        documentSelector:
+          path: kind
+          value: OasgenProvider
+      # and the URLs must STILL be derived in the same render -- the two halves coexist rather
+      # than one clobbering the other through the componentValues merge
+      - equal:
+          path: spec.rdc.env.URL_AUTHN
+          value: http://authn.krateo-system.svc.cluster.local:8082
+        documentSelector:
+          path: kind
+          value: OasgenProvider

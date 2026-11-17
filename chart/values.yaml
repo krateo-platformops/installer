@@ -492,6 +492,42 @@ componentValues:
   # Verified the hard way on krateo-057: with only the schema default, the portal release rendered
   # config.agents={enabled:false} (the PORTAL chart's own default) and /agents 404'd while
   # portal-agents was installed and its five page CRs were live.
+  # oasgen-provider's rest-dynamic-controller: the projected authn token that *ApiRef delegation
+  # requires. The URLs are NOT here -- they embed the platform namespace and values.yaml is not
+  # templated, so they are derived in compositions.yaml from the `internalPeerUrls` pin field
+  # (installer#578). These two need no templating, so they belong where they can be read and
+  # overridden.
+  #
+  # THE AUDIENCE MUST BE EXACTLY `authn`. authn verifies the token with a Kubernetes TokenReview,
+  # which enforces the audience, so the pod's OWN default ServiceAccount token -- a perfectly
+  # valid token -- is REFUSED. Without this volume the rdc gets past URL_AUTHN and fails at
+  # `reading projected service account token ".../token": no such file or directory`
+  # (oasgen-provider#262 prerequisite 3), which is a different error at a later step and reads
+  # like a broken mount rather than a missing one.
+  #
+  # *ApiRef ALSO REQUIRES authn THE DEPLOYMENT, not merely authn-crds: every snowplow /call
+  # route, read and write, sits behind middleware.UserConfig, which needs an authn-signed bearer
+  # JWT AND the caller's <username>-clientconfig Secret -- and authn writes that Secret itself
+  # during the ServiceAccount login, so nobody creates it by hand. Testing that snowplow STARTS
+  # does not test that it ANSWERS; oasgen-provider#262 records a cluster build wasted on exactly
+  # that inference. This is NOT expressed as a pin `deps` entry on purpose: oasgen-provider also
+  # serves kinds that never use *ApiRef, and gating all 34 of 057's RestDefinitions on authn's
+  # health would couple far more than the feature needs.
+  oasgen-provider:
+    rdc:
+      volumes:
+        - name: authn-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: authn
+                  expirationSeconds: 3600
+                  path: token
+      volumeMounts:
+        - name: authn-token
+          mountPath: /var/run/secrets/krateo.io/serviceaccount
+          readOnly: true
+
   portal:
     agents:
       enabled: true
