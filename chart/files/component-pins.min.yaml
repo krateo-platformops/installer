@@ -811,7 +811,7 @@ components:
   kind: KrateoKeycloakRealm
   chart: krateo-keycloak-realm
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.6.0
+  version: 0.6.1
   requiresApiGroups:
   - keycloak.ogen.krateo.io
   deps:
