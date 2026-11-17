@@ -11235,6 +11235,19 @@
             }
           }
         },
+        "kyverno": {
+          "type": "object",
+          "additionalProperties": false,
+          "title": "kyverno",
+          "description": "Per-cluster overrides for the kyverno blueprint. The RBAC the krateo ClusterPolicies need is NOT here — it is defaulted by the wrapper chart from 3.9.4, because every krateo install running those policies needs the same 18 rules and each operator was otherwise rediscovering them. This node is only for what legitimately differs per cluster.",
+          "properties": {
+            "kyverno": {
+              "type": "object",
+              "title": "upstream passthrough",
+              "description": "NOTE THE DOUBLE `kyverno`, and that it is not a typo: the wrapper chart's own top level is CLOSED to `global` and `kyverno`, and `.kyverno` is its passthrough to the upstream subchart. So componentValues.kyverno.kyverno.<x> is the only path that reaches upstream; a single-`kyverno` path is refused at CHART LOAD, which is loud and therefore safe. Verified against the wrapper's own values.schema.json rather than assumed.\n\nTHIS NODE IS OPEN, which is a deliberate exception to this file's closed-object convention, for two reasons. First, it mirrors the wrapper's own `.kyverno`, which is open for the same reason: upstream kyverno's values schema is enormous and a closed duplicate here would be a maintenance fiction that silently falls behind every upstream release. Second, under a CLOSED node the Installer CRD PRUNES an undeclared key silently — the value vanishes, `kubectl` still prints \"patched\", and the chart default wins; open preserves it instead. The cost is that a typo here is passed through rather than rejected, so it surfaces as an upstream chart error at render time rather than at the CR write.\n\nThe known case is backgroundController.resources (the wrapper defaults 2Gi/256Mi from saas's file). NO `default:` anywhere under this node: a default on a componentValues leaf materializes into every install's live CR — which is why 057's Installer CR still carries four http://localhost:808x strings today."
+            }
+          }
+        },
         "keycloak-config-kog": {
           "type": "object",
           "additionalProperties": false,
