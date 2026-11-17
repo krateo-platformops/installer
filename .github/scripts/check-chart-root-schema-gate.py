@@ -90,7 +90,18 @@ CASES = [
     ("closed SUB-object -> ok (rdc, image: legitimate)",
      {"properties": {"rdc": {"additionalProperties": False}}}, {}, True, set()),
     ("empty required -> ok", {"required": [], "properties": {}}, {}, True, set()),
-    ("no schema at all -> ok", None, {}, True, set()),
+    # A chart with NO root values.schema.json cannot be registered: crdgen builds the composition
+    # CRD from it. This suite asserted the OPPOSITE until 2026-11-17 -- "no schema at all -> ok"
+    # was a deliberate pass fixture -- which is why nothing refused the kyverno 3.9.2 pin at pin
+    # time and the failure surfaced only as a Synced=False CD on a cluster.
+    ("no schema at all -> REFUSE (crdgen has nothing to build a CRD from)",
+     None, {}, False, set()),
+    ("no schema but on the exempt list -> ok, as a TRACKED gap",
+     None, {}, True, set(), "kyverno"),
+    # The exemption must not outlive its reason. If an exempt chart grows a root schema, the gate
+    # refuses until the entry is removed -- otherwise a carve-out becomes permanent in silence.
+    ("exempt component that NOW has a schema -> REFUSE (stale exemption)",
+     {"properties": {"global": {}}}, {}, False, set(), "kyverno"),
     ("unspecified additionalProperties -> ok", {"properties": {}}, {}, True, set()),
 
     # both defects at once must still refuse
@@ -101,8 +112,11 @@ CASES = [
 
 def main():
     failures = []
-    for label, schema, defaults, want, cv_props in CASES:
-        ok, reason = gate.verdict(schema, defaults, cv_props)
+    for case in CASES:
+        label, schema, defaults, want, cv_props = case[:5]
+        # 6th element, optional: the component name, which selects the missing-schema exemption.
+        name = case[5] if len(case) > 5 else None
+        ok, reason = gate.verdict(schema, defaults, cv_props, name)
         if ok != want:
             failures.append(f"{label}: ok={ok}, wanted {want}  [{reason}]")
         # The old suite asserted a partly-defaulted REFUSE must name ONLY the unmet key. That rested

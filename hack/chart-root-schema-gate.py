@@ -55,7 +55,26 @@ except ImportError:
     sys.exit(2)
 
 
-def verdict(schema, defaults=None, cv_props=None):
+# A pinned chart with NO root values.schema.json cannot be registered at all: core-provider's
+# crdgen builds the composition CRD from that file. Measured 2026-11-17 on kc-roll057, where the
+# kyverno CD sat at Synced=False "error getting JSON schema: open kyverno/values.schema.json: file
+# does not exist", which in turn withheld identity-lifecycle for lack of policies.kyverno.io.
+#
+# This gate used to report such a chart as `ok`, in TWO places that disagreed with each other: the
+# verdict() branch below, and a `NO_SCHEMA` short-circuit in main() that never called verdict() at
+# all. Fixing only the unit-level branch would have changed nothing a pin PR actually runs.
+#
+# An entry here is a KNOWN, TRACKED gap, not a pardon. The value is why it cannot comply yet. The
+# exemption reports its own staleness: once the chart grows a root schema, this gate REFUSES until
+# the entry is removed, so a carve-out cannot outlive its reason in silence.
+MISSING_SCHEMA_EXEMPT = {
+    "kyverno": "upstream kyverno/charts ships no root values.schema.json at any version (checked "
+               "against repos/kyverno/kyverno charts/kyverno on 2026-11-17); being republished as "
+               "a krateo-blueprints wrapper that adds one",
+}
+
+
+def verdict(schema, defaults=None, cv_props=None, name=None):
     """(ok, reason). Only the ROOT is examined; a closed sub-object is legitimate.
 
     THE `defaults` EXEMPTION WAS WRONG AND THIS IS THE CORRECTION. This function used to read:
@@ -89,7 +108,15 @@ def verdict(schema, defaults=None, cv_props=None):
     is useful when deciding what the installer should declare. It no longer excuses anything.
     """
     if schema is None:
-        return True, "no values.schema.json (nothing constrains the root)"
+        if name in MISSING_SCHEMA_EXEMPT:
+            return True, f"no root values.schema.json -- EXEMPT: {MISSING_SCHEMA_EXEMPT[name]}"
+        return False, ("no root values.schema.json -- crdgen cannot build a composition CRD "
+                       "without one, so the CompositionDefinition fails to register with "
+                       "`error getting JSON schema: open <chart>/values.schema.json: file does "
+                       "not exist` (measured on kyverno 3.9.2, 2026-11-17)")
+    if name in MISSING_SCHEMA_EXEMPT:
+        return False, (f"{name} is listed in MISSING_SCHEMA_EXEMPT but its chart now HAS a root "
+                       f"values.schema.json -- remove the entry, the gap it recorded is closed")
     defaults = defaults or {}
     props = schema.get("properties") or {}
     closed = schema.get("additionalProperties") is False
@@ -295,10 +322,15 @@ def main(argv):
             schema, defaults = got
             if schema == "NO_SCHEMA":
                 examined += 1
-                print(f"  ok   {name:<26} {version:<10} no values.schema.json")
+                good, reason = verdict(None, defaults, componentvalues_props(name), name)
+                if good:
+                    print(f"  ok   {name:<26} {version:<10} {reason}")
+                else:
+                    print(f"  REFUSE {name:<24} {version:<10} {reason}")
+                    refused.append((name, version, reason))
                 continue
             examined += 1
-            good, reason = verdict(schema, defaults, componentvalues_props(name))
+            good, reason = verdict(schema, defaults, componentvalues_props(name), name)
             if good:
                 print(f"  ok   {name:<26} {version:<10} {reason}")
             else:
