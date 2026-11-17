@@ -626,7 +626,7 @@ components:
   agent: true
 - name: incident-provider
   kind: IncidentProvider
-  version: 0.14.0
+  version: 0.11.0
   deps:
   - incident-provider-crd
   tier: observability
@@ -636,7 +636,7 @@ components:
 - name: incident-provider-crd
   kind: IncidentProviderCrds
   chart: incident-provider-crds
-  version: 0.14.0
+  version: 0.11.0
   tier: observability
   feature: portal
 - name: alert-provider-crd
