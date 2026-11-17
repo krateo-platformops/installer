@@ -47,6 +47,14 @@ gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 
 # (label, schema, defaults, expected_ok, cv_props)
+# The exemption fixtures inject their OWN entry rather than naming a real one. MISSING_SCHEMA_EXEMPT
+# is deliberately empty in the gate, and a suite that asserted behaviour through a production entry
+# would have broken the moment that entry was removed -- which is a test depending on configuration
+# rather than on the code it covers.
+EXEMPT_PROBE = "exempt-probe-not-a-real-component"
+gate.MISSING_SCHEMA_EXEMPT[EXEMPT_PROBE] = "injected by this suite; not a real exemption"
+
+
 CASES = [
     # the global conjunction, both directions
     ("closed root, no global -> REFUSE",
@@ -90,7 +98,18 @@ CASES = [
     ("closed SUB-object -> ok (rdc, image: legitimate)",
      {"properties": {"rdc": {"additionalProperties": False}}}, {}, True, set()),
     ("empty required -> ok", {"required": [], "properties": {}}, {}, True, set()),
-    ("no schema at all -> ok", None, {}, True, set()),
+    # A chart with NO root values.schema.json cannot be registered: crdgen builds the composition
+    # CRD from it. This suite asserted the OPPOSITE until 2026-11-17 -- "no schema at all -> ok"
+    # was a deliberate pass fixture -- which is why nothing refused the kyverno 3.9.2 pin at pin
+    # time and the failure surfaced only as a Synced=False CD on a cluster.
+    ("no schema at all -> REFUSE (crdgen has nothing to build a CRD from)",
+     None, {}, False, set()),
+    ("no schema but on the exempt list -> ok, as a TRACKED gap",
+     None, {}, True, set(), EXEMPT_PROBE),
+    # The exemption must not outlive its reason. If an exempt chart grows a root schema, the gate
+    # refuses until the entry is removed -- otherwise a carve-out becomes permanent in silence.
+    ("exempt component that NOW has a schema -> REFUSE (stale exemption)",
+     {"properties": {"global": {}}}, {}, False, set(), EXEMPT_PROBE),
     ("unspecified additionalProperties -> ok", {"properties": {}}, {}, True, set()),
 
     # both defects at once must still refuse
@@ -99,10 +118,67 @@ CASES = [
 ]
 
 
+
+# ---------------------------------------------------------------------------------------------
+# dependency_problems(): the class verdict() CANNOT see.
+#
+# helm validates the parent's schema against COALESCED values, and coalesceDeps always creates a
+# key per dependency holding that dependency's defaults. So a closed root missing a dependency key
+# passes verdict() -- which reasons about the schema alone -- and then fails every helm install.
+# Found by core-provider on 2026-11-17 while reviewing the kyverno wrapper's schema, where my
+# closed root declared `global` only and would have been refused on every install and upgrade.
+#
+# (label, root schema, dependencies, expected ok, substring the reason must contain)
+DEP_CASES = [
+    ("open root, dependency undeclared -> ok (nothing is forced)",
+     {"properties": {}}, [{"name": "kyverno"}], True, "not closed"),
+    ("unset additionalProperties counts as open -> ok",
+     {"properties": {"global": {}}}, [{"name": "kyverno"}], True, "not closed"),
+    ("closed root declaring the dependency -> ok",
+     {"additionalProperties": False, "properties": {"global": {}, "kyverno": {}}},
+     [{"name": "kyverno"}], True, "declares all 1"),
+    ("closed root, NO dependencies at all -> ok",
+     {"additionalProperties": False, "properties": {"global": {}}}, [], True, "no dependencies"),
+
+    # the defect this check exists for
+    ("closed root missing an UNCONDITIONAL dependency -> REFUSE, every install",
+     {"additionalProperties": False, "properties": {"global": {}}},
+     [{"name": "kyverno"}], False, "ALWAYS coalesces"),
+
+    # the predicate must be WEAKER for a conditional dependency: helm processes dependencies
+    # before building render values, so a disabled one may never be coalesced. Claiming "every
+    # install" there would be a claim this function cannot support.
+    ("closed root missing a CONDITIONAL dependency -> REFUSE, but only when the condition is true",
+     {"additionalProperties": False, "properties": {"global": {}}},
+     [{"name": "reports-server", "condition": "reports-server.enabled"}], False,
+     "WHEN THE CONDITION IS TRUE"),
+    ("a conditional miss must NOT be reported as failing every install",
+     {"additionalProperties": False, "properties": {"global": {}}},
+     [{"name": "x", "condition": "x.enabled"}], False, "costs nothing"),
+
+    # aliasing renames the subchart BEFORE coalescing, so the alias is the key that matters
+    ("closed root declaring the ALIAS -> ok",
+     {"additionalProperties": False, "properties": {"global": {}, "pg": {}}},
+     [{"name": "cloudnative-pg", "alias": "pg"}], True, "declares all 1"),
+    ("closed root declaring the CHART NAME while the dep is ALIASED -> REFUSE",
+     {"additionalProperties": False, "properties": {"global": {}, "cloudnative-pg": {}}},
+     [{"name": "cloudnative-pg", "alias": "pg"}], False, "ALWAYS coalesces"),
+
+    # CONTROL: the shape actually being published must pass, or the gate refuses our own fix
+    ("CONTROL the kyverno wrapper as designed -> ok",
+     {"additionalProperties": False,
+      "properties": {"global": {"type": "object", "additionalProperties": True},
+                     "kyverno": {"type": "object", "additionalProperties": True}}},
+     [{"name": "kyverno", "version": "3.9.2"}], True, "declares all 1"),
+]
+
 def main():
     failures = []
-    for label, schema, defaults, want, cv_props in CASES:
-        ok, reason = gate.verdict(schema, defaults, cv_props)
+    for case in CASES:
+        label, schema, defaults, want, cv_props = case[:5]
+        # 6th element, optional: the component name, which selects the missing-schema exemption.
+        name = case[5] if len(case) > 5 else None
+        ok, reason = gate.verdict(schema, defaults, cv_props, name)
         if ok != want:
             failures.append(f"{label}: ok={ok}, wanted {want}  [{reason}]")
         # The old suite asserted a partly-defaulted REFUSE must name ONLY the unmet key. That rested
@@ -113,6 +189,20 @@ def main():
             if not any(m in reason for m in ("does not declare", "EMPTY objects", "NO default",
                                              "declares NO componentValues")):
                 failures.append(f"{label}: REFUSE reason names no failure mode: {reason}")
+
+    for label, sch, deps, want, must in DEP_CASES:
+        ok, reason = gate.dependency_problems(sch, deps)
+        if ok != want:
+            failures.append(f"[dep] {label}: ok={ok}, wanted {want}  [{reason}]")
+        elif must not in reason:
+            failures.append(f"[dep] {label}: reason lacks {must!r}: {reason}")
+
+    # A conditional miss must never borrow the unconditional claim. Asserted directly, because the
+    # two differ only in wording and a copy-paste would make the gate overclaim.
+    _, r_cond = gate.dependency_problems(
+        {"additionalProperties": False, "properties": {}}, [{"name": "z", "condition": "z.on"}])
+    if "ALWAYS coalesces" in r_cond:
+        failures.append("[dep] a CONDITIONAL miss is reported as failing every install: " + r_cond)
 
     # The suite must exercise both verdicts, or it proves only one half.
     verdicts = {c[3] for c in CASES}
@@ -129,7 +219,8 @@ def main():
         for f in failures:
             print(f"  {f}")
         return 1
-    print(f"check-chart-root-schema-gate: OK — {len(CASES)} cases, both verdicts reached, "
+    print(f"check-chart-root-schema-gate: OK — {len(CASES)} verdict + {len(DEP_CASES)} dependency "
+          f"cases, both verdicts reached, "
           f"self-test green")
     return 0
 
