@@ -107,7 +107,7 @@ FAILED_REASONS = ("Unavailable", "CreateOutcomeUnknown", "HooksMayNotHaveRun")
 # that learns to ignore the list. core-provider pointed out the fix: classify by the REASON, whose
 # verdict the registry already gives, rather than by reading each child Deployment.
 CD_FAILED_REASONS = ("Unavailable", "RemoteChartUnreachable", "SchemaDefaultContradiction",
-                     "ValuesSchemaMissing")
+                     "ValuesSchemaMissing", "DerivedNameTooLong")
 
 # compositionDefinition.converging, mirrored for the same dependency-free reason.
 CD_CONVERGING_REASONS = ("Creating", "Deleting")
