@@ -74,6 +74,25 @@ DECLARED_OPEN = {
         "agentgateway's own Deployment override block, owned by that chart",
     "/properties/componentValues/properties/agentgateway-policies/properties/gateway/properties/parameters/properties/service":
         "agentgateway's own Service override block, owned by that chart",
+    "/properties/componentValues/properties/kyverno/properties/kyverno":
+        "BLUEPRINT-WRAPPER PASSTHROUGH, and the open node is the point rather than an omission. "
+        "krateo-blueprints/kyverno is a thin wrapper whose single top-level values key is `kyverno`, "
+        "under which sits UPSTREAM Kyverno's entire values surface -- measured on 3.9.4: the wrapper "
+        "offers exactly one top-level key and `global` lives one level down, inside the subchart. "
+        "Enumerating that subtree would mean mirroring a third-party chart's values into this schema "
+        "and re-mirroring it on every upstream bump, which is the coupling the other subchart "
+        "passthroughs above are open to avoid. "
+        "WHAT IT IS FOR: Diego ruled 2026-11-17 that the wrapper carries the 18 extraResources RBAC "
+        "rules as DEFAULTS (shipped in 3.9.4, byte-equal to krateo-platformops/saas's "
+        "policies/kyverno/kyverno-values.yaml) and the schema takes the TUNING. Without this node "
+        "componentValues.kyverno was undeclared entirely, so an operator tuning those rules would "
+        "have had the key PRUNED silently by the Installer CRD and seen success with no effect -- "
+        "which is how four values keys were lost in one day. "
+        "BOUNDED WHERE IT MATTERS: the enclosing componentValues.kyverno IS closed "
+        "(additionalProperties: false, one key), so only this one subtree is open, and crdgen's "
+        "x-kubernetes-preserve-unknown-fields on it means a live CR's contents are preserved rather "
+        "than pruned -- which is the behaviour an adoption needs. "
+        "Delete this entry if the wrapper ever gains a typed values schema worth mirroring.",
 }
 # An open object under one of these ARRAY paths is a k8s-native list element (volumes, tolerations,
 # imagePullSecrets, env, listeners, tls): same reasoning as K8S_NATIVE_OPEN.
