@@ -38,25 +38,30 @@ import urllib.error
 import urllib.request
 
 REGISTRY = "ghcr.io"
-CHART_PREFIX = "oci://ghcr.io/krateo-platformops/charts"
+# THREE REGISTRIES ARE IN USE and the component's `repo` key is the authority, not this default.
+# Measured 2026-11-18: krateo-keycloak-realm lives in krateo-blueprints, and probing it against the
+# default answered ABSENT for 0.6.1, 0.6.2 and 9.9.9 alike -- so the controls caught it and the
+# script refused to report, which is the design working. But refusing is not probing: pass --repo
+# with whatever the pin's `repo` key says.
+DEFAULT_CHART_PREFIX = "oci://ghcr.io/krateo-platformops/charts"
 IMAGE_ORG = "krateo-platformops"
 IMPOSSIBLE = "9.9.9"
 
 
-def chart_present(name, version, timeout=90):
+def chart_present(name, version, prefix=DEFAULT_CHART_PREFIX, timeout=90):
     """True if `helm show chart` can read it. helm exits non-zero for an absent version."""
     try:
         r = subprocess.run(
-            ["helm", "show", "chart", "%s/%s" % (CHART_PREFIX, name), "--version", version],
+            ["helm", "show", "chart", "%s/%s" % (prefix, name), "--version", version],
             capture_output=True, text=True, timeout=timeout)
         return r.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return None  # unknown, not absent -- the caller must not read this as a verdict
 
 
-def _token(repo, timeout=30):
+def _token(repo, org=IMAGE_ORG, timeout=30):
     url = ("https://%s/token?scope=repository:%s/%s:pull&service=%s"
-           % (REGISTRY, IMAGE_ORG, repo, REGISTRY))
+           % (REGISTRY, org, repo, REGISTRY))
     try:
         with urllib.request.urlopen(url, timeout=timeout) as fh:
             return (json.load(fh) or {}).get("token")
@@ -64,7 +69,7 @@ def _token(repo, timeout=30):
         return None
 
 
-def image_present(repo, tag, token, timeout=30):
+def image_present(repo, tag, token, org=IMAGE_ORG, timeout=30):
     """True/False from a TOKENED manifest HEAD. None if the probe itself could not run.
 
     Without the token this returns 401 for present and absent alike -- see the module
@@ -73,7 +78,7 @@ def image_present(repo, tag, token, timeout=30):
     """
     if not token:
         return None
-    url = "https://%s/v2/%s/%s/manifests/%s" % (REGISTRY, IMAGE_ORG, repo, tag)
+    url = "https://%s/v2/%s/%s/manifests/%s" % (REGISTRY, org, repo, tag)
     req = urllib.request.Request(url, method="GET")
     req.add_header("Authorization", "Bearer %s" % token)
     req.add_header("Accept", ", ".join([
@@ -100,6 +105,11 @@ def main(argv):
                     help="a KNOWN-PUBLISHED version, to prove the probe can see presence")
     ap.add_argument("--chart", action="append", default=[], help="chart name; repeatable")
     ap.add_argument("--image", action="append", default=[], help="image repo name; repeatable")
+    ap.add_argument("--repo", default=DEFAULT_CHART_PREFIX,
+                    help="OCI chart prefix; use the pin's own `repo` key (default: %s)"
+                         % DEFAULT_CHART_PREFIX)
+    ap.add_argument("--image-org", default=IMAGE_ORG,
+                    help="ghcr org for images (default: %s)" % IMAGE_ORG)
     a = ap.parse_args(argv)
 
     if not a.chart and not a.image:
@@ -109,19 +119,22 @@ def main(argv):
     rows, broken = [], []
 
     for name in a.chart:
-        under = chart_present(name, a.version)
-        ctl_ok = chart_present(name, a.control)
-        ctl_no = chart_present(name, IMPOSSIBLE)
+        under = chart_present(name, a.version, a.repo)
+        ctl_ok = chart_present(name, a.control, a.repo)
+        ctl_no = chart_present(name, IMPOSSIBLE, a.repo)
         if ctl_ok is not True or ctl_no is not False:
-            broken.append("chart %s: control %s=%r and %s=%r -- the probe does not discriminate"
-                          % (name, a.control, ctl_ok, IMPOSSIBLE, ctl_no))
+            broken.append("chart %s at %s: control %s=%r and %s=%r -- the probe does not "
+                          "discriminate. The component's `repo` key is the authority; three "
+                          "registries are in use (krateo-platformops, krateo-blueprints, "
+                          "krateo-agentiko), so check --repo before reading this as absence."
+                          % (name, a.repo, a.control, ctl_ok, IMPOSSIBLE, ctl_no))
         rows.append(("chart", name, under))
 
     for repo in a.image:
-        tok = _token(repo)
-        under = image_present(repo, a.version, tok)
-        ctl_ok = image_present(repo, a.control, tok)
-        ctl_no = image_present(repo, IMPOSSIBLE, tok)
+        tok = _token(repo, a.image_org)
+        under = image_present(repo, a.version, tok, a.image_org)
+        ctl_ok = image_present(repo, a.control, tok, a.image_org)
+        ctl_no = image_present(repo, IMPOSSIBLE, tok, a.image_org)
         if ctl_ok is not True or ctl_no is not False:
             broken.append("image %s: control %s=%r and %s=%r -- the probe does not discriminate "
                           "(an UNTOKENED probe answers 401 for both, which is the trap this guards)"
