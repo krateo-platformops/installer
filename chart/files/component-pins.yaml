@@ -9792,6 +9792,28 @@ components:
   upstream: true
   version: 3.9.4
 - name: identity-lifecycle
+  # THE ACCESS-REQUEST INTAKE, and it is a SECOND Service of this component -- the pattern
+  # keycloak already uses (svcMatch keycloak-service). IL's own intake.route renders only for a
+  # HOST-mode gateway, so on a path-mode cluster nothing routed this and a POST to
+  # /request-access/api/... reached the frontend SPA instead (measured: 057 had 0 of 27 HTTPRoute
+  # rules mentioning it).
+  #
+  # gatewayPathsFrom, not a literal gatewayPath, because the route must exist ONLY when
+  # componentValues.identity-lifecycle.accessRequest.intake.enabled is true. The derivation returns
+  # an empty list otherwise and `if $paths` renders nothing -- no rule, no backend.
+  #
+  # NO REWRITE: the intake serves under /request-access/api itself.
+  # PUBLIC auth: requesters are anonymous by definition; the intake carries its own per-IP, global
+  # and per-page rate limits.
+  # svcMatch is the EXACT Service name. identity-lifecycle-intake-metrics (9090) also contains this
+  # string, and the derived-route guard in _helpers.tpl refuses a contains-fallback for exactly that
+  # reason -- a public path on a metrics port would come up healthy.
+  expose: true
+  exposePort: 80
+  svcMatch: identity-lifecycle-intake
+  gatewayPathsFrom: accessRequestIntake
+  gatewayRewrite: false
+  gatewayAuth: public
   # NEW COMPONENT, wired 2026-11-04. Reconciles downstream identity CRs for a user's lifecycle.
   #
   # LANDS DARK: feature `identityLifecycle` defaults FALSE, which is the convention for any new

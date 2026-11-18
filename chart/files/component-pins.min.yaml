@@ -835,6 +835,12 @@ components:
   upstream: true
   version: 3.9.4
 - name: identity-lifecycle
+  expose: true
+  exposePort: 80
+  svcMatch: identity-lifecycle-intake
+  gatewayPathsFrom: accessRequestIntake
+  gatewayRewrite: false
+  gatewayAuth: public
   kind: IdentityLifecycle
   version: 0.4.3
   deps:

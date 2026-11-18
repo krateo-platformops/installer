@@ -1796,13 +1796,77 @@ be tested without faking that flag.
      make each prefix an element boundary, so /keycloak/realmsx and /keycloak/realms/krateox cannot
      match. No rewrite: Keycloak already serves under relativePath. */}}
 {{- $paths = list (printf "%s/realms/%s/" $rp $realm) (printf "%s/resources/" $rp) }}
+{{- else if eq $d.gatewayPathsFrom "accessRequestIntake" }}
+{{/* IDENTITY-LIFECYCLE'S ACCESS-REQUEST INTAKE, and it is the OPPOSITE failure posture to
+     keycloakRealm above. keycloakRealm FAILS when its input is missing, because a Keycloak that is
+     enabled and unrouted is broken. This one must render NOTHING, silently, when the feature is
+     off: an identity-lifecycle install without access requests is a legitimate configuration, and
+     `if $paths` below already turns an empty list into no rule and no backend.
+
+     Copying keycloakRealm's `fail` here would break every IL install that does not want the
+     feature. Same mechanism, inverted posture -- which is exactly what gets copied wrong.
+
+     WHY THE INTAKE NEEDS A ROUTE AT ALL (keycloak-provider-kog, measured on kc-roll057 and
+     confirmed on krateo-057): IL's own intake.route renders only for a HOST-mode gateway -- "where
+     the installer routes by path, it renders nothing". So on a path-mode cluster the intake
+     Deployment runs and NOTHING routes to it: 057 had 26 HTTPRoutes, 27 rules, zero mentioning
+     request-access. A browser's POST /request-access/api/... matched platform-frontend `/` and
+     reached the SPA.
+
+     ONE PREFIX COVERS THE WHOLE PUBLIC SURFACE. From internal/intake/server.go at IL 0.4.4 the
+     intake serves exactly /request-access/api/v1/{requests,username-checks,confirmations,hubspot}.
+     /healthz is probes-only and falls outside the prefix anyway. NO REWRITE: the intake serves
+     under the prefix itself.
+
+     NOT /request-access/confirm -- that page is NOT the intake's and not the frontend's either. It
+     is portal's public-pages chart at /public/request-access-confirm, which is a separate pinned
+     component. */}}
+{{- $cv := default dict $top.Values.componentValues }}
+{{- if eq (toString (dig "identity-lifecycle" "accessRequest" "intake" "enabled" false $cv)) "true" }}
+{{- $paths = list "/request-access/api" }}
+{{- end }}
 {{- else }}
-{{- fail (printf "components[%s]: gatewayPathsFrom=%s is not a derivation this chart knows. The only one is keycloakRealm." $d.name $d.gatewayPathsFrom) }}
+{{- fail (printf "components[%s]: gatewayPathsFrom=%s is not a derivation this chart knows. The ones this chart knows are keycloakRealm and accessRequestIntake." $d.name $d.gatewayPathsFrom) }}
 {{- end }}
 {{- end }}
 {{- if $paths }}
 {{- $backendName := include "inst.svcname" (list $top $d.svcMatch) }}
-{{- if not $backendName }}{{- $backendName = $d.name }}{{- end }}
+{{/* A DERIVED ROUTE FALLS BACK TO ITS svcMatch, NOT ITS COMPONENT NAME (keycloak-provider-kog).
+     The generic fallback is $d.name, which for identity-lifecycle is the Service
+     `identity-lifecycle` -- a name IL never renders. Mid-install, or wherever the lookup is
+     vacuous, that produces a route pointing at a Service that will never exist: a dangling
+     backend that looks configured. For a derived route the exact svcMatch is always the right
+     target, so the route can only ever point at identity-lifecycle-intake. Whether this should
+     become the GENERAL fallback belongs with the svcMatch exact-only work, not here. */}}
+{{- if not $backendName }}
+{{- if and $d.gatewayPathsFrom $d.svcMatch }}{{- $backendName = $d.svcMatch }}
+{{- else }}{{- $backendName = $d.name }}{{- end }}
+{{- end }}
+{{/* THE CONTAINS-FALLBACK IS A REAL HAZARD FOR A DERIVED PUBLIC ROUTE, and it is already
+     load-bearing elsewhere so it cannot simply be removed. inst.svcname is `$exact | default
+     $contains`: an exact Service name wins, but when none exists it returns the FIRST Service whose
+     name CONTAINS the svcMatch string.
+
+     Measured on krateo-057: krateo-sse-proxy resolves THROUGH that fallback today (svcMatch
+     `sse-proxy`, no such Service, resolves to `krateo-sse-proxy`), and five more are safe only
+     because an exact Service happens to exist -- authn's `authn` also matches `authn-internal`,
+     the TLS-only listener on 8090.
+
+     For THIS route the sibling is `identity-lifecycle-intake-metrics` on port 9090
+     (keycloak-provider-kog). A fallback onto it would publish a metrics port on a PUBLIC path and
+     come up healthy, because the route would exist and the backend would answer. So a derived
+     route refuses the fallback: exact or fail. The general fix to inst.svcname is a separate
+     change in two releases. */}}
+{{/* THE GUARD MUST NOT FIRE ON A VACUOUS LOOKUP. `lookup` returns nothing under `helm template`
+     and `--dry-run=client`, so inst.svcname comes back EMPTY and line above falls back to
+     $d.name -- which is not the svcMatch and would trip a naive `ne`. My first version did exactly
+     that and broke all three tests plus every non-cluster render. So: fire only when the lookup
+     RESOLVED something and that something is not the exact name. Empty means "no cluster to ask",
+     which is not evidence of a wrong backend. */}}
+{{- $resolved := include "inst.svcname" (list $top $d.svcMatch) }}
+{{- if and $d.gatewayPathsFrom $resolved (ne $resolved $d.svcMatch) }}
+{{- fail (printf "components[%s]: gatewayPathsFrom=%s resolved its backend to Service %q, which is NOT the exact svcMatch %q. inst.svcname fell back to a CONTAINS match. For a derived PUBLIC route that is refused: the sibling may be a metrics or internal listener (identity-lifecycle-intake-metrics:9090 is exactly this case), and the route would come up healthy on the wrong port. Create the exact Service, or correct svcMatch." $d.name $d.gatewayPathsFrom $resolved $d.svcMatch) }}
+{{- end }}
 {{/* Listener + ports: default to the shared platform-http:$gwPlatformPort listener and the peer's
      exposePort backend — the four portal pins (authn/snowplow/frontend/sse-proxy) carry NO
      gatewayListener/gatewayPort so these fallbacks reproduce today's route byte-identically. A
