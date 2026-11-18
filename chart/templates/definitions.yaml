@@ -196,7 +196,7 @@ spec:
   statusDataTemplate:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with $c.resources }}
+  {{- if or $c.resources $c.pool }}
   {{/* Per-Kind CDC controller resources, at spec.controller.resources.
 
        IT USED TO RENDER AT spec.resources AND WAS SILENTLY DISCARDED. The CompositionDefinition
@@ -222,9 +222,30 @@ spec:
        requests.memory (cdc.goMemLimit: request, deployment.yaml:91-96), so this value is at once
        the eviction floor and the Go heap ceiling. Setting it below a controller's measured peak
        makes it GC-thrash; setting it too low makes it eviction-bait mid-helm-operation. */}}
+  {{/* AND spec.controller.pool IS MEMBERSHIP, NOT SIZING. Setting it makes this definition a
+       member of the named cdc pool: core-provider stops running a dedicated
+       <resource>-<version>-controller Deployment for it and the pool's cdc-pool-<name> runs it
+       instead. That is a DIFFERENT KNOB from core-provider.cdc.pool.{default,overrides}, which
+       sizes a pool's Deployment. I carried those two as one thing until core-provider separated
+       them: sizing is core-provider's values, membership is per-definition and lives here.
+
+       THE KEY MUST BE DECLARED IN values.schema.json OR IT NEVER ARRIVES. components[] is a
+       CLOSED object, and the Installer CRD PRUNES an undeclared key silently -- the value
+       vanishes while kubectl prints "patched". That is the same mechanism that discarded every
+       spec.resources pin above for months, so the schema entry is not paperwork.
+
+       BOTH KEYS NEST UNDER ONE `controller:`. They used to be one block because `resources` was
+       the only one; emitting a second `{{- with }}` would write `controller:` twice and produce
+       invalid YAML that no gate here would catch, because the render would still parse as a
+       later key silently replacing the earlier one. */}}
   controller:
+    {{- with $c.resources }}
     resources:
       {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with $c.pool }}
+    pool: {{ . | quote }}
+    {{- end }}
   {{- end }}
 {{- end }}
 {{- end }}
