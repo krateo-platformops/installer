@@ -1,0 +1,51 @@
+name: check-patch-validates
+
+# Validates the CR patch the post-upgrade hook will SEND against values.schema.json -- the schema
+# core-provider's crdgen turns into the Installer CRD's structural schema.
+#
+# IT EXISTS BECAUSE 0.3.686 SHIPPED WITH A PIN VALUE ITS OWN SCHEMA REJECTED. installer#1060 added
+# an `accessRequestIntake` arm to the gatewayPathsFrom derivation and set it on the
+# identity-lifecycle pin while the schema still declared enum: ["keycloakRealm"]. All 47 gates
+# passed, the chart rendered and linted, the chart tests passed, and the tag went out. A colleague
+# caught it in review (#1063), eleven minutes after the tag.
+#
+# check-pin-fields.py could not catch it: it asks whether every pin KEY is declared, never whether
+# a value is legal. An enum violation is a REJECTION rather than pruning, so the apiserver refuses
+# the WHOLE patch, `set -e` fails the hook, and `helm upgrade` blocks on it until timeout.
+#
+# The approach -- render, take installer-self-cr's own components-patch.json, put THAT through the
+# schema -- is the keycloak-provider-kog session's precheck2pass.sh, which caught 0.3.686 offline.
+# This version needs no cluster, so it gates every PR rather than every roll.
+
+on:
+  pull_request:
+      # NO `branches:` filter: a branches: [main] here means the gate does not run on a STACKED
+      # pull request, which then shows "all checks passed" with every gate skipped.
+    # NO `paths:` filter: a path-filtered workflow never STARTS on a PR that misses its paths, so a
+    # required context would wait forever on "Expected". This one must run on EVERY PR regardless:
+    # the patch is built from the pins file, the schema AND self-bootstrap.yaml, and a change to any
+    # of the three can break it.
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  patch-validates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Set up Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: v3.19.0
+      - name: Install PyYAML and jsonschema
+        # jsonschema is NOT optional here. The script refuses to run without it rather than
+        # skipping, because a guard that skips when its tool is missing reports success for a
+        # thing it did not do.
+        run: pip install --quiet pyyaml jsonschema
+      - name: The rendered CR patch must satisfy values.schema.json
+        run: python3 .github/scripts/check-patch-validates.py
