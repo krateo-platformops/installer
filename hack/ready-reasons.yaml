@@ -153,7 +153,8 @@ composition:
     ChartRenderable:
       universal: false   # absent on a paused composition
       healthy: [Renderable]
-      unhealthy: [UnservedKind, ValuesSchemaViolation, InspectorRejected, InspectorUnavailable]
+      unhealthy: [UnservedKind, ValuesSchemaViolation, InspectorRejected, InspectorUnavailable,
+                  TemplateRefused]
       note: >-
         chart-inspector rendered the chart against this cluster.
 
@@ -183,8 +184,25 @@ composition:
         including under core-provider#579's grace. Only the ChartRenderable attribution is wrong, so
         this note changes how to READ the reason, not whether it is unhealthy.
 
-        core-provider will tell me before shipping any new ChartRenderable reason, so if the #583 fix
-        adds one, this list needs updating and check-ready-reasons-current will say so.
+        #583 IS FIXED IN core-provider 2.13.112, AND THE STRING DISCRIMINATOR ABOVE IS NOW A FALLBACK
+        FOR OLDER VERSIONS ONLY. From 2.13.112 chart-inspector answers 400 with Status reason
+        "TemplateRefused" for a chart's own `fail`, and the cdc sets ChartRenderable
+        False/TemplateRefused, writer composition-dynamic-controller, clearance indefinite - until the
+        author changes the values or the chart (#583).
+
+        Ready IS UNCHANGED for this class: still False/Unavailable. So every alert, rollup and gate
+        keyed on Ready behaves identically, and only a reader of ChartRenderable sees the new
+        information.
+
+        WHICH SIGNAL TO READ, BY VERSION. Below 2.13.112, a 5xx whose body contains `execution error
+        at (` - a STRING match on an error body, which breaks silently the day the message is
+        reworded. From 2.13.112, reason == TemplateRefused with status 400 instead of 500 - a fact
+        rather than a parse. KEEP BOTH while any cluster runs below 2.13.112: 057 and demo are on
+        2.13.111 as of 2026-11-18, so the string discriminator is still the live one on both.
+
+        This row exists because core-provider sent the declaration copied from their branch before
+        cutting the tag, and check-ready-reasons-current failed the moment 2.13.112 published. That
+        is the contract working in both directions.
     RBACComplete:
       universal: false   # absent on a paused composition
       healthy: [Applied]
