@@ -1,0 +1,63 @@
+# A FAILED READ MUST NOT BE READ AS "THE CR DOES NOT EXIST".
+#
+# installer-self-instance (post-install/post-upgrade, weight 10) decides between a surgical
+# merge-patch and a whole-CR apply by asking whether the Installer CR exists. It used to ask like
+# this:
+#
+#     if kubectl get installers.<ver>.composition.krateo.io installer -n "$NS" >/dev/null 2>&1
+#
+# `kubectl get` exits 1 for BOTH "absent" and "could not read it" -- an RBAC denial, an API
+# timeout, a transient 500 -- and `2>&1` threw away the only text that distinguishes them. So on a
+# cluster where the CR EXISTS but the read blips, the else branch applied the WHOLE CR over the
+# live one, clobbering spec.features and every user override: exactly what that branch's own
+# comment says it exists to avoid. On krateo-057 it would have withdrawn internalTls, serviceDesk
+# and sloRollup, none of which appear in any values file, so nothing would have reported the loss.
+#
+# Found by the agentiko-mcp-server session while reading the script, not by any gate, and not by
+# either live cluster -- the window needs a read failure at the moment of an upgrade.
+#
+# THE FIX IS --ignore-not-found, which makes the distinction the exit code cannot. Verified against
+# the real kubectl: an absent object gives exit 0, empty stdout and empty stderr, while an unknown
+# resource type gives exit 1 with the error on stderr. Under `set -e` that second case aborts the
+# hook, so the apply branch becomes reachable ONLY on a genuine absence.
+#
+# FAILING CLOSED IS THE POINT: a failed upgrade is recoverable, a clobbered CR is not.
+#
+# CASE 3 is the control. Without it this suite would pass on a chart that simply deleted the apply
+# branch -- which would break every FIRST install, the one case the branch is for.
+suite: a failed CR read must not take the apply branch
+templates:
+  - templates/self-bootstrap.yaml
+tests:
+  - it: "CASE 1 -- the existence check uses --ignore-not-found, so a real failure cannot be mistaken for absence"
+    set:
+      bootstrap.coreProvider.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '(?s)kubectl get installers\..*--ignore-not-found'
+        documentSelector:
+          path: metadata.name
+          value: installer-self-instance
+
+  - it: "CASE 2 -- the blind form is gone: no branch keys off a discarded exit status"
+    set:
+      bootstrap.coreProvider.enabled: true
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'kubectl get installers\.[^\n]*>/dev/null 2>&1; then'
+        documentSelector:
+          path: metadata.name
+          value: installer-self-instance
+
+  - it: "CASE 3 (control) -- the apply branch still exists, for a genuine first install"
+    set:
+      bootstrap.coreProvider.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'kubectl apply -f /cr/installer\.yaml'
+        documentSelector:
+          path: metadata.name
+          value: installer-self-instance
