@@ -9165,15 +9165,6 @@ components:
   #   whether the versions differing has no valid reading, and here it has one -- the controller has
   #   not changed. Contrast keycloak/keycloak-operator, declared as a line tonight because that
   #   repo's release-tag.yaml packages every chart at the tag and refuses a mismatched archive.
-  # 0.2.35 (#95, #62; #98 comment-only):
-  #   (1) llm.toolHistory.truncate: every result of the latest tool-call batch is fresh, each capped
-  #       by newestMaxChars, and a finished turn truncates in full. Before it, only the last result
-  #       of a batch was fresh: on krateo-057 (gemini-4-hydrogen batches 4-16 calls a turn) 650
-  #       results reached the model as 8,000-char stubs in five days.
-  #   (2) mcpEntry.backend/bridge/oauth (#95): new keys, chart default backend kagent renders as
-  #       before. NOT declared in componentValues here; declare them with the change that sets them.
-  #   Leaf diff of values.yaml 0.2.33 -> 0.2.35: only those mcpEntry leaves added, zero changed,
-  #   zero removed.
   version: 0.2.35
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
