@@ -7176,7 +7176,7 @@ components:
   # alert-provider#107's ApplyActionStale prompt and re-resolves against the served schema. The
   # second half is INERT until acmp's provider-side condition ships. The Agent's system-prompt
   # ConfigMap changes and the agent pod restarts once.
-  version: 0.3.8
+  version: 0.3.9
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
