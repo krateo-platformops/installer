@@ -42,3 +42,4 @@ jobs:
       # which check-keycloak-routes asserts again from its own direction.
       - name: Prove Keycloak's path-mode exposure, and that the admin console is NOT routed
         run: python3 .github/scripts/check-keycloak-routes.py
+        run: python3 .github/scripts/check-intake-route.py
