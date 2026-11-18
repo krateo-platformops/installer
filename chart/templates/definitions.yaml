@@ -71,10 +71,31 @@
 {{- fail (printf "components[github-provider-kog-config]: componentValues.github-provider-kog.kinds omits %s, which this component requires. It renders a RepositoryConfiguration and a PullRequestConfiguration, so both RestDefinitions must exist. Neither `deps` nor `requiresApiGroups: github.krateo.io` can detect this — the component is Ready and the API group exists — so without this guard the chart would fail with an endless chart-inspector 500. Fix: add %s to componentValues.github-provider-kog.kinds, or leave `kinds` empty to render all 32, or set features.githubProviderKogConfig=false." (join ", " $missing) (join " and " $missing)) }}
 {{- end }}{{- end }}{{- end }}
 {{- if ne $cdNamespace $.Values.namespaces.krateo }}
-{{/* Emit the namespace unless it already exists and is not this release's (helm cannot adopt it,
-     and an existing namespace needs nothing). keep: uninstalling the installer must not delete a
-     namespace other things may have been put into; core-provider removes the definition's own
-     controller objects when the definition goes. */}}
+{{/* Emit the namespace unless it already exists and is not this release's. keep: uninstalling the
+     installer must not delete a namespace other things may have been put into; core-provider
+     removes the definition's own controller objects when the definition goes.
+
+     THIS LOOKUP IS THE ONLY THING PREVENTING ADOPTION, and this comment used to say the opposite.
+     It read "helm cannot adopt it", which is FALSE under the cdc: core-provider applies the
+     umbrella with TakeOwnership: true (cdc internal/composition/composition.go:683, 1045, 1306),
+     so an emitted Namespace TAKES OVER an existing unannotated one at the same uid instead of
+     failing helm's ownership check. Corrected 2026-11-18 from core-provider's code read, after
+     keycloak-provider-kog measured a hand-created `kyverno` namespace being adopted into
+     installer-platform on kc-roll057 -- same uid, newly carrying meta.helm.sh/release-name,
+     app.kubernetes.io/managed-by: Helm and helm.sh/resource-policy: keep.
+
+     So a false belief about helm's ownership check had been standing in for the guard. If this
+     condition is ever weakened there is no second line of defence.
+
+     THE LOOKUP ITSELF IS SOUND, which was the other thing I doubted. core-provider confirmed from
+     helm v3.20.2's code that `lookup` is served LIVE in both real render paths: chart-inspector
+     renders with DryRun: DryRunServer, which sets interactWithRemote = true and renders with
+     engine.New(restConfig), and the cdc's real apply is not a dry run at all. It is vacuous only
+     under `helm template` / --dry-run=client. A cluster-scoped single-object lookup takes the same
+     path as the list form (helm pkg/engine/lookup_func.go: client.Get): NotFound yields an empty
+     map, and ANY other error -- Forbidden included -- fails the whole render rather than returning
+     empty. So this cannot silently mis-fire on RBAC, and 057's chart-inspector SA does hold
+     namespaces get/list (measured). Why the kc-roll057 render saw NotFound is still open. */}}
 {{- $existingNs := lookup "v1" "Namespace" "" $cdNamespace }}
 {{- if or (not $existingNs) (eq (dig "metadata" "annotations" "meta.helm.sh/release-name" "" $existingNs) $.Release.Name) }}
 ---
