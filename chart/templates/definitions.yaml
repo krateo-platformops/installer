@@ -196,6 +196,26 @@ spec:
   statusDataTemplate:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- if and $c.targetRef $c.expose }}
+  {{/* A TARGETED COMPONENT CANNOT BE EXPOSED FROM HERE, and the failure would be SILENT.
+
+       `inst.svcname` resolves a component's backend Service by looking it up IN THIS CLUSTER. A
+       targeted component's Service lives on the TARGET, so exposure wiring for it can only resolve
+       to nothing -- or, worse, to a DIFFERENT local Service through the contains-fallback
+       (`$exact | default $contains`).
+
+       MEASURED on krateo-057, and authn is exactly the dangerous case: the local Services are
+       `authn`, `authn-agent` and `authn-internal`. A component `authn-spoke1` carrying
+       `svcMatch: authn` would resolve to THIS cluster's `authn` -- routing public traffic to the
+       MANAGEMENT cluster's authn while every signal says it reaches the target. That is the same
+       resolved-but-wrong-backend class the derived-route guard in _helpers.tpl refuses, one layer
+       along, and it comes up healthy.
+
+       So the two keys are mutually exclusive and the render refuses rather than guessing. Exposing
+       a service that runs on a spoke is a gateway question on that spoke, not an `expose: true`
+       here. */}}
+  {{- fail (printf "component %q sets BOTH targetRef and expose. A targeted component's Service runs on the TARGET cluster, but inst.svcname resolves backends in THIS one -- and its contains-fallback would silently bind the route to a DIFFERENT local Service (on 057: authn, authn-agent, authn-internal all exist, so svcMatch 'authn' resolves HERE). Drop expose/exposePort/svcMatch/gatewayPath* from this pin; exposing a spoke service is a gateway question on that spoke." $c.name) }}
+  {{- end }}
   {{- with $c.targetRef }}
   {{/* REMOTE-TARGET DELIVERY, at spec.deploy.targetRef (installer#579, for authn#38).
 

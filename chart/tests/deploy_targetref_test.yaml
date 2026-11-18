@@ -118,6 +118,71 @@ tests:
           path: metadata.name
           value: a-local-thing
 
+  # THE GUARD. targetRef + expose is a CONTRADICTION whose failure would be silent: inst.svcname
+  # resolves backends in THIS cluster, a targeted component's Service is on the TARGET, and the
+  # contains-fallback would bind the route to a DIFFERENT local Service. Measured on 057: `authn`,
+  # `authn-agent` and `authn-internal` all exist, so a targeted `authn-spoke1` with svcMatch `authn`
+  # would route public traffic to the MANAGEMENT cluster's authn and come up healthy.
+  - it: "CASE 6 -- targetRef together with expose REFUSES the render"
+    set:
+      components:
+        - name: a-targeted-exposed-thing
+          kind: ATargetedExposedThing
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+          expose: true
+          exposePort: 8080
+          svcMatch: authn
+          targetRef:
+            name: a-spoke
+    asserts:
+      - failedTemplate:
+          errorPattern: "sets BOTH targetRef and expose"
+
+  # CONTROL for CASE 6, and it is the half that matters: without it the guard would pass just as
+  # well if it refused EVERY targeted component, which would make the whole feature unusable while
+  # reporting a correct-looking refusal.
+  - it: "CASE 7 CONTROL -- targetRef WITHOUT expose still renders"
+    set:
+      components:
+        - name: a-targeted-plain-thing
+          kind: ATargetedPlainThing
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+          targetRef:
+            name: a-spoke
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.deploy.targetRef.name
+          value: a-spoke
+        documentSelector:
+          path: metadata.name
+          value: a-targeted-plain-thing
+
+  # SECOND CONTROL: expose WITHOUT targetRef is the ordinary case for 6 live components and must be
+  # untouched. Without this, a guard that refused every exposed component would pass CASE 6.
+  - it: "CASE 8 CONTROL -- expose WITHOUT targetRef still renders"
+    set:
+      components:
+        - name: an-exposed-thing
+          kind: AnExposedThing
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+          expose: true
+          exposePort: 8080
+          svcMatch: an-exposed-thing
+    asserts:
+      - notFailedTemplate: {}
+      - isNull:
+          path: spec.deploy
+        documentSelector:
+          path: metadata.name
+          value: an-exposed-thing
+
   # targetRef must not disturb the keys that already share this spec. `controller` was emitted
   # under one key for exactly this reason (controller_pool_test.yaml CASE 3); deploy is a sibling,
   # not a nested key, and this proves the two coexist.
