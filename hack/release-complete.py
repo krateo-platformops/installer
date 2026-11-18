@@ -22,6 +22,22 @@ both, and reading 401 as "exists, needs auth" reports every version as published
 anonymous pull token the same two requests give 200 and 404. So this script fetches a token
 per repository and REFUSES to report anything if its own controls do not discriminate.
 
+AND "PULLABLE BY ME" IS NOT "PULLABLE BY THE CLUSTER". Measured 2026-11-18 on krateo-demo: this
+script reported `chart kyverno PRESENT` for oci://ghcr.io/krateo-blueprints/charts/kyverno 3.9.4,
+the pin went out in 0.3.682, and the cdc could not install it:
+
+    GET https://ghcr.io/token?scope=repository:krateo-blueprints/charts/kyverno:pull
+    response status code 401: unauthorized: authentication required
+
+The package was PRIVATE. `helm show chart` had succeeded here because this machine is logged in to
+ghcr, so the probe answered a question nobody asked: "can Diego pull it", not "can a cluster pull
+it". Every other krateo-blueprints chart that cluster uses is public, so the pin looked ordinary and
+the failure appeared only after the roll, as one CD stuck in Creating.
+
+So presence is probed TWICE: once however this machine is configured, and once ANONYMOUSLY, which
+is what a cdc with no registry credentials does. A chart that is present but not anonymously
+pullable is reported as NOT PINNABLE, because that is the fact that licenses a pin.
+
 CONTROLS ARE MANDATORY, NOT OPTIONAL. Every run probes:
   - the version under test
   - a KNOWN-PUBLISHED version (--control), which must come back present
@@ -57,6 +73,30 @@ def chart_present(name, version, prefix=DEFAULT_CHART_PREFIX, timeout=90):
         return r.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return None  # unknown, not absent -- the caller must not read this as a verdict
+
+
+def anon_pullable(path, timeout=30):
+    """Can a client with NO credentials get a pull token for this OCI path?
+
+    `path` is the registry path without the host, e.g. "krateo-blueprints/charts/kyverno".
+    True  -> the registry issued an anonymous pull token: a credential-less cdc can fetch it.
+    False -> it refused (401): the package is private, whatever `helm show chart` says here.
+    None  -> the probe itself could not run, which is NOT a verdict.
+
+    This asks the token endpoint rather than the manifest, because the token refusal is the
+    discriminator: GHCR answers 401 on a manifest GET for a public-but-absent tag too, so a
+    manifest probe cannot separate "private" from "that version does not exist".
+    """
+    url = ("https://%s/token?scope=repository:%s:pull&service=%s" % (REGISTRY, path, REGISTRY))
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as fh:
+            return bool((json.load(fh) or {}).get("token"))
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            return False
+        return None
+    except (urllib.error.URLError, json.JSONDecodeError, OSError):
+        return None
 
 
 def _token(repo, org=IMAGE_ORG, timeout=30):
@@ -116,9 +156,18 @@ def main(argv):
         print("release-complete: nothing to probe -- pass at least one --chart or --image")
         return 2
 
-    rows, broken = [], []
+    rows, broken, private, unknown_vis = [], [], [], []
 
     for name in a.chart:
+        # "pullable by me" and "pullable by a cluster" are different facts -- see the docstring.
+        path = "%s/%s" % (a.repo.split("://", 1)[-1].split("/", 1)[-1], name)
+        anon = anon_pullable(path)
+        if anon is False:
+            private.append((name, path))
+        elif anon is None:
+            print("  note: could not run the anonymous visibility probe for %s -- treating its "
+                  "visibility as UNKNOWN, not public" % name)
+            unknown_vis.append(name)
         under = chart_present(name, a.version, a.repo)
         ctl_ok = chart_present(name, a.control, a.repo)
         ctl_no = chart_present(name, IMPOSSIBLE, a.repo)
@@ -147,6 +196,18 @@ def main(argv):
         for b in broken:
             print("  %s" % b)
         return 2
+
+    if private:
+        print("::error::release-complete: %s is PUBLISHED BUT NOT PINNABLE. The registry refuses an "
+              "anonymous pull token, so a cdc with no registry credentials CANNOT fetch it -- even "
+              "though a probe from this machine succeeds, because this machine is logged in:"
+              % a.version)
+        for name, path in private:
+            print("  chart %s: %s is PRIVATE" % (name, path))
+        print("Do NOT pin it. Measured consequence: the pin installs, the CompositionDefinition "
+              "sticks in Ready=False/Creating with a 401 in its Synced message, and nothing else "
+              "reports a problem. Make the package public first, then re-run this.")
+        return 1
 
     for kind, name, present in rows:
         print("  %-6s %-34s %s" % (kind, name, "PRESENT" if present else
