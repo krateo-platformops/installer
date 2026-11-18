@@ -548,7 +548,7 @@ This answers only "may this component be enabled". What must be HEALTHY before i
      flap -- chart-inspector cannot render the chart at all, so emitting anyway buys an endless 500. */}}
 {{- if eq (include "inst.requiresApiGroups" (list $c.requiresApiGroups $allCRDs)) "true" -}}
 {{- $deps := include "inst.depsReady" (list $top $c.deps $comps $allCRDs) -}}
-{{- $exists := include "inst.compositionExistsAny" (list $top $c.kind $c.name $allCRDs) -}}
+{{- $exists := include "inst.compositionExistsAny" (list $top $c.kind $c.name $allCRDs $c.namespace) -}}
 {{- if or (eq $deps "true") (eq $exists "true") -}}{{- $emit -}}{{- end -}}
 {{- end -}}
 {{- else -}}
@@ -581,7 +581,7 @@ This answers only "may this component be enabled". What must be HEALTHY before i
          across a bump, so a lookup at the PINNED version MISSES an object that exists, $gone stays
          "true", and the draining component is deleted WHILE A DEPENDENT IS STILL THERE -- the
          exact outcome this helper exists to prevent, reintroduced by the fix for the other one. */}}
-    {{- if eq (include "inst.compositionExistsAny" (list $top $c.kind $c.name $allCRDs)) "true" -}}{{- $gone = "" -}}{{- end -}}
+    {{- if eq (include "inst.compositionExistsAny" (list $top $c.kind $c.name $allCRDs $c.namespace)) "true" -}}{{- $gone = "" -}}{{- end -}}
   {{- end -}}
 {{- end -}}
 {{- $gone -}}
@@ -595,13 +595,14 @@ This answers only "may this component be enabled". What must be HEALTHY before i
      GC'd out from under a still-draining component (the Pass-A counterpart to inst.dependentsGone). */}}
 {{- define "inst.compositionExists" -}}
 {{- $top := index . 0 -}}{{- $kind := index . 1 -}}{{- $name := index . 2 -}}{{- $ver := index . 3 -}}{{- $allCRDs := index . 4 -}}
+{{- $ns := index . 5 -}}
 {{/* Keyed on the tag the instance is actually SERVED at, not on $ver (#477 follow-on). This helper
      answers "is this component still present?" for definitions.yaml, which uses it to keep a
      CompositionDefinition REGISTERED while the component drains. A pinned-version lookup misses a
      live CR that inst.emitTag is holding at an older served tag, so the definition would be
      deregistered and the generated CRD GC'd out from under the live composition -- the orphaned-CR
      outcome this helper was added to prevent. */}}
-{{- include "inst.compositionExistsAny" (list $top $kind $name $allCRDs) -}}
+{{- include "inst.compositionExistsAny" (list $top $kind $name $allCRDs $ns) -}}
 {{- end -}}
 
 {{/* External IP of a browser-facing component's LoadBalancer Service. args: (list $ "svcNameSubstring")
@@ -997,7 +998,7 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{/* Ask existence the way inst.emitDecision asks it -- version-agnostically. A reason derived from
      a different question than the decision acted on is how this reporter came to contradict the
      gate once already. */}}
-{{- $any := include "inst.compositionExistsAny" (list $top $c.kind $c.name $allCRDs) -}}
+{{- $any := include "inst.compositionExistsAny" (list $top $c.kind $c.name $allCRDs $c.namespace) -}}
 {{- if not $etag -}}
 {{- printf "withheld: no CRD serves kind %s at version %s and no live instance exists at any served version to keep alive (normal before first creation; persistent means crdgen rejected the CRD)" $c.kind (toString $c.version) -}}
 {{- else if and ($c.deps | default list) (ne $any "true") -}}
@@ -1277,10 +1278,66 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 
 {{- define "inst.compositionExistsAny" -}}
 {{- $top := index . 0 -}}{{- $kind := index . 1 -}}{{- $name := index . 2 -}}{{- $allCRDs := index . 3 -}}
+{{/* THE NAMESPACE IS A PARAMETER, and before 2026-11-18 it was hardcoded to namespaces.krateo.
+     That was correct while every composition instance lived there. It stopped being correct in the
+     change that let a pinned component target its own namespace (installer#1029):
+     compositions.yaml now emits `namespace: {{ $c.namespace | default ... }}`, so a
+     namespace-targeted component's instance is NOT in namespaces.krateo and a lookup there finds
+     nothing.
+
+     WHICH CONSUMER THIS ACTUALLY BREAKS. I first wrote that the hazard was inst.emitDecision's
+     `or $deps $exists` escape hatch never opening, so a deps flap would prune a live workload. THAT
+     IS WRONG for the component this matters for: inst.depsReady starts at "true" and ranges over
+     the dep list, so a component with NO deps -- which kyverno is -- always has $deps="true" and
+     never consults $exists at all. I measured that after writing the claim, not before.
+
+     The reachable consumer is definitions.yaml's third arm:
+
+         {{- if or $c.registerOnly (compEnabled ...) (compositionExists ...) }}
+
+     which keeps a DEFINITION registered while its composition is still live. Read with the wrong
+     namespace it is permanently false, so with the FEATURE OFF and a composition still present the
+     CompositionDefinition is deregistered and its generated CRDs garbage-collected out from under
+     that live composition. The helper's own comment two definitions below calls this "the
+     orphaned-CR outcome this helper was added to prevent".
+
+     WHY IT IS REACHABLE AND NOT THEORETICAL. kyverno is gated on features.identityLifecycle, TRUE
+     on demo and FALSE on 057, and demo's Kyverno release already exists in namespace `kyverno` --
+     adopting it is what tag K does. So turning identityLifecycle off on demo, for any reason, would
+     GC the Kyverno CRDs from under a running install, and ClusterPolicy tenant-namespace-on-login
+     depends on that install. The keycloak-provider-kog session is holding off exactly that step in
+     its Arm A rehearsal until this is fixed.
+
+     inst.dependentsGone and the withheld reporter take the same parameter for the same reason: a
+     reason derived from a different question than the decision acted on is how that reporter came
+     to contradict the gate once already.
+
+     THIS CHANGE HAS NO UNIT TEST, AND THAT IS A HARNESS LIMIT RATHER THAN A CHOICE. I tried to
+     build one and measured why it cannot exist here: helm-unittest's `lookup` fake does not serve
+     this composition lookup at all. definitions.yaml renders 41 documents with the feature off and
+     41 with the feature off PLUS a Kyverno composition fixture -- the third arm never fires. I then
+     forced the lookup back to namespaces.krateo with the fixture ALSO in namespaces.krateo, so both
+     sides agreed on the release namespace, and it was still 41. So the failure is the fake, not the
+     namespace, and no arrangement of fixtures can exercise this path. (The same harness DOES serve
+     other namespaced custom resources -- httproutes_test.yaml documents kind-specific quirks in it,
+     including a kind named `Gateway` resolving to an empty dict whatever group it is under.)
+
+     THE CONTROL THAT PROVES THE PATH IS REACHABLE AT ALL: with features.identityLifecycle TRUE the
+     kyverno CompositionDefinition renders and `spec.chart.version: 3.9.4` is selectable, and the
+     document count goes 41 -> 45. So the template and the selector are right; only the lookup is
+     unserved.
+
+     SO THE VERIFICATION IS AN INTEGRATION STEP, named rather than skipped: on a cluster where a
+     Kyverno composition is LIVE in namespace `kyverno`, turn features.identityLifecycle OFF and
+     assert the CompositionDefinition is still registered and its CRDs still present. That is
+     precisely the step keycloak-provider-kog is holding in its Arm A rehearsal, and it is the only
+     place this can be measured. Do not record this as verified until that step reports. */}}
+{{- $ns := index . 4 -}}
+{{- if not $ns -}}{{- $ns = $top.Values.namespaces.krateo -}}{{- end -}}
 {{- $found := "" -}}
 {{- range $t := splitList " " (include "inst.servedTags" (list $kind $allCRDs)) -}}
 {{- if and (not $found) $t -}}
-{{- if lookup (printf "composition.krateo.io/%s" $t) $kind $top.Values.namespaces.krateo $name -}}{{- $found = "true" -}}{{- end -}}
+{{- if lookup (printf "composition.krateo.io/%s" $t) $kind $ns $name -}}{{- $found = "true" -}}{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- $found -}}
