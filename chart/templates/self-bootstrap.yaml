@@ -402,7 +402,23 @@ spec:
               NS={{ .Values.namespaces.krateo }}
               # Address the CR through the fully-qualified resource.version.group so kubectl pins
               # THIS chart's (now confirmed-served, by w5) version, not a cached preferred version.
-              if kubectl get installers.{{ $crVer }}.composition.krateo.io installer -n "$NS" >/dev/null 2>&1; then
+              # ABSENT AND UNREADABLE ARE DIFFERENT, AND `kubectl get` EXITS 1 FOR BOTH.
+              # This was `if kubectl get ... >/dev/null 2>&1; then patch; else apply; fi`, which takes
+              # the apply branch on ANY get failure -- an RBAC denial, an API timeout, a transient 500
+              # -- and 2>&1 discarded the only text that could tell them apart. On a cluster where the
+              # CR EXISTS but the read blips, that applied the WHOLE CR over it, clobbering
+              # spec.features and every user override: precisely what the comment below says this
+              # branch exists to avoid. On krateo-057 it would have withdrawn internalTls, serviceDesk
+              # and sloRollup, none of which appear in any values file.
+              # --ignore-not-found makes the distinction the exit code cannot: it prints nothing and
+              # exits 0 when the object is absent, and still exits non-zero on a real failure, which
+              # `set -e` turns into an aborted hook. Verified against kubectl: absent -> exit 0, empty
+              # stdout, empty stderr; unknown resource type -> exit 1 with the error on stderr.
+              # FAILING CLOSED IS THE POINT. A hook that cannot read the CR must not guess which
+              # branch it is in: a failed upgrade is recoverable, a clobbered CR is not.
+              EXISTING=$(kubectl get installers.{{ $crVer }}.composition.krateo.io installer \
+                -n "$NS" --ignore-not-found -o name)
+              if [ -n "$EXISTING" ]; then
                 # UPGRADE: the CR is the source of truth for runtime state (spec.features the
                 # installer-agent toggles, user overrides). Re-applying the whole CR would clobber
                 # that, so merge-patch ONLY the chart-managed components + componentValues (+ exposure).
