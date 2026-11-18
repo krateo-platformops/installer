@@ -7109,7 +7109,7 @@ components:
   kind: Agentiko
   agentName: agentiko
   # 0.8.1: the alert-authoring prompt names spec.description.
-  version: 0.8.3
+  version: 0.8.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
     - repo-mcp-server
