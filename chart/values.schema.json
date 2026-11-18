@@ -11795,6 +11795,32 @@
                   "items": {
                     "type": "string"
                   }
+                },
+                "secretRefs": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "title": "Identity-provider Secret references",
+                  "description": "Specific Secrets the identity-lifecycle controller may read, one Role per namespace with get and resourceNames. Prefer this over secretNamespaces, which grants get on EVERY Secret in a namespace -- krateo-system holds 183. Mirrors identity-lifecycle's own schema.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "namespace",
+                      "name"
+                    ],
+                    "properties": {
+                      "namespace": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+                        "maxLength": 63
+                      },
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$",
+                        "maxLength": 253
+                      }
+                    }
+                  }
                 }
               }
             },
@@ -14267,6 +14293,52 @@
                         "minimum": 32
                       }
                     }
+                  }
+                }
+              }
+            },
+            "users": {
+              "type": "array",
+              "title": "Realm users",
+              "description": "Users the realm chart creates, as KeycloakUser objects reconciled through the chart's KeycloakUserConfiguration. NO PASSWORDS: a first password is set by the user through Keycloak's \"Forgot password?\" flow using realm SMTP. Kept on uninstall. Mirrors the realm chart's own schema, so a value this accepts cannot be one the chart then rejects at render.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "username"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 63,
+                    "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+                    "title": "KeycloakUser object name",
+                    "description": "The KeycloakUser object's own name, when it must differ from the chart's default of <realm>-<username>. Needed to ADOPT a pre-existing object rather than create a second one beside it: demo's personas are objects named persona-ada/-bob/-acme/-globex whose usernames are ada/bob/acme/globex, and the originals carry the default delete policy, so a duplicate pair per user is not a cosmetic problem. Optional; omit it on a fresh install."
+                  },
+                  "username": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255,
+                    "pattern": "^[A-Za-z0-9._@-]+$"
+                  },
+                  "firstName": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "lastName": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "email": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "pattern": "^[^@\\s]+@[^@\\s]+$"
+                  },
+                  "emailVerified": {
+                    "type": "boolean"
+                  },
+                  "enabled": {
+                    "type": "boolean"
                   }
                 }
               }
