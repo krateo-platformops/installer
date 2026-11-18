@@ -501,6 +501,25 @@ def capture(ctx, secrets=()):
                 # object's lifetime and not a stall. installer#1017.
                 "createdAt": o["metadata"].get("creationTimestamp"),
                 "Synced": conds.get("Synced"),
+                # syncedAt + syncedMessage, ADDED 2026-11-18 for a measurement that cannot be taken
+                # without them. core-provider#579 keeps a composition's Ready at its last value for
+                # up to 5 minutes while chart-inspector gives no answer, and signals the grace on
+                # SYNCED: status False, reason ReconcileError, and a MESSAGE ending
+                # "Ready is kept as last assessed until <RFC3339>".
+                #
+                # Status+reason alone cannot distinguish that grace from an ordinary
+                # False/ReconcileError -- the reason string is deliberately unchanged, because
+                # core-provider did not want a new reason consumers would have to learn. The
+                # DEADLINE in the message is the only thing that separates "deliberately holding
+                # the last known Ready until T" from "this reconcile failed". So a capture that
+                # keeps reason but drops message can see the grace and not know it is the grace.
+                #
+                # syncedAt matters for the same reason readyAt does on the line above: it tells a
+                # fresh dip from a stale error. A composition sitting at False/ReconcileError for
+                # nine days and one that entered it 30 seconds ago read identically without it --
+                # and during a roll that difference is the whole question.
+                "syncedAt": (cmap.get("Synced") or {}).get("lastTransitionTime"),
+                "syncedMessage": (cmap.get("Synced") or {}).get("message"),
                 "uid": o["metadata"].get("uid"),
             }
 
@@ -703,6 +722,17 @@ def diff(pre, post, expect_delta=None, matching=None):
     ch = {}
     for k in sorted(set(pc) & set(poc)):
         a, b = pc[k], poc[k]
+        # syncedAt AND syncedMessage ARE CAPTURED BUT DELIBERATELY NOT DIFFED. Both move on every
+        # real transition, and core-provider#579's grace message embeds an RFC3339 deadline -- so a
+        # message that advances by one reconcile would read as a CHANGE on every affected
+        # composition. That is the 52-of-90 noise the agentiko-mcp-server session had to filter out
+        # of this very diff: lastTransitionTime-keyed rows swamping three real state changes.
+        #
+        # So the split is by purpose rather than by availability. The diff's verdict stays keyed on
+        # status+reason, which is the granularity a roll is pass/fail at. The two new fields are
+        # FORENSICS, read out of the JSON when a specific question needs them -- "is this
+        # False/ReconcileError the #579 grace, and until when?" cannot be answered from the reason,
+        # because core-provider deliberately did not mint a new reason string for it.
         d = {f: [a.get(f), b.get(f)] for f in ("apiVersion", "managed", "Ready", "Synced", "uid")
              if a.get(f) != b.get(f)}
         if d:
