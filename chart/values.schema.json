@@ -13770,8 +13770,9 @@
                     "type": "string"
                   },
                   "username": {
+                    "description": "Length bounds mirror the realm chart's own user-profile validation (krateo-keycloak-realm 0.6.2, files/keycloak-26-default-user-profile.json: min 3, max 255). Keycloak refuses a shorter username with a 400 AT CREATE, not at render or apply, so a looser bound here moves the rejection into a reconcile where the offending field is not in the message.",
                     "maxLength": 255,
-                    "minLength": 1,
+                    "minLength": 3,
                     "pattern": "^[A-Za-z0-9._@-]+$",
                     "type": "string"
                   }
