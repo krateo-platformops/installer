@@ -22,6 +22,22 @@ both, and reading 401 as "exists, needs auth" reports every version as published
 anonymous pull token the same two requests give 200 and 404. So this script fetches a token
 per repository and REFUSES to report anything if its own controls do not discriminate.
 
+AND "PULLABLE BY ME" IS NOT "PULLABLE BY THE CLUSTER". Measured 2026-11-18 on krateo-demo: this
+script reported `chart kyverno PRESENT` for oci://ghcr.io/krateo-blueprints/charts/kyverno 3.9.4,
+the pin went out in 0.3.682, and the cdc could not install it:
+
+    GET https://ghcr.io/token?scope=repository:krateo-blueprints/charts/kyverno:pull
+    response status code 401: unauthorized: authentication required
+
+The package was PRIVATE. `helm show chart` had succeeded here because this machine is logged in to
+ghcr, so the probe answered a question nobody asked: "can Diego pull it", not "can a cluster pull
+it". Every other krateo-blueprints chart that cluster uses is public, so the pin looked ordinary and
+the failure appeared only after the roll, as one CD stuck in Creating.
+
+So presence is probed TWICE: once however this machine is configured, and once ANONYMOUSLY, which
+is what a cdc with no registry credentials does. A chart that is present but not anonymously
+pullable is reported as NOT PINNABLE, because that is the fact that licenses a pin.
+
 CONTROLS ARE MANDATORY, NOT OPTIONAL. Every run probes:
   - the version under test
   - a KNOWN-PUBLISHED version (--control), which must come back present
@@ -57,6 +73,63 @@ def chart_present(name, version, prefix=DEFAULT_CHART_PREFIX, timeout=90):
         return r.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return None  # unknown, not absent -- the caller must not read this as a verdict
+
+
+def anon_pullable(path, timeout=30):
+    """Can a client with NO credentials get a pull token for this OCI path?
+
+    `path` is the registry path without the host, e.g. "krateo-blueprints/charts/kyverno".
+    "public"   -> the registry issued an anonymous pull token: a credential-less cdc can fetch it.
+    "private"  -> 401. The package EXISTS and is private, whatever `helm show chart` says here.
+    "no-such-package" -> 403. The package does not exist AT ALL under this path.
+    None       -> the probe itself could not run, which is NOT a verdict.
+
+    401 AND 403 MUST NOT BE CONFLATED, which this function did until keycloak-provider-kog caught
+    it. Their sweep found that a package name that does not exist answers 403, so a probe treating
+    both as "private" sends the reader to change a visibility setting on a package that is not
+    there. Measured 2026-11-18:
+
+        krateo-blueprints/charts/kyverno                  token 401  (exists, private)
+        krateo-blueprints/charts/openstack-keystone-kog   token 403  (WRONG NAME -- the real one
+                                                                      is openstack-keystone-operator-kog)
+        krateo-blueprints/charts/openstack-keystone-operator-kog  token 200  (public)
+        krateo-blueprints/charts/definitely-not-a-real-chart-xyz  token 403  (does not exist)
+
+    The two remedies are completely different -- change the package visibility, or fix the name --
+    so a probe that cannot tell them apart is worse than one that says nothing.
+
+    THE 403 RULE HOLDS ONLY FOR AN UNAUTHENTICATED PROBE, and this function is one: urllib sends
+    no Authorization header and reads no .netrc here. Run the same request WITH a credential that
+    lacks access and 403 means "forbidden for this identity", not "does not exist" -- the acmp
+    session measured exactly that on the same package within the hour, reading 403 where this
+    anonymous probe reads 401. Their conclusion (private) was right by a different route. If this
+    code ever grows a credentialed mode, the 403 branch must not come with it.
+
+    AND DO NOT SWITCH THIS TO THE MANIFEST ENDPOINT. Measured, no Authorization header:
+
+        private package   GET /v2/<path>/manifests/<tag>  -> 401
+        absent package    GET /v2/<path>/manifests/<tag>  -> 401
+        PUBLIC package    GET /v2/<path>/manifests/<tag>  -> 401
+
+    All three identical. The manifest endpoint cannot discriminate anything without a token, which
+    is the whole reason this asks the token endpoint instead.
+
+    This asks the token endpoint rather than the manifest, because the token answer is the
+    discriminator: GHCR answers 401 on a manifest GET for a public-but-absent TAG too, so a
+    manifest probe cannot separate "private" from "that version does not exist".
+    """
+    url = ("https://%s/token?scope=repository:%s:pull&service=%s" % (REGISTRY, path, REGISTRY))
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as fh:
+            return "public" if (json.load(fh) or {}).get("token") else None
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return "private"
+        if e.code == 403:
+            return "no-such-package"
+        return None
+    except (urllib.error.URLError, json.JSONDecodeError, OSError):
+        return None
 
 
 def _token(repo, org=IMAGE_ORG, timeout=30):
@@ -116,9 +189,20 @@ def main(argv):
         print("release-complete: nothing to probe -- pass at least one --chart or --image")
         return 2
 
-    rows, broken = [], []
+    rows, broken, private, unknown_vis, absent_pkg = [], [], [], [], []
 
     for name in a.chart:
+        # "pullable by me" and "pullable by a cluster" are different facts -- see the docstring.
+        path = "%s/%s" % (a.repo.split("://", 1)[-1].split("/", 1)[-1], name)
+        anon = anon_pullable(path)
+        if anon == "private":
+            private.append((name, path))
+        elif anon == "no-such-package":
+            absent_pkg.append((name, path))
+        elif anon is None:
+            print("  note: could not run the anonymous visibility probe for %s -- treating its "
+                  "visibility as UNKNOWN, not public" % name)
+            unknown_vis.append(name)
         under = chart_present(name, a.version, a.repo)
         ctl_ok = chart_present(name, a.control, a.repo)
         ctl_no = chart_present(name, IMPOSSIBLE, a.repo)
@@ -141,12 +225,36 @@ def main(argv):
                           % (repo, a.control, ctl_ok, IMPOSSIBLE, ctl_no))
         rows.append(("image", repo, under))
 
+    if absent_pkg:
+        print("::error::release-complete: NO SUCH PACKAGE. The registry answered 403 to an "
+              "anonymous token request, which means the path does not exist -- NOT that it is "
+              "private (that is 401). Check the package name before anything else:")
+        for name, path in absent_pkg:
+            print("  chart %s: %s does not exist" % (name, path))
+        print("A component's chart name is not always its component name, and a wrong name here "
+              "looks exactly like a permissions problem. Measured case: "
+              "openstack-keystone-kog answers 403; the real package is "
+              "openstack-keystone-operator-kog.")
+        return 2
+
     if broken:
         print("::error::release-complete: REFUSING to report. The probe failed its own controls, "
               "so it can neither certify presence nor absence:")
         for b in broken:
             print("  %s" % b)
         return 2
+
+    if private:
+        print("::error::release-complete: %s is PUBLISHED BUT NOT PINNABLE. The registry refuses an "
+              "anonymous pull token, so a cdc with no registry credentials CANNOT fetch it -- even "
+              "though a probe from this machine succeeds, because this machine is logged in:"
+              % a.version)
+        for name, path in private:
+            print("  chart %s: %s is PRIVATE" % (name, path))
+        print("Do NOT pin it. Measured consequence: the pin installs, the CompositionDefinition "
+              "sticks in Ready=False/Creating with a 401 in its Synced message, and nothing else "
+              "reports a problem. Make the package public first, then re-run this.")
+        return 1
 
     for kind, name, present in rows:
         print("  %-6s %-34s %s" % (kind, name, "PRESENT" if present else
