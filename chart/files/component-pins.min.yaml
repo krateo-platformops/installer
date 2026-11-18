@@ -829,10 +829,11 @@ components:
   chart: kyverno
   feature: identityLifecycle
   kind: Kyverno
-  repo: oci://ghcr.io/kyverno/charts
+  namespace: kyverno
+  repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   upstream: true
-  version: 3.9.2
+  version: 3.9.4
 - name: identity-lifecycle
   kind: IdentityLifecycle
   version: 0.4.3

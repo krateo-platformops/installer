@@ -9714,7 +9714,8 @@ components:
   tier: platform
   feature: identityLifecycle
 - name: kyverno
-  # 3.9.2 (Kyverno v1.19.2). A NEW COMPONENT, and the dependency identity-lifecycle could not
+  # 3.9.3, a krateo-blueprints wrapper around upstream 3.9.2 (Kyverno v1.19.2). A NEW COMPONENT,
+  # and the dependency identity-lifecycle could not
   # declare for itself. With accessRequest.enabled the IL chart renders policies.kyverno.io/v1 CEL
   # policies UNCONDITIONALLY -- the decided-by stamp -- so the group must be served or the apply
   # fails. MEASURED on krateo-057 2026-11-16, before this pin existed: ZERO CRDs in any kyverno.io
@@ -9751,11 +9752,29 @@ components:
   # two could disagree -- requiresApiGroups is satisfied by ANY provider of the group, including a
   # hand-installed Kyverno, while deps would demand this component specifically.
   #
-  # OCI, NOT THE CLASSIC HELM REPO. kyverno publishes both; oci://ghcr.io/kyverno/charts/kyverno
-  # 3.9.2 resolves at appVersion v1.19.2, verified. Every other pin in this file is OCI and NO pin
-  # uses chartRepo -- so taking the classic repo would have made this the first exercise of that
-  # render path for no benefit. Third-party OCI orgs are established precedent: cloudnative-pg and
-  # external-secrets both pin from their vendors' own ghcr orgs.
+  # A KRATEO-BLUEPRINTS WRAPPER, NOT UPSTREAM'S CHART, AND THAT IS THE WHOLE POINT OF THIS ENTRY'S
+  # repo. This pin first read oci://ghcr.io/kyverno/charts, with a rationale that third-party OCI
+  # orgs were established precedent. That rationale was sound about the registry and wrong about
+  # the chart: upstream ships NO ROOT values.schema.json at any version, and core-provider's crdgen
+  # builds the composition CRD from that file. MEASURED on kc-roll057 2026-11-17 by
+  # keycloak-provider-kog, with features.identityLifecycle on:
+  #
+  #     CD kyverno  Synced=False: create failed: error getting JSON schema:
+  #                 open kyverno/values.schema.json: file does not exist
+  #
+  # which withheld kyverno AND identity-lifecycle, and left the Installer Ready=False on 1 of 106
+  # children. core-provider refused a permissive fallback (their #566): a typed CRD and the JSON
+  # schema the portal builds its form from are the contract. So the chart is republished at
+  # krateo-blueprints/kyverno-blueprint with a root schema, and this pin follows it.
+  #
+  # THE VERSION MIRRORS UPSTREAM EXCEPT FOR ONE PATCH, DELIBERATELY. The wrapper's 3.9.2 mirrored
+  # upstream exactly, so that the served apiVersion (composition.krateo.io/v<version>) could not
+  # move and turn a pin change into a GVK migration. 3.9.2 then proved to annotate only 11 of the
+  # 22 CRDs -- `crds.annotations` does not reach the separate kyverno-api subchart that carries all
+  # 11 policies.kyverno.io CRDs -- so 3.9.3 adds the second values block. A patch bump rather than
+  # a re-cut, because 3.9.2 was published and already pulled. Safe here and ONLY here: kyverno has
+  # no CompositionDefinition on krateo-057 or krateo-demo, so moving v3-9-2 -> v3-9-3 migrates
+  # nothing. cloudnative-pg and external-secrets have live instances on demo and keep exact mirrors.
   #
   # upstream: true because the appVersion (v1.19.2) is NOT one of our tags -- that flag is about
   # appVersion provenance, not chart ownership, and it disables check-pin-ci's appVersion->tag route.
@@ -9767,10 +9786,11 @@ components:
   chart: kyverno
   feature: identityLifecycle
   kind: Kyverno
-  repo: oci://ghcr.io/kyverno/charts
+  namespace: kyverno
+  repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   upstream: true
-  version: 3.9.2
+  version: 3.9.4
 - name: identity-lifecycle
   # NEW COMPONENT, wired 2026-11-04. Reconciles downstream identity CRs for a user's lifecycle.
   #
