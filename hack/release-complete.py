@@ -63,6 +63,25 @@ DEFAULT_CHART_PREFIX = "oci://ghcr.io/krateo-platformops/charts"
 IMAGE_ORG = "krateo-platformops"
 IMPOSSIBLE = "9.9.9"
 
+# REGISTRIES THAT ARE PRIVATE ON PURPOSE. For these, "not anonymously pullable" is the DESIGNED
+# state, not a defect, and the remedy is a credential -- NEVER a visibility change.
+#
+# Measured 2026-11-18: this script reported incident-agent 0.3.9 as "PUBLISHED BUT NOT PINNABLE"
+# and told the reader to "make the package public first". For krateo-agentiko that instruction is
+# against standing policy: agent charts and images are private by design and clusters pull them
+# through scoped credentials. A tool that confidently advises a prohibited action is worse than one
+# that says nothing, so the org is checked before the verdict is written.
+#
+# krateo-platformops and krateo-blueprints are NOT here: their artifacts are public, and a private
+# one is the real defect this script exists to catch (krateo-blueprints/charts/kyverno, which
+# wedged a demo roll the same day).
+EXPECTED_PRIVATE = ("krateo-agentiko",)
+
+
+def _expected_private(path):
+    """True if this registry path is one whose packages are private by design."""
+    return path.split("/", 1)[0] in EXPECTED_PRIVATE
+
 
 def chart_present(name, version, prefix=DEFAULT_CHART_PREFIX, timeout=90):
     """True if `helm show chart` can read it. helm exits non-zero for an absent version."""
@@ -189,14 +208,14 @@ def main(argv):
         print("release-complete: nothing to probe -- pass at least one --chart or --image")
         return 2
 
-    rows, broken, private, unknown_vis, absent_pkg = [], [], [], [], []
+    rows, broken, private, unknown_vis, absent_pkg, by_design = [], [], [], [], [], []
 
     for name in a.chart:
         # "pullable by me" and "pullable by a cluster" are different facts -- see the docstring.
         path = "%s/%s" % (a.repo.split("://", 1)[-1].split("/", 1)[-1], name)
         anon = anon_pullable(path)
         if anon == "private":
-            private.append((name, path))
+            (by_design if _expected_private(path) else private).append((name, path))
         elif anon == "no-such-package":
             absent_pkg.append((name, path))
         elif anon is None:
@@ -244,6 +263,11 @@ def main(argv):
             print("  %s" % b)
         return 2
 
+    for name, path in by_design:
+        print("  note: %s (%s) is PRIVATE, which is EXPECTED for this registry. It is pinnable only "
+              "on a cluster whose registryAuth covers %s -- check that before pinning. Do NOT "
+              "make it public." % (name, path, path.split("/", 1)[0]))
+
     if private:
         print("::error::release-complete: %s is PUBLISHED BUT NOT PINNABLE. The registry refuses an "
               "anonymous pull token, so a cdc with no registry credentials CANNOT fetch it -- even "
@@ -272,5 +296,39 @@ def main(argv):
     return 0
 
 
+def _selftest():
+    """Prove both private branches are reachable and distinct.
+
+    WHY THIS EXISTS: adding EXPECTED_PRIVATE made the REFUSAL branch harder to reach, and at the
+    time of writing no non-agentiko private package remained to test it against -- the one that
+    motivated the whole check (krateo-blueprints/charts/kyverno) had just been made public. A branch
+    with no live example is exactly the one that rots, so it is exercised here with stubs.
+    """
+    cases = [
+        # (registry path,            expected bucket)
+        ("krateo-agentiko/charts/incident-agent",       "by_design"),
+        ("krateo-agentiko/repo-mcp-server",             "by_design"),
+        ("krateo-blueprints/charts/kyverno",            "refuse"),
+        ("krateo-platformops/charts/core-provider",     "refuse"),
+        ("krateo-blueprints/charts/krateo-private-ca",  "refuse"),
+    ]
+    fails = 0
+    for path, want in cases:
+        got = "by_design" if _expected_private(path) else "refuse"
+        ok = got == want
+        fails += 0 if ok else 1
+        print("  %-4s %-46s -> %-10s (want %s)" % ("ok" if ok else "FAIL", path, got, want))
+    # the name must not be matched loosely: a path merely CONTAINING the org name is not that org
+    for path in ("notkrateo-agentiko/charts/x", "evil/krateo-agentiko/charts/x"):
+        ok = not _expected_private(path)
+        fails += 0 if ok else 1
+        print("  %-4s %-46s -> refuse (must not match loosely)" % ("ok" if ok else "FAIL", path))
+    print()
+    print("  %d case(s), %d failure(s)" % (len(cases) + 2, fails))
+    return 1 if fails else 0
+
+
 if __name__ == "__main__":
+    if "--selftest" in sys.argv[1:]:
+        sys.exit(_selftest())
     sys.exit(main(sys.argv[1:]))
