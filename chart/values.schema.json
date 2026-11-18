@@ -20508,6 +20508,22 @@
           "svcMatch": {
             "type": "string"
           },
+          "targetRef": {
+            "additionalProperties": false,
+            "description": "Deliver this component to a REMOTE cluster: rendered as the CompositionDefinition's spec.deploy.targetRef (installer#579). The composition-dynamic-controller, the generated CRD and the RBAC are created in the named KubernetesTarget's cluster instead of this one. OMIT IT and the CompositionDefinition renders byte-identically to today -- this is inert unless set, like apiRef and statusDataTemplate. THE KubernetesTarget MUST EXIST IN THE SAME NAMESPACE AS THE CompositionDefinition: the CRD gives targetRef only a `name`, resolved in the referencing object's own namespace, so there is no way to point at a target elsewhere. The installer does NOT verify it exists -- that would need `lookup`, which `helm template` disables, so the check would pass vacuously in every render. core-provider fails closed when the target is absent. CREDENTIALS ARE THE OPERATOR'S: the target's kubeconfig or token, and any per-target signing key, are created by the operator and referenced by name. The installer generates neither and no credential passes through a render path.",
+            "properties": {
+              "name": {
+                "description": "Name of the KubernetesTarget, resolved in the CompositionDefinition's own namespace. Mirrors the CRD field exactly; the CRD requires it.",
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "title": "targetRef",
+            "type": "object"
+          },
           "tier": {
             "enum": [
               "platform",

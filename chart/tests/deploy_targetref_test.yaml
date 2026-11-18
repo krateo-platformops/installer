@@ -1,0 +1,212 @@
+# REMOTE-TARGET DELIVERY: spec.deploy.targetRef, AND THE PROOF THAT OMITTING IT CHANGES NOTHING.
+#
+# installer#579, for authn#38. core-provider has shipped spec.deploy.targetRef since 2026-08-24 and
+# the installer emitted no surface for it, so no component could be aimed at a spoke through this
+# umbrella regardless of what core-provider supported.
+#
+# THE SHAPE IS READ FROM THE LIVE CRD, not from the roadmap. compositiondefinitions.core.krateo.io
+# v1alpha1 on krateo-057 declares spec as {apiRef, chart, controller, deploy, statusDataTemplate,
+# upgradePolicy}; spec.deploy.properties is [targetRef]; spec.deploy.targetRef.properties is [name],
+# required [name], described as "resolved in the referencing object's own namespace". There is NO
+# namespace field, so the KubernetesTarget must live in the CompositionDefinition's own namespace.
+#
+# WHY CASE 3 IS THE ONE THAT MATTERS. The whole safety claim for this change is "omitting targetRef
+# renders byte-identically to today", the same posture as apiRef and statusDataTemplate. CASE 1
+# proves the feature works; CASE 3 proves it is inert, and CASE 4 is what stops CASE 3 passing
+# vacuously -- without a component that renders at all, "no spec.deploy" and "no document" are the
+# same observation. That is the exact defect I shipped twice in #1060: negatives passing against an
+# empty list.
+#
+# NO RENDER-TIME EXISTENCE CHECK IS ASSERTED HERE, BECAUSE THERE IS NONE AND THERE MUST NOT BE.
+# Verifying the KubernetesTarget exists needs `lookup`, which `helm template` disables -- so such a
+# check would pass vacuously in every render and every CI gate, reading as coverage while testing
+# nothing. core-provider fails closed at reconcile when the target is absent. Diego's decision
+# (2026-11-18): core-provider's check IS the check, amending Decision 1 on authn#38, which had said
+# the installer would check.
+suite: spec.deploy.targetRef is emitted when set and absent when not
+templates:
+  - templates/definitions.yaml
+tests:
+  - it: "CASE 1 -- targetRef renders at spec.deploy.targetRef.name"
+    set:
+      components:
+        - name: a-remote-thing
+          kind: ARemoteThing
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+          targetRef:
+            name: a-spoke
+    asserts:
+      - equal:
+          path: spec.deploy.targetRef.name
+          value: a-spoke
+        documentSelector:
+          path: metadata.name
+          value: a-remote-thing
+
+  # The CRD gives targetRef only `name`. If a later core-provider adds a field, the pin schema is a
+  # CLOSED object and must be widened first -- this case pins the shape we emit today so a widening
+  # is a deliberate change rather than a surprise.
+  - it: "CASE 2 -- spec.deploy carries ONLY targetRef, and targetRef only name"
+    set:
+      components:
+        - name: a-remote-thing
+          kind: ARemoteThing
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+          targetRef:
+            name: a-spoke
+    asserts:
+      - isSubset:
+          path: spec.deploy
+          content:
+            targetRef:
+              name: a-spoke
+        documentSelector:
+          path: metadata.name
+          value: a-remote-thing
+      - equal:
+          path: spec.deploy.targetRef
+          value:
+            name: a-spoke
+        documentSelector:
+          path: metadata.name
+          value: a-remote-thing
+
+  # THE INERTNESS CLAIM, asserted directly. Every live CompositionDefinition on 057 today has no
+  # spec.deploy -- the union of spec keys across all of them is [apiRef, chart, controller,
+  # statusDataTemplate, upgradePolicy]. This change must keep that true for every component that
+  # does not set targetRef, which is all 92 of them.
+  - it: "CASE 3 -- targetRef ABSENT renders NO spec.deploy key at all"
+    set:
+      components:
+        - name: a-local-thing
+          kind: ALocalThing
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+    asserts:
+      - isNull:
+          path: spec.deploy
+        documentSelector:
+          path: metadata.name
+          value: a-local-thing
+
+  # CONTROL for CASE 3. Without it, "no spec.deploy" would pass just as well if the component
+  # rendered no document whatsoever -- a much larger bug reported as success.
+  - it: "CASE 4 CONTROL -- that same component DOES render, with its chart and tier intact"
+    set:
+      components:
+        - name: a-local-thing
+          kind: ALocalThing
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+    asserts:
+      - equal:
+          path: spec.chart.version
+          value: "1.0.0"
+        documentSelector:
+          path: metadata.name
+          value: a-local-thing
+      - equal:
+          path: metadata.labels["krateo.io/tier"]
+          value: catalog
+        documentSelector:
+          path: metadata.name
+          value: a-local-thing
+
+  # THE GUARD. targetRef + expose is a CONTRADICTION whose failure would be silent: inst.svcname
+  # resolves backends in THIS cluster, a targeted component's Service is on the TARGET, and the
+  # contains-fallback would bind the route to a DIFFERENT local Service. Measured on 057: `authn`,
+  # `authn-agent` and `authn-internal` all exist, so a targeted `authn-spoke1` with svcMatch `authn`
+  # would route public traffic to the MANAGEMENT cluster's authn and come up healthy.
+  - it: "CASE 6 -- targetRef together with expose REFUSES the render"
+    set:
+      components:
+        - name: a-targeted-exposed-thing
+          kind: ATargetedExposedThing
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+          expose: true
+          exposePort: 8080
+          svcMatch: authn
+          targetRef:
+            name: a-spoke
+    asserts:
+      - failedTemplate:
+          errorPattern: "sets BOTH targetRef and expose"
+
+  # CONTROL for CASE 6, and it is the half that matters: without it the guard would pass just as
+  # well if it refused EVERY targeted component, which would make the whole feature unusable while
+  # reporting a correct-looking refusal.
+  - it: "CASE 7 CONTROL -- targetRef WITHOUT expose still renders"
+    set:
+      components:
+        - name: a-targeted-plain-thing
+          kind: ATargetedPlainThing
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+          targetRef:
+            name: a-spoke
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.deploy.targetRef.name
+          value: a-spoke
+        documentSelector:
+          path: metadata.name
+          value: a-targeted-plain-thing
+
+  # SECOND CONTROL: expose WITHOUT targetRef is the ordinary case for 6 live components and must be
+  # untouched. Without this, a guard that refused every exposed component would pass CASE 6.
+  - it: "CASE 8 CONTROL -- expose WITHOUT targetRef still renders"
+    set:
+      components:
+        - name: an-exposed-thing
+          kind: AnExposedThing
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+          expose: true
+          exposePort: 8080
+          svcMatch: an-exposed-thing
+    asserts:
+      - notFailedTemplate: {}
+      - isNull:
+          path: spec.deploy
+        documentSelector:
+          path: metadata.name
+          value: an-exposed-thing
+
+  # targetRef must not disturb the keys that already share this spec. `controller` was emitted
+  # under one key for exactly this reason (controller_pool_test.yaml CASE 3); deploy is a sibling,
+  # not a nested key, and this proves the two coexist.
+  - it: "CASE 5 -- targetRef alongside controller.pool: both present, neither displaced"
+    set:
+      components:
+        - name: a-remote-pooled-thing
+          kind: ARemotePooledThing
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+          pool: pages
+          targetRef:
+            name: a-spoke
+    asserts:
+      - equal:
+          path: spec.deploy.targetRef.name
+          value: a-spoke
+        documentSelector:
+          path: metadata.name
+          value: a-remote-pooled-thing
+      - equal:
+          path: spec.controller.pool
+          value: pages
+        documentSelector:
+          path: metadata.name
+          value: a-remote-pooled-thing

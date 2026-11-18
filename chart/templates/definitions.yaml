@@ -196,6 +196,74 @@ spec:
   statusDataTemplate:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- if and $c.targetRef $c.expose }}
+  {{/* A TARGETED COMPONENT CANNOT BE EXPOSED FROM HERE, and the failure would be SILENT.
+
+       `inst.svcname` resolves a component's backend Service by looking it up IN THIS CLUSTER. A
+       targeted component's Service lives on the TARGET, so exposure wiring for it can only resolve
+       to nothing -- or, worse, to a DIFFERENT local Service through the contains-fallback
+       (`$exact | default $contains`).
+
+       MEASURED on krateo-057, and authn is exactly the dangerous case: the local Services are
+       `authn`, `authn-agent` and `authn-internal`. A component `authn-spoke1` carrying
+       `svcMatch: authn` would resolve to THIS cluster's `authn` -- routing public traffic to the
+       MANAGEMENT cluster's authn while every signal says it reaches the target. That is the same
+       resolved-but-wrong-backend class the derived-route guard in _helpers.tpl refuses, one layer
+       along, and it comes up healthy.
+
+       So the two keys are mutually exclusive and the render refuses rather than guessing. Exposing
+       a service that runs on a spoke is a gateway question on that spoke, not an `expose: true`
+       here. */}}
+  {{- fail (printf "component %q sets BOTH targetRef and expose. A targeted component's Service runs on the TARGET cluster, but inst.svcname resolves backends in THIS one -- and its contains-fallback would silently bind the route to a DIFFERENT local Service (on 057: authn, authn-agent, authn-internal all exist, so svcMatch 'authn' resolves HERE). Drop expose/exposePort/svcMatch/gatewayPath* from this pin; exposing a spoke service is a gateway question on that spoke." $c.name) }}
+  {{- end }}
+  {{- with $c.targetRef }}
+  {{/* REMOTE-TARGET DELIVERY, at spec.deploy.targetRef (installer#579, for authn#38).
+
+       WHAT THIS DOES: it aims a component's composition-dynamic-controller -- and the generated
+       CRD and RBAC -- at a REMOTE cluster instead of this one. core-provider has shipped the
+       mechanism since 2026-08-24; the installer had no way to reach it, so no component could be
+       installed into a spoke through this umbrella regardless of what core-provider supported.
+
+       THE SHAPE MIRRORS THE CRD, read from the live CRD on krateo-057 rather than from the
+       roadmap. compositiondefinitions.core.krateo.io v1alpha1 declares:
+         spec: {apiRef, chart, controller, deploy, statusDataTemplate, upgradePolicy}
+         spec.deploy.properties:        [targetRef]
+         spec.deploy.targetRef.properties: [name]   required: [name]
+       targetRef has NO namespace field, and the CRD's own description says the name is
+       "resolved in the referencing object's own namespace". So:
+
+       THE KubernetesTarget MUST LIVE IN THE CD'S NAMESPACE, which here is $cdNamespace. A target
+       created anywhere else is not found, and the failure surfaces on the CompositionDefinition
+       rather than on the installer -- so it will look like a core-provider problem.
+
+       NO RENDER-TIME EXISTENCE CHECK, DELIBERATELY. Verifying the target exists would need
+       `lookup`, and `helm template` disables lookup: the check would pass vacuously in every
+       render and every CI gate, which is worse than no check because it reads as coverage.
+       core-provider fails closed when the target is absent; that is the right layer for it.
+
+       CREDENTIALS ARE THE OPERATOR'S, NOT THE CHART'S. Both per-target secrets -- the target's
+       own kubeconfig/token and authn's per-target JWT signing key -- are created by the operator
+       and referenced by name. The installer never generates either. That is the authn session's
+       user's decision and it is the safer of the two shapes I recorded in #579: the alternative,
+       a `lookup`-guarded random generation like admin-password, cannot work correctly here
+       because `helm template` disables lookup, so the reuse-the-existing-Secret arm never fires
+       in a render and randAlphaNum re-rolls every time -- a render diff then shows a key rotating
+       when it has not, which has already cost real debugging time on this chart.
+
+       OMITTING IT RENDERS BYTE-IDENTICALLY TO TODAY, which is the whole posture: same as
+       apiRef/statusDataTemplate above and internalUrls/internalPorts elsewhere. No live
+       CompositionDefinition on 057 carries spec.deploy -- the union of spec keys across all of
+       them is [apiRef, chart, controller, statusDataTemplate, upgradePolicy] -- so this path has
+       never been exercised here and must stay inert until someone sets it.
+
+       NOT THE `spoke*` VALUES. spokeReadbackCluster / spokeReadbackEndpointNamespace /
+       spokeReadbackEndpointSecret are snowplow READING BACK compositions from a registered spoke
+       for the /clusters/{name} page. Read-only observability of a spoke, not delivery to it.
+       Anyone grepping the schema for "spoke" finds those first and must not conflate them. */}}
+  deploy:
+    targetRef:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}
   {{- if or $c.resources $c.pool }}
   {{/* Per-Kind CDC controller resources, at spec.controller.resources.
 
