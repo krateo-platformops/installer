@@ -79,21 +79,38 @@ def anon_pullable(path, timeout=30):
     """Can a client with NO credentials get a pull token for this OCI path?
 
     `path` is the registry path without the host, e.g. "krateo-blueprints/charts/kyverno".
-    True  -> the registry issued an anonymous pull token: a credential-less cdc can fetch it.
-    False -> it refused (401): the package is private, whatever `helm show chart` says here.
-    None  -> the probe itself could not run, which is NOT a verdict.
+    "public"   -> the registry issued an anonymous pull token: a credential-less cdc can fetch it.
+    "private"  -> 401. The package EXISTS and is private, whatever `helm show chart` says here.
+    "no-such-package" -> 403. The package does not exist AT ALL under this path.
+    None       -> the probe itself could not run, which is NOT a verdict.
 
-    This asks the token endpoint rather than the manifest, because the token refusal is the
-    discriminator: GHCR answers 401 on a manifest GET for a public-but-absent tag too, so a
+    401 AND 403 MUST NOT BE CONFLATED, which this function did until keycloak-provider-kog caught
+    it. Their sweep found that a package name that does not exist answers 403, so a probe treating
+    both as "private" sends the reader to change a visibility setting on a package that is not
+    there. Measured 2026-11-18:
+
+        krateo-blueprints/charts/kyverno                  token 401  (exists, private)
+        krateo-blueprints/charts/openstack-keystone-kog   token 403  (WRONG NAME -- the real one
+                                                                      is openstack-keystone-operator-kog)
+        krateo-blueprints/charts/openstack-keystone-operator-kog  token 200  (public)
+        krateo-blueprints/charts/definitely-not-a-real-chart-xyz  token 403  (does not exist)
+
+    The two remedies are completely different -- change the package visibility, or fix the name --
+    so a probe that cannot tell them apart is worse than one that says nothing.
+
+    This asks the token endpoint rather than the manifest, because the token answer is the
+    discriminator: GHCR answers 401 on a manifest GET for a public-but-absent TAG too, so a
     manifest probe cannot separate "private" from "that version does not exist".
     """
     url = ("https://%s/token?scope=repository:%s:pull&service=%s" % (REGISTRY, path, REGISTRY))
     try:
         with urllib.request.urlopen(url, timeout=timeout) as fh:
-            return bool((json.load(fh) or {}).get("token"))
+            return "public" if (json.load(fh) or {}).get("token") else None
     except urllib.error.HTTPError as e:
-        if e.code in (401, 403):
-            return False
+        if e.code == 401:
+            return "private"
+        if e.code == 403:
+            return "no-such-package"
         return None
     except (urllib.error.URLError, json.JSONDecodeError, OSError):
         return None
@@ -156,14 +173,16 @@ def main(argv):
         print("release-complete: nothing to probe -- pass at least one --chart or --image")
         return 2
 
-    rows, broken, private, unknown_vis = [], [], [], []
+    rows, broken, private, unknown_vis, absent_pkg = [], [], [], [], []
 
     for name in a.chart:
         # "pullable by me" and "pullable by a cluster" are different facts -- see the docstring.
         path = "%s/%s" % (a.repo.split("://", 1)[-1].split("/", 1)[-1], name)
         anon = anon_pullable(path)
-        if anon is False:
+        if anon == "private":
             private.append((name, path))
+        elif anon == "no-such-package":
+            absent_pkg.append((name, path))
         elif anon is None:
             print("  note: could not run the anonymous visibility probe for %s -- treating its "
                   "visibility as UNKNOWN, not public" % name)
@@ -189,6 +208,18 @@ def main(argv):
                           "(an UNTOKENED probe answers 401 for both, which is the trap this guards)"
                           % (repo, a.control, ctl_ok, IMPOSSIBLE, ctl_no))
         rows.append(("image", repo, under))
+
+    if absent_pkg:
+        print("::error::release-complete: NO SUCH PACKAGE. The registry answered 403 to an "
+              "anonymous token request, which means the path does not exist -- NOT that it is "
+              "private (that is 401). Check the package name before anything else:")
+        for name, path in absent_pkg:
+            print("  chart %s: %s does not exist" % (name, path))
+        print("A component's chart name is not always its component name, and a wrong name here "
+              "looks exactly like a permissions problem. Measured case: "
+              "openstack-keystone-kog answers 403; the real package is "
+              "openstack-keystone-operator-kog.")
+        return 2
 
     if broken:
         print("::error::release-complete: REFUSING to report. The probe failed its own controls, "
