@@ -5681,7 +5681,7 @@ components:
   #   0.1.48 resolves (positive control), 0.1.45 resolves (second control), 9.9.9 absent.
   #   Schema `required` read AT PIN TIME: identical to 0.1.48 -- no root `required`, two
   #   items-level blocks (defaultAlerts.alerts.items, defaultMetrics.items). No umbrella wedge.
-  version: 0.1.51
+  version: 0.1.55
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -5799,7 +5799,7 @@ components:
   #     v1-12-41 4/8 (50%)   v1-12-42 0/8 (0%)   v0-3-413 0/6 (0%)   <- both rolled that morning
   # The 48h AGGREGATE reads a flat ~100% and hides this entirely; only the per-apiVersion split
   # shows it. Read the split, never the rollup, when judging event correlation.
-  version: 0.3.18
+  version: 0.3.23
   deps:
   - krateo-observability
   tier: observability
@@ -5982,7 +5982,7 @@ components:
   #
   # CONTROLS: 0.1.1 resolves; 0.1.0 resolves; 9.9.9 does not.
   kind: OtelCollectorTailsampling
-  version: 0.1.13
+  version: 0.1.17
   deps:
     - otel-collector-deployment
   tier: observability
@@ -6166,7 +6166,7 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.31
+  version: 0.1.35
   deps:
   - otel-collector-deployment
   tier: observability

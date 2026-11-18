@@ -307,7 +307,7 @@ components:
   feature: portal
 - name: krateo-observability
   kind: KrateoObservability
-  version: 0.1.51
+  version: 0.1.55
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -317,7 +317,7 @@ components:
   svcMatch: krateo-clickstack
 - name: otel-collector-deployment
   kind: OtelCollectorDeployment
-  version: 0.3.18
+  version: 0.3.23
   deps:
   - krateo-observability
   tier: observability
@@ -331,14 +331,14 @@ components:
   feature: sloRollup
 - name: otel-collector-tailsampling
   kind: OtelCollectorTailsampling
-  version: 0.1.13
+  version: 0.1.17
   deps:
     - otel-collector-deployment
   tier: observability
   feature: portal
 - name: otel-collector-daemonset
   kind: OtelCollectorDaemonset
-  version: 0.1.31
+  version: 0.1.35
   deps:
   - otel-collector-deployment
   tier: observability
