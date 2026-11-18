@@ -538,7 +538,7 @@ components:
   #   differing has no valid reading -- which is why the pairing is now a DECLARED version line in
   #   .github/pin-version-lines.yaml rather than a convention. Minimum for 1.12.71: CRD content
   #   >= 1.12.65; pin 1.12.71/1.12.71 together.
-  version: 1.12.70
+  version: 1.12.74
   tier: platform
   feature: portal
 # 0.35.4 (2026-11-05, authn main 75aedb1): owner re-diffed both charts against 0.34.0 and
@@ -1907,7 +1907,7 @@ components:
   # Also needs frontend >= 1.8.37 for the fix to be complete; this repo pins the frontend line at
   # 1.8.44, so that half is already satisfied -- asserted here so the next reader does not have to
   # re-derive it.
-  version: 1.12.70
+  version: 1.12.74
   deps:
   - snowplow-crd
   - authn
