@@ -20405,6 +20405,12 @@
             "description": "This agent is the fleet's ORCHESTRATOR (krateo-autopilot): it auto-attaches every deployed, feature-enabled `agent` component as an A2A sub-agent via extraAgents. Split out of modelOwner, which now marks the ModelConfig owner instead.",
             "type": "boolean"
           },
+          "pool": {
+            "description": "MEMBERSHIP, NOT SIZING. Threaded onto the component CompositionDefinition's spec.controller.pool. Setting it makes this definition a member of the named cdc pool: core-provider stops running a dedicated <resource>-<version>-controller Deployment for it, and the pool's cdc-pool-<name> Deployment runs it instead. THIS IS A DIFFERENT KNOB FROM core-provider.cdc.pool.{default,overrides}, which SIZES a pool's Deployment (resources and total workers). Sizing is core-provider's values; membership is per-definition and lives here. I carried the two as one thing until core-provider separated them. spec.controller.workers is PER CONTROLLER and keeps its meaning for a pool member; cdc.pool.*.workers is the pool's TOTAL across its members. A pool is created on its FIRST member and later members join it, so adding three definitions to a new pool in one change and adding them one at a time measure different mechanisms. REQUIRES core-provider >= 2.13.113: before that, a CompositionDefinition's Ready and ControllerActive were read from <resource>-<version>-controller for EVERY definition including pool members, and cutover deletes that Deployment -- so a member would have read Ready=False/Creating indefinitely with its composition perfectly healthy (core-provider #581). The reason there is `Creating`, which is already a known reason, so a reason-registry gate stays SILENT and only an age-based check fires, with nothing unusual pointing at the cause.",
+            "minLength": 1,
+            "title": "cdc pool membership",
+            "type": "string"
+          },
           "readerGroups": {
             "description": "Groups that may see this blueprint on the Blueprints page: a Role reading compositiondefinitions in the blueprint `namespace`, bound to each group (never a ClusterRole). Requires `namespace` set to a blueprint namespace other than namespaces.krateo.",
             "items": {

@@ -256,8 +256,16 @@ def main():
 
     # ---- FALSIFIER: a template that renders at spec.resources MUST be refused ----
     defs = open(DEFS, encoding="utf-8").read()
-    mutant = defs.replace("  controller:\n    resources:\n      {{- toYaml . | nindent 6 }}",
-                          "  resources:\n    {{- toYaml . | nindent 4 }}")
+    # The shape this mutates CHANGED when spec.controller.pool was added: `controller:` is
+    # now emitted once with `resources` and `pool` nested under it, so the old single-string
+    # replace stopped matching and this gate REFUSED rather than passing blind. That refusal
+    # is the behaviour to keep -- a falsifier that cannot be built must never be skipped --
+    # so the anchor is updated here rather than the check being relaxed.
+    mutant = defs.replace(
+        "  controller:\n    {{- with $c.resources }}\n    resources:\n"
+        "      {{- toYaml . | nindent 6 }}\n    {{- end }}",
+        "  {{- with $c.resources }}\n  resources:\n"
+        "    {{- toYaml . | nindent 4 }}\n  {{- end }}")
     if mutant == defs:
         die("FALSIFIER could not be built: the expected controller/resources render is not in "
             f"{DEFS}, so this gate cannot prove it detects the original bug.")
