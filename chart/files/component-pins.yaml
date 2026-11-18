@@ -9165,6 +9165,33 @@ components:
   #   whether the versions differing has no valid reading, and here it has one -- the controller has
   #   not changed. Contrast keycloak/keycloak-operator, declared as a line tonight because that
   #   repo's release-tag.yaml packages every chart at the tag and refuses a mismatched archive.
+  # 0.2.35 (#1062, tag 0.3.686). The RATIONALE, recorded here because #1062 dropped its pin comment
+  # in its third commit and this file is where the next reader looks -- a PR body is findable only by
+  # someone who already knows which PR to find.
+  #
+  # 0.2.35 (krateo-agentiko/agentgateway-policies#62): tool-history truncation now treats every
+  #   result of the LATEST tool-call batch as fresh and caps each with `newestMaxChars`. On 057,
+  #   where gemini-4-hydrogen batches 4-16 calls per turn, the previous behaviour had cut 650 fresh
+  #   results to 8,000 chars in five days. The change lives in the agentgateway-policies-llm
+  #   AgentgatewayBackend's CEL.
+  # 0.2.34 (#95): new `mcpEntry.backend` / `mcpEntry.bridge.*` / `mcpEntry.oauth.*` keys.
+  #
+  # NOT DECLARED IN componentValues, DELIBERATELY, and that was #1062's call rather than an omission.
+  # Verified against the 0.2.35 chart: 15 leaves added, ALL under mcpEntry, zero changed, zero
+  # removed. The defaults are inert and the dangerous arm fails LOUDLY:
+  #   mcpEntry.enabled        false by default; the whole block is gated on it
+  #   mcpEntry.backend        `kagent` -- 057 sets only {enabled: true}, so it takes this default
+  #                           and the live route agentgateway-policies-mcp-entry still points at
+  #                           kagent-controller:8083 (measured on 057 2026-11-18)
+  #   mcpEntry.oauth.*        read ONLY when backend == agentiko-mcp-server; issuer/clientId/
+  #                           audience/jwks.* all ship EMPTY, and httproute-mcp-entry.yaml:78
+  #                           `fail`s naming the missing key rather than rendering a route with no
+  #                           authentication. So there is no silent-misroute path here.
+  # Declare them in the change that SETS them -- declaring a key nothing uses puts it on the
+  # Installer CRD, and componentValues is a closed object per component, so it is easier to add
+  # than to remove ([[componentvalues-cannot-be-unset-via-values]] is the installer-side version).
+  #
+  # agentgateway-controller STAYS at 0.2.0. See the note above on why these two versions diverge.
   version: 0.2.35
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
