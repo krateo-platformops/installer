@@ -114,6 +114,22 @@ def anon_pullable(path, timeout=30):
     All three identical. The manifest endpoint cannot discriminate anything without a token, which
     is the whole reason this asks the token endpoint instead.
 
+    AND 403 HAS AT LEAST THREE CAUSES, so it is only a verdict at the endpoint and auth state this
+    function uses. Measured on the same private package:
+
+        token endpoint,  no credentials                 401   (private -- what we rely on)
+        token endpoint,  no credentials, absent package 403   (absent  -- what we rely on)
+        manifest,        no Authorization header        401
+        manifest,        Authorization: Bearer <empty>  403
+        manifest,        Authorization: Bearer <junk>   403
+
+    The acmp session reached 403 on this package by requesting a token without credentials and then
+    sending the manifest HEAD with whatever came back -- for a private package that is an unusable
+    token, and an unusable Bearer is 403. Their "private" verdict came from the GitHub packages API
+    (visibility=private), not from the status code; the code merely agreed. That is the right way
+    round, and the reason this function pins BOTH the endpoint and the auth state in its contract
+    rather than claiming "403 means absent" in general.
+
     This asks the token endpoint rather than the manifest, because the token answer is the
     discriminator: GHCR answers 401 on a manifest GET for a public-but-absent TAG too, so a
     manifest probe cannot separate "private" from "that version does not exist".
