@@ -154,7 +154,37 @@ composition:
       universal: false   # absent on a paused composition
       healthy: [Renderable]
       unhealthy: [UnservedKind, ValuesSchemaViolation, InspectorRejected, InspectorUnavailable]
-      note: chart-inspector rendered the chart against this cluster.
+      note: >-
+        chart-inspector rendered the chart against this cluster.
+
+        InspectorUnavailable IS AMBIGUOUS AND DOES NOT MEAN WHAT IT SAYS (core-provider#583,
+        2026-11-18). chart-inspector's classifier is 400 = schema violation, 422 = unserved kind,
+        EVERYTHING ELSE = 500; and the cdc maps every 5xx to InspectorUnavailable, documented as
+        "chart-inspector itself failed; not the blueprint's fault". So A TEMPLATE'S OWN `fail`
+        ARRIVES HERE AS InspectorUnavailable, attributing a deliberate refusal by THIS chart to an
+        infrastructure fault. The installer has guards that fail deliberately: the
+        github-provider-kog-config kinds check is one, and the namespace/readerGroups guard that
+        froze krateo-057 on 0.3.674 was another.
+
+        THE DISCRIMINATOR, from core-provider, until #583 is fixed: a 5xx whose response body
+        contains `execution error at (` or `execution error in (` is THE CHART REFUSING ITS VALUES,
+        not chart-inspector failing. Read the body, not the reason. Measured example, the Installer
+        CR's Synced message at 2026-11-18T00:16:10Z - "unexpected status code: 500 - response body:
+        {... execution error at (installer/templates/withheld-components.yaml:31:20):
+        components[kyverno]: ...}".
+
+        A 500 is also a THIRD class alongside the two transport signatures core-provider named for
+        the chart-inspector termination work: `connection refused`/`i/o timeout` on the dial means
+        #578 is not working, `EOF`/`connection reset by peer` while reading means #582 is missing,
+        and a 5xx means the server ANSWERED. Forcing a 500 into either transport arm would report a
+        termination verdict about a template error.
+
+        Ready=False/Unavailable is CORRECT either way, because any HTTP answer is a verdict -
+        including under core-provider#579's grace. Only the ChartRenderable attribution is wrong, so
+        this note changes how to READ the reason, not whether it is unhealthy.
+
+        core-provider will tell me before shipping any new ChartRenderable reason, so if the #583 fix
+        adds one, this list needs updating and check-ready-reasons-current will say so.
     RBACComplete:
       universal: false   # absent on a paused composition
       healthy: [Applied]
