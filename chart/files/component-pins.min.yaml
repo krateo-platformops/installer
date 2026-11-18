@@ -517,7 +517,7 @@ components:
 - name: agentiko
   kind: Agentiko
   agentName: agentiko
-  version: 0.8.3
+  version: 0.8.4
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
     - repo-mcp-server
@@ -626,7 +626,7 @@ components:
   agent: true
 - name: incident-provider
   kind: IncidentProvider
-  version: 0.14.0
+  version: 0.11.0
   deps:
   - incident-provider-crd
   tier: observability
@@ -636,7 +636,7 @@ components:
 - name: incident-provider-crd
   kind: IncidentProviderCrds
   chart: incident-provider-crds
-  version: 0.14.0
+  version: 0.11.0
   tier: observability
   feature: portal
 - name: alert-provider-crd
@@ -829,10 +829,11 @@ components:
   chart: kyverno
   feature: identityLifecycle
   kind: Kyverno
-  repo: oci://ghcr.io/kyverno/charts
+  namespace: kyverno
+  repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   upstream: true
-  version: 3.9.2
+  version: 3.9.4
 - name: identity-lifecycle
   kind: IdentityLifecycle
   version: 0.4.3

@@ -1,0 +1,84 @@
+# AN IGNORED OVERRIDE MUST LEAVE A TRACE.
+#
+# As of 2026-11-18 a pin-owned key (`namespace`, `readerGroups`) on a PINNED component is ignored
+# rather than refused, because refusing froze krateo-057: chart-inspector answered HTTP 500,
+# ChartRenderable went False/InspectorUnavailable, and `helm rollback` could not clear it.
+#
+# Ignoring is right for the render. But an ignored override with no trace is the same failure class
+# as the Installer CRD silently PRUNING an undeclared key — someone sets a value, every tool reports
+# success, and it never takes effect. That class has cost this repo four separate releases. The acmp
+# session raised it immediately after talking me out of the refuse-on-mismatch design, which is the
+# right order: make it inert first, then make it visible.
+#
+# THE ECHO IS DELIBERATELY NOT REPORTED, and CASE 2 is what holds that line. The self-bootstrap
+# writes pin-owned keys into the CR on any chart predating inst.componentsPatchList, and the CR
+# returns as .Values.components — so an echo of the pin's own value is the machine talking to
+# itself. Reporting it would fill this ConfigMap on every cluster for one pass after an upgrade and
+# train the reader to skip it. Only a value that DISAGREES with the pin is an intent that failed.
+suite: an ignored pin-owned override is reported, and the self-bootstrap echo is not
+templates:
+  - templates/withheld-components.yaml
+tests:
+  - it: "CASE 1 -- a DISAGREEING namespace is reported, naming the component and the key"
+    set:
+      bootstrap.coreProvider.enabled: false
+      components:
+        - name: kyverno
+          namespace: somewhere-else
+    asserts:
+      - matchRegex:
+          path: data.summary
+          pattern: 'ignored-pin-owned-overrides=1'
+        documentSelector:
+          path: metadata.name
+          value: krateo-withheld-components
+      - matchRegex:
+          path: data["ignored-override-kyverno-namespace"]
+          pattern: 'somewhere-else'
+        documentSelector:
+          path: metadata.name
+          value: krateo-withheld-components
+
+  # THE ECHO. This is the exact input the self-bootstrap sends back, and the exact input that froze
+  # 057 under the old refusing guard. It must render AND stay out of the report.
+  - it: "CASE 2 -- an ECHO of the pin's own value is NOT reported: that is the round-trip, not an intent"
+    set:
+      bootstrap.coreProvider.enabled: false
+      components:
+        - name: kyverno
+          namespace: kyverno
+    asserts:
+      - matchRegex:
+          path: data.summary
+          pattern: 'ignored-pin-owned-overrides=0'
+        documentSelector:
+          path: metadata.name
+          value: krateo-withheld-components
+
+  - it: "CASE 3 -- readerGroups is reported the same way"
+    set:
+      bootstrap.coreProvider.enabled: false
+      components:
+        - name: kyverno
+          readerGroups:
+            - platform-admins
+    asserts:
+      - matchRegex:
+          path: data.summary
+          pattern: 'ignored-pin-owned-overrides=1'
+        documentSelector:
+          path: metadata.name
+          value: krateo-withheld-components
+
+  # CONTROL. Without it, every case above would pass just as well if the counter were hardcoded,
+  # or if the report fired on any component at all.
+  - it: "CASE 4 CONTROL -- no override means a zero count, so the counter measures something"
+    set:
+      bootstrap.coreProvider.enabled: false
+    asserts:
+      - matchRegex:
+          path: data.summary
+          pattern: 'ignored-pin-owned-overrides=0'
+        documentSelector:
+          path: metadata.name
+          value: krateo-withheld-components

@@ -66,6 +66,82 @@ def render(chart_dir, features):
         ids.add((d["kind"], m.get("namespace") or "-", m.get("name")))
     return ids
 
+# THE VERDICT, EXTRACTED 2026-11-17 SO IT CAN BE TESTED. Until now this file had `def main()`
+# only: every rule below was exercised ONLY against whatever the live chart happened to render.
+# That is not coverage, it is a sample of one -- and on 2026-11-17 I CHANGED one of these rules
+# (the #526 assertion, made namespace-agnostic) with nothing but the live chart to tell me whether
+# the new version still caught anything. A rule that no longer detects reports a protection that
+# does not exist, which is worse than having no rule.
+#
+# PURE ON PURPOSE: it takes the two rendered object sets rather than calling render() itself, so a
+# test can hand it constructed sets. main() keeps the rendering.
+def verdict(feat, comps, base, off):
+    """Failures for one feature's on/off pair. Object tuples are (kind, namespace, name).
+
+    `off` is None when the OFF render could not be produced; that is a failure in itself and
+    never a pass.
+    """
+    failures = []
+    present = {n for (_k, _ns, n) in base if n in comps}
+    if not present:
+        failures.append(
+            f"{feat}: none of its {len(comps)} components appear in the baseline render "
+            f"({sorted(comps)}) \u2014 the toggle cannot be proven either way")
+        return failures
+    if off is None:
+        failures.append(f"{feat}: the OFF render could not be produced, so nothing is proven")
+        return failures
+
+    removed = base - off
+    added = off - base
+    if added:
+        failures.append(f"{feat}: turning it OFF ADDED objects: {sorted(added)}")
+    if not removed:
+        failures.append(
+            f"{feat}: turning it OFF removed NOTHING, but {sorted(present)} "
+            f"is gated on it and rendered in the baseline")
+        return failures
+
+    stray, undeclared = [], []
+    for (k, ns, n) in sorted(removed):
+        if n in comps:
+            continue
+        owner = COMPANIONS.get((k, n))
+        if owner is None:
+            if (k, n) in UMBRELLA:
+                stray.append((k, ns, n))
+            else:
+                undeclared.append((k, ns, n))
+        elif owner not in comps:
+            stray.append((k, ns, n))
+    if undeclared:
+        failures.append(
+            f"{feat}: removed hand-written object(s) not declared in COMPANIONS: "
+            f"{undeclared} \u2014 add each one against the component it serves")
+    if stray:
+        failures.append(
+            f"{feat}: turning it OFF removed objects NOT gated on it: {stray}")
+
+    # THE #526 ASSERTION, matched WITHOUT the namespace. It read (k, "krateo-system", n) until
+    # 2026-11-17, correct only while every component rendered into namespaces.krateo. A pinned
+    # component may now declare its own `namespace`, and a companion rendered elsewhere would not
+    # match the hardcoded tuple even when it HAD been removed -- reporting a correctly-removed
+    # companion as having SURVIVED. A false positive on this assertion is the direction that
+    # teaches an operator to ignore the gate.
+    removed_kn = {(k, n) for (k, _ns, n) in removed}
+    orphaned = sorted(
+        (k, n) for (k, n), owner in COMPANIONS.items()
+        if owner in present and (k, n) not in removed_kn
+        and any(n2 == n for (_k2, _ns2, n2) in base)
+    )
+    if orphaned:
+        failures.append(
+            f"{feat}: component(s) removed but their companion object(s) SURVIVED: "
+            f"{orphaned} \u2014 the companion's gate does not follow its component "
+            f"(this is the installer#526 defect)")
+    return failures
+
+
 def main():
     schema = json.load(open(f"{CHART}/values.schema.json"))
     declared = sorted(schema["properties"]["features"].get("properties", {}))
@@ -108,66 +184,13 @@ def main():
         failures = []
         for feat in gating:
             comps = by_feature[feat]
-            # Non-vacuity A: this feature's components must actually be in the baseline, or
-            # turning the feature off proves nothing about them.
             present = {n for (_k, _ns, n) in base if n in comps}
-            if not present:
-                failures.append(
-                    f"{feat}: none of its {len(comps)} components appear in the baseline render "
-                    f"({sorted(comps)}) — the toggle cannot be proven either way")
+            off = render(staged, {**all_on, feat: False}) if present else None
+            fs = verdict(feat, comps, base, off)
+            failures.extend(fs)
+            if fs:
                 continue
-
-            off = render(staged, {**all_on, feat: False})
             removed = base - off
-            added = off - base
-
-            # Nothing may APPEAR when a feature is turned off.
-            if added:
-                failures.append(f"{feat}: turning it OFF ADDED objects: {sorted(added)}")
-
-            # Non-vacuity B: something must go.
-            if not removed:
-                failures.append(
-                    f"{feat}: turning it OFF removed NOTHING, but {sorted(present)} "
-                    f"is gated on it and rendered in the baseline")
-                continue
-
-            # Every removal must be attributable to one of this feature's components, either by
-            # being named after it or by being a declared companion of it.
-            stray, undeclared = [], []
-            for (k, ns, n) in sorted(removed):
-                if n in comps:
-                    continue
-                owner = COMPANIONS.get((k, n))
-                if owner is None:
-                    if (k, n) in UMBRELLA:
-                        stray.append((k, ns, n))  # umbrella objects must never be feature-gated
-                    else:
-                        undeclared.append((k, ns, n))
-                elif owner not in comps:
-                    stray.append((k, ns, n))
-            if undeclared:
-                failures.append(
-                    f"{feat}: removed hand-written object(s) not declared in COMPANIONS: "
-                    f"{undeclared} — add each one against the component it serves")
-            if stray:
-                failures.append(
-                    f"{feat}: turning it OFF removed objects NOT gated on it: {stray}")
-
-            # THE #526 ASSERTION, the other direction: if a component goes, its declared
-            # companions must go with it. A companion left behind is a component deployed
-            # without the object it cannot start without.
-            orphaned = sorted(
-                (k, n) for (k, n), owner in COMPANIONS.items()
-                if owner in present and (k, "krateo-system", n) not in removed
-                and any(n2 == n for (_k2, _ns2, n2) in base)
-            )
-            if orphaned:
-                failures.append(
-                    f"{feat}: component(s) removed but their companion object(s) SURVIVED: "
-                    f"{orphaned} — the companion's gate does not follow its component "
-                    f"(this is the installer#526 defect)")
-
             print(f"  {feat:18s} off -> -{len(removed):2d} objects, all attributable")
 
         if failures:

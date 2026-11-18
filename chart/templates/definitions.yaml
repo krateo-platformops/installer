@@ -14,7 +14,7 @@
 {{- range $c := $components }}
 {{/* registerOnly (catalog) blueprints are always registered while installDefinitions is on, so the
      blueprint appears in the portal; their Composition emission is suppressed in compositions.yaml. */}}
-{{- if or $c.registerOnly (eq (include "inst.compEnabled" (list $ $c)) "true") (eq (include "inst.compositionExists" (list $ $c.kind $c.name $c.version $allCRDs)) "true") }}
+{{- if or $c.registerOnly (eq (include "inst.compEnabled" (list $ $c)) "true") (eq (include "inst.compositionExists" (list $ $c.kind $c.name $c.version $allCRDs $c.namespace)) "true") }}
 {{/* Blueprint namespace (portal#261: a blueprint's namespace is its visibility scope). An APPENDED
      registerOnly catalog blueprint may set `namespace` to place its CompositionDefinition there
      instead of namespaces.krateo, and `readerGroups` to let those groups see it on the Blueprints
@@ -26,8 +26,26 @@
      release (core-provider#203) hands the composition controller over without touching the
      definition's instances. */}}
 {{- $cdNamespace := $.Values.namespaces.krateo }}
+{{/* `namespace` ON A PINNED COMPONENT IS NOW ALLOWED, and the guard that forbade it was narrowed
+     rather than deleted. It read "`namespace` is only supported on registerOnly catalog
+     blueprints", which was true when the field existed only to place catalogue definitions. It is
+     no longer true: Diego decided 2026-11-16 that the installer ADOPTS demo's hand-installed
+     Kyverno in place, which means the kyverno pin must target helm release `kyverno` in namespace
+     `kyverno` so the installer upgrades that release instead of standing a second one up beside it.
+
+     WHAT THE FAIL WAS ACTUALLY PROTECTING, and what still needs care: for a non-registerOnly
+     component the namespace moves the COMPOSITION INSTANCE as well as the definition. On a cluster
+     where that component has no composition yet this is a plain create -- kyverno on krateo-057,
+     where namespace `kyverno` does not even exist. On a cluster where it DOES have one in
+     namespaces.krateo, adding `namespace` is a CROSS-NAMESPACE MIGRATION, not a rename: the new
+     instance is created and the old one removed within one upgrade, and the release is renamed with
+     it. Nothing here detects that, so it belongs in the pin's own review rather than in a template.
+
+     The companion hazard is already handled elsewhere and is load-bearing:
+     compositions.yaml sets `krateo.io/release-name: {{ $c.name }}`, without which the cdc would
+     generate a suffixed release name, collide with nothing, and produce two complete installations
+     side by side instead of a migration. */}}
 {{- if $c.namespace }}
-{{- if not $c.registerOnly }}{{- fail (printf "components[%s]: `namespace` is only supported on registerOnly catalog blueprints" (toString $c.name)) }}{{- end }}
 {{- $cdNamespace = $c.namespace }}
 {{- end }}
 {{- if and $c.readerGroups (eq $cdNamespace $.Values.namespaces.krateo) }}
