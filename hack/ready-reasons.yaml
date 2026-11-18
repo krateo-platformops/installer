@@ -526,6 +526,26 @@ compositionDefinition:
     # for a state that cannot change, so a time-bounded detector was the only thing that could
     # ever have noticed. The new reason makes it FAILED, which is a verdict rather than a wait.
     - ValuesSchemaMissing
+    # DerivedNameTooLong: core-provider 2.13.114 / #588. Observe now checks the names it will
+    # DERIVE from the chart's name and Chart.yaml version BEFORE writing the CRD, and refuses when
+    # one would exceed its limit: the CRD version `v<ver>` (DNS-1035, 63), the controller selector
+    # `<plural>-v<ver>-controller` (63 -- previously silently trunc'd, so two versions could
+    # collide on one selector), and `<plural>-v<ver>-controller-service` (63, checked only when
+    # cdc.metrics.enabled).
+    #
+    # FAILED rather than converging, and the distinction is the point: waiting does not shorten a
+    # name. Same lesson ValuesSchemaMissing records above -- a converging reason for a state that
+    # cannot change is only ever caught by a time bound.
+    #
+    # NOT REACHABLE AT THE PINNED 2.13.113. Classified now anyway, because roll-snapshot reports an
+    # unclassified reason as `unclassified`, which reads as this file having drifted from
+    # core-provider's table rather than as a known state. Measured on krateo-057 for the bump: the
+    # longest name this check governs is krateogcpconfigconnectorcrds-v0-1-5-controller at 46 of
+    # 63, so 17 characters of headroom (9 with the -service suffix, moot there -- 0
+    # controller-service Services exist, so cdc.metrics.enabled is off). The 53-character names on
+    # that cluster are github-provider-kog controllers, which carry no `-v<ver>-` segment and are
+    # therefore not names this check derives.
+    - DerivedNameTooLong
   unevaluated:
     # NotObserved is core-provider's "unevaluated (rolls up as healthy)" -- a PARENT counts such
     # a child healthy. This repo files it unevaluated and its tooling counts it NOT converged,
