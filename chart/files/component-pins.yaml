@@ -9165,7 +9165,7 @@ components:
   #   whether the versions differing has no valid reading, and here it has one -- the controller has
   #   not changed. Contrast keycloak/keycloak-operator, declared as a line tonight because that
   #   repo's release-tag.yaml packages every chart at the tag and refuses a mismatched archive.
-  version: 0.2.33
+  version: 0.2.35
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
