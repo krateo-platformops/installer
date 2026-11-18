@@ -197,7 +197,10 @@ data:
 {{- $_ := set $spec "componentValues" ((include "inst.componentValuesResolved" .) | fromJson) }}
 {{- /* components pins come from the chart FILE (files/component-pins.yaml), NOT .Values, so a
        chart bump always propagates its pins on upgrade even under `helm upgrade --reuse-values`. */}}
-{{- $_ := set $spec "components" (include "inst.componentsYaml" $ | fromYaml).components }}
+{{- /* PIN-OWNED KEYS STRIPPED here too: a fresh install writes the same CR shape as an
+       upgrade patch, or the freeze would reappear only on new clusters -- the hardest case to
+       notice, and the same trap the componentValues comment above records. */}}
+{{- $_ := set $spec "components" ((include "inst.componentsPatchList" $) | fromJsonArray) }}
 {{- $_ := set $spec "bootstrap" (dict "coreProvider" (dict "enabled" false)) }}
 apiVersion: v1
 kind: ConfigMap
@@ -277,7 +280,7 @@ data:
   # merge patch on `helm upgrade` (see the post-upgrade branch below): the `components` list is
   # replaced wholesale; the object fields deep-merge, so chart/values-set keys win and any user-only
   # keys are preserved.
-  components-patch.json: {{ dict "spec" (dict "components" (include "inst.componentsYaml" $ | fromYaml).components "componentValues" ((include "inst.componentValuesPatch" $) | fromJson) "exposure" .Values.exposure "vertexAI" .Values.vertexAI "registryAuth" .Values.registryAuth "hitlApproval" .Values.hitlApproval) | toJson | quote }}
+  components-patch.json: {{ dict "spec" (dict "components" ((include "inst.componentsPatchList" $) | fromJsonArray) "componentValues" ((include "inst.componentValuesPatch" $) | fromJson) "exposure" .Values.exposure "vertexAI" .Values.vertexAI "registryAuth" .Values.registryAuth "hitlApproval" .Values.hitlApproval) | toJson | quote }}
 ---
 {{- /*
   The bootstrap is FOUR ordered, bounded, idempotent hook WAVES (helm hook-weights) instead of one

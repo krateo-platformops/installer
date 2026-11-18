@@ -93,34 +93,350 @@ CONVERGED = ("True/Available", "True/AvailablePartialCoverage",
 # cause in the message. There is no new reason to classify -- Unavailable is already failed here
 # -- but there WAS no check that looked. A composition left failed after a roll was reported as a
 # changed field and nothing more.
-FAILED_REASONS = ("Unavailable", "CreateOutcomeUnknown")
+FAILED_REASONS = ("Unavailable", "CreateOutcomeUnknown", "HooksMayNotHaveRun")
+
+# The COMPOSITIONDEFINITION failed set, which is a DIFFERENT namespace from the one above.
+# ready-reasons.yaml carries both and check-roll-snapshot.yaml cross-checks each against its own
+# list; mixing them is the mistake core-provider and I both nearly made on ValuesSchemaMissing.
+#
+# WHY THIS EXISTS AT ALL. The CD check below used to report every CD not reading True/Available as
+# a problem. That was right while a non-Available CD meant "Observe has not caught up". From
+# core-provider 2.13.108 `Available` REQUIRES A COMPLETED ROLLOUT, so a CD whose controller
+# Deployment is still rolling reads Ready=False/CREATING -- a converging verdict, not a failure.
+# A blanket check would then report ~70 problems during a normal roll, and an operator who sees
+# that learns to ignore the list. core-provider pointed out the fix: classify by the REASON, whose
+# verdict the registry already gives, rather than by reading each child Deployment.
+CD_FAILED_REASONS = ("Unavailable", "RemoteChartUnreachable", "SchemaDefaultContradiction",
+                     "ValuesSchemaMissing")
+
+# compositionDefinition.converging, mirrored for the same dependency-free reason.
+CD_CONVERGING_REASONS = ("Creating", "Deleting")
 
 
-def stuck_converging(snap, budget_s=CONVERGING_BUDGET_S, now=None):
-    """Compositions that are not converged and whose Ready last changed longer ago than budget_s.
+def _age_seconds(ts, now=None):
+    """Seconds since an RFC 3339 timestamp, or None if it cannot be parsed or is absent.
 
-    Returns [(key, Ready, readyAt, age_seconds)]. A composition with no readyAt is NOT reported:
-    absence of the field is not evidence of staleness, and guessing would turn a gap in the
-    capture into a false finding about the cluster.
+    None means "do not judge": a missing or unparseable readyAt is a gap in the capture, and
+    turning that into a finding about the cluster is the failure mode this returns None to avoid.
     """
     import datetime as _dt
+    try:
+        t = _dt.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    ref = now or _dt.datetime.now(_dt.timezone.utc)
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=_dt.timezone.utc)
+    return (ref - t).total_seconds()
+
+
+# A composition whose Ready has NEVER moved off its initial value is not stalled, and an age
+# alone cannot tell the two apart. MEASURED 2026-11-17 on krateo-057, on this bound's first real
+# run, while taking a pre-roll baseline:
+#
+#   internalcabundles/krateo-system/internal-ca-bundle
+#     created                    2026-11-15T21:36:50Z
+#     Ready Unknown/ZeroEvidence 2026-11-15T21:36:56Z   <- SIX SECONDS after creation
+#     reported as                "converging longer than 900s ... (34.7 h)"
+#     message: none of its 1 managed children could be health-evaluated (no readiness semantics
+#              this controller knows how to read)
+#
+# It renders, its RBAC is applied, it is Synced, its apiRef resolved. Its single managed child has
+# a kind whose readiness the cdc has no semantics for, so ZeroEvidence is the honest answer and
+# will be the answer for ever. "Stuck for 34.7 h" is true as arithmetic and misleading as a
+# finding: it reads as WAS FINE, NOW STUCK, when the truth is NEVER EVALUABLE.
+#
+# WHY THE SPLIT MATTERS MORE THAN THE WORDING. This bound exists because a crash-looping workload
+# reads as converging indefinitely and hid an 8.5-hour outage on demo. A bound that ALSO fires,
+# permanently, on an unevaluable composition trains its reader to skip the line -- which is how
+# the real case gets missed. Same reason the FAILED check fires on the failed class only rather
+# than on everything that is not True/Available. installer#1017.
+NEVER_EVALUATED_GRACE_S = 60
+
+
+# CHILDREN'S OWN `Synced`, BECAUSE THE PARENT DOES NOT CARRY IT. The gap this closes was found
+# the expensive way on krateo-demo 2026-11-17: KeycloakServiceAccountRoleMapping
+# krateo-identity-lifecycle-roles sat at Ready=Unknown/ObserveFailed AND
+# Synced=False/ReconcileError -- it could not reconcile at all -- while its parent composition read
+# Ready=True/AvailablePartialCoverage. The child was one of 8 the rollup never health-evaluated, so
+# it was EXCLUDED from the verdict rather than counted against it. Every instrument I had read that
+# cluster as healthy. acmp found it by reading the child directly.
+#
+# core-provider's #575 (merged, not yet in a tag) will name unobservable children in the parent's
+# message and count them in status.unevaluatedChildren.notObserved. That covers ObserveFailed and
+# NotObserved. It does NOT cover a child failing for any other reason, and demo's child was ALSO
+# Synced=False/ReconcileError -- a signal its own controller wrote and nothing aggregated. So this
+# stays mine.
+#
+# ONLY KRATEO-GROUP CHILDREN ARE CHECKED. A Deployment or a Role has no `Synced` condition, so
+# asking for one would produce noise, not findings; the children that carry it are the krateo CRs
+# a composition owns. On demo's realm composition that is 13 of 15 managed children.
+#
+# ONE LIST PER KIND, NOT ONE GET PER CHILD. The distinct (group, resource) pairs across every
+# composition are collected first and listed once each -- on 057 that is tens of LISTs rather than
+# ~1800 GETs. Children are then attributed back by namespace and name.
+#
+# ONLY THE FAILING CHILDREN ARE STORED, with the denominator beside them. Capturing all ~1800 would
+# bloat every snapshot for no gain, and a bare list of failures with no denominator cannot
+# distinguish "none failing" from "none checked" -- the distinction this file keeps making.
+KRATEO_GROUP_SUFFIX = ".krateo.io"
+
+# A child that EXISTS and carries no `Synced` condition. Distinct from None, which means the
+# capture could not resolve the child at all.
+NO_SYNCED = "<no-synced-condition>"
+
+
+def _child_kinds(compositions):
+    """The distinct (group, resource) pairs among krateo-group managed children."""
+    kinds = set()
+    for c in compositions.values():
+        for m in (c.get("managedRefs") or []):
+            av = m.get("apiVersion") or ""
+            if "/" not in av:
+                continue                      # a core-group child (v1) has no Synced condition
+            group = av.split("/", 1)[0]
+            if not group.endswith(KRATEO_GROUP_SUFFIX):
+                continue
+            res = m.get("resource")
+            if res:
+                kinds.add((group, res))
+    return sorted(kinds)
+
+
+def unsynced_children(snap):
+    """Compositions with a krateo-group child whose own `Synced` is not True.
+
+    Returns (findings, checked, no_cond, unknown). `checked` is the DENOMINATOR: children that
+    exist AND carry a `Synced` condition. The other two are reported separately and never folded
+    into it, because they mean different things:
+
+      no_cond   the child exists and its KIND has no `Synced` condition -- portal widgets
+                (flexes, cards, buttons, tables, ...) and similar rendered objects. A FACT about
+                the kind. On demo this is the large majority.
+      unknown   the capture could not resolve the child at all. A GAP in the capture. A child
+                that could not be read is not healthy and is not a finding either.
+
+    Collapsing those two made this check report 80% blind on its first run against demo when it
+    was fully sighted on every kind that actually carries the condition.
+    """
+    findings, checked, no_cond, unknown = [], 0, 0, 0
+    for key, c in sorted((snap.get("compositions") or {}).items()):
+        for ch in (c.get("childrenSynced") or []):
+            st = ch.get("synced")
+            if st is None:
+                unknown += 1            # the capture could not resolve it: a GAP, not a state
+                continue
+            if st == NO_SYNCED:
+                no_cond += 1            # the kind carries no such condition: a FACT, not a gap
+                continue
+            checked += 1
+            if not str(st).startswith("True/"):
+                findings.append((key, ch.get("child"), st))
+    return findings, checked, no_cond, unknown
+
+
+def never_evaluated_by_coverage(c):
+    """True / False / None: did the rollup assess NOTHING for this composition?
+
+    Returns None when the coverage scalars cannot answer, so the caller falls back.
+
+    THE PREDICATE, from core-provider (cdc childhealth.go:1473, coverageScalars):
+        healthEvaluatedChildren = managedChildrenCount - unevaluated - unreadableChildrenCount
+    every child lands in EXACTLY ONE bucket. So managed > 0 with evaluated == 0 and
+    unreadable == 0 means every named child was unevaluated -- a kind with no readiness model,
+    or asserted-ready. No timestamps involved.
+
+    WHY THIS REPLACES A TIME WINDOW. The old test compared readyAt to createdAt within
+    NEVER_EVALUATED_GRACE_S. Measured on demo 2026-11-17: selfservice-status took 111 s from
+    creation to its first and only Ready write, fell outside the window, and was reported as
+    STALLED FOR 226 HOURS -- a nine-day stall that never happened, which would have gone into a
+    roll report as a reason not to roll. The window was always a stand-in for the thing I could
+    not measure. Now I can measure it.
+
+    THREE WAYS TO GET THIS WRONG, each named by core-provider and each guarded here:
+
+    1. evaluated > 0 does NOT mean any child is healthy. A child recorded in status.managed but
+       MISSING from the cluster counts as EVALUATED -- absent is a subset of converging
+       (childhealth.go:178). So this returns False for an all-absent composition, which is
+       correct: it is genuinely converging, not unevaluable.
+    2. Do NOT key on the Ready reason. evaluated == 0 does not fix Ready to ZeroEvidence: a
+       blueprint projecting its own status.health ready=true reads Available on that projection
+       with zero rollup evidence. unreadable > 0 with evaluated == 0 is ChildrenForbidden, and
+       managed == 0 is InventoryNotRecorded. The scalars decide, not the reason.
+    3. Do NOT pair these scalars with a timestamp from the same pass. They are written only on
+       passes where the rollup actually ran (support.go:455, `if rollupRan`) and otherwise keep
+       their previous values, so they describe the LAST rollup rather than this moment. This
+       predicate therefore uses them ALONE and never alongside readyAt.
+
+    managed == 0 returns None rather than True: with no inventory recorded there is no coverage
+    evidence in either direction, and calling that "never evaluated" would state a fact about the
+    composition from the absence of one.
+    """
+    cov = c.get("coverage") or {}
+    total = cov.get("managedChildrenCount")
+    evaluated = cov.get("healthEvaluatedChildren")
+    unread = cov.get("unreadableChildrenCount")
+    if total is None or evaluated is None or unread is None:
+        return None
+    if total <= 0:
+        return None
+    return evaluated == 0 and unread == 0
+
+
+def stuck_converging(snap, budget_s=CONVERGING_BUDGET_S, now=None, prior=None):
+    """Not-converged compositions, split into (stalled, never_evaluated).
+
+    Each list holds (key, Ready, readyAt, age_seconds). A composition is NEVER EVALUATED when
+    never_evaluated_by_coverage() says so from core-provider's coverage scalars; only when those
+    cannot answer does it fall back to the old heuristic, readyAt within NEVER_EVALUATED_GRACE_S
+    of createdAt. The scalars are evidence, the window was a guess.
+
+    Without a createdAt it is classed STALLED -- the conservative side on purpose, because
+    under-reporting a real stall is the failure this bound exists to prevent, and a snapshot taken
+    before createdAt was captured (anything before installer#1017) has none.
+
+    A composition with no readyAt is in NEITHER list: absence of the field is not evidence of
+    staleness, and guessing would turn a gap in the capture into a false finding about the cluster.
+
+    PRIOR carries the age forward. Pass the pre-roll snapshot's compositions and, for any
+    composition whose Ready VALUE is unchanged, the EARLIER readyAt is used. See the block in the
+    body for why; the direction is deliberate -- it can only ever lengthen a measured age.
+    """
+    import datetime as _dt
+
+    def _parse(v):
+        try:
+            return _dt.datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return None
+
     now = now or _dt.datetime.now(_dt.timezone.utc)
-    out = []
+    stalled, never = [], []
     for key, c in sorted((snap.get("compositions") or {}).items()):
         ready = c.get("Ready")
         if ready in CONVERGED or ready is None:
             continue
         at = c.get("readyAt")
-        if not at:
-            continue
-        try:
-            t = _dt.datetime.fromisoformat(str(at).replace("Z", "+00:00"))
-        except ValueError:
+        t = _parse(at)
+        # CARRY THE AGE FORWARD when Ready's VALUE is unchanged since the prior snapshot.
+        #
+        # Measured on 057's 0.3.673 roll: 52 of 90 compositions had readyAt MOVE while Ready stayed
+        # byte-identical. agentiko-mcp-server spotted it; I measured the scale and concluded "the
+        # cdc rewrites lastTransitionTime", which was WRONG. core-provider traced it (#577):
+        # chart-inspector becomes unreachable during a core-provider roll, the cdc's Observe fails
+        # and writes Ready=False/Unavailable (cdc assessedfailure.go:30), and it recovers ~35 s
+        # later. unstructured-runtime's condition.Upsert (v1.27.1 condition.go:297-305) PRESERVES
+        # lastTransitionTime on a same-status write, so a moved LTT is proof of a real transition,
+        # not of a rewrite -- I had that inference exactly backwards.
+        #
+        # Either way the consequence for THIS bound is the same and is why the fix stays: a brief
+        # dip RESETS the age without the composition having made any progress. A nine-day stall
+        # reads as four minutes old immediately after the roll most likely to have wedged it --
+        # the check is blind at precisely the moment it exists for.
+        #
+        # Take the EARLIER of the two timestamps, so this can only ever LENGTHEN a measured age.
+        # Under-reporting a real stall is the failure this bound exists to prevent.
+        if prior is not None and ready is not None:
+            p = (prior or {}).get(key) or {}
+            if p.get("Ready") == ready:
+                pt = _parse(p.get("readyAt"))
+                if pt is not None and (t is None or pt < t):
+                    t, at = pt, p.get("readyAt")
+        if t is None:
             continue
         age = (now - t).total_seconds()
-        if age > budget_s:
-            out.append((key, ready, at, age))
-    return out
+        if age <= budget_s:
+            continue
+        row = (key, ready, at, age)
+        # THE SCALARS DECIDE WHEN THEY CAN. They are direct evidence about whether the rollup
+        # assessed anything; the timestamp comparison below is a heuristic that stood in for them
+        # and got selfservice-status wrong by nine days. Fallback order, not a blend.
+        by_cov = never_evaluated_by_coverage(c)
+        if by_cov is True:
+            never.append(row)
+            continue
+        if by_cov is False:
+            stalled.append(row)
+            continue
+        born = _parse(c.get("createdAt"))
+        if born is not None and abs((t - born).total_seconds()) <= NEVER_EVALUATED_GRACE_S:
+            never.append(row)
+        else:
+            stalled.append(row)
+    return stalled, never
+
+
+# COVERAGE SCALARS. ADDED 2026-11-17, and the reason is that `Ready` CANNOT carry this.
+# core-provider's childhealth.go is explicit about the rollup's direction of failure:
+#
+#     "The rollup is itself fail-safe (unreadable / unmodeled children count healthy), so this
+#      can only surface failures it can positively observe -- it never flips a working
+#      composition to NotReady."
+#
+# So a composition whose ServiceAccount was REFUSED a read of some of its children still reads
+# Ready=True/Available. childhealth.go calls that refusal "a DEFECT IN GENERATED RBAC -- ours,
+# and actionable", which is exactly the class a green roll verification must not swallow. The
+# count reaches consumers as a STRUCTURED FIELD rather than prose, for the reason their own
+# comment gives: "because prose is not an" API.
+#
+# WHAT I HAD WRONG BEFORE THIS. I had been carrying a held item called `UnmodelledKeysPresent`,
+# believing it a condition reason I watched nothing for. It does not exist. `unmodelled` in
+# core-provider means a child KIND with no readiness model, which falls through to
+# existence-is-health -- a rollup concept, nothing to do with schema keys. The thing I actually
+# wanted was never a condition at all: these three scalars are.
+def _coverage(st):
+    """The rollup's coverage scalars, PRESERVING ABSENCE.
+
+    ABSENT IS NOT ZERO, and this is the trap core-provider's own test guards. They assert these
+    fields are NOT written when the rollup never ran, with the reason spelled out:
+
+        "a zero here is a fact about the instrument published as a fact about the composition,
+         and a consumer reading healthEvaluatedChildren == managedChildrenCount would conclude
+         FULL COVERAGE from 0 == 0"
+
+    So a missing field stays None here and is never defaulted. Reading it as 0 would make a
+    never-assessed composition look fully covered -- the precise inversion of what this capture
+    is for.
+    """
+    return {k: st.get(k) for k in ("managedChildrenCount",
+                                   "healthEvaluatedChildren",
+                                   "unreadableChildrenCount")}
+
+
+def coverage_problems(snap):
+    """Compositions the rollup could not fully see: (unreadable, unevaluated, broken).
+
+    unreadable   children the rollup was REFUSED a read of. A FINDING: fail-open by design,
+                 so the composition reads green, and the cause is our own generated RBAC.
+    unevaluated  children neither evaluated nor unreadable, derived with core-provider's OWN
+                 invariant, which their test states as
+                 managedChildrenCount - healthEvaluatedChildren - unreadableChildrenCount.
+                 REPORTED, NOT A FINDING: these are kinds with no readiness model, and they are
+                 EXCLUDED from the rollup rather than counted as converging -- which I got
+                 backwards earlier today and told two sessions.
+    broken       the invariant goes NEGATIVE. A FINDING about THIS SCRIPT or the contract, not
+                 about the cluster; the other two lists are untrustworthy until it is resolved.
+
+    A composition missing any of the three fields appears in NONE of the lists -- the same rule
+    stuck_converging() uses for a missing readyAt: absence of a field is not evidence of a state.
+    """
+    unreadable, unevaluated, broken = [], [], []
+    for key, c in sorted((snap.get("compositions") or {}).items()):
+        cov = c.get("coverage") or {}
+        total = cov.get("managedChildrenCount")
+        evaluated = cov.get("healthEvaluatedChildren")
+        unread = cov.get("unreadableChildrenCount")
+        if total is None or evaluated is None or unread is None:
+            continue
+        gap = total - evaluated - unread
+        if gap < 0:
+            broken.append((key, total, evaluated, unread))
+            continue
+        if unread > 0:
+            unreadable.append((key, unread, total, c.get("Ready")))
+        if gap > 0:
+            unevaluated.append((key, gap, total, c.get("Ready")))
+    return unreadable, unevaluated, broken
 
 
 def capture(ctx, secrets=()):
@@ -151,8 +467,27 @@ def capture(ctx, secrets=()):
             conds = {t: "%s/%s" % (x["status"], x.get("reason", ""))
                      for t, x in cmap.items()}
             key = "%s/%s/%s" % (plural, o["metadata"]["namespace"], o["metadata"]["name"])
+            # krateo.io/hooks-unverified (an RFC 3339 time) is what HooksMayNotHaveRun is set
+            # FROM, and it outlives the condition: a human or the next real helm install/upgrade
+            # clears the reason, and the annotation is the only record that the hooks were never
+            # verified. Captured as a value, not a boolean, so a pre/post pair shows whether it is
+            # the SAME unverified episode or a new one.
+            hooks_unverified = (o["metadata"].get("annotations") or {}).get(
+                "krateo.io/hooks-unverified")
             snap["compositions"][key] = {
                 "apiVersion": o["apiVersion"],
+                "hooksUnverified": hooks_unverified,
+                "coverage": _coverage(st),
+                # Only the KRATEO-GROUP refs, which are the ones carrying a `Synced`
+                # condition. A Deployment or Role has none, so storing them would add rows that
+                # can never produce a finding. On demo's realm composition this is 13 of 15.
+                "managedRefs": [
+                    {"apiVersion": m.get("apiVersion"), "resource": m.get("resource"),
+                     "namespace": m.get("namespace"), "name": m.get("name")}
+                    for m in (st.get("managed") or [])
+                    if "/" in (m.get("apiVersion") or "")
+                    and (m["apiVersion"].split("/", 1)[0]).endswith(KRATEO_GROUP_SUFFIX)
+                ],
                 "managed": len(st.get("managed") or []) if st.get("managed") is not None else None,
                 "Ready": conds.get("Ready"),
                 # readyAt, ADDED 2026-11-17, for the same reason it was added to definitions on
@@ -160,6 +495,11 @@ def capture(ctx, secrets=()):
                 # what a composition reads AT SNAPSHOT TIME; lastTransitionTime says WHEN it last
                 # changed, and that is the only thing that can bound how long it has been stuck.
                 "readyAt": (cmap.get("Ready") or {}).get("lastTransitionTime"),
+                # createdAt, so NEVER EVALUATED can be told from STALLED. See
+                # stuck_converging(): a readyAt within seconds of creation means the Ready
+                # condition has not moved since the object appeared, so its age measures the
+                # object's lifetime and not a stall. installer#1017.
+                "createdAt": o["metadata"].get("creationTimestamp"),
                 "Synced": conds.get("Synced"),
                 "uid": o["metadata"].get("uid"),
             }
@@ -205,6 +545,46 @@ def capture(ctx, secrets=()):
 
     # Secrets: metadata only. Never a value, and the data KEY NAMES only so a key appearing or
     # disappearing is visible.
+    # CHILDREN'S OWN `Synced`. One LIST per distinct (group, resource), then attribute by
+    # namespace+name -- tens of calls rather than ~1800. A kind that cannot be listed leaves its
+    # children with synced=None, which unsynced_children() counts as UNKNOWN and never as healthy:
+    # a read that failed is not a fact about the cluster.
+    _index = {}
+    for group, resource in _child_kinds(snap["compositions"]):
+        out = _run(["kubectl", "--context", ctx, "get",
+                    "%s.%s" % (resource, group), "-A", "-o", "json"])
+        if out is None:
+            continue
+        try:
+            items = json.loads(out).get("items", [])
+        except ValueError:
+            continue
+        for o in items:
+            conds = {c["type"]: "%s/%s" % (c["status"], c.get("reason", ""))
+                     for c in ((o.get("status") or {}).get("conditions") or [])}
+            # NO_SYNCED is NOT the same as unresolved. Measured on demo 2026-11-17: 768 of 953
+            # krateo-group children came back "unknown", and almost all were portal WIDGET kinds
+            # -- flexes, cards, buttons, paragraphs, listies, tables, pageheaders -- which are
+            # rendered objects carrying no `Synced` condition at all. Folding those into "unknown"
+            # made the check read 80% blind when it was in fact fully sighted on every kind that
+            # has the condition. A kind without the condition is a FACT about the kind; a kind that
+            # could not be listed is a gap in the capture. They must not share a bucket.
+            _index[(group, resource, o["metadata"].get("namespace"), o["metadata"]["name"])] = \
+                conds.get("Synced") or NO_SYNCED
+    for key, c in snap["compositions"].items():
+        rows = []
+        for m in (c.get("managedRefs") or []):
+            av = m.get("apiVersion") or ""
+            group = av.split("/", 1)[0] if "/" in av else ""
+            k = (group, m.get("resource"), m.get("namespace"), m.get("name"))
+            rows.append({"child": "%s/%s/%s" % (m.get("resource"), m.get("namespace"),
+                                                m.get("name")),
+                         "synced": _index.get(k)})
+        c["childrenSynced"] = rows
+        # managedRefs served their purpose; dropping them keeps the snapshot small and leaves
+        # exactly one place where a child's state lives.
+        c.pop("managedRefs", None)
+
     for ref in secrets:
         ns, _, name = ref.partition("/")
         out = _run(["kubectl", "--context", ctx, "get", "secret", name, "-n", ns,
@@ -240,11 +620,59 @@ def diff(pre, post, expect_delta=None, matching=None):
             moved[k] = {f: [a.get(f), b.get(f)] for f in ("chart", "revision", "status")
                         if a.get(f) != b.get(f)}
     out["releases"]["moved"] = moved
-    for key, ready, at, age in stuck_converging(post):
+    _stalled, _never = stuck_converging(post, prior=pre.get("compositions"))
+    for key, ready, at, age in _stalled:
         out["problems"].append(
             "STUCK CONVERGING: %s reads %s since %s (%.1f h). Converging is not converged; a "
             "crash-looping workload child caps at converging, so this never becomes a failure "
             "on its own." % (key, ready, at, age / 3600.0))
+    # NEVER EVALUATED is reported, not a problem: its age is the object's lifetime. Putting it in
+    # problems would fire on every roll for ever and teach the reader to skip the list.
+    for key, ready, at, age in _never:
+        out.setdefault("never_evaluated", []).append(
+            "%s reads %s and has not moved since creation (%.1f h)" % (key, ready, age / 3600.0))
+    _unreadable, _unevaluated, _broken = coverage_problems(post)
+    _unsynced, _ch_checked, _ch_nocond, _ch_unknown = unsynced_children(post)
+    # ABSOLUTE, not a delta: a child that cannot reconcile is a problem whatever the pre-state
+    # said. And the denominator goes in the output so a zero can be told from a blind run.
+    out["child_synced"] = {"checked": _ch_checked, "no_condition": _ch_nocond,
+                           "unresolved": _ch_unknown}
+    for key, child, st in _unsynced:
+        out["problems"].append(
+            "CHILD NOT SYNCED: %s reads %s, under composition %s which reads %s. The parent's "
+            "rollup EXCLUDES a child it never health-evaluated, so this does not surface there."
+            % (child, st, key, (post.get("compositions", {}).get(key) or {}).get("Ready")))
+    if _ch_unknown:
+        out["problems"].append(
+            "CHILD SYNCED INCOMPLETE: %d managed child(ren) could not be resolved, so the "
+            "child-synced result above is not complete." % _ch_unknown)
+    for key, total, evaluated, unread in _broken:
+        out["problems"].append(
+            "COVERAGE INVARIANT BROKEN: %s has managed=%d evaluated=%d unreadable=%d, so "
+            "managed-evaluated-unreadable is negative. A finding about this script or about "
+            "core-provider's contract, not about the cluster." % (key, total, evaluated, unread))
+    for key, n, total, ready in _unreadable:
+        out["problems"].append(
+            "CHILDREN UNREADABLE: %s reads %s with %d of %d children the rollup was refused a "
+            "read of. The rollup is fail-safe, so this reads green; core-provider calls the "
+            "refusal a defect in generated RBAC." % (key, ready, n, total))
+    # GROWTH ONLY. The absolute count is a steady state on a healthy cluster (32 of 89
+    # compositions on 057), so reporting it per object every time is noise. A count that GREW
+    # across the window is the informative case: children appeared that the rollup cannot assess.
+    # Reported, not a problem -- new children of an unmodelled kind are normal.
+    _pre_gap = {}
+    for key, c in (pre.get("compositions") or {}).items():
+        cov = c.get("coverage") or {}
+        t, e, u = (cov.get("managedChildrenCount"), cov.get("healthEvaluatedChildren"),
+                   cov.get("unreadableChildrenCount"))
+        if None not in (t, e, u):
+            _pre_gap[key] = t - e - u
+    for key, n, total, ready in _unevaluated:
+        was = _pre_gap.get(key)
+        if was is not None and n > was:
+            out.setdefault("partial_coverage", []).append(
+                "%s reads %s with %d of %d children never health-evaluated, up from %d"
+                % (key, ready, n, total, was))
     if out["releases"]["gone"]:
         out["problems"].append("RELEASES DISAPPEARED: %s" % out["releases"]["gone"])
     bad_status = {k: v["status"] for k, v in po.items() if v.get("status") != "deployed"}
@@ -354,13 +782,58 @@ def diff(pre, post, expect_delta=None, matching=None):
     # check-ready-gate blocks on. Not-yet-settled and genuinely broken look identical in a single
     # sample, so this is reported as a problem and the caller re-snapshots rather than treating it
     # as a verdict. readyAt is in the changed set above so the window is bounded, not just sampled.
-    not_ready = {k: v.get("Ready") for k, v in pod.items() if v.get("Ready") != "True/Available"}
-    if not_ready:
+    # CLASSIFIED BY REASON, AND CONVERGING IS BOUNDED BY TIME RATHER THAN REPORTED OUTRIGHT.
+    # Changed 2026-11-17, and the previous behaviour was defensible rather than wrong: it reported
+    # every CD not reading True/Available, because Creating has NO DEADLINE and a CD stuck in it
+    # forever would otherwise be invisible. That is still true. What changed is the base rate --
+    # from core-provider 2.13.108 `Available` requires a COMPLETED ROLLOUT, so Creating is the
+    # normal state of every CD whose controller Deployment is rolling. Reporting it outright would
+    # make the list ~70 long on a healthy roll, and a list that is always long is never read.
+    #
+    # So the three buckets differ in what they mean, not just in wording:
+    #   failed       classified `failed` by the registry -> a problem NOW, do not wait it out
+    #   converging   Creating/Deleting -> a problem ONLY past CONVERGING_BUDGET_S, measured from
+    #                readyAt, the same bound stuck_converging() applies to compositions. This is
+    #                what keeps the old concern (no deadline) without the new noise.
+    #   unclassified neither Available nor either of the above -> a problem, because an unknown
+    #                reason is where this file having drifted from core-provider's table shows up
+    cd_failed, cd_conv_late, cd_other = {}, {}, {}
+    for k, v in pod.items():
+        ready = str(v.get("Ready", ""))
+        if ready == "True/Available":
+            continue
+        reason = ready.split("/", 1)[-1]
+        if reason in CD_FAILED_REASONS:
+            cd_failed[k] = v.get("Ready")
+        elif reason in CD_CONVERGING_REASONS:
+            age = _age_seconds(v.get("readyAt"))
+            # No readyAt means NEITHER list: a gap in the capture must not become a finding
+            # about the cluster. Same rule as stuck_converging().
+            if age is not None and age > CONVERGING_BUDGET_S:
+                cd_conv_late[k] = "%s for %.0fs" % (v.get("Ready"), age)
+        else:
+            cd_other[k] = v.get("Ready")
+    if cd_failed:
         out["problems"].append(
-            "COMPOSITIONDEFINITIONS NOT True/Available: %d of %d -- %s. A chart-version bump is "
-            "EXPECTED to show this until the next Observe (poll interval, 3m default): re-snapshot "
-            "before concluding, and compare readyAt to bound the window."
-            % (len(not_ready), len(pod), json.dumps(not_ready, sort_keys=True)))
+            "COMPOSITIONDEFINITIONS FAILED: %d of %d -- %s. These reasons are classified `failed`"
+            " in ready-reasons.yaml's compositionDefinition namespace, so this is NOT a settling"
+            " roll and waiting will not clear it."
+            % (len(cd_failed), len(pod), json.dumps(cd_failed, sort_keys=True)))
+    if cd_conv_late:
+        out["problems"].append(
+            "COMPOSITIONDEFINITIONS CONVERGING PAST %ds: %d of %d -- %s. Creating/Deleting is"
+            " EXPECTED during a roll (from 2.13.108 `Available` requires a completed rollout), so"
+            " this is reported only past the budget. Creating has no deadline of its own, which is"
+            " why the bound exists at all."
+            % (CONVERGING_BUDGET_S, len(cd_conv_late), len(pod),
+               json.dumps(cd_conv_late, sort_keys=True)))
+    if cd_other:
+        out["problems"].append(
+            "COMPOSITIONDEFINITIONS with an UNCLASSIFIED reason: %d of %d -- %s. Not Available,"
+            " not a known failure, not a known converging state -- so check it against"
+            " core-provider's docs/cd-ready-reasons.md rather than assuming it is benign. This is"
+            " where a drift between that table and ready-reasons.yaml surfaces."
+            % (len(cd_other), len(pod), json.dumps(cd_other, sort_keys=True)))
 
     ps, pos = pre.get("secrets", {}), post.get("secrets", {})
     for k in sorted(set(ps) | set(pos)):
@@ -394,6 +867,7 @@ def _ago(seconds):
 
 
 def _self_test():
+    import datetime as _dt_mod
     PRE = {
         "releases": {
             "krateo-system/publish-a": {"chart": "builder-publish-1.8.128", "revision": "72", "status": "deployed"},
@@ -403,6 +877,14 @@ def _self_test():
         "compositions": {
             "portals/krateo-system/portal": {"apiVersion": "composition.krateo.io/v1-8-128",
                                              "managed": 64, "Ready": "True/Available",
+                                             "childrenSynced": [
+                                                 {"child": "keycloakclients/krateo-system/a",
+                                                  "synced": "True/ReconcileSuccess"},
+                                                 {"child": "flexes/krateo-system/w",
+                                                  "synced": "<no-synced-condition>"}],
+                                             "coverage": {"managedChildrenCount": 64,
+                                                          "healthEvaluatedChildren": 64,
+                                                          "unreadableChildrenCount": 0},
                                              "Synced": "True/ReconcileSuccess", "uid": "u-portal"},
         },
         "definitions": {
@@ -435,6 +917,8 @@ def _self_test():
             if k == "uid": p["compositions"]["portals/krateo-system/portal"]["uid"] = v
             if k == "av": p["compositions"]["portals/krateo-system/portal"]["apiVersion"] = v
             if k == "managed": p["compositions"]["portals/krateo-system/portal"]["managed"] = v
+            if k == "cov": p["compositions"]["portals/krateo-system/portal"]["coverage"] = v
+            if k == "kids": p["compositions"]["portals/krateo-system/portal"]["childrenSynced"] = v
             if k == "cd_ready": p["definitions"]["krateo-system/portal"]["Ready"] = v
             if k == "cd_readyat": p["definitions"]["krateo-system/portal"]["readyAt"] = v
             if k == "cd_chart": p["definitions"]["krateo-system/portal"]["chartVersion"] = v
@@ -442,12 +926,75 @@ def _self_test():
             if k == "comp_ready": p["compositions"]["portals/krateo-system/portal"]["Ready"] = v
             if k == "comp_readyat":
                 p["compositions"]["portals/krateo-system/portal"]["readyAt"] = v
+            if k == "comp_createdat":
+                p["compositions"]["portals/krateo-system/portal"]["createdAt"] = v
             if k == "secret_rv": p["secrets"]["krateo-system/cj"]["resourceVersion"] = v
             if k == "secret_keys": p["secrets"]["krateo-system/cj"]["dataKeys"] = v
         return p
 
     cases = [
         ("identical snapshots -> no problems", PRE, None, None, 0),
+        # CHILD-SYNCED CASES, 2026-11-17. The gap: demo's KeycloakServiceAccountRoleMapping sat
+        # at Synced=False/ReconcileError under a parent reading Ready=True/AvailablePartialCoverage,
+        # because the rollup EXCLUDES a child it never health-evaluated. Validated end-to-end
+        # against that live object before these were written.
+        ("a managed child at Synced=False/ReconcileError IS a problem, whatever the parent reads",
+         post(kids=[{"child": "keycloakserviceaccountrolemappings/krateo-system/r",
+                     "synced": "False/ReconcileError"}]), None, None, 1),
+        ("a child at Synced=True/ReconcileSuccess is NOT a problem",
+         post(kids=[{"child": "keycloakclients/krateo-system/a",
+                     "synced": "True/ReconcileSuccess"}]), None, None, 0),
+        # THE LOAD-BEARING DISTINCTION. A kind with no `Synced` condition and a child that could
+        # not be READ are both "not True", and treating them alike made the first run against demo
+        # report 768 of 953 children as unknown -- 80% blind -- when every kind that actually
+        # carries the condition had resolved. Without BOTH cases, one bucket could silently absorb
+        # the other.
+        ("a child of a kind with NO `Synced` condition is NOT a problem -- portal widgets are "
+         "rendered objects and never carry one",
+         post(kids=[{"child": "flexes/krateo-system/w", "synced": "<no-synced-condition>"}]),
+         None, None, 0),
+        ("a child the capture could NOT RESOLVE is a problem -- not because the child is broken "
+         "but because the result is INCOMPLETE and must not read as a clean pass",
+         post(kids=[{"child": "keycloakclients/krateo-system/a", "synced": None}]),
+         None, None, 1),
+        # COVERAGE CASES, 2026-11-17. `coverage` is deliberately NOT in the compared field list
+        # above, so these exercise the coverage checks and nothing else -- a case that passed
+        # because the dict differed would prove nothing about the checks.
+        #
+        # The checks are ABSOLUTE, not deltas: unreadable>0 is a finding whatever the pre-state
+        # said. A delta would attribute the condition to the window, and children legitimately
+        # come and go across a roll.
+        ("coverage: 3 of 64 children UNREADABLE while Ready reads True/Available -> problem, "
+         "because the rollup is fail-open and this is the state it hides",
+         post(cov={"managedChildrenCount": 64, "healthEvaluatedChildren": 61,
+                   "unreadableChildrenCount": 3}), None, None, 1),
+        ("coverage: 5 of 64 never health-evaluated -> NO problem; reported, not a finding, "
+         "because a kind with no readiness model is a permanent state",
+         post(cov={"managedChildrenCount": 64, "healthEvaluatedChildren": 59,
+                   "unreadableChildrenCount": 0}), None, None, 0),
+        ("coverage: full (64 = 64 + 0) -> no problem",
+         post(cov={"managedChildrenCount": 64, "healthEvaluatedChildren": 64,
+                   "unreadableChildrenCount": 0}), None, None, 0),
+        # unread is 0 DELIBERATELY. My first version of this case used unreadable=5, which
+        # reported via the unreadable path instead -- so deleting the invariant branch entirely
+        # left the case passing. Measured, not reasoned: mutation testing caught it.
+        ("coverage: invariant NEGATIVE (5 - 8 - 0) with NO unreadable children -> problem ABOUT "
+         "THIS SCRIPT or about core-provider's contract, not about the cluster",
+         post(cov={"managedChildrenCount": 5, "healthEvaluatedChildren": 8,
+                   "unreadableChildrenCount": 0}), None, None, 1),
+        ("coverage: all three fields ABSENT (the rollup never ran) -> NO problem",
+         post(cov={}), None, None, 0),
+        # THE CASE THAT DISCRIMINATES. The all-absent case above passes identically whether
+        # absence is preserved or defaulted to 0 (0-0-0 is a clean full-coverage read), so on its
+        # own it proves nothing. Here unreadable=3 is present while managedChildrenCount is NOT:
+        # preserving absence skips the object, while defaulting to 0 computes 0-0-3 = -3 and
+        # reports a FALSE broken invariant. This is the case that fails if _coverage() ever grows
+        # a `or 0`.
+        ("CONTROL: unreadableChildrenCount present but managedChildrenCount ABSENT -> NO "
+         "problem. Defaulting absence to 0 would compute 0-0-3 and report a FALSE broken "
+         "invariant, so this case is what makes ABSENT-IS-NOT-ZERO testable",
+         post(cov={"healthEvaluatedChildren": 0, "unreadableChildrenCount": 3}),
+         None, None, 0),
         ("both releases +1, expect 1 -> PASS", post(rev_a="73", rev_b="81"), 1, "publish-", 0),
         ("one release +2, expect 1 -> REFUSED", post(rev_a="74", rev_b="81"), 1, "publish-", 1),
         ("one release unmoved, expect 1 -> REFUSED", post(rev_a="72", rev_b="81"), 1, "publish-", 1),
@@ -479,6 +1026,39 @@ def _self_test():
          post(comp_ready="True/ReconcilePaused"), None, None, 0),
         ("a composition converging for 2h IS a problem -- the demo OOM case",
          post(comp_ready="False/Creating", comp_readyat=_ago(7200)), None, None, 1),
+        # THE FIXTURE CARRIED FULL COVERAGE while describing a never-evaluated composition, so
+        # once the scalars took precedence it failed. The fixture was incoherent, not the code:
+        # a composition the rollup never assessed reads evaluated == 0, not 64 of 64.
+        ("a composition converging 2h but born 2h ago is NEVER EVALUATED, not a problem -- the "
+         "internal-ca-bundle case, installer#1017",
+         post(comp_ready="Unknown/ZeroEvidence", comp_readyat=_ago(7200),
+              comp_createdat=_ago(7206),
+              cov={"managedChildrenCount": 1, "healthEvaluatedChildren": 0, "unreadableChildrenCount": 0}), None, None, 0),
+        # THE TWO CASES THAT PROVE THE PRECEDENCE, one per direction. Without them the fallback
+        # order is untested and either signal could silently become the only one consulted.
+        ("PRECEDENCE: timestamps say STALLED (born 2h before Ready moved) but the scalars say the "
+         "rollup assessed NOTHING -> NEVER EVALUATED, not a problem. This is selfservice-status "
+         "on demo: 111 s outside a 60 s window, reported as a 226-hour stall that never happened",
+         post(comp_ready="Unknown/ZeroEvidence", comp_readyat=_ago(7200),
+              comp_createdat=_ago(14400),
+              cov={"managedChildrenCount": 1, "healthEvaluatedChildren": 0, "unreadableChildrenCount": 0}), None, None, 0),
+        ("PRECEDENCE, the other way: timestamps say NEVER EVALUATED (born with Ready) but the "
+         "scalars say children WERE evaluated -> a problem. Evidence beats the heuristic in both "
+         "directions, and per core-provider evaluated>0 can be all-ABSENT children, since absent "
+         "is a subset of converging -- which is a real stall, not an unevaluable composition",
+         post(comp_ready="False/Creating", comp_readyat=_ago(7200),
+              comp_createdat=_ago(7206),
+              cov={"managedChildrenCount": 64, "healthEvaluatedChildren": 64, "unreadableChildrenCount": 0}), None, None, 1),
+        ("the SAME age, but born long before Ready moved, IS a problem -- it converged once and "
+         "regressed",
+         post(comp_ready="False/Creating", comp_readyat=_ago(7200),
+              comp_createdat=_ago(600000)), None, None, 1),
+        ("FALSIFIER: no createdAt -> classed STALLED, the conservative side, so a pre-#1017 "
+         "snapshot still reports real stalls",
+         post(comp_ready="False/Creating", comp_readyat=_ago(7200)), None, None, 1),
+        ("FALSIFIER: never-evaluated but WITHIN the budget is in neither list",
+         post(comp_ready="Unknown/ZeroEvidence", comp_readyat=_ago(60),
+              comp_createdat=_ago(66)), None, None, 0),
         ("FALSIFIER: converging for 60s is a NORMAL bump and must NOT trip",
          post(comp_ready="False/Creating", comp_readyat=_ago(60)), None, None, 0),
         ("FALSIFIER: an OLD readyAt while CONVERGED is not a problem -- age alone proves nothing",
@@ -488,8 +1068,18 @@ def _self_test():
          post(comp_ready="False/Creating", comp_readyat=None), None, None, 0),
         ("a CD left at False/Unavailable IS a problem",
          post(cd_ready="False/Unavailable"), None, None, 1),
-        ("a CD at False/Creating IS a problem too -- converging is not converged, and Creating\n          has no deadline on either the composition or the CD side",
+        # The four cases below are a SET. Creating alone no longer decides anything: from
+        # core-provider 2.13.108 `Available` requires a completed rollout, so Creating is the
+        # normal state of a CD whose controller is rolling. What decides is the reason's verdict
+        # and, for converging, how long it has been there.
+        ("a CD at False/Creating PAST the budget is a problem -- the fixture's readyAt is a day\n          old, so this is the time bound catching it, not Creating by itself",
          post(cd_ready="False/Creating"), None, None, 1),
+        ("a CD at False/Creating WITHIN the budget is NOT a problem -- without this case the one\n          above would pass equally if Creating were still reported outright, which is the noise\n          this change exists to remove",
+         post(cd_ready="False/Creating", cd_readyat=_ago(60)), None, None, 0),
+        ("a CD at False/ValuesSchemaMissing is a problem IMMEDIATELY, with no budget -- it is\n          classified `failed`, and waiting cannot clear a chart that ships no root schema",
+         post(cd_ready="False/ValuesSchemaMissing", cd_readyat=_ago(5)), None, None, 1),
+        ("a CD at an UNCLASSIFIED reason is a problem even when fresh -- an unknown reason is\n          where drift from core-provider's table shows up, so it must not be read as benign",
+         post(cd_ready="False/SomeReasonNobodyClassified", cd_readyat=_ago(5)), None, None, 1),
         ("a CD DISAPPEARING is always a problem", post(cd_drop=True), None, None, 1),
         ("FALSIFIER: a CD chartVersion moving is REPORTED but is not by itself a problem --\n          that is exactly what a pin bump is supposed to do",
          post(cd_chart="1.8.130"), None, None, 0),
@@ -498,6 +1088,103 @@ def _self_test():
         ("FALSIFIER: identical definitions raise nothing, so the check above is not raising\n          unconditionally",
          post(), None, None, 0),
     ]
+    # _coverage() IS NOT REACHED BY THE CASES ABOVE. It runs only inside capture(), against live
+    # status; the fixtures set `coverage` directly. I discovered that by mutating _coverage() to
+    # default absence to 0 and watching all 38 cases still pass -- the mutation could not reach
+    # them. So the layer where an `or 0` would actually be written needs its own assertion.
+    cov_unit = [
+        ("absent stays None, never 0",
+         {"unreadableChildrenCount": 3},
+         {"managedChildrenCount": None, "healthEvaluatedChildren": None,
+          "unreadableChildrenCount": 3}),
+        ("a REAL zero is preserved as 0, not confused with absence",
+         {"managedChildrenCount": 7, "healthEvaluatedChildren": 7, "unreadableChildrenCount": 0},
+         {"managedChildrenCount": 7, "healthEvaluatedChildren": 7, "unreadableChildrenCount": 0}),
+        ("an empty status yields all three as None",
+         {},
+         {"managedChildrenCount": None, "healthEvaluatedChildren": None,
+          "unreadableChildrenCount": None}),
+    ]
+    # never_evaluated_by_coverage() NEEDS ITS OWN ASSERTIONS. Mutation testing showed the case
+    # list cannot reach its `unread == 0` guard: dropping that guard left all 43 cases passing,
+    # because a composition with unreadable children raises the CHILDREN UNREADABLE problem
+    # independently, and the runner judges only problems>0 vs ==0. So the misclassification was
+    # invisible at that level. These assert the predicate directly.
+    ne_unit = [
+        ("managed>0, evaluated 0, unreadable 0 -> True (the rollup assessed nothing)",
+         {"managedChildrenCount": 1, "healthEvaluatedChildren": 0, "unreadableChildrenCount": 0},
+         True),
+        ("evaluated 0 but unreadable 5 -> FALSE. core-provider: that is ChildrenForbidden, an "
+         "actionable RBAC defect, NOT an unevaluable composition. THE GUARD.",
+         {"managedChildrenCount": 5, "healthEvaluatedChildren": 0, "unreadableChildrenCount": 5},
+         False),
+        ("evaluated 64 of 64 -> False",
+         {"managedChildrenCount": 64, "healthEvaluatedChildren": 64, "unreadableChildrenCount": 0},
+         False),
+        ("evaluated>0 may be ALL-ABSENT children (absent is a subset of converging) -> still "
+         "False: genuinely converging, not unevaluable",
+         {"managedChildrenCount": 3, "healthEvaluatedChildren": 3, "unreadableChildrenCount": 0},
+         False),
+        ("managed 0 -> None, not True. InventoryNotRecorded carries no coverage evidence either "
+         "way, and calling it never-evaluated would state a fact from the absence of one.",
+         {"managedChildrenCount": 0, "healthEvaluatedChildren": 0, "unreadableChildrenCount": 0},
+         None),
+        ("a missing scalar -> None (absent is not zero, same rule as _coverage)",
+         {"managedChildrenCount": 5, "healthEvaluatedChildren": 0},
+         None),
+    ]
+    bad_ne = 0
+    # THE CARRY-FORWARD NEEDS DIRECT ASSERTIONS, for the reason the ne_unit block above records:
+    # the case runner judges only problems>0 vs ==0, so a composition can be misclassified
+    # invisibly. Each case below is a separate claim about stuck_converging(prior=...), and each was
+    # mutation-tested by reverting the carry-forward -- case 1 FAILS without it, which is the point.
+    _T0 = "2026-11-08T10:00:00Z"   # nine days before the frozen clock: a real stall
+    _T1 = "2026-11-17T23:14:51Z"   # the dip: readyAt reset to the roll moment
+    _NOW = _dt_mod.datetime(2026, 11, 17, 23, 24, 51, tzinfo=_dt_mod.timezone.utc)
+
+    def _snap(ready, at):
+        return {"compositions": {"krateo-system/x": {"Ready": ready, "readyAt": at,
+                                                     "coverage": {"managedChildrenCount": 4,
+                                                                  "healthEvaluatedChildren": 4,
+                                                                  "unreadableChildrenCount": 0}}}}
+    cf_unit = [
+        ("Ready value UNCHANGED and readyAt reset by a dip -> the NINE-DAY age survives",
+         _snap("False/Creating", _T1), _snap("False/Creating", _T0)["compositions"], True),
+        ("Ready value CHANGED -> prior is ignored, the new age stands (600 s, under the 900 s budget)",
+         _snap("False/Creating", _T1), _snap("False/Unavailable", _T0)["compositions"], False),
+        ("prior readyAt is NEWER -> the EARLIER post value is kept; never shortens an age",
+         _snap("False/Creating", _T0), _snap("False/Creating", _T1)["compositions"], True),
+        ("key absent from prior -> post value used, so a NEW composition is not aged falsely",
+         _snap("False/Creating", _T1), {"krateo-system/other": {"Ready": "False/Creating",
+                                                                "readyAt": _T0}}, False),
+        ("prior=None -> the single-snapshot behaviour is unchanged (regression guard)",
+         _snap("False/Creating", _T1), None, False),
+    ]
+    bad_cf = 0
+    for label, snap, prior, want_stalled in cf_unit:
+        st, _nv = stuck_converging(snap, now=_NOW, prior=prior)
+        got = bool(st)
+        ok = got is want_stalled
+        bad_cf += 0 if ok else 1
+        print("  %-4s carry-forward: %s" % ("ok" if ok else "FAIL", label))
+        if not ok:
+            print("        want stalled=%r got=%r rows=%r" % (want_stalled, got, st))
+
+    for label, cov, want in ne_unit:
+        got = never_evaluated_by_coverage({"coverage": cov})
+        ok = got is want
+        bad_ne += 0 if ok else 1
+        print("  %-4s never_evaluated: %s" % ("ok" if ok else "FAIL", label))
+        if not ok:
+            print("        want=%r got=%r" % (want, got))
+    bad_unit = 0
+    for label, st, want in cov_unit:
+        got = _coverage(st)
+        ok = got == want
+        bad_unit += 0 if ok else 1
+        print("  %-4s _coverage: %s" % ("ok" if ok else "FAIL", label))
+        if not ok:
+            print("        want=%s got=%s" % (want, got))
     bad = 0
     for label, po, delta, match, want in cases:
         d = diff(PRE, po, expect_delta=delta, matching=match)
@@ -507,8 +1194,10 @@ def _self_test():
         print("  %-4s %s" % ("ok" if ok else "FAIL", label))
         if not ok:
             print("        want_problems=%s got=%s" % (want, d["problems"]))
-    print("self-test: %d case(s), %d failure(s)" % (len(cases), bad))
-    return 1 if bad else 0
+    print("self-test: %d case(s), %d failure(s)"
+          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit),
+             bad + bad_unit + bad_ne + bad_cf))
+    return 1 if (bad or bad_unit or bad_ne) else 0
 
 
 def main():
@@ -547,18 +1236,108 @@ def main():
         # REPORTED ON A SINGLE READ, not only in the diff. demo's 8.5-hour outage needed no
         # "before": one capture carrying readyAt would have shown it outright. A finding that
         # only a diff can surface is a finding you cannot make during an incident.
-        stuck = stuck_converging(snap)
-        if stuck:
-            print("\nFINDINGS: %d composition(s) converging longer than %ds. CONVERGING IS NOT "
-                  "CONVERGED, and nothing in the platform bounds it yet (core-provider#498)."
-                  % (len(stuck), CONVERGING_BUDGET_S))
-            for key, ready, at, age in stuck:
+        stalled, never = stuck_converging(snap)
+        unreadable, unevaluated, broken = coverage_problems(snap)
+        unsynced, ch_checked, ch_nocond, ch_unknown = unsynced_children(snap)
+        # THE INSTRUMENT MUST SAY WHEN IT SAW NOTHING. coverage_problems() skips any composition
+        # missing the three scalars, which is correct -- absence is not zero -- but it means a
+        # FIELD RENAME upstream turns every object into a skip and the coverage lines fall silent.
+        # Silence would then read as full coverage, which is the exact inversion this capture
+        # exists to prevent. So the denominator is printed whenever it is zero: a fleet on an
+        # older core-provider legitimately has none, and that is worth knowing rather than
+        # assuming.
+        _with_cov = sum(1 for c in (snap.get("compositions") or {}).values()
+                        if any(v is not None for v in (c.get("coverage") or {}).values()))
+        if not _with_cov and snap.get("compositions"):
+            print("\nCOVERAGE NOT READABLE: 0 of %d composition(s) carry any of "
+                  "managedChildrenCount / healthEvaluatedChildren / unreadableChildrenCount, so "
+                  "the coverage checks below examined NOTHING. Either this fleet predates the "
+                  "fields or core-provider renamed them -- do not read the absence of coverage "
+                  "findings as full coverage." % len(snap["compositions"]))
+        if never:
+            print("\nNEVER EVALUATED: %d composition(s) whose Ready has not moved since the "
+                  "object was created. NOT a finding -- the age measures their lifetime, not a "
+                  "stall, and this state can be permanent (e.g. a managed child whose kind has "
+                  "no readiness semantics the cdc can read)." % len(never))
+            for key, ready, at, age in never:
+                print("  %-56s %-20s since creation %s  (%.1f h)" % (key, ready, at, age / 3600.0))
+        # REPORTED, NOT A FINDING, for the same reason as NEVER EVALUATED: a kind with no
+        # readiness model is a permanent state, so this would fire on every roll for ever. It is
+        # printed because its ABSENCE is the informative case -- 76 of 81 children unevaluated is
+        # what AvailablePartialCoverage looks like from the inside, and I described that
+        # population as "converging" to two sessions today when core-provider EXCLUDES it.
+        # AGGREGATE, NOT ONE LINE PER COMPOSITION. Measured on 057 2026-11-17: 32 of 89
+        # compositions carry at least one unevaluated child and 939 of 1914 named children are
+        # unevaluated fleet-wide. A per-object list is therefore 32 lines on EVERY capture of a
+        # healthy cluster -- which is precisely the "fires for ever and teaches the reader to
+        # skip the line" failure this script already warns about for NEVER EVALUATED. The
+        # per-object detail is in the JSON; the printed form is the denominator.
+        #
+        # Nor is a per-object list informative here: core-provider's reason already names the
+        # compositions where it matters most. childhealth.go availableReason() is
+        # `unevaluated*2 > total`, so AvailablePartialCoverage means the rollup assessed a
+        # MINORITY. Verified against all 88 compositions on the Available arm: 0 mismatches,
+        # with the predicate inverted giving 88 of 88, so the comparison can distinguish.
+        if unevaluated:
+            _u = sum(n for _, n, _, _ in unevaluated)
+            _t = sum(t for _, _, t, _ in unevaluated)
+            # THE DENOMINATOR NAMES ITS POPULATION. _t sums only the compositions that HAVE a
+            # gap, so it is not the fleet total: on 057 that is 939 of 1400 (67%) among the 32
+            # affected, where the fleet figure is 939 of 1914 (49%). Two different claims, and
+            # "939 of 1400 named children" reads as the second one.
+            print("\nPARTIAL COVERAGE: %d composition(s) carry %d of THEIR OWN %d named "
+                  "children unevaluated (%.0f%% of those, not of the fleet). NOT a finding -- "
+                  "a kind with no "
+                  "readiness model is existence-is-health and is EXCLUDED from the rollup, not "
+                  "counted as converging. Per-composition detail is in the JSON; a GROWING count "
+                  "is what `diff` reports." % (len(unevaluated), _u, _t, 100.0 * _u / _t))
+        if stalled:
+            print("\nFINDINGS: %d composition(s) converging longer than %ds, having previously "
+                  "moved. CONVERGING IS NOT CONVERGED, and nothing in the platform bounds it yet "
+                  "(core-provider#498)." % (len(stalled), CONVERGING_BUDGET_S))
+            for key, ready, at, age in stalled:
                 print("  %-56s %-20s since %s  (%.1f h)" % (key, ready, at, age / 3600.0))
             print("A workload crash loop reads as Creating, not failed, so this is what an "
                   "8.5-hour OOM outage looked like from the conditions. Decide before rolling "
                   "on top of it: a pin bump onto an unhealthy dependency is not safe.")
-            return 3
-        return 0
+        # FINDINGS ACCUMULATE. Before 2026-11-17 the stalled block returned 3 directly, so a
+        # coverage finding printed after it could never be reached -- the same shape of bug as a
+        # wait loop that treats an empty list as settled.
+        if broken:
+            print("\nFINDINGS: %d composition(s) whose coverage scalars break core-provider's "
+                  "OWN invariant, managed - evaluated - unreadable < 0. This is a finding about "
+                  "THIS SCRIPT or about their contract, not about the cluster: do not trust the "
+                  "coverage lines above until it is resolved." % len(broken))
+            for key, total, evaluated, unread in broken:
+                print("  %-56s managed=%d evaluated=%d unreadable=%d"
+                      % (key, total, evaluated, unread))
+        if unreadable:
+            print("\nFINDINGS: %d composition(s) the rollup was REFUSED a read of children for. "
+                  "THESE READ GREEN: core-provider's childhealth.go says the rollup is "
+                  "\"fail-safe (unreadable / unmodeled children count healthy)\" and \"never "
+                  "flips a working composition to NotReady\", and it calls the refusal \"a "
+                  "DEFECT IN GENERATED RBAC -- ours, and actionable\"." % len(unreadable))
+            for key, n, total, ready in unreadable:
+                print("  %-56s %-20s %d of %d UNREADABLE" % (key, ready, n, total))
+        # THE DENOMINATOR IS PRINTED EVEN WHEN THERE ARE NO FINDINGS, because "no child is
+        # out of sync" and "no child was checked" are different claims and this is the only
+        # place that can tell them apart.
+        print("\nCHILD SYNCED: %d krateo-group child(ren) checked, %d of a kind with no "
+              "`Synced` condition, %d unresolved."
+              % (ch_checked, ch_nocond, ch_unknown))
+        if ch_unknown:
+            print("  %d child(ren) could NOT be resolved. That is a gap in this capture, not a "
+                  "statement about the cluster -- do not read the findings below as complete."
+                  % ch_unknown)
+        if unsynced:
+            print("\nFINDINGS: %d managed child(ren) whose OWN `Synced` is not True. THE PARENT "
+                  "DOES NOT CARRY THIS: a child the rollup never health-evaluated is EXCLUDED "
+                  "from the verdict, so its composition can read Ready=True while the child "
+                  "cannot reconcile at all." % len(unsynced))
+            for key, child, st in unsynced:
+                print("  %-52s %s" % (child, st))
+                print("      parent %s reads %s" % (key, (snap["compositions"].get(key) or {}).get("Ready")))
+        return 3 if (stalled or unreadable or broken or unsynced) else 0
     if a.cmd == "diff":
         pre = json.load(open(a.pre, encoding="utf-8"))
         post = json.load(open(a.post, encoding="utf-8"))

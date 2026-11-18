@@ -16552,10 +16552,6 @@
               "title": "Service account",
               "additionalProperties": false,
               "properties": {
-                "create": {
-                  "type": "boolean",
-                  "title": "Create service account"
-                },
                 "automount": {
                   "type": "boolean",
                   "title": "Automount API credentials"
@@ -16568,7 +16564,8 @@
                   "type": "string",
                   "title": "Service account name"
                 }
-              }
+              },
+              "description": "ServiceAccount settings. `create` is DELIBERATELY NOT DECLARED: with create=false and an empty name this chart's bindings resolve to the namespace's `default` ServiceAccount, and its ClusterRoles carry clusterroles:* and clusterrolebindings:*, so a one-line CR edit would hand full RBAC control to the 12 pods already running as default in krateo-system. Measured 2026-11-17. Set `name` to point at a pre-created ServiceAccount; the chart still creates one by default."
             },
             "podAnnotations": {
               "type": "object",
@@ -16720,33 +16717,6 @@
                 }
               },
               "type": "object"
-            },
-            "autoscaling": {
-              "type": "object",
-              "title": "Autoscaling",
-              "additionalProperties": false,
-              "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "title": "Autoscaling enabled"
-                },
-                "minReplicas": {
-                  "type": "integer",
-                  "title": "Minimum replicas"
-                },
-                "maxReplicas": {
-                  "type": "integer",
-                  "title": "Maximum replicas"
-                },
-                "targetCPUUtilizationPercentage": {
-                  "type": "integer",
-                  "title": "Target CPU utilization percentage"
-                },
-                "targetMemoryUtilizationPercentage": {
-                  "type": "integer",
-                  "title": "Target memory utilization percentage"
-                }
-              }
             },
             "volumes": {
               "type": "array",
@@ -16964,33 +16934,6 @@
                           "type": "string"
                         }
                       }
-                    }
-                  }
-                },
-                "autoscaling": {
-                  "type": "object",
-                  "title": "Autoscaling",
-                  "additionalProperties": false,
-                  "properties": {
-                    "enabled": {
-                      "type": "boolean",
-                      "title": "Autoscaling enabled"
-                    },
-                    "minReplicas": {
-                      "type": "integer",
-                      "title": "Minimum replicas"
-                    },
-                    "maxReplicas": {
-                      "type": "integer",
-                      "title": "Maximum replicas"
-                    },
-                    "targetCPUUtilizationPercentage": {
-                      "type": "integer",
-                      "title": "Target CPU utilization percentage"
-                    },
-                    "targetMemoryUtilizationPercentage": {
-                      "type": "integer",
-                      "title": "Target memory utilization percentage"
                     }
                   }
                 },
@@ -19236,11 +19179,6 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "create": {
-                  "type": "boolean",
-                  "description": "Whether to create a service account.",
-                  "title": "Create"
-                },
                 "automount": {
                   "type": "boolean",
                   "description": "Automatically mount the service account API token.",
@@ -19260,7 +19198,7 @@
                   "title": "Name"
                 }
               },
-              "description": "Service account configuration.",
+              "description": "ServiceAccount settings. `create` is DELIBERATELY NOT DECLARED: with create=false and an empty name this chart's bindings resolve to the namespace's `default` ServiceAccount, and its ClusterRoles carry clusterroles:* and clusterrolebindings:*, so a one-line CR edit would hand full RBAC control to the 12 pods already running as default in krateo-system. Measured 2026-11-17. Set `name` to point at a pre-created ServiceAccount; the chart still creates one by default.",
               "title": "Service Account"
             },
             "podAnnotations": {
@@ -21033,7 +20971,35 @@
       }
     },
     "core-provider": {
-      "type": "object"
+      "type": "object",
+      "description": "Values passed to the core-provider subchart. Deliberately FREE-FORM apart from the node below: core-provider is a Chart.yaml dependency, so its whole values surface must pass through, and crdgen renders a property-less object as x-kubernetes-preserve-unknown-fields, which is why an Installer CR can carry anything here and nothing prunes it.",
+      "properties": {
+        "serviceAccount": {
+          "type": "object",
+          "additionalProperties": false,
+          "title": "Service account",
+          "description": "DECLARED ONLY TO WITHHOLD `create`. Everything else under core-provider still passes through untouched; this one node is closed because a chart whose RoleBinding subjects follow a serviceAccountName helper binds the namespace's `default` ServiceAccount when create=false and name is empty -- and in krateo-system 12 pods already run as `default`. The same hazard is closed for oasgen-provider and snowplow in this change. Set `name` to use a pre-created ServiceAccount; the subchart still creates one by default.",
+          "properties": {
+            "create": {
+              "type": "boolean",
+              "enum": [
+                true
+              ],
+              "title": "Create service account (must stay true)",
+              "description": "PINNED TO true, not removed. The subchart's own values.yaml sets {create: true, automount: true, annotations: {}, name: ''}, and helm validates this schema against COALESCED values -- coalesceDeps always merges a dependency's defaults in -- so a node omitting `create` can NEVER render. CI refused exactly that. `enum: [true]` instead refuses only the dangerous value: with create=false and an empty name this chart's RoleBinding subjects resolve to the namespace's `default` ServiceAccount, and 12 pods in krateo-system already run as `default`. Plain JSON Schema, so no CEL and no cost budget."
+            },
+            "name": {
+              "type": "string"
+            },
+            "annotations": {
+              "type": "object"
+            },
+            "automount": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
     },
     "core-provider-crds": {
       "type": "object"

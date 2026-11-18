@@ -118,8 +118,68 @@ ACTUAL_0_3_638 = [("snowplow", "version", "1.12.67", "1.12.70"),
                   ("authn", "version", "0.46.0", "0.47.0")]
 
 
-def self_test():
+def _baseline_selftest():
+    """The BASELINE SELECTION had no test, and that is where the defect lived.
+
+    Every case below stubs td so it runs offline. The point is not that previous_released_tag works
+    -- hack/tag-delta.py tests that -- but that main() ROUTES through it and handles all three of
+    its returns. The gate shipped for weeks calling td.previous_tag(), and no self-test could tell.
+    """
     fails = 0
+    real_prt, real_pt = td.previous_released_tag, td.previous_tag
+    real_pins, real_deps, real_msg = td.pins_at, td.deps_at, globals()["tag_message"]
+    try:
+        # A tag's delta is read from pins; stub them so only the baseline choice varies.
+        td.pins_at = lambda t: {"c": {"version": "1" if t == "OLD" else "2"}}
+        td.deps_at = lambda t: {}
+        globals()["tag_message"] = lambda t: "h\n\n" + td.block(
+            [("c", "version", "1", "2")], []) + "\n\nt"
+
+        cases = []
+        # 1. the normal path: no skips, exit 0
+        td.previous_released_tag = lambda t: ("OLD", [], None)
+        cases.append(("published predecessor -> OK", main(["NEW"]), 0, None))
+        # 2. THE REAL DEFECT: an unpublished tag is skipped and the fact is REPORTED. Without the
+        #    report, the wider delta looks like an undeclared change to whoever reads the log.
+        td.previous_released_tag = lambda t: ("OLD", ["SKIPPED"], None)
+        import io as _io, contextlib as _cl
+        buf = _io.StringIO()
+        with _cl.redirect_stdout(buf):
+            rc = main(["NEW"])
+        cases.append(("skipped baseline -> OK and SAYS SO", rc, 0,
+                      "SKIPPED" if "SKIPPED" in buf.getvalue() else None))
+        # 3. REFUSAL, not a guess. An unreachable registry must not silently become a baseline.
+        td.previous_released_tag = lambda t: (None, [], "registry unreachable")
+        cases.append(("registry error -> REFUSES with exit 2", main(["NEW"]), 2, None))
+        # 4. a genuine first tag: nothing to compare, exit 0
+        td.previous_released_tag = lambda t: (None, [], None)
+        cases.append(("no predecessor -> exit 0", main(["NEW"]), 0, None))
+
+        for label, got, want, extra in cases:
+            ok = got == want and (extra is not None if "SAYS SO" in label else True)
+            fails += 0 if ok else 1
+            print("  %-5s baseline: %s" % ("ok" if ok else "FAIL", label))
+            if not ok:
+                print("        want exit=%r got=%r extra=%r" % (want, got, extra))
+        # 5. THE ROUTING ASSERTION. If main() is ever changed back to the naive predecessor, every
+        #    case above still passes -- they stub both. So assert previous_tag is NOT consulted.
+        called = []
+        td.previous_tag = lambda t: called.append(t) or "NAIVE"
+        td.previous_released_tag = lambda t: ("OLD", [], None)
+        main(["NEW"])
+        ok = not called
+        fails += 0 if ok else 1
+        print("  %-5s baseline: main() does NOT consult the naive previous_tag" %
+              ("ok" if ok else "FAIL"))
+    finally:
+        td.previous_released_tag, td.previous_tag = real_prt, real_pt
+        td.pins_at, td.deps_at = real_pins, real_deps
+        globals()["tag_message"] = real_msg
+    return fails
+
+
+def self_test():
+    fails = _baseline_selftest()
     pd = [("snowplow", "version", "1.12.67", "1.12.70"),
           ("authn", "gatewayPath", "/auth", "/authn")]
     dd = [("core-provider", "version", "2.13.82", "2.13.95")]
@@ -187,7 +247,7 @@ def self_test():
     else:
         print("ok    falsifier: readable PROSE is refused, not withheld — the two are distinct")
 
-    print("check-tag-delta: %s" % ("OK -- %d cases + 2 falsifiers" % len(cases) if not fails
+    print("check-tag-delta: %s" % ("OK -- %d cases + 2 falsifiers + 5 baseline-selection cases" % len(cases) if not fails
                                    else "%d FAILURE(S)" % fails))
     return 1 if fails else 0
 
@@ -205,10 +265,31 @@ def main(argv):
                          "For a live check: check-tag-delta.py <tag>\n")
         return self_test()
     tag = argv[0]
-    prev = td.previous_tag(tag)
+    # THE BASELINE MUST BE A PUBLISHED TAG, and this gate used td.previous_tag() -- the naive
+    # immediate predecessor -- while hack/tag-delta.py used td.previous_released_tag(), which skips
+    # tags whose chart was never published. The two implementations of one predicate diverged, and
+    # the divergence had a consequence: 0.3.672's release failed at the org "Assert the tag is on
+    # main" gate, so its chart never published, and this gate then compared 0.3.673 against it and
+    # computed an EMPTY delta -- reading RED on a correctly-published tag whose message was right.
+    #
+    # A delta against an unpublished baseline describes a transition NO CLUSTER CAN MAKE, which is
+    # why hack/ refuses it. Calling the shared function is the whole fix; duplicating the logic here
+    # is what caused this in the first place.
+    prev, skipped, perr = td.previous_released_tag(tag)
+    if perr:
+        # REFUSING IS CORRECT HERE. An unreachable registry and a long run of unpublished tags look
+        # identical from here ("nothing published"), and the two call for opposite responses. A gate
+        # that guesses silently produces the exact failure above; one that stops says so.
+        print("::error::check-tag-delta: %s" % perr)
+        return 2
     if not prev:
         print("check-tag-delta: %s has no predecessor tag — nothing to compare" % tag)
         return 0
+    if skipped:
+        # SAY WHEN THE BASELINE IS NOT THE PREDECESSOR. The declared delta is then wider than a
+        # reader expects, and without this line the extra entries look like an undeclared change.
+        print("check-tag-delta: baseline is %s, not the immediate predecessor — skipped %d tag(s) "
+              "whose chart was never published: %s" % (prev, len(skipped), ", ".join(skipped)))
     po, pn = td.pins_at(prev), td.pins_at(tag)
     if po is None or pn is None:
         print("::error::check-tag-delta: no pins file at %s or %s" % (prev, tag))
