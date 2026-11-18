@@ -9614,7 +9614,7 @@ components:
   #   It REQUIRES the snowplow endpoint Secret and snowplow + authn wired into the rdc deployment.
   #   Declared in componentValues in this same change, with no installer default. Inert on
   #   krateo-057 today because features.keycloak is false there.
-  version: 0.9.2
+  version: 0.11.0
   requiresApiGroups:
   - ogen.krateo.io
   - external-secrets.io
