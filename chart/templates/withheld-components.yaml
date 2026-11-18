@@ -56,7 +56,17 @@ metadata:
   name: krateo-withheld-components
   namespace: {{ .Values.namespaces.krateo }}
 data:
-  summary: {{ printf "declared=%d emitted=%d withheld=%d" $declared $emitted (len $withheld) | quote }}
+{{- $ignoredOv := (include "inst.ignoredPinOwnedOverrides" $top) | fromJson }}
+  summary: {{ printf "declared=%d emitted=%d withheld=%d ignored-pin-owned-overrides=%d" $declared $emitted (len $withheld) (len $ignoredOv) | quote }}
+{{- /* IGNORED PIN-OWNED OVERRIDES. A pinned component's `namespace`/`readerGroups` are decided by
+       the pins file, so a DISAGREEING value in .Values.components does not take effect. It is not
+       refused -- refusing froze 057 -- so it is reported here instead, because an override that
+       silently does nothing is the failure class this whole ConfigMap exists to prevent. An ECHO of
+       the pin's own value is omitted on purpose: that is the self-bootstrap's round-trip, not
+       anyone's intent. */}}
+{{- range $key, $val := $ignoredOv }}
+  ignored-override-{{ $key | replace "." "-" }}: {{ printf "%q was IGNORED: `%s` is decided by the pins file, not per cluster" $val $key | quote }}
+{{- end }}
   {{- if not $withheld }}
   note: "nothing withheld: every declared component passed the emission gate"
   {{- end }}

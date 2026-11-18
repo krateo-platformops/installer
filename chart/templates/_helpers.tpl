@@ -1424,6 +1424,54 @@ the surgical upgrade patch — so the two paths cannot drift.
      PINNED ENTRIES ONLY. An appended registerOnly catalog blueprint keeps its namespace and
      readerGroups, because for those the CR is the ONLY source -- stripping them would delete a
      cluster's own configuration. The discriminator is presence in files/component-pins.min.yaml. */}}
+{{/* ---------------------------------------------------------------------------------------
+     inst.ignoredPinOwnedOverrides — the pin-owned keys that .Values.components tried to set on a
+     PINNED component, and which the merge therefore ignored. Returned as a JSON map of
+     "<component>.<key>" -> the ignored value.
+
+     WHY THIS EXISTS. As of 2026-11-18 a pin-owned key on a pinned component is IGNORED rather than
+     refused, because refusing froze krateo-057 (chart-inspector HTTP 500, unclearable by rollback).
+     Ignoring is right for the render -- but an ignored override with no trace is the same failure
+     class as the Installer CRD silently PRUNING an undeclared key: someone sets a namespace, every
+     tool reports success, and the value never takes effect. That class has cost this repo four
+     separate releases.
+
+     This was the acmp session's point, made immediately after they had talked me out of the
+     refuse-on-mismatch design. Inert for the render, visible in the report.
+
+     THE EXPECTED CASE IS NOT REPORTED, and that distinction is the whole design. The self-bootstrap
+     writes pin-owned keys into the CR on any chart that predates inst.componentsPatchList, and the
+     CR comes back as .Values.components -- so an ECHO of the pin's own value is the machine talking
+     to itself and says nothing to an operator. Only a value that DISAGREES with the pin represents
+     an intent that did not take effect, and only that is worth a line. Otherwise this report would
+     be full on every cluster for one pass after an upgrade and read as noise. */}}
+{{- define "inst.ignoredPinOwnedOverrides" -}}
+{{- $top := . -}}
+{{- $pins := dict -}}
+{{- range $c := (($top.Files.Get "files/component-pins.min.yaml" | fromYaml).components | default list) -}}
+{{- $_ := set $pins (toString $c.name) $c -}}
+{{- end -}}
+{{- $ignored := dict -}}
+{{- range $o := ($top.Values.components | default list) -}}
+{{- if and (kindIs "map" $o) (hasKey $o "name") -}}
+{{- $pin := index $pins (toString $o.name) -}}
+{{- if $pin -}}
+{{- range $k := (list "namespace" "readerGroups") -}}
+{{- if hasKey $o $k -}}
+{{- $want := index $o $k -}}
+{{- $have := (get $pin $k) -}}
+{{- if ne (toString $want) (toString ($have | default "")) -}}
+{{- $_ := set $ignored (printf "%s.%s" (toString $o.name) $k) (toString $want) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $ignored | toJson -}}
+{{- end -}}
+
+
 {{- define "inst.componentsPatchList" -}}
 {{- $top := . -}}
 {{- $pinned := dict -}}
