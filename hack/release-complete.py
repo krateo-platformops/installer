@@ -98,6 +98,22 @@ def anon_pullable(path, timeout=30):
     The two remedies are completely different -- change the package visibility, or fix the name --
     so a probe that cannot tell them apart is worse than one that says nothing.
 
+    THE 403 RULE HOLDS ONLY FOR AN UNAUTHENTICATED PROBE, and this function is one: urllib sends
+    no Authorization header and reads no .netrc here. Run the same request WITH a credential that
+    lacks access and 403 means "forbidden for this identity", not "does not exist" -- the acmp
+    session measured exactly that on the same package within the hour, reading 403 where this
+    anonymous probe reads 401. Their conclusion (private) was right by a different route. If this
+    code ever grows a credentialed mode, the 403 branch must not come with it.
+
+    AND DO NOT SWITCH THIS TO THE MANIFEST ENDPOINT. Measured, no Authorization header:
+
+        private package   GET /v2/<path>/manifests/<tag>  -> 401
+        absent package    GET /v2/<path>/manifests/<tag>  -> 401
+        PUBLIC package    GET /v2/<path>/manifests/<tag>  -> 401
+
+    All three identical. The manifest endpoint cannot discriminate anything without a token, which
+    is the whole reason this asks the token endpoint instead.
+
     This asks the token endpoint rather than the manifest, because the token answer is the
     discriminator: GHCR answers 401 on a manifest GET for a public-but-absent TAG too, so a
     manifest probe cannot separate "private" from "that version does not exist".
