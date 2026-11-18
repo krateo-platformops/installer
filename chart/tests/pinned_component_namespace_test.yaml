@@ -25,14 +25,35 @@ suite: namespace stays a pin-level fact, not a per-cluster override
 templates:
   - templates/compositions.yaml
 tests:
-  - it: refuses `namespace` on a PINNED component supplied through .Values.components
+  # A DIFFERENT namespace than the pin's. This case used to pass `namespace: kyverno`, which was a
+  # refusal while no pin declared the field; now that the kyverno pin DOES declare `kyverno`, that
+  # same input is an echo of the pin and is allowed (next case). To test the refusal the override has
+  # to actually disagree with the pin, which is what the property forbids.
+  - it: refuses a `namespace` override that DISAGREES with the pin
+    set:
+      components:
+        - name: kyverno
+          namespace: somewhere-else
+    asserts:
+      - failedTemplate:
+          errorMessage: "components[kyverno]: `namespace` cannot be overridden per cluster -- the pin says \"kyverno\" and .Values.components says \"somewhere-else\". It is a pin-level fact so that every cluster reads the same namespace from the same pins file."
+
+  # THE ROUND-TRIP, and this is the case whose absence wedged krateo-057 at 2026-11-18T00:16Z.
+  # The self-bootstrap writes the EFFECTIVE components list into the Installer CR, and the CR's
+  # spec.components arrives as .Values.components on the next render -- so a namespace that came
+  # from the PINS FILE returns through the override path one pass later. The blanket refusal made
+  # chart-inspector answer HTTP 500, ChartRenderable went False/InspectorUnavailable, RBACComplete
+  # Unknown/NotEvaluated, and no configuration change could apply. A helm rollback to the previous
+  # chart did NOT clear it: by then the value lived in the CR, and every chart carrying the blanket
+  # guard refused it. 96 releases stayed deployed and 158 deployments stayed ready, so the cluster
+  # was frozen rather than damaged -- but only a hand edit of the CR could unfreeze it.
+  - it: ACCEPTS a `namespace` that matches the pin, because the self-bootstrap echoes it back
     set:
       components:
         - name: kyverno
           namespace: kyverno
     asserts:
-      - failedTemplate:
-          errorMessage: "components[kyverno]: `namespace`/`readerGroups` apply only to appended registerOnly catalog blueprints, not to a pinned component"
+      - notFailedTemplate: {}
 
   - it: refuses `readerGroups` on a PINNED component the same way
     set:
@@ -42,7 +63,7 @@ tests:
             - platform-admins
     asserts:
       - failedTemplate:
-          errorMessage: "components[kyverno]: `namespace`/`readerGroups` apply only to appended registerOnly catalog blueprints, not to a pinned component"
+          errorMessage: "components[kyverno]: `readerGroups` applies only to appended registerOnly catalog blueprints, not to a pinned component"
 
   # CONTROL. Without this case the two above would pass just as well if EVERY .Values.components
   # entry were refused -- which would be a different, much larger bug reported as success.

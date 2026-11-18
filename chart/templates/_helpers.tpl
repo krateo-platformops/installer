@@ -734,6 +734,10 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{/* Index the chart-pinned component names. */}}
 {{- $known := dict -}}
 {{- range $c := $components -}}{{- $_ := set $known (toString $c.name) true -}}{{- end -}}
+{{/* THE PINNED NAMESPACE, needed because the self-bootstrap turns every pin field into an
+     "override" on the next pass. See the guard below. */}}
+{{- $knownNs := dict -}}
+{{- range $c := $components -}}{{- $_ := set $knownNs (toString $c.name) (toString ((get $c "namespace") | default "")) -}}{{- end -}}
 {{/* RETIRED-NAMES allowlist (files/retired-components.yaml, installer#144 Landmine 1):
      a live Installer CR ships its FULL spec.components list wholesale on every upgrade
      (self-bootstrap.yaml), so a name whose pin was DELETED when its feature was retired
@@ -775,10 +779,35 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- range $o := (.Values.components | default list) -}}
 {{- if and (kindIs "map" $o) (hasKey $o "name") -}}
 {{- if hasKey $known (toString $o.name) -}}
-{{/* namespace/readerGroups place a blueprint's CompositionDefinition in its own namespace; they are
-     for APPENDED registerOnly catalog blueprints only (definitions.yaml). A pinned component's
-     definition stays in namespaces.krateo, so refuse rather than silently ignore them. */}}
-{{- if or (hasKey $o "namespace") (hasKey $o "readerGroups") -}}{{- fail (printf "components[%s]: `namespace`/`readerGroups` apply only to appended registerOnly catalog blueprints, not to a pinned component" (toString $o.name)) -}}{{- end -}}
+{{/* readerGroups stay refused outright on a pinned component: no pin declares them, so any
+     arrival is a genuine per-cluster override of a field that would move a definition. */}}
+{{- if hasKey $o "readerGroups" -}}{{- fail (printf "components[%s]: `readerGroups` applies only to appended registerOnly catalog blueprints, not to a pinned component" (toString $o.name)) -}}{{- end -}}
+{{/* `namespace` IS NOW REFUSED ONLY WHEN IT DIFFERS FROM THE PIN, and the reason is that this
+     guard's old premise stopped being true.
+     It read "a pinned component's definition stays in namespaces.krateo". installer#1029 made that
+     false: a pinned component may target its own namespace, which is how the kyverno pin adopts
+     demo's existing release in namespace `kyverno` instead of standing a second one up.
+     WHY A BLANKET REFUSAL THEN WEDGES THE CLUSTER. The self-bootstrap writes the EFFECTIVE
+     components list back into the Installer CR, and the CR's spec.components arrives as
+     .Values.components on the next render. So a namespace that came from the PINS FILE returns
+     here as an "override" one pass later and trips a guard meant for per-cluster overrides.
+     MEASURED on krateo-057 2026-11-18T00:16Z, rolling 0.3.674: chart-inspector returned HTTP 500
+     with this exact fail message, so ChartRenderable went False/InspectorUnavailable, RBACComplete
+     Unknown/NotEvaluated, and the umbrella could not reconcile. A helm rollback to 0.3.673 did NOT
+     clear it -- the offending value was in the CR by then, and every chart version carrying this
+     guard refuses it. 96 releases stayed deployed and 158 deployments stayed ready, so the cluster
+     was FROZEN rather than damaged, but no configuration change could apply until the CR field was
+     removed by hand.
+     THE PROPERTY WORTH KEEPING is the one chart/tests/pinned_component_namespace_test.yaml states:
+     both clusters read the same namespace from the same pins file, so no cluster can decide a
+     component lives somewhere else. Comparing against the pin keeps exactly that -- an echo of the
+     pin's own value passes, a DIFFERENT value is still refused -- while a blanket refusal keeps it
+     only by making the field unusable. */}}
+{{- if hasKey $o "namespace" -}}
+{{- if ne (toString ($o.namespace | default "")) (toString (index $knownNs (toString $o.name))) -}}
+{{- fail (printf "components[%s]: `namespace` cannot be overridden per cluster -- the pin says %q and .Values.components says %q. It is a pin-level fact so that every cluster reads the same namespace from the same pins file." (toString $o.name) (toString (index $knownNs (toString $o.name))) (toString ($o.namespace | default ""))) -}}
+{{- end -}}
+{{- end -}}
 {{- $fields := dict -}}
 {{- range $k := (list "version" "registerOnly" "tier" "repo" "chart") -}}
 {{- if hasKey $o $k -}}{{- $_ := set $fields $k (index $o $k) -}}{{- end -}}
