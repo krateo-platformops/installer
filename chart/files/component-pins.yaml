@@ -5134,7 +5134,7 @@ components:
   #   not render (oasgen#628). Declared in componentValues in THIS SAME CHANGE: the node is closed,
   #   so a split would prune maxBodyMiB silently while kubectl printed "patched".
   #   The bounds are mirrored; the chart's `default: 4` deliberately is NOT.
-  version: 0.74.0
+  version: 0.80.0
   tier: platform
   feature: portal
   chart: controller-render-service
