@@ -6694,7 +6694,20 @@ components:
   # with neither required sibling, and the apiserver would have REJECTED the Kagent CR outright on
   # any cluster with registryAuth on. 0.1.22 moves the secret to the sibling key
   # perUserRbac.toolImagePullSecrets, so the injection never touches toolImage.
-  version: 0.1.23
+  # 0.1.24 MOVES THE TOOL IMAGE AND NOTHING ELSE: the digest constant in the chart's own
+  # templates/_helpers.tpl goes sha256:f8d3920a... -> sha256:f92a1542... (build tag
+  # v0.3.1-krateo.3). THE VALUES ARE BYTE-IDENTICAL -- 0 keys added, 0 removed -- and
+  # values.yaml's `tag: "0.3.1"` is INFORMATIONAL, never rendered. So a values-key diff and a tag
+  # grep both report "no image change" here and both are BLIND; `diff -rq` over the two untarred
+  # charts is what finds it, and it finds exactly two files: Chart.yaml and _helpers.tpl.
+  # WHAT THE NEW IMAGE DOES (krateo-agentiko/kagent-tools#6): every tool result is BOUNDED, 256
+  # KiB by default. A larger result is refused with OUTPUT_TOO_LARGE, the error says how to narrow
+  # the request, and the command is STOPPED at the limit.
+  # THIS IS A BEHAVIOUR CHANGE, NOT A SAFETY NET. agentiko-mcp-server's batch evidence on 0.3.687
+  # included a 704k-character krateo-system Deployment YAML that returned HTTP 200; that same call
+  # is REFUSED after this pin. Anyone comparing batch-path numbers across this roll is comparing
+  # two different contracts.
+  version: 0.1.24
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
