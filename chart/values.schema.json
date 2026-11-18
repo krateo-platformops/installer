@@ -20324,9 +20324,10 @@
             "uniqueItems": true
           },
           "gatewayPathsFrom": {
-            "description": "Names a DERIVATION that computes this component's path prefixes, instead of literal paths. Mutually exclusive with both gatewayPath and gatewayPaths. The only value is `keycloakRealm`, which builds [<relativePath>/realms/<realm>/, <relativePath>/resources/] from componentValues.keycloak.keycloak.http.relativePath and componentValues.krateo-keycloak-realm.realm.name. It exists because hard-coding those prefixes would repeat the coupling this change fixes for the KOG URLs: rename the realm or move the relative path and the route silently stops matching while every composition stays Ready. Deriving route, baseUrl and tokenEndpoint from the same two values makes them agree by construction. An unknown value fails the render loudly.",
+            "description": "Names a DERIVATION that computes this component's path prefixes, instead of literal paths. Mutually exclusive with both gatewayPath and gatewayPaths. `keycloakRealm` builds [<relativePath>/realms/<realm>/, <relativePath>/resources/] from componentValues.keycloak.keycloak.http.relativePath and componentValues.krateo-keycloak-realm.realm.name. It exists because hard-coding those prefixes would repeat the coupling this change fixes for the KOG URLs: rename the realm or move the relative path and the route silently stops matching while every composition stays Ready. Deriving route, baseUrl and tokenEndpoint from the same two values makes them agree by construction. `accessRequestIntake` routes identity-lifecycle's access-request intake, and renders no route when accessRequest.intake is off. An unknown value fails the render loudly.",
             "enum": [
-              "keycloakRealm"
+              "keycloakRealm",
+              "accessRequestIntake"
             ],
             "title": "gatewayPathsFrom",
             "type": "string"
