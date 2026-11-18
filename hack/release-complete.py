@@ -78,6 +78,53 @@ IMPOSSIBLE = "9.9.9"
 EXPECTED_PRIVATE = ("krateo-agentiko",)
 
 
+def chart_prefix_path(repo):
+    """Turn an OCI chart prefix into the registry path prefix it addresses, or raise.
+
+    A CHART PREFIX IS NOT AN ORG NAME, and accepting one as if it were is how this function came
+    to exist. Measured 2026-11-18: probing agentgateway-policies, I passed `--repo krateo-agentiko`
+    -- the org -- where the pin's `repo` key says `oci://ghcr.io/krateo-agentiko/charts`. The old
+    one-liner stripped a scheme that was not there and a host segment that was the org itself, so it
+    built `krateo-agentiko/agentgateway-policies`, dropping `charts/`. The registry answered 403 to
+    that path, and 403 means ABSENT, so the script reported:
+
+        NO SUCH PACKAGE ... Check the package name before anything else
+
+    -- confident, specific, and about the wrong thing. The chart was published the whole time. I
+    repeated it against two more wrong orgs before reading my own argument help.
+
+    AND THE CONTROLS COULD NOT SAVE IT. `chart_present` would also have failed on all three
+    versions, which is exactly the signature the controls exist to catch. But no-such-package is
+    reported BEFORE failed-controls, deliberately -- when a path really is wrong, the name is the
+    first thing to check and a control complaint would bury it. That ordering is right and it is
+    also what let a malformed prefix read as a naming mistake. So the prefix is validated here,
+    before any probe runs, rather than diagnosed afterwards.
+
+    Returns e.g. "krateo-agentiko/charts" for "oci://ghcr.io/krateo-agentiko/charts".
+    """
+    raw = str(repo or "").strip()
+    if not raw:
+        raise ValueError("--repo is empty; pass the pin's own `repo` key, e.g. %s"
+                         % DEFAULT_CHART_PREFIX)
+    body = raw.split("://", 1)[-1].strip("/")
+    parts = [p for p in body.split("/") if p]
+    # <host>/<org>/<path...> is the only shape that can address a chart. Two segments means a host
+    # and an org with no path, which cannot hold charts; one means somebody passed a bare name.
+    if len(parts) < 3:
+        raise ValueError(
+            "--repo %r is not an OCI chart prefix: it has %d path segment(s) and needs at least "
+            "three (<registry>/<org>/<path>). Pass the pin's own `repo` key verbatim, e.g. %s or "
+            "oci://ghcr.io/krateo-agentiko/charts. A bare org name silently builds the wrong "
+            "registry path and the probe then reports NO SUCH PACKAGE for a chart that exists."
+            % (raw, len(parts), DEFAULT_CHART_PREFIX))
+    if parts[0] != REGISTRY:
+        raise ValueError(
+            "--repo %r names registry %r, but this script only probes %s -- its token and manifest "
+            "endpoints are ghcr-specific. Probing another registry needs more than a flag."
+            % (raw, parts[0], REGISTRY))
+    return "/".join(parts[1:])
+
+
 def _expected_private(path):
     """True if this registry path is one whose packages are private by design."""
     return path.split("/", 1)[0] in EXPECTED_PRIVATE
@@ -224,11 +271,19 @@ def main(argv):
         print("release-complete: nothing to probe -- pass at least one --chart or --image")
         return 2
 
+    # VALIDATE THE PREFIX BEFORE ANY PROBE. A malformed one makes every subsequent answer a
+    # confident statement about a path nobody meant to ask about.
+    try:
+        prefix = chart_prefix_path(a.repo)
+    except ValueError as e:
+        print("::error::release-complete: %s" % e)
+        return 2
+
     rows, broken, private, unknown_vis, absent_pkg, by_design = [], [], [], [], [], []
 
     for name in a.chart:
         # "pullable by me" and "pullable by a cluster" are different facts -- see the docstring.
-        path = "%s/%s" % (a.repo.split("://", 1)[-1].split("/", 1)[-1], name)
+        path = "%s/%s" % (prefix, name)
         anon = anon_pullable(path)
         if anon == "private":
             (by_design if _expected_private(path) else private).append((name, path))
@@ -339,8 +394,32 @@ def _selftest():
         ok = not _expected_private(path)
         fails += 0 if ok else 1
         print("  %-4s %-46s -> refuse (must not match loosely)" % ("ok" if ok else "FAIL", path))
+    # THE PREFIX VALIDATOR. Each rejected case is one I actually typed or could type; each
+    # accepted case is a real pin's `repo` key.
+    prefix_cases = [
+        # (--repo value,                                 expected)
+        ("oci://ghcr.io/krateo-platformops/charts",       "krateo-platformops/charts"),
+        ("oci://ghcr.io/krateo-agentiko/charts",          "krateo-agentiko/charts"),
+        ("oci://ghcr.io/krateo-blueprints/charts",        "krateo-blueprints/charts"),
+        ("ghcr.io/krateo-blueprints/charts",              "krateo-blueprints/charts"),
+        ("oci://ghcr.io/krateo-blueprints/charts/",       "krateo-blueprints/charts"),
+        ("krateo-agentiko",                               "REJECT"),
+        ("krateo-blueprints",                             "REJECT"),
+        ("oci://ghcr.io/krateo-agentiko",                 "REJECT"),
+        ("",                                              "REJECT"),
+        ("oci://quay.io/krateo-platformops/charts",        "REJECT"),
+    ]
+    for repo, want in prefix_cases:
+        try:
+            got = chart_prefix_path(repo)
+        except ValueError:
+            got = "REJECT"
+        ok = got == want
+        fails += 0 if ok else 1
+        print("  %-4s %-42s -> %-28s (want %s)"
+              % ("ok" if ok else "FAIL", repr(repo), got, want))
     print()
-    print("  %d case(s), %d failure(s)" % (len(cases) + 2, fails))
+    print("  %d case(s), %d failure(s)" % (len(cases) + 2 + len(prefix_cases), fails))
     return 1 if fails else 0
 
 
