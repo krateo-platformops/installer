@@ -1,55 +1,164 @@
-# `namespace` is a PIN-LEVEL fact. It may come from files/component-pins.yaml; it may NOT be
-# supplied per cluster through .Values.components.
+# `namespace` AND `readerGroups` ARE PIN-OWNED FACTS. A cluster cannot change where a pinned
+# component lives — and the enforcement is that the value is IGNORED, not that the render fails.
 #
-# WHY THIS SUITE EXISTS. On 2026-11-17 definitions.yaml stopped refusing `namespace` on a pinned,
-# non-registerOnly component, because Diego decided the installer must ADOPT demo's hand-installed
-# Kyverno in place -- the pin targets helm release `kyverno` in namespace `kyverno`, so the
-# installer upgrades that release rather than standing a second one up in krateo-system. Two
-# complete Kyverno installations sharing 22 cluster-scoped CRDs and 10 webhook configurations is
-# the failure that change avoids.
+# WHY THIS SUITE CHANGED SHAPE ON 2026-11-18. It previously asserted that `namespace` on a pinned
+# component supplied through .Values.components FAILS the render. That assertion was correct about
+# the code and wrong about the consequence, and it cost a cluster:
 #
-# THAT CHANGE MUST NOT LEAK INTO THE OVERRIDE PATH, and this suite is what holds the line. A
-# SEPARATE guard at _helpers.tpl:781 refuses `namespace` and `readerGroups` on a pinned component
-# arriving via .Values.components, and it is deliberately untouched. The property it protects is
-# that both clusters read the same namespace from the same pins file -- "same files, different
-# flags". If `namespace` were overridable per cluster, 057 and demo could disagree about where a
-# component lives while every other gate passed.
+#   krateo-057, rolling 0.3.674 at 00:15:30Z. helm upgrade SUCCEEDED (43 s, rev 582, deployed). The
+#   bootstrap post-upgrade hook then patched the Installer CR with the new effective components, so
+#   kyverno gained `namespace: kyverno` -- a value present only in 0.3.674's pins. chart-inspector
+#   rendered next, hit that fail, and answered HTTP 500:
+#     ChartRenderable  False/InspectorUnavailable
+#     RBACComplete     Unknown/NotEvaluated
+#   No configuration change could apply. 96 helm releases stayed deployed and 158 deployments
+#   stayed ready -- FROZEN, not damaged -- but `helm rollback` could NOT clear it: the value lived
+#   in the CR by then, and every chart version carrying the fail refuses it. Only a hand edit of
+#   the CR unfroze the cluster.
 #
-# WHAT THIS SUITE DOES NOT COVER, said plainly rather than left to be discovered: the pins-file
-# path itself. No pinned component declares `namespace` yet, and a test cannot inject one -- the
-# override whitelist is exactly what case 1 asserts is closed, and the pins file is read through
-# .Files rather than values. The render-level test of a composition landing in a non-default
-# namespace therefore lands with the FIRST PIN that uses the field, not here. Until then this
-# suite proves the blast radius of the change was bounded, not that the new path works.
-suite: namespace stays a pin-level fact, not a per-cluster override
+# THE MECHANISM, which is the part to keep in mind when touching this: the self-bootstrap writes
+# the EFFECTIVE components list into the CR, and the CR's spec.components arrives as
+# .Values.components on the NEXT render. So a pin-owned key reaches the override path BY DESIGN one
+# pass after any chart that sets it. It is not an operator's override; it is the chart's own value
+# coming home.
+#
+# WHY NOT "REFUSE ONLY WHEN IT DIFFERS FROM THE PIN", which was the first fix: the acmp session
+# found that an echo then passes only while the pin and the CR AGREE, so the day a pins file CHANGES
+# a namespace every cluster's CR still holds the previous echo -- now a "different" value -- and
+# every cluster freezes again, unclearable by rollback. A guard that traps the pins file's own
+# changes is worse than the bug it fixes. Hence: ignore, and strip the key at the writer.
+#
+# THE PROPERTY IS HELD MORE STRONGLY BY IGNORING. The pins file is the only source, so an override
+# attempt is INERT rather than fatal -- the same guarantee without a cluster-wide outage as its
+# enforcement mechanism. CASE 1 asserts that directly: it overrides the namespace and then checks
+# the composition landed in the PIN's namespace anyway.
+suite: namespace and readerGroups are pin-owned, and an override is inert rather than fatal
 templates:
   - templates/compositions.yaml
 tests:
-  - it: refuses `namespace` on a PINNED component supplied through .Values.components
+  # THE PROPERTY, asserted on the rendered object rather than on an error message. Without this case
+  # the suite would pass if the override were silently HONOURED, which is the failure the old `fail`
+  # existed to prevent -- so this is the case that keeps the guarantee.
+  - it: "CASE 1 -- an override DISAGREEING with the pin is IGNORED: the composition lands in the PIN's namespace"
     set:
+      features.identityLifecycle: true
+      components:
+        - name: kyverno
+          namespace: somewhere-else
+    kubernetesProvider:
+      scheme: &scheme
+        "apiextensions.k8s.io/v1/CustomResourceDefinition":
+          gvr: {version: v1, group: apiextensions.k8s.io, resource: customresourcedefinitions}
+        "composition.krateo.io/v3-9-4/Kyverno":
+          gvr: {group: composition.krateo.io, version: v3-9-4, resource: kyvernoes}
+          namespaced: true
+      objects: &objects
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata:
+            name: kyvernoes.composition.krateo.io
+          spec:
+            group: composition.krateo.io
+            names:
+              kind: Kyverno
+            versions:
+              - name: v3-9-4
+                served: true
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: kyverno
+        documentSelector:
+          path: metadata.name
+          value: kyverno
+      - notFailedTemplate: {}
+
+  # THE ROUND-TRIP. This is the exact input that froze 057: the pin's own namespace arriving through
+  # the override path, as the self-bootstrap sends it one pass later.
+  - it: "CASE 2 -- an echo of the pin's own value renders, because that is how the CR sends it back"
+    set:
+      features.identityLifecycle: true
       components:
         - name: kyverno
           namespace: kyverno
+    kubernetesProvider:
+      scheme: *scheme
+      objects: *objects
     asserts:
-      - failedTemplate:
-          errorMessage: "components[kyverno]: `namespace`/`readerGroups` apply only to appended registerOnly catalog blueprints, not to a pinned component"
+      - notFailedTemplate: {}
+      - equal:
+          path: metadata.namespace
+          value: kyverno
+        documentSelector:
+          path: metadata.name
+          value: kyverno
 
-  - it: refuses `readerGroups` on a PINNED component the same way
+  # acmp's CASE: a pins file that CHANGES a pin-owned field, against a CR written by the previous
+  # chart. The override carries the OLD value; the pin carries the new one. Under the compare-to-pin
+  # rule this froze every cluster. It must render, and the NEW pin value must win.
+  - it: "CASE 3 -- a STALE echo from an older chart does not freeze the render, and the new pin wins"
     set:
+      features.identityLifecycle: true
+      components:
+        - name: kyverno
+          namespace: the-previous-namespace
+    kubernetesProvider:
+      scheme: *scheme
+      objects: *objects
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: metadata.namespace
+          value: kyverno
+        documentSelector:
+          path: metadata.name
+          value: kyverno
+
+  - it: "CASE 4 -- readerGroups on a pinned component is ignored the same way, for the same reason"
+    set:
+      features.identityLifecycle: true
       components:
         - name: kyverno
           readerGroups:
             - platform-admins
-    asserts:
-      - failedTemplate:
-          errorMessage: "components[kyverno]: `namespace`/`readerGroups` apply only to appended registerOnly catalog blueprints, not to a pinned component"
-
-  # CONTROL. Without this case the two above would pass just as well if EVERY .Values.components
-  # entry were refused -- which would be a different, much larger bug reported as success.
-  - it: CONTROL accepts a whitelisted override on the same pinned component
-    set:
-      components:
-        - name: kyverno
-          version: 3.9.2
+    kubernetesProvider:
+      scheme: *scheme
+      objects: *objects
     asserts:
       - notFailedTemplate: {}
+
+  # CONTROL. Without this, every case above would pass just as well if the whole .Values.components
+  # entry were discarded -- which would be a different and much larger bug reported as success.
+  - it: "CASE 5 CONTROL -- a whitelisted override on the same pinned component still APPLIES"
+    set:
+      features.identityLifecycle: true
+      components:
+        - name: kyverno
+          version: 3.9.3
+    kubernetesProvider:
+      scheme:
+        "apiextensions.k8s.io/v1/CustomResourceDefinition":
+          gvr: {version: v1, group: apiextensions.k8s.io, resource: customresourcedefinitions}
+        "composition.krateo.io/v3-9-3/Kyverno":
+          gvr: {group: composition.krateo.io, version: v3-9-3, resource: kyvernoes}
+          namespaced: true
+      objects:
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata:
+            name: kyvernoes.composition.krateo.io
+          spec:
+            group: composition.krateo.io
+            names:
+              kind: Kyverno
+            versions:
+              - name: v3-9-3
+                served: true
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: apiVersion
+          value: composition.krateo.io/v3-9-3
+        documentSelector:
+          path: metadata.name
+          value: kyverno

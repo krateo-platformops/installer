@@ -775,11 +775,40 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- range $o := (.Values.components | default list) -}}
 {{- if and (kindIs "map" $o) (hasKey $o "name") -}}
 {{- if hasKey $known (toString $o.name) -}}
-{{/* namespace/readerGroups place a blueprint's CompositionDefinition in its own namespace; they are
-     for APPENDED registerOnly catalog blueprints only (definitions.yaml). A pinned component's
-     definition stays in namespaces.krateo, so refuse rather than silently ignore them. */}}
-{{- if or (hasKey $o "namespace") (hasKey $o "readerGroups") -}}{{- fail (printf "components[%s]: `namespace`/`readerGroups` apply only to appended registerOnly catalog blueprints, not to a pinned component" (toString $o.name)) -}}{{- end -}}
-{{- $fields := dict -}}
+{{/* PIN-OWNED KEYS ON A PINNED COMPONENT ARE IGNORED HERE, not refused, and not merged.
+     `namespace` and `readerGroups` are decided by the pins file. This branch handles
+     .Values.components, which is the OVERRIDE layer -- and because the self-bootstrap writes the
+     EFFECTIVE components list into the Installer CR, and the CR's spec.components arrives here as
+     .Values.components on the next render, a pin-owned key reaches this branch BY DESIGN one pass
+     after any chart that sets it. It is not an operator's override at all; it is the chart's own
+     value coming home.
+
+     WHY NOT `fail`, which is what this did until 2026-11-18. A fail here does not reject a bad
+     input -- it FREEZES THE CLUSTER. Measured on krateo-057 at 00:15:30Z rolling 0.3.674: the
+     bootstrap post-upgrade hook patched the CR with the new pins (kyverno gained
+     namespace: kyverno, a value present only in 0.3.674), THEN chart-inspector rendered and hit
+     this fail, answering HTTP 500. ChartRenderable went False/InspectorUnavailable, RBACComplete
+     Unknown/NotEvaluated, and no configuration change could apply. 96 releases stayed deployed and
+     158 deployments stayed ready -- frozen, not damaged -- but `helm rollback` could NOT clear it,
+     because the value was in the CR by then and EVERY chart carrying the fail refuses it. Only a
+     hand edit of the CR unfroze it.
+
+     WHY NOT COMPARE AGAINST THE PIN, which was my first fix. The acmp session found the flaw: an
+     echo passes only while the pin and the CR AGREE, so the day the pins file CHANGES a namespace,
+     every cluster's CR still holds the previous echo -- now a "different" value -- and every
+     cluster freezes again, with the same unclearable rollback. That turns the guard into a trap
+     for the pins file's own changes, which is worse than the bug it fixes.
+
+     THE PROPERTY IS STILL HELD, and held more strongly than by refusing. The pins file is the ONLY
+     source of a pinned component's namespace: this branch copies `namespace` into neither $fields
+     nor the override map, so whatever the CR says is discarded and the pin always wins. A cluster
+     therefore CANNOT decide a component lives somewhere else -- an attempt is inert rather than
+     fatal, which is the same guarantee without a cluster-wide outage as its enforcement mechanism.
+     And it is not silent: withheld-components.yaml reports what was not emitted, and the write-back
+     no longer carries these keys at all (see inst.componentsPatchList).
+
+     An APPENDED registerOnly blueprint is unaffected -- it takes the else branch below, where
+     namespace/readerGroups are passed through whole, because for those the CR IS the only source. */}}{{- $fields := dict -}}
 {{- range $k := (list "version" "registerOnly" "tier" "repo" "chart") -}}
 {{- if hasKey $o $k -}}{{- $_ := set $fields $k (index $o $k) -}}{{- end -}}
 {{- end -}}
@@ -1375,6 +1404,47 @@ the surgical upgrade patch — so the two paths cannot drift.
      componentValuesUnset needs -- not for installer-computed wiring. */}}
 {{- $cv | toJson -}}
 {{- end -}}
+
+{{/* ---------------------------------------------------------------------------------------
+     inst.componentsPatchList — the effective components list with PIN-OWNED KEYS REMOVED from
+     pinned entries, for writing back to the Installer CR.
+
+     WHY THIS EXISTS. The self-bootstrap merge-patches the effective `components` list onto the live
+     CR so chart-side pins reach the cluster. Writing pin-owned keys into that list is what froze
+     krateo-057 on 2026-11-18: the CR's spec.components arrives as .Values.components on the next
+     render, so a `namespace` that the PINS FILE decided came back through the OVERRIDE path and hit
+     a guard meant for per-cluster overrides. The guard is no longer fatal, but the cause is here:
+     the CR should hold what a CLUSTER overrides, never a copy of what the pin already decides.
+
+     This was the acmp session's diagnosis, and their argument for fixing the writer rather than
+     only relaxing the reader is the reason this helper exists: with a stale copy in the CR, ANY
+     later change to a pin-owned field collides with it. Remove the copy and the collision cannot
+     occur, whatever the reader does.
+
+     PINNED ENTRIES ONLY. An appended registerOnly catalog blueprint keeps its namespace and
+     readerGroups, because for those the CR is the ONLY source -- stripping them would delete a
+     cluster's own configuration. The discriminator is presence in files/component-pins.min.yaml. */}}
+{{- define "inst.componentsPatchList" -}}
+{{- $top := . -}}
+{{- $pinned := dict -}}
+{{- range $c := (($top.Files.Get "files/component-pins.min.yaml" | fromYaml).components | default list) -}}
+{{- $_ := set $pinned (toString $c.name) true -}}
+{{- end -}}
+{{- $out := list -}}
+{{- range $c := (include "inst.componentsYaml" $top | fromYaml).components -}}
+{{- if hasKey $pinned (toString $c.name) -}}
+{{- $clean := dict -}}
+{{- range $k, $v := $c -}}
+{{- if not (or (eq $k "namespace") (eq $k "readerGroups")) -}}{{- $_ := set $clean $k $v -}}{{- end -}}
+{{- end -}}
+{{- $out = append $out $clean -}}
+{{- else -}}
+{{- $out = append $out $c -}}
+{{- end -}}
+{{- end -}}
+{{- $out | toJson -}}
+{{- end -}}
+
 
 {{- define "inst.componentValuesPatch" -}}
 {{- /* Builds components-patch.json's componentValues, turning every componentValuesUnset path into

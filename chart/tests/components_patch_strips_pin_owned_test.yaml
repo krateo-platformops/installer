@@ -1,0 +1,60 @@
+# THE WRITE-BACK MUST NOT CARRY PIN-OWNED KEYS INTO THE INSTALLER CR.
+#
+# This is the half of the 057 freeze that is a CAUSE rather than a symptom, and it is the acmp
+# session's diagnosis. The self-bootstrap merge-patches the effective `components` list onto the
+# live CR so chart-side pins reach the cluster. The CR's spec.components then arrives as
+# .Values.components on the NEXT render — so every pin-owned key the patch writes comes back
+# through the OVERRIDE path one pass later.
+#
+# On 2026-11-18 that round-trip hit a guard meant for per-cluster overrides and froze krateo-057:
+# chart-inspector answered HTTP 500, ChartRenderable went False/InspectorUnavailable, and
+# `helm rollback` could not clear it because the value was in the CR by then.
+#
+# The reader no longer fails on it (see pinned_component_namespace_test.yaml). But a stale copy in
+# the CR collides with ANY later change to a pin-owned field, whatever the reader does — which is
+# why the fix belongs at the writer too. Remove the copy and the collision cannot occur.
+#
+# CASE 2 is the control that makes case 1 mean something: an APPENDED registerOnly blueprint keeps
+# its namespace, because for those the CR is the ONLY source and stripping it would delete a
+# cluster's own configuration. Without this case, a writer that stripped the key from EVERY entry
+# would pass case 1 while silently discarding catalog placement.
+suite: the CR write-back carries no pin-owned keys for pinned components
+templates:
+  - templates/self-bootstrap.yaml
+tests:
+  - it: "CASE 1 -- the kyverno pin's `namespace` is NOT written into components-patch.json"
+    set:
+      bootstrap.coreProvider.enabled: true
+    asserts:
+      # The kyverno pin declares `namespace: kyverno`. The rendered patch must still name the
+      # component (so the pin itself propagates) while carrying no namespace for it.
+      - matchRegex:
+          path: data["components-patch.json"]
+          pattern: '"name":"kyverno"'
+        documentSelector:
+          path: metadata.name
+          value: installer-self-cr
+      - notMatchRegex:
+          path: data["components-patch.json"]
+          pattern: '"namespace":"kyverno"'
+        documentSelector:
+          path: metadata.name
+          value: installer-self-cr
+
+  - it: "CASE 2 CONTROL -- an APPENDED registerOnly blueprint KEEPS its namespace"
+    set:
+      bootstrap.coreProvider.enabled: true
+      components:
+        - name: a-catalog-blueprint
+          kind: ACatalogBlueprint
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+          namespace: a-catalog-namespace
+    asserts:
+      - matchRegex:
+          path: data["components-patch.json"]
+          pattern: '"namespace":"a-catalog-namespace"'
+        documentSelector:
+          path: metadata.name
+          value: installer-self-cr
