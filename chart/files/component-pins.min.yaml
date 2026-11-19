@@ -517,7 +517,7 @@ components:
 - name: agentiko
   kind: Agentiko
   agentName: agentiko
-  version: 0.8.4
+  version: 0.8.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
     - repo-mcp-server
