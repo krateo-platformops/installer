@@ -19,6 +19,15 @@
 # on either, and snowplow's live composition carries no URL keys in spec.env at all (those come
 # from its own chart defaults). internalUrls CORRECTS an existing value; this one SUPPLIES a
 # missing one. CASE 1 is what internalUrls could not have done.
+# FIXTURE VERSION IS COUPLED TO THE PIN, and nothing but this suite enforces it.
+# The CompositionDefinition renders at an apiVersion derived from oasgen-provider's CHART
+# VERSION, so `kubernetesProvider.scheme` and every fixture object below must carry that same
+# v<major>-<minor>-<patch>. When the pin moves, these lines must move with it or helm-unittest
+# reports `document not found` on EVERY assert -- which reads like the derivation is broken
+# rather than like the fixture is stale. Measured 2026-11-19: merging 46 commits of main into
+# this branch moved oasgen-provider 0.74.0 -> 0.80.0 and failed 5 of 5 cases that way.
+# 3 of 13 suites here hard-code a composition apiVersion; there is no gate for the drift, so
+# the suite itself is the detector. Current: oasgen-provider 0.80.0 -> v0-80-0.
 suite: internalPeerUrls - in-cluster baseline peer URLs, in every exposure mode
 templates:
   - templates/compositions.yaml
@@ -35,10 +44,10 @@ tests:
             version: v1
             group: apiextensions.k8s.io
             resource: customresourcedefinitions
-        "composition.krateo.io/v0-74-0/OasgenProviderCrds":
+        "composition.krateo.io/v0-80-0/OasgenProviderCrds":
           gvr:
             group: composition.krateo.io
-            version: v0-74-0
+            version: v0-80-0
             resource: oasgenprovidercrdses
           namespaced: true
       objects:
@@ -48,17 +57,17 @@ tests:
           spec:
             group: composition.krateo.io
             names: {kind: OasgenProvider}
-            versions: [{name: v0-74-0, served: true}]
+            versions: [{name: v0-80-0, served: true}]
         - apiVersion: apiextensions.k8s.io/v1
           kind: CustomResourceDefinition
           metadata: {name: oasgenprovidercrdses.composition.krateo.io}
           spec:
             group: composition.krateo.io
             names: {kind: OasgenProviderCrds}
-            versions: [{name: v0-74-0, served: true}]
+            versions: [{name: v0-80-0, served: true}]
         # the dep must read Ready, or the umbrella OMITS its dependents entirely and the
         # assertions below would fail on an empty render rather than on a wrong URL
-        - apiVersion: composition.krateo.io/v0-74-0
+        - apiVersion: composition.krateo.io/v0-80-0
           kind: OasgenProviderCrds
           metadata: {name: oasgen-provider-crd, namespace: krateo-system}
           status:
@@ -97,10 +106,10 @@ tests:
             version: v1
             group: apiextensions.k8s.io
             resource: customresourcedefinitions
-        "composition.krateo.io/v0-74-0/OasgenProviderCrds":
+        "composition.krateo.io/v0-80-0/OasgenProviderCrds":
           gvr:
             group: composition.krateo.io
-            version: v0-74-0
+            version: v0-80-0
             resource: oasgenprovidercrdses
           namespaced: true
       objects:
@@ -110,18 +119,18 @@ tests:
           spec:
             group: composition.krateo.io
             names: {kind: OasgenProvider}
-            versions: [{name: v0-74-0, served: true}]
+            versions: [{name: v0-80-0, served: true}]
         - apiVersion: apiextensions.k8s.io/v1
           kind: CustomResourceDefinition
           metadata: {name: oasgenprovidercrdses.composition.krateo.io}
           spec:
             group: composition.krateo.io
             names: {kind: OasgenProviderCrds}
-            versions: [{name: v0-74-0, served: true}]
+            versions: [{name: v0-80-0, served: true}]
         # in the MOVED namespace -- the dep gate resolves the dep BY NAMESPACE, so a fixture
         # left at krateo-system makes the umbrella omit the dependent and the case fails with
         # "document not found" rather than a wrong URL
-        - apiVersion: composition.krateo.io/v0-74-0
+        - apiVersion: composition.krateo.io/v0-80-0
           kind: OasgenProviderCrds
           metadata: {name: oasgen-provider-crd, namespace: krateo-elsewhere}
           status:
