@@ -62,6 +62,7 @@ of a parent/child chart -- children POST before the parent exists, take a 404, a
 long-lived cluster is not exposed until the next such install.
 """
 import argparse
+import datetime
 import json
 import subprocess
 import sys
@@ -82,20 +83,40 @@ def incomplete(ann):
     bad = []
 
     def ts(key):
+        """PARSE the marker, never string-compare it.
+
+        This used to require a `Z` suffix and compare lexicographically, which is correct ONLY
+        for equal-length values. A FRACTIONAL-SECOND marker is >=20 chars and ends with `Z`, so
+        it passed that guard and then compared WRONGLY: `"...:00Z" > "...:00.000001Z"` is True,
+        because `Z` (0x5A) sorts after `.` (0x2E). A composition whose `succeeded` carried
+        fractional seconds therefore read as STILL LATCHED with bad=[] -- a silent wrong verdict,
+        not a reported one. Found 2026-11-19 while answering core-provider's question about
+        their move to UTC marker values (core-provider cdc -> unstructured-runtime v1.29.0).
+
+        Parsing also makes a non-UTC OFFSET comparable instead of unparseable, which is the
+        point of their change: `+01:00` and `Z` now order correctly against each other rather
+        than one of them being discarded.
+        """
         v = (ann or {}).get(key)
         if not v:
-            return ""
-        # RFC3339, lexicographically comparable when Z-normalised and equal-length.
-        if len(v) < 20 or not v.endswith("Z"):
+            return None
+        try:
+            d = datetime.datetime.fromisoformat(v.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
             bad.append((key, v))
-            return ""
-        return v
+            return None
+        # A naive value has no zone; treat it as UTC rather than crashing the comparison.
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=datetime.timezone.utc)
+        return d
 
     pending = ts(PENDING)
-    if not pending:
+    if pending is None:
         return False, bad
-    latest = max(ts(SUCCEEDED), ts(FAILED), ts(NOT_REQUESTED))
-    return (pending > latest), bad
+    clearers = [d for d in (ts(SUCCEEDED), ts(FAILED), ts(NOT_REQUESTED)) if d is not None]
+    if not clearers:
+        return True, bad
+    return (pending > max(clearers)), bad
 
 
 def _kinds_from_restdefinitions(ctx):
@@ -236,6 +257,25 @@ def _selftest():
                                      NOT_REQUESTED: "2026-11-18T10:00:01Z"}, False),
         ("not-requested SAME SECOND clears it", {PENDING: "2026-11-18T10:00:00Z",
                                                  NOT_REQUESTED: "2026-11-18T10:00:00Z"}, False),
+        # --- REGRESSION, 2026-11-19: these were WRONG under the old lexicographic compare,
+        # and SILENTLY so (bad=[]). A fractional-second value is >=20 chars and ends with `Z`,
+        # so it passed the length/suffix guard, and then "...:00Z" compared GREATER than
+        # "...:00.000001Z" because `Z` (0x5A) sorts after `.` (0x2E). The last three reported a
+        # COMPLETED handshake as still latched. ts() now PARSES, so neither length nor offset
+        # affects ordering. Found while answering core-provider's question about 2.13.116
+        # writing these markers in UTC (cdc -> unstructured-runtime v1.29.0).
+        ("fractional pending, truly newer", {PENDING: "2026-11-18T10:00:01.500000Z",
+                                             SUCCEEDED: "2026-11-18T10:00:00Z"}, True),
+        ("fractional succeeded, truly newer -> complete", {PENDING: "2026-11-18T10:00:00Z",
+                                                           SUCCEEDED: "2026-11-18T10:00:00.500000Z"}, False),
+        ("fractional succeeded by 1us -> complete", {PENDING: "2026-11-18T10:00:00Z",
+                                                     SUCCEEDED: "2026-11-18T10:00:00.000001Z"}, False),
+        # An OFFSET value is now COMPARABLE rather than discarded as unparseable. 2.13.116
+        # writes UTC, but values written before it keep whatever offset they had.
+        ("offset succeeded, truly newer -> complete", {PENDING: "2026-11-18T10:00:00Z",
+                                                       SUCCEEDED: "2026-11-18T11:00:01+01:00"}, False),
+        ("offset succeeded, truly older -> latched", {PENDING: "2026-11-18T10:00:01Z",
+                                                      SUCCEEDED: "2026-11-18T10:00:00+01:00"}, True),
     ]
     fails = 0
     for label, ann, want in cases:
