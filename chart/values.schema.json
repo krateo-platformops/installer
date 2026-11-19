@@ -20376,6 +20376,36 @@
             },
             "type": "array"
           },
+          "internalPeerUrls": {
+            "type": "array",
+            "description": "In-cluster BASELINE peer URLs this component's chart needs but does NOT default — the missing third mechanism of installer#578. Distinct from the two that exist: `configKeys` derives a BROWSER-reachable address (LB IP, node IP, external hostname), wrong for a controller dialling from inside the cluster; `internalUrls` only CORRECTS an already-present URL onto exposure.port and is gated on $isLB, so it never fires under Gateway — measured on 057 and demo, where both are type Gateway and snowplow's live CR carries no URL keys at all. This one SUPPLIES the value, in every exposure mode. Consumers: oasgen-provider's rdc (URL_SNOWPLOW/URL_AUTHN, whose absence makes *ApiRef delegation silently inert), core-provider's cdc (URL_AUTHN, core-provider#251 item 4), and cmp-usage-collector (showback.url, whose chart FAILS at pure defaults). NOT a schema `default:` — a default on a componentValues leaf lands in every install's CR, which is why 057's Installer CR still carries four http://localhost:808x strings.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "peer"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Dotted path in the component chart's values to write the URL to, e.g. rdc.env.URL_AUTHN."
+                },
+                "peer": {
+                  "type": "string",
+                  "description": "COMPONENT name of the peer. Its Service is taken from that component's own `svcMatch` and its port from `exposePort`, never by name-matching: authn also publishes <release>-internal on 8090 serving only POST /usernames/check, admitted by NetworkPolicy to identity-lifecycle alone, so a derivation that 'finds authn's Service' yields a URL that resolves, connects, then 404s or is refused depending on the caller."
+                },
+                "service": {
+                  "type": "string",
+                  "description": "Explicit Service name, REQUIRED when the peer declares no `svcMatch` (e.g. showback). Overrides svcMatch when both are present."
+                },
+                "port": {
+                  "type": "integer",
+                  "description": "Explicit port, REQUIRED when the peer declares no `exposePort` (e.g. showback, which is not exposed at all). An exposed peer under exposure.port collapse uses the shared port instead."
+                }
+              }
+            }
+          },
           "kind": {
             "type": "string"
           },

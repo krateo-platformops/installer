@@ -5424,6 +5424,23 @@ components:
 # THE CHECK: no further OOMKilling of a `manager` process followed by an operator restart.
 #
 # CONTROLS: 0.1.2 resolves; the outgoing 0.1.1 resolves; 9.9.9 does not.
+  # The rdc's in-cluster peers (installer#578). Without these two, rest-dynamic-controller
+  # resolves no *ApiRef at all: mutate_restaction.go hard-errors "no snowplow client is
+  # configured" and every delegated observe/apply/delete is SILENTLY INERT. Measured on demo
+  # 2026-11-17: KeycloakServiceAccountRoleMapping krateo-identity-lifecycle-roles sat at
+  # Synced=False/ReconcileError with that exact message while its parent composition read
+  # Ready=True/AvailablePartialCoverage -- the child was one of 8 the rollup never evaluated,
+  # so nothing in the platform reported it.
+  #
+  # The peer's svcMatch and exposePort are resolved from ITS pin, never by name: authn's
+  # <release>-internal:8090 serves only POST /usernames/check behind a NetworkPolicy that
+  # admits identity-lifecycle alone, so name-matching picks a Service that resolves, connects,
+  # and then 404s.
+  internalPeerUrls:
+    - path: rdc.env.URL_SNOWPLOW
+      peer: snowplow
+    - path: rdc.env.URL_AUTHN
+      peer: authn
 - name: clickhouse-operator
   kind: ClickhouseOperator
   version: 0.1.2
