@@ -119,33 +119,6 @@ bootstrap:
 core-provider:
   otel:
     endpoint: http://otel-collector-daemonset-local.krateo-system.svc:4318
-  # CPU-saturation gating for every composition dynamic controller. `cdc.env` is
-  # CHART-WIDE: the core-provider chart ranges over it into the per-cdc env ConfigMap
-  # (assets/cdc/configmap.yaml), and that ConfigMap's checksum sits in each cdc's pod
-  # template (core-provider #391), so changing these rolls EVERY cdc pod once -- 76 of
-  # them on krateo-057, each dedicated controller restarting into its Lease. Plan the
-  # window for the pod roll, not for the gate.
-  #
-  # Both values are STRINGS. The ConfigMap takes cdc.env verbatim and the cdc parses
-  # them itself (core-provider docs/configuration.md, "CPU-saturation gating"). An
-  # unquoted 50 renders as a bare number, which is not the shape this was measured with.
-  #
-  # These two keys ADD to the chart's own cdc.env defaults rather than replacing them.
-  # Verified on core-provider 2.13.106 by rendering the subchart with these values
-  # layered over krateo-057's live core-provider block: HOME=/tmp survives alongside
-  # all five other defaults (DEBUG, WORKERS, GRACEFUL_SHUTDOWN_TIMEOUT,
-  # RESYNC_INTERVAL). HOME matters well beyond this gate -- helm needs a writable home
-  # (helm#8038), and losing it breaks every cdc's chart fetch, not just saturation.
-  #
-  # Threshold 50 costs 1.23x drain time steady and 1.25x restarting into a backlog on
-  # the GKE harness (core-provider #66, post-#82 rule, 250m limit). On krateo-057 the
-  # expectation is NO measurable change: the 11-15 sizing found in_flight_max <= 1 for
-  # every cdc over 24h, and the gate's floor is 1. core-provider #554 holds the before
-  # and after -- in-flight max, local capacity, deferred passes, CPU p95 per cdc.
-  cdc:
-    env:
-      COMPOSITION_CONTROLLER_SATURATION_ENABLED: "true"
-      COMPOSITION_CONTROLLER_CPU_PRESSURE_THRESHOLD: "50"
 
 # Namespaces the umbrella manages. The observability stack (ClickStack, collectors,
 # MCP, agents) now runs entirely in `krateo` — there is no separate clickhouse

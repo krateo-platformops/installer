@@ -971,7 +971,13 @@ apiVersion: composition.krateo.io/{{ $emit }}
 kind: {{ $c.kind }}
 metadata:
   name: {{ $c.name }}
-  namespace: {{ $top.Values.namespaces.krateo }}
+  {{/* The ONLY place a composition instance's namespace is set. Hardcoded to namespaces.krateo
+       until 2026-11-17; now honours a pin's own `namespace`, which is what lets the installer
+       upgrade demo's existing Kyverno release in namespace `kyverno` in place rather than
+       installing a second one in krateo-system. definitions.yaml places the CD, Role and
+       RoleBinding at the same namespace already, and creates it with resource-policy: keep when
+       absent while leaving an existing one untouched. */}}
+  namespace: {{ $c.namespace | default $top.Values.namespaces.krateo }}
   labels:
     # NB: app.kubernetes.io/managed-by is intentionally NOT set — helm forces it to
     # "Helm" on every release resource, so a chart-set value never converges and makes

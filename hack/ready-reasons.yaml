@@ -153,8 +153,56 @@ composition:
     ChartRenderable:
       universal: false   # absent on a paused composition
       healthy: [Renderable]
-      unhealthy: [UnservedKind, ValuesSchemaViolation, InspectorRejected, InspectorUnavailable]
-      note: chart-inspector rendered the chart against this cluster.
+      unhealthy: [UnservedKind, ValuesSchemaViolation, InspectorRejected, InspectorUnavailable,
+                  TemplateRefused]
+      note: >-
+        chart-inspector rendered the chart against this cluster.
+
+        InspectorUnavailable IS AMBIGUOUS AND DOES NOT MEAN WHAT IT SAYS (core-provider#583,
+        2026-11-18). chart-inspector's classifier is 400 = schema violation, 422 = unserved kind,
+        EVERYTHING ELSE = 500; and the cdc maps every 5xx to InspectorUnavailable, documented as
+        "chart-inspector itself failed; not the blueprint's fault". So A TEMPLATE'S OWN `fail`
+        ARRIVES HERE AS InspectorUnavailable, attributing a deliberate refusal by THIS chart to an
+        infrastructure fault. The installer has guards that fail deliberately: the
+        github-provider-kog-config kinds check is one, and the namespace/readerGroups guard that
+        froze krateo-057 on 0.3.674 was another.
+
+        THE DISCRIMINATOR, from core-provider, until #583 is fixed: a 5xx whose response body
+        contains `execution error at (` or `execution error in (` is THE CHART REFUSING ITS VALUES,
+        not chart-inspector failing. Read the body, not the reason. Measured example, the Installer
+        CR's Synced message at 2026-11-18T00:16:10Z - "unexpected status code: 500 - response body:
+        {... execution error at (installer/templates/withheld-components.yaml:31:20):
+        components[kyverno]: ...}".
+
+        A 500 is also a THIRD class alongside the two transport signatures core-provider named for
+        the chart-inspector termination work: `connection refused`/`i/o timeout` on the dial means
+        #578 is not working, `EOF`/`connection reset by peer` while reading means #582 is missing,
+        and a 5xx means the server ANSWERED. Forcing a 500 into either transport arm would report a
+        termination verdict about a template error.
+
+        Ready=False/Unavailable is CORRECT either way, because any HTTP answer is a verdict -
+        including under core-provider#579's grace. Only the ChartRenderable attribution is wrong, so
+        this note changes how to READ the reason, not whether it is unhealthy.
+
+        #583 IS FIXED IN core-provider 2.13.112, AND THE STRING DISCRIMINATOR ABOVE IS NOW A FALLBACK
+        FOR OLDER VERSIONS ONLY. From 2.13.112 chart-inspector answers 400 with Status reason
+        "TemplateRefused" for a chart's own `fail`, and the cdc sets ChartRenderable
+        False/TemplateRefused, writer composition-dynamic-controller, clearance indefinite - until the
+        author changes the values or the chart (#583).
+
+        Ready IS UNCHANGED for this class: still False/Unavailable. So every alert, rollup and gate
+        keyed on Ready behaves identically, and only a reader of ChartRenderable sees the new
+        information.
+
+        WHICH SIGNAL TO READ, BY VERSION. Below 2.13.112, a 5xx whose body contains `execution error
+        at (` - a STRING match on an error body, which breaks silently the day the message is
+        reworded. From 2.13.112, reason == TemplateRefused with status 400 instead of 500 - a fact
+        rather than a parse. KEEP BOTH while any cluster runs below 2.13.112: 057 and demo are on
+        2.13.111 as of 2026-11-18, so the string discriminator is still the live one on both.
+
+        This row exists because core-provider sent the declaration copied from their branch before
+        cutting the tag, and check-ready-reasons-current failed the moment 2.13.112 published. That
+        is the contract working in both directions.
     RBACComplete:
       universal: false   # absent on a paused composition
       healthy: [Applied]
@@ -478,6 +526,26 @@ compositionDefinition:
     # for a state that cannot change, so a time-bounded detector was the only thing that could
     # ever have noticed. The new reason makes it FAILED, which is a verdict rather than a wait.
     - ValuesSchemaMissing
+    # DerivedNameTooLong: core-provider 2.13.114 / #588. Observe now checks the names it will
+    # DERIVE from the chart's name and Chart.yaml version BEFORE writing the CRD, and refuses when
+    # one would exceed its limit: the CRD version `v<ver>` (DNS-1035, 63), the controller selector
+    # `<plural>-v<ver>-controller` (63 -- previously silently trunc'd, so two versions could
+    # collide on one selector), and `<plural>-v<ver>-controller-service` (63, checked only when
+    # cdc.metrics.enabled).
+    #
+    # FAILED rather than converging, and the distinction is the point: waiting does not shorten a
+    # name. Same lesson ValuesSchemaMissing records above -- a converging reason for a state that
+    # cannot change is only ever caught by a time bound.
+    #
+    # NOT REACHABLE AT THE PINNED 2.13.113. Classified now anyway, because roll-snapshot reports an
+    # unclassified reason as `unclassified`, which reads as this file having drifted from
+    # core-provider's table rather than as a known state. Measured on krateo-057 for the bump: the
+    # longest name this check governs is krateogcpconfigconnectorcrds-v0-1-5-controller at 46 of
+    # 63, so 17 characters of headroom (9 with the -service suffix, moot there -- 0
+    # controller-service Services exist, so cdc.metrics.enabled is off). The 53-character names on
+    # that cluster are github-provider-kog controllers, which carry no `-v<ver>-` segment and are
+    # therefore not names this check derives.
+    - DerivedNameTooLong
   unevaluated:
     # NotObserved is core-provider's "unevaluated (rolls up as healthy)" -- a PARENT counts such
     # a child healthy. This repo files it unevaluated and its tooling counts it NOT converged,

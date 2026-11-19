@@ -548,7 +548,7 @@ This answers only "may this component be enabled". What must be HEALTHY before i
      flap -- chart-inspector cannot render the chart at all, so emitting anyway buys an endless 500. */}}
 {{- if eq (include "inst.requiresApiGroups" (list $c.requiresApiGroups $allCRDs)) "true" -}}
 {{- $deps := include "inst.depsReady" (list $top $c.deps $comps $allCRDs) -}}
-{{- $exists := include "inst.compositionExistsAny" (list $top $c.kind $c.name $allCRDs) -}}
+{{- $exists := include "inst.compositionExistsAny" (list $top $c.kind $c.name $allCRDs $c.namespace) -}}
 {{- if or (eq $deps "true") (eq $exists "true") -}}{{- $emit -}}{{- end -}}
 {{- end -}}
 {{- else -}}
@@ -581,7 +581,7 @@ This answers only "may this component be enabled". What must be HEALTHY before i
          across a bump, so a lookup at the PINNED version MISSES an object that exists, $gone stays
          "true", and the draining component is deleted WHILE A DEPENDENT IS STILL THERE -- the
          exact outcome this helper exists to prevent, reintroduced by the fix for the other one. */}}
-    {{- if eq (include "inst.compositionExistsAny" (list $top $c.kind $c.name $allCRDs)) "true" -}}{{- $gone = "" -}}{{- end -}}
+    {{- if eq (include "inst.compositionExistsAny" (list $top $c.kind $c.name $allCRDs $c.namespace)) "true" -}}{{- $gone = "" -}}{{- end -}}
   {{- end -}}
 {{- end -}}
 {{- $gone -}}
@@ -595,13 +595,14 @@ This answers only "may this component be enabled". What must be HEALTHY before i
      GC'd out from under a still-draining component (the Pass-A counterpart to inst.dependentsGone). */}}
 {{- define "inst.compositionExists" -}}
 {{- $top := index . 0 -}}{{- $kind := index . 1 -}}{{- $name := index . 2 -}}{{- $ver := index . 3 -}}{{- $allCRDs := index . 4 -}}
+{{- $ns := index . 5 -}}
 {{/* Keyed on the tag the instance is actually SERVED at, not on $ver (#477 follow-on). This helper
      answers "is this component still present?" for definitions.yaml, which uses it to keep a
      CompositionDefinition REGISTERED while the component drains. A pinned-version lookup misses a
      live CR that inst.emitTag is holding at an older served tag, so the definition would be
      deregistered and the generated CRD GC'd out from under the live composition -- the orphaned-CR
      outcome this helper was added to prevent. */}}
-{{- include "inst.compositionExistsAny" (list $top $kind $name $allCRDs) -}}
+{{- include "inst.compositionExistsAny" (list $top $kind $name $allCRDs $ns) -}}
 {{- end -}}
 
 {{/* External IP of a browser-facing component's LoadBalancer Service. args: (list $ "svcNameSubstring")
@@ -775,11 +776,40 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- range $o := (.Values.components | default list) -}}
 {{- if and (kindIs "map" $o) (hasKey $o "name") -}}
 {{- if hasKey $known (toString $o.name) -}}
-{{/* namespace/readerGroups place a blueprint's CompositionDefinition in its own namespace; they are
-     for APPENDED registerOnly catalog blueprints only (definitions.yaml). A pinned component's
-     definition stays in namespaces.krateo, so refuse rather than silently ignore them. */}}
-{{- if or (hasKey $o "namespace") (hasKey $o "readerGroups") -}}{{- fail (printf "components[%s]: `namespace`/`readerGroups` apply only to appended registerOnly catalog blueprints, not to a pinned component" (toString $o.name)) -}}{{- end -}}
-{{- $fields := dict -}}
+{{/* PIN-OWNED KEYS ON A PINNED COMPONENT ARE IGNORED HERE, not refused, and not merged.
+     `namespace` and `readerGroups` are decided by the pins file. This branch handles
+     .Values.components, which is the OVERRIDE layer -- and because the self-bootstrap writes the
+     EFFECTIVE components list into the Installer CR, and the CR's spec.components arrives here as
+     .Values.components on the next render, a pin-owned key reaches this branch BY DESIGN one pass
+     after any chart that sets it. It is not an operator's override at all; it is the chart's own
+     value coming home.
+
+     WHY NOT `fail`, which is what this did until 2026-11-18. A fail here does not reject a bad
+     input -- it FREEZES THE CLUSTER. Measured on krateo-057 at 00:15:30Z rolling 0.3.674: the
+     bootstrap post-upgrade hook patched the CR with the new pins (kyverno gained
+     namespace: kyverno, a value present only in 0.3.674), THEN chart-inspector rendered and hit
+     this fail, answering HTTP 500. ChartRenderable went False/InspectorUnavailable, RBACComplete
+     Unknown/NotEvaluated, and no configuration change could apply. 96 releases stayed deployed and
+     158 deployments stayed ready -- frozen, not damaged -- but `helm rollback` could NOT clear it,
+     because the value was in the CR by then and EVERY chart carrying the fail refuses it. Only a
+     hand edit of the CR unfroze it.
+
+     WHY NOT COMPARE AGAINST THE PIN, which was my first fix. The acmp session found the flaw: an
+     echo passes only while the pin and the CR AGREE, so the day the pins file CHANGES a namespace,
+     every cluster's CR still holds the previous echo -- now a "different" value -- and every
+     cluster freezes again, with the same unclearable rollback. That turns the guard into a trap
+     for the pins file's own changes, which is worse than the bug it fixes.
+
+     THE PROPERTY IS STILL HELD, and held more strongly than by refusing. The pins file is the ONLY
+     source of a pinned component's namespace: this branch copies `namespace` into neither $fields
+     nor the override map, so whatever the CR says is discarded and the pin always wins. A cluster
+     therefore CANNOT decide a component lives somewhere else -- an attempt is inert rather than
+     fatal, which is the same guarantee without a cluster-wide outage as its enforcement mechanism.
+     And it is not silent: withheld-components.yaml reports what was not emitted, and the write-back
+     no longer carries these keys at all (see inst.componentsPatchList).
+
+     An APPENDED registerOnly blueprint is unaffected -- it takes the else branch below, where
+     namespace/readerGroups are passed through whole, because for those the CR IS the only source. */}}{{- $fields := dict -}}
 {{- range $k := (list "version" "registerOnly" "tier" "repo" "chart") -}}
 {{- if hasKey $o $k -}}{{- $_ := set $fields $k (index $o $k) -}}{{- end -}}
 {{- end -}}
@@ -968,7 +998,7 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{/* Ask existence the way inst.emitDecision asks it -- version-agnostically. A reason derived from
      a different question than the decision acted on is how this reporter came to contradict the
      gate once already. */}}
-{{- $any := include "inst.compositionExistsAny" (list $top $c.kind $c.name $allCRDs) -}}
+{{- $any := include "inst.compositionExistsAny" (list $top $c.kind $c.name $allCRDs $c.namespace) -}}
 {{- if not $etag -}}
 {{- printf "withheld: no CRD serves kind %s at version %s and no live instance exists at any served version to keep alive (normal before first creation; persistent means crdgen rejected the CRD)" $c.kind (toString $c.version) -}}
 {{- else if and ($c.deps | default list) (ne $any "true") -}}
@@ -1248,10 +1278,66 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 
 {{- define "inst.compositionExistsAny" -}}
 {{- $top := index . 0 -}}{{- $kind := index . 1 -}}{{- $name := index . 2 -}}{{- $allCRDs := index . 3 -}}
+{{/* THE NAMESPACE IS A PARAMETER, and before 2026-11-18 it was hardcoded to namespaces.krateo.
+     That was correct while every composition instance lived there. It stopped being correct in the
+     change that let a pinned component target its own namespace (installer#1029):
+     compositions.yaml now emits `namespace: {{ $c.namespace | default ... }}`, so a
+     namespace-targeted component's instance is NOT in namespaces.krateo and a lookup there finds
+     nothing.
+
+     WHICH CONSUMER THIS ACTUALLY BREAKS. I first wrote that the hazard was inst.emitDecision's
+     `or $deps $exists` escape hatch never opening, so a deps flap would prune a live workload. THAT
+     IS WRONG for the component this matters for: inst.depsReady starts at "true" and ranges over
+     the dep list, so a component with NO deps -- which kyverno is -- always has $deps="true" and
+     never consults $exists at all. I measured that after writing the claim, not before.
+
+     The reachable consumer is definitions.yaml's third arm:
+
+         {{- if or $c.registerOnly (compEnabled ...) (compositionExists ...) }}
+
+     which keeps a DEFINITION registered while its composition is still live. Read with the wrong
+     namespace it is permanently false, so with the FEATURE OFF and a composition still present the
+     CompositionDefinition is deregistered and its generated CRDs garbage-collected out from under
+     that live composition. The helper's own comment two definitions below calls this "the
+     orphaned-CR outcome this helper was added to prevent".
+
+     WHY IT IS REACHABLE AND NOT THEORETICAL. kyverno is gated on features.identityLifecycle, TRUE
+     on demo and FALSE on 057, and demo's Kyverno release already exists in namespace `kyverno` --
+     adopting it is what tag K does. So turning identityLifecycle off on demo, for any reason, would
+     GC the Kyverno CRDs from under a running install, and ClusterPolicy tenant-namespace-on-login
+     depends on that install. The keycloak-provider-kog session is holding off exactly that step in
+     its Arm A rehearsal until this is fixed.
+
+     inst.dependentsGone and the withheld reporter take the same parameter for the same reason: a
+     reason derived from a different question than the decision acted on is how that reporter came
+     to contradict the gate once already.
+
+     THIS CHANGE HAS NO UNIT TEST, AND THAT IS A HARNESS LIMIT RATHER THAN A CHOICE. I tried to
+     build one and measured why it cannot exist here: helm-unittest's `lookup` fake does not serve
+     this composition lookup at all. definitions.yaml renders 41 documents with the feature off and
+     41 with the feature off PLUS a Kyverno composition fixture -- the third arm never fires. I then
+     forced the lookup back to namespaces.krateo with the fixture ALSO in namespaces.krateo, so both
+     sides agreed on the release namespace, and it was still 41. So the failure is the fake, not the
+     namespace, and no arrangement of fixtures can exercise this path. (The same harness DOES serve
+     other namespaced custom resources -- httproutes_test.yaml documents kind-specific quirks in it,
+     including a kind named `Gateway` resolving to an empty dict whatever group it is under.)
+
+     THE CONTROL THAT PROVES THE PATH IS REACHABLE AT ALL: with features.identityLifecycle TRUE the
+     kyverno CompositionDefinition renders and `spec.chart.version: 3.9.4` is selectable, and the
+     document count goes 41 -> 45. So the template and the selector are right; only the lookup is
+     unserved.
+
+     SO THE VERIFICATION IS AN INTEGRATION STEP, named rather than skipped: on a cluster where a
+     Kyverno composition is LIVE in namespace `kyverno`, turn features.identityLifecycle OFF and
+     assert the CompositionDefinition is still registered and its CRDs still present. That is
+     precisely the step keycloak-provider-kog is holding in its Arm A rehearsal, and it is the only
+     place this can be measured. Do not record this as verified until that step reports. */}}
+{{- $ns := index . 4 -}}
+{{- if not $ns -}}{{- $ns = $top.Values.namespaces.krateo -}}{{- end -}}
 {{- $found := "" -}}
 {{- range $t := splitList " " (include "inst.servedTags" (list $kind $allCRDs)) -}}
 {{- if and (not $found) $t -}}
-{{- if lookup (printf "composition.krateo.io/%s" $t) $kind $top.Values.namespaces.krateo $name -}}{{- $found = "true" -}}{{- end -}}
+{{- if lookup (printf "composition.krateo.io/%s" $t) $kind $ns $name -}}{{- $found = "true" -}}{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- $found -}}
@@ -1375,6 +1461,95 @@ the surgical upgrade patch — so the two paths cannot drift.
      componentValuesUnset needs -- not for installer-computed wiring. */}}
 {{- $cv | toJson -}}
 {{- end -}}
+
+{{/* ---------------------------------------------------------------------------------------
+     inst.componentsPatchList — the effective components list with PIN-OWNED KEYS REMOVED from
+     pinned entries, for writing back to the Installer CR.
+
+     WHY THIS EXISTS. The self-bootstrap merge-patches the effective `components` list onto the live
+     CR so chart-side pins reach the cluster. Writing pin-owned keys into that list is what froze
+     krateo-057 on 2026-11-18: the CR's spec.components arrives as .Values.components on the next
+     render, so a `namespace` that the PINS FILE decided came back through the OVERRIDE path and hit
+     a guard meant for per-cluster overrides. The guard is no longer fatal, but the cause is here:
+     the CR should hold what a CLUSTER overrides, never a copy of what the pin already decides.
+
+     This was the acmp session's diagnosis, and their argument for fixing the writer rather than
+     only relaxing the reader is the reason this helper exists: with a stale copy in the CR, ANY
+     later change to a pin-owned field collides with it. Remove the copy and the collision cannot
+     occur, whatever the reader does.
+
+     PINNED ENTRIES ONLY. An appended registerOnly catalog blueprint keeps its namespace and
+     readerGroups, because for those the CR is the ONLY source -- stripping them would delete a
+     cluster's own configuration. The discriminator is presence in files/component-pins.min.yaml. */}}
+{{/* ---------------------------------------------------------------------------------------
+     inst.ignoredPinOwnedOverrides — the pin-owned keys that .Values.components tried to set on a
+     PINNED component, and which the merge therefore ignored. Returned as a JSON map of
+     "<component>.<key>" -> the ignored value.
+
+     WHY THIS EXISTS. As of 2026-11-18 a pin-owned key on a pinned component is IGNORED rather than
+     refused, because refusing froze krateo-057 (chart-inspector HTTP 500, unclearable by rollback).
+     Ignoring is right for the render -- but an ignored override with no trace is the same failure
+     class as the Installer CRD silently PRUNING an undeclared key: someone sets a namespace, every
+     tool reports success, and the value never takes effect. That class has cost this repo four
+     separate releases.
+
+     This was the acmp session's point, made immediately after they had talked me out of the
+     refuse-on-mismatch design. Inert for the render, visible in the report.
+
+     THE EXPECTED CASE IS NOT REPORTED, and that distinction is the whole design. The self-bootstrap
+     writes pin-owned keys into the CR on any chart that predates inst.componentsPatchList, and the
+     CR comes back as .Values.components -- so an ECHO of the pin's own value is the machine talking
+     to itself and says nothing to an operator. Only a value that DISAGREES with the pin represents
+     an intent that did not take effect, and only that is worth a line. Otherwise this report would
+     be full on every cluster for one pass after an upgrade and read as noise. */}}
+{{- define "inst.ignoredPinOwnedOverrides" -}}
+{{- $top := . -}}
+{{- $pins := dict -}}
+{{- range $c := (($top.Files.Get "files/component-pins.min.yaml" | fromYaml).components | default list) -}}
+{{- $_ := set $pins (toString $c.name) $c -}}
+{{- end -}}
+{{- $ignored := dict -}}
+{{- range $o := ($top.Values.components | default list) -}}
+{{- if and (kindIs "map" $o) (hasKey $o "name") -}}
+{{- $pin := index $pins (toString $o.name) -}}
+{{- if $pin -}}
+{{- range $k := (list "namespace" "readerGroups") -}}
+{{- if hasKey $o $k -}}
+{{- $want := index $o $k -}}
+{{- $have := (get $pin $k) -}}
+{{- if ne (toString $want) (toString ($have | default "")) -}}
+{{- $_ := set $ignored (printf "%s.%s" (toString $o.name) $k) (toString $want) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $ignored | toJson -}}
+{{- end -}}
+
+
+{{- define "inst.componentsPatchList" -}}
+{{- $top := . -}}
+{{- $pinned := dict -}}
+{{- range $c := (($top.Files.Get "files/component-pins.min.yaml" | fromYaml).components | default list) -}}
+{{- $_ := set $pinned (toString $c.name) true -}}
+{{- end -}}
+{{- $out := list -}}
+{{- range $c := (include "inst.componentsYaml" $top | fromYaml).components -}}
+{{- if hasKey $pinned (toString $c.name) -}}
+{{- $clean := dict -}}
+{{- range $k, $v := $c -}}
+{{- if not (or (eq $k "namespace") (eq $k "readerGroups")) -}}{{- $_ := set $clean $k $v -}}{{- end -}}
+{{- end -}}
+{{- $out = append $out $clean -}}
+{{- else -}}
+{{- $out = append $out $c -}}
+{{- end -}}
+{{- end -}}
+{{- $out | toJson -}}
+{{- end -}}
+
 
 {{- define "inst.componentValuesPatch" -}}
 {{- /* Builds components-patch.json's componentValues, turning every componentValuesUnset path into
@@ -1621,13 +1796,77 @@ be tested without faking that flag.
      make each prefix an element boundary, so /keycloak/realmsx and /keycloak/realms/krateox cannot
      match. No rewrite: Keycloak already serves under relativePath. */}}
 {{- $paths = list (printf "%s/realms/%s/" $rp $realm) (printf "%s/resources/" $rp) }}
+{{- else if eq $d.gatewayPathsFrom "accessRequestIntake" }}
+{{/* IDENTITY-LIFECYCLE'S ACCESS-REQUEST INTAKE, and it is the OPPOSITE failure posture to
+     keycloakRealm above. keycloakRealm FAILS when its input is missing, because a Keycloak that is
+     enabled and unrouted is broken. This one must render NOTHING, silently, when the feature is
+     off: an identity-lifecycle install without access requests is a legitimate configuration, and
+     `if $paths` below already turns an empty list into no rule and no backend.
+
+     Copying keycloakRealm's `fail` here would break every IL install that does not want the
+     feature. Same mechanism, inverted posture -- which is exactly what gets copied wrong.
+
+     WHY THE INTAKE NEEDS A ROUTE AT ALL (keycloak-provider-kog, measured on kc-roll057 and
+     confirmed on krateo-057): IL's own intake.route renders only for a HOST-mode gateway -- "where
+     the installer routes by path, it renders nothing". So on a path-mode cluster the intake
+     Deployment runs and NOTHING routes to it: 057 had 26 HTTPRoutes, 27 rules, zero mentioning
+     request-access. A browser's POST /request-access/api/... matched platform-frontend `/` and
+     reached the SPA.
+
+     ONE PREFIX COVERS THE WHOLE PUBLIC SURFACE. From internal/intake/server.go at IL 0.4.4 the
+     intake serves exactly /request-access/api/v1/{requests,username-checks,confirmations,hubspot}.
+     /healthz is probes-only and falls outside the prefix anyway. NO REWRITE: the intake serves
+     under the prefix itself.
+
+     NOT /request-access/confirm -- that page is NOT the intake's and not the frontend's either. It
+     is portal's public-pages chart at /public/request-access-confirm, which is a separate pinned
+     component. */}}
+{{- $cv := default dict $top.Values.componentValues }}
+{{- if eq (toString (dig "identity-lifecycle" "accessRequest" "intake" "enabled" false $cv)) "true" }}
+{{- $paths = list "/request-access/api" }}
+{{- end }}
 {{- else }}
-{{- fail (printf "components[%s]: gatewayPathsFrom=%s is not a derivation this chart knows. The only one is keycloakRealm." $d.name $d.gatewayPathsFrom) }}
+{{- fail (printf "components[%s]: gatewayPathsFrom=%s is not a derivation this chart knows. The ones this chart knows are keycloakRealm and accessRequestIntake." $d.name $d.gatewayPathsFrom) }}
 {{- end }}
 {{- end }}
 {{- if $paths }}
 {{- $backendName := include "inst.svcname" (list $top $d.svcMatch) }}
-{{- if not $backendName }}{{- $backendName = $d.name }}{{- end }}
+{{/* A DERIVED ROUTE FALLS BACK TO ITS svcMatch, NOT ITS COMPONENT NAME (keycloak-provider-kog).
+     The generic fallback is $d.name, which for identity-lifecycle is the Service
+     `identity-lifecycle` -- a name IL never renders. Mid-install, or wherever the lookup is
+     vacuous, that produces a route pointing at a Service that will never exist: a dangling
+     backend that looks configured. For a derived route the exact svcMatch is always the right
+     target, so the route can only ever point at identity-lifecycle-intake. Whether this should
+     become the GENERAL fallback belongs with the svcMatch exact-only work, not here. */}}
+{{- if not $backendName }}
+{{- if and $d.gatewayPathsFrom $d.svcMatch }}{{- $backendName = $d.svcMatch }}
+{{- else }}{{- $backendName = $d.name }}{{- end }}
+{{- end }}
+{{/* THE CONTAINS-FALLBACK IS A REAL HAZARD FOR A DERIVED PUBLIC ROUTE, and it is already
+     load-bearing elsewhere so it cannot simply be removed. inst.svcname is `$exact | default
+     $contains`: an exact Service name wins, but when none exists it returns the FIRST Service whose
+     name CONTAINS the svcMatch string.
+
+     Measured on krateo-057: krateo-sse-proxy resolves THROUGH that fallback today (svcMatch
+     `sse-proxy`, no such Service, resolves to `krateo-sse-proxy`), and five more are safe only
+     because an exact Service happens to exist -- authn's `authn` also matches `authn-internal`,
+     the TLS-only listener on 8090.
+
+     For THIS route the sibling is `identity-lifecycle-intake-metrics` on port 9090
+     (keycloak-provider-kog). A fallback onto it would publish a metrics port on a PUBLIC path and
+     come up healthy, because the route would exist and the backend would answer. So a derived
+     route refuses the fallback: exact or fail. The general fix to inst.svcname is a separate
+     change in two releases. */}}
+{{/* THE GUARD MUST NOT FIRE ON A VACUOUS LOOKUP. `lookup` returns nothing under `helm template`
+     and `--dry-run=client`, so inst.svcname comes back EMPTY and line above falls back to
+     $d.name -- which is not the svcMatch and would trip a naive `ne`. My first version did exactly
+     that and broke all three tests plus every non-cluster render. So: fire only when the lookup
+     RESOLVED something and that something is not the exact name. Empty means "no cluster to ask",
+     which is not evidence of a wrong backend. */}}
+{{- $resolved := include "inst.svcname" (list $top $d.svcMatch) }}
+{{- if and $d.gatewayPathsFrom $resolved (ne $resolved $d.svcMatch) }}
+{{- fail (printf "components[%s]: gatewayPathsFrom=%s resolved its backend to Service %q, which is NOT the exact svcMatch %q. inst.svcname fell back to a CONTAINS match. For a derived PUBLIC route that is refused: the sibling may be a metrics or internal listener (identity-lifecycle-intake-metrics:9090 is exactly this case), and the route would come up healthy on the wrong port. Create the exact Service, or correct svcMatch." $d.name $d.gatewayPathsFrom $resolved $d.svcMatch) }}
+{{- end }}
 {{/* Listener + ports: default to the shared platform-http:$gwPlatformPort listener and the peer's
      exposePort backend — the four portal pins (authn/snowplow/frontend/sse-proxy) carry NO
      gatewayListener/gatewayPort so these fallbacks reproduce today's route byte-identically. A

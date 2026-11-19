@@ -14,7 +14,7 @@
 {{- range $c := $components }}
 {{/* registerOnly (catalog) blueprints are always registered while installDefinitions is on, so the
      blueprint appears in the portal; their Composition emission is suppressed in compositions.yaml. */}}
-{{- if or $c.registerOnly (eq (include "inst.compEnabled" (list $ $c)) "true") (eq (include "inst.compositionExists" (list $ $c.kind $c.name $c.version $allCRDs)) "true") }}
+{{- if or $c.registerOnly (eq (include "inst.compEnabled" (list $ $c)) "true") (eq (include "inst.compositionExists" (list $ $c.kind $c.name $c.version $allCRDs $c.namespace)) "true") }}
 {{/* Blueprint namespace (portal#261: a blueprint's namespace is its visibility scope). An APPENDED
      registerOnly catalog blueprint may set `namespace` to place its CompositionDefinition there
      instead of namespaces.krateo, and `readerGroups` to let those groups see it on the Blueprints
@@ -26,8 +26,26 @@
      release (core-provider#203) hands the composition controller over without touching the
      definition's instances. */}}
 {{- $cdNamespace := $.Values.namespaces.krateo }}
+{{/* `namespace` ON A PINNED COMPONENT IS NOW ALLOWED, and the guard that forbade it was narrowed
+     rather than deleted. It read "`namespace` is only supported on registerOnly catalog
+     blueprints", which was true when the field existed only to place catalogue definitions. It is
+     no longer true: Diego decided 2026-11-16 that the installer ADOPTS demo's hand-installed
+     Kyverno in place, which means the kyverno pin must target helm release `kyverno` in namespace
+     `kyverno` so the installer upgrades that release instead of standing a second one up beside it.
+
+     WHAT THE FAIL WAS ACTUALLY PROTECTING, and what still needs care: for a non-registerOnly
+     component the namespace moves the COMPOSITION INSTANCE as well as the definition. On a cluster
+     where that component has no composition yet this is a plain create -- kyverno on krateo-057,
+     where namespace `kyverno` does not even exist. On a cluster where it DOES have one in
+     namespaces.krateo, adding `namespace` is a CROSS-NAMESPACE MIGRATION, not a rename: the new
+     instance is created and the old one removed within one upgrade, and the release is renamed with
+     it. Nothing here detects that, so it belongs in the pin's own review rather than in a template.
+
+     The companion hazard is already handled elsewhere and is load-bearing:
+     compositions.yaml sets `krateo.io/release-name: {{ $c.name }}`, without which the cdc would
+     generate a suffixed release name, collide with nothing, and produce two complete installations
+     side by side instead of a migration. */}}
 {{- if $c.namespace }}
-{{- if not $c.registerOnly }}{{- fail (printf "components[%s]: `namespace` is only supported on registerOnly catalog blueprints" (toString $c.name)) }}{{- end }}
 {{- $cdNamespace = $c.namespace }}
 {{- end }}
 {{- if and $c.readerGroups (eq $cdNamespace $.Values.namespaces.krateo) }}
@@ -53,10 +71,31 @@
 {{- fail (printf "components[github-provider-kog-config]: componentValues.github-provider-kog.kinds omits %s, which this component requires. It renders a RepositoryConfiguration and a PullRequestConfiguration, so both RestDefinitions must exist. Neither `deps` nor `requiresApiGroups: github.krateo.io` can detect this — the component is Ready and the API group exists — so without this guard the chart would fail with an endless chart-inspector 500. Fix: add %s to componentValues.github-provider-kog.kinds, or leave `kinds` empty to render all 32, or set features.githubProviderKogConfig=false." (join ", " $missing) (join " and " $missing)) }}
 {{- end }}{{- end }}{{- end }}
 {{- if ne $cdNamespace $.Values.namespaces.krateo }}
-{{/* Emit the namespace unless it already exists and is not this release's (helm cannot adopt it,
-     and an existing namespace needs nothing). keep: uninstalling the installer must not delete a
-     namespace other things may have been put into; core-provider removes the definition's own
-     controller objects when the definition goes. */}}
+{{/* Emit the namespace unless it already exists and is not this release's. keep: uninstalling the
+     installer must not delete a namespace other things may have been put into; core-provider
+     removes the definition's own controller objects when the definition goes.
+
+     THIS LOOKUP IS THE ONLY THING PREVENTING ADOPTION, and this comment used to say the opposite.
+     It read "helm cannot adopt it", which is FALSE under the cdc: core-provider applies the
+     umbrella with TakeOwnership: true (cdc internal/composition/composition.go:683, 1045, 1306),
+     so an emitted Namespace TAKES OVER an existing unannotated one at the same uid instead of
+     failing helm's ownership check. Corrected 2026-11-18 from core-provider's code read, after
+     keycloak-provider-kog measured a hand-created `kyverno` namespace being adopted into
+     installer-platform on kc-roll057 -- same uid, newly carrying meta.helm.sh/release-name,
+     app.kubernetes.io/managed-by: Helm and helm.sh/resource-policy: keep.
+
+     So a false belief about helm's ownership check had been standing in for the guard. If this
+     condition is ever weakened there is no second line of defence.
+
+     THE LOOKUP ITSELF IS SOUND, which was the other thing I doubted. core-provider confirmed from
+     helm v3.20.2's code that `lookup` is served LIVE in both real render paths: chart-inspector
+     renders with DryRun: DryRunServer, which sets interactWithRemote = true and renders with
+     engine.New(restConfig), and the cdc's real apply is not a dry run at all. It is vacuous only
+     under `helm template` / --dry-run=client. A cluster-scoped single-object lookup takes the same
+     path as the list form (helm pkg/engine/lookup_func.go: client.Get): NotFound yields an empty
+     map, and ANY other error -- Forbidden included -- fails the whole render rather than returning
+     empty. So this cannot silently mis-fire on RBAC, and 057's chart-inspector SA does hold
+     namespaces get/list (measured). Why the kc-roll057 render saw NotFound is still open. */}}
 {{- $existingNs := lookup "v1" "Namespace" "" $cdNamespace }}
 {{- if or (not $existingNs) (eq (dig "metadata" "annotations" "meta.helm.sh/release-name" "" $existingNs) $.Release.Name) }}
 ---
@@ -157,7 +196,75 @@ spec:
   statusDataTemplate:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with $c.resources }}
+  {{- if and $c.targetRef $c.expose }}
+  {{/* A TARGETED COMPONENT CANNOT BE EXPOSED FROM HERE, and the failure would be SILENT.
+
+       `inst.svcname` resolves a component's backend Service by looking it up IN THIS CLUSTER. A
+       targeted component's Service lives on the TARGET, so exposure wiring for it can only resolve
+       to nothing -- or, worse, to a DIFFERENT local Service through the contains-fallback
+       (`$exact | default $contains`).
+
+       MEASURED on krateo-057, and authn is exactly the dangerous case: the local Services are
+       `authn`, `authn-agent` and `authn-internal`. A component `authn-spoke1` carrying
+       `svcMatch: authn` would resolve to THIS cluster's `authn` -- routing public traffic to the
+       MANAGEMENT cluster's authn while every signal says it reaches the target. That is the same
+       resolved-but-wrong-backend class the derived-route guard in _helpers.tpl refuses, one layer
+       along, and it comes up healthy.
+
+       So the two keys are mutually exclusive and the render refuses rather than guessing. Exposing
+       a service that runs on a spoke is a gateway question on that spoke, not an `expose: true`
+       here. */}}
+  {{- fail (printf "component %q sets BOTH targetRef and expose. A targeted component's Service runs on the TARGET cluster, but inst.svcname resolves backends in THIS one -- and its contains-fallback would silently bind the route to a DIFFERENT local Service (on 057: authn, authn-agent, authn-internal all exist, so svcMatch 'authn' resolves HERE). Drop expose/exposePort/svcMatch/gatewayPath* from this pin; exposing a spoke service is a gateway question on that spoke." $c.name) }}
+  {{- end }}
+  {{- with $c.targetRef }}
+  {{/* REMOTE-TARGET DELIVERY, at spec.deploy.targetRef (installer#579, for authn#38).
+
+       WHAT THIS DOES: it aims a component's composition-dynamic-controller -- and the generated
+       CRD and RBAC -- at a REMOTE cluster instead of this one. core-provider has shipped the
+       mechanism since 2026-08-24; the installer had no way to reach it, so no component could be
+       installed into a spoke through this umbrella regardless of what core-provider supported.
+
+       THE SHAPE MIRRORS THE CRD, read from the live CRD on krateo-057 rather than from the
+       roadmap. compositiondefinitions.core.krateo.io v1alpha1 declares:
+         spec: {apiRef, chart, controller, deploy, statusDataTemplate, upgradePolicy}
+         spec.deploy.properties:        [targetRef]
+         spec.deploy.targetRef.properties: [name]   required: [name]
+       targetRef has NO namespace field, and the CRD's own description says the name is
+       "resolved in the referencing object's own namespace". So:
+
+       THE KubernetesTarget MUST LIVE IN THE CD'S NAMESPACE, which here is $cdNamespace. A target
+       created anywhere else is not found, and the failure surfaces on the CompositionDefinition
+       rather than on the installer -- so it will look like a core-provider problem.
+
+       NO RENDER-TIME EXISTENCE CHECK, DELIBERATELY. Verifying the target exists would need
+       `lookup`, and `helm template` disables lookup: the check would pass vacuously in every
+       render and every CI gate, which is worse than no check because it reads as coverage.
+       core-provider fails closed when the target is absent; that is the right layer for it.
+
+       CREDENTIALS ARE THE OPERATOR'S, NOT THE CHART'S. Both per-target secrets -- the target's
+       own kubeconfig/token and authn's per-target JWT signing key -- are created by the operator
+       and referenced by name. The installer never generates either. That is the authn session's
+       user's decision and it is the safer of the two shapes I recorded in #579: the alternative,
+       a `lookup`-guarded random generation like admin-password, cannot work correctly here
+       because `helm template` disables lookup, so the reuse-the-existing-Secret arm never fires
+       in a render and randAlphaNum re-rolls every time -- a render diff then shows a key rotating
+       when it has not, which has already cost real debugging time on this chart.
+
+       OMITTING IT RENDERS BYTE-IDENTICALLY TO TODAY, which is the whole posture: same as
+       apiRef/statusDataTemplate above and internalUrls/internalPorts elsewhere. No live
+       CompositionDefinition on 057 carries spec.deploy -- the union of spec keys across all of
+       them is [apiRef, chart, controller, statusDataTemplate, upgradePolicy] -- so this path has
+       never been exercised here and must stay inert until someone sets it.
+
+       NOT THE `spoke*` VALUES. spokeReadbackCluster / spokeReadbackEndpointNamespace /
+       spokeReadbackEndpointSecret are snowplow READING BACK compositions from a registered spoke
+       for the /clusters/{name} page. Read-only observability of a spoke, not delivery to it.
+       Anyone grepping the schema for "spoke" finds those first and must not conflate them. */}}
+  deploy:
+    targetRef:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}
+  {{- if or $c.resources $c.pool }}
   {{/* Per-Kind CDC controller resources, at spec.controller.resources.
 
        IT USED TO RENDER AT spec.resources AND WAS SILENTLY DISCARDED. The CompositionDefinition
@@ -183,9 +290,30 @@ spec:
        requests.memory (cdc.goMemLimit: request, deployment.yaml:91-96), so this value is at once
        the eviction floor and the Go heap ceiling. Setting it below a controller's measured peak
        makes it GC-thrash; setting it too low makes it eviction-bait mid-helm-operation. */}}
+  {{/* AND spec.controller.pool IS MEMBERSHIP, NOT SIZING. Setting it makes this definition a
+       member of the named cdc pool: core-provider stops running a dedicated
+       <resource>-<version>-controller Deployment for it and the pool's cdc-pool-<name> runs it
+       instead. That is a DIFFERENT KNOB from core-provider.cdc.pool.{default,overrides}, which
+       sizes a pool's Deployment. I carried those two as one thing until core-provider separated
+       them: sizing is core-provider's values, membership is per-definition and lives here.
+
+       THE KEY MUST BE DECLARED IN values.schema.json OR IT NEVER ARRIVES. components[] is a
+       CLOSED object, and the Installer CRD PRUNES an undeclared key silently -- the value
+       vanishes while kubectl prints "patched". That is the same mechanism that discarded every
+       spec.resources pin above for months, so the schema entry is not paperwork.
+
+       BOTH KEYS NEST UNDER ONE `controller:`. They used to be one block because `resources` was
+       the only one; emitting a second `{{- with }}` would write `controller:` twice and produce
+       invalid YAML that no gate here would catch, because the render would still parse as a
+       later key silently replacing the earlier one. */}}
   controller:
+    {{- with $c.resources }}
     resources:
       {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with $c.pool }}
+    pool: {{ . | quote }}
+    {{- end }}
   {{- end }}
 {{- end }}
 {{- end }}

@@ -104,7 +104,7 @@ components:
   # 0.28.1: co-versioned with oasgen-provider. Same k8s >= 1.36 floor; carries no part of the
   # regression fix, which is provider-side only.
   # 0.64.0: moves with the oasgen line (one tag publishes all three charts).
-  version: 0.74.0
+  version: 0.80.0
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -365,7 +365,7 @@ components:
   #   which is true only without a `default:` -- a CRD property WITH one is applied by the apiserver to
   #   every existing object on its next read or write. The rule carried forward is "additive AND no
   #   new `default:`", and applying it is what found the Collapse timeout.
-  version: 1.8.47
+  version: 1.8.50
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -538,7 +538,7 @@ components:
   #   differing has no valid reading -- which is why the pairing is now a DECLARED version line in
   #   .github/pin-version-lines.yaml rather than a convention. Minimum for 1.12.71: CRD content
   #   >= 1.12.65; pin 1.12.71/1.12.71 together.
-  version: 1.12.70
+  version: 1.12.74
   tier: platform
   feature: portal
 # 0.35.4 (2026-11-05, authn main 75aedb1): owner re-diffed both charts against 0.34.0 and
@@ -1907,7 +1907,7 @@ components:
   # Also needs frontend >= 1.8.37 for the fix to be complete; this repo pins the frontend line at
   # 1.8.44, so that half is already satisfied -- asserted here so the next reader does not have to
   # re-derive it.
-  version: 1.12.70
+  version: 1.12.74
   deps:
   - snowplow-crd
   - authn
@@ -2977,7 +2977,7 @@ components:
   #   confirmed it by sha256 per file: ONE file differs in the published chart, Chart.yaml. No values
   #   keys added or changed, no templates touched, no dangerous `required`. Image
   #   ghcr.io/krateo-platformops/frontend:1.8.43, multi-arch amd64+arm64.
-  version: 1.8.47
+  version: 1.8.50
   deps:
   - frontend-crd
   - authn
@@ -4389,7 +4389,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - frontend
   - git-provider
@@ -4506,7 +4506,7 @@ components:
   # 1.8.73; diff -r reports only Chart.yaml.
   # 1.8.117: CONTENT CHANGE -- 2 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.130
+  version: 1.8.136
   deps: ['portal']
   tier: platform
   feature: portal
@@ -4546,7 +4546,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - portal
   tier: platform
@@ -4617,7 +4617,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - portal
   tier: platform
@@ -4628,7 +4628,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - portal
   tier: platform
@@ -4757,7 +4757,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - portal
   tier: platform
@@ -4802,7 +4802,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - portal
   tier: platform
@@ -4940,7 +4940,7 @@ components:
   kind: CompositionsPage
   # 1.8.117: CONTENT CHANGE -- 5 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - portal
   tier: platform
@@ -4952,7 +4952,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - portal
   tier: platform
@@ -4964,7 +4964,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - portal
   tier: platform
@@ -4976,7 +4976,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - portal
   tier: platform
@@ -4988,7 +4988,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - portal
   tier: platform
@@ -5000,7 +5000,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - portal
   tier: platform
@@ -5012,7 +5012,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - portal
   tier: platform
@@ -5022,7 +5022,7 @@ components:
   kind: SettingsPage
   # 1.8.117: CONTENT CHANGE -- 6 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - portal
   tier: platform
@@ -5032,7 +5032,7 @@ components:
   kind: ObservabilityPage
   # 1.8.117: CONTENT CHANGE -- 9 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - portal
   tier: platform
@@ -5051,7 +5051,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.130
+  version: 1.8.136
   deps:
   - portal
   tier: platform
@@ -5134,7 +5134,7 @@ components:
   #   not render (oasgen#628). Declared in componentValues in THIS SAME CHANGE: the node is closed,
   #   so a split would prune maxBodyMiB silently while kubectl printed "patched".
   #   The bounds are mirrored; the chart's `default: 4` deliberately is NOT.
-  version: 0.74.0
+  version: 0.80.0
   tier: platform
   feature: portal
   chart: controller-render-service
@@ -5349,7 +5349,7 @@ components:
   #   genuinely create-less and would then report it, correctly.
   #   github-provider-kog verified its 32+32 CRDs render byte-identically to 0.63.1's, same 5
   #   warnings, 0 whole-object differences, with a maxLength positive control present in both.
-  version: 0.74.0
+  version: 0.80.0
   # 0.43.0, NOT the 0.42.0 this PR first proposed. The two extra releases are correctness fixes a
   # consumer feels, both reported by the openstack-nova-operator-kog session and CLOSED upstream:
   #   #322 a populated spec object compared EQUAL to an EMPTY remote object, so
@@ -5698,7 +5698,7 @@ components:
   #   0.1.48 resolves (positive control), 0.1.45 resolves (second control), 9.9.9 absent.
   #   Schema `required` read AT PIN TIME: identical to 0.1.48 -- no root `required`, two
   #   items-level blocks (defaultAlerts.alerts.items, defaultMetrics.items). No umbrella wedge.
-  version: 0.1.51
+  version: 0.1.55
   deps:
   - clickhouse-operator
   - mongodb-operator
@@ -5816,7 +5816,7 @@ components:
   #     v1-12-41 4/8 (50%)   v1-12-42 0/8 (0%)   v0-3-413 0/6 (0%)   <- both rolled that morning
   # The 48h AGGREGATE reads a flat ~100% and hides this entirely; only the per-apiVersion split
   # shows it. Read the split, never the rollup, when judging event correlation.
-  version: 0.3.18
+  version: 0.3.23
   deps:
   - krateo-observability
   tier: observability
@@ -5999,7 +5999,7 @@ components:
   #
   # CONTROLS: 0.1.1 resolves; 0.1.0 resolves; 9.9.9 does not.
   kind: OtelCollectorTailsampling
-  version: 0.1.13
+  version: 0.1.17
   deps:
     - otel-collector-deployment
   tier: observability
@@ -6183,7 +6183,7 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.31
+  version: 0.1.35
   deps:
   - otel-collector-deployment
   tier: observability
@@ -6711,7 +6711,20 @@ components:
   # with neither required sibling, and the apiserver would have REJECTED the Kagent CR outright on
   # any cluster with registryAuth on. 0.1.22 moves the secret to the sibling key
   # perUserRbac.toolImagePullSecrets, so the injection never touches toolImage.
-  version: 0.1.23
+  # 0.1.24 MOVES THE TOOL IMAGE AND NOTHING ELSE: the digest constant in the chart's own
+  # templates/_helpers.tpl goes sha256:f8d3920a... -> sha256:f92a1542... (build tag
+  # v0.3.1-krateo.3). THE VALUES ARE BYTE-IDENTICAL -- 0 keys added, 0 removed -- and
+  # values.yaml's `tag: "0.3.1"` is INFORMATIONAL, never rendered. So a values-key diff and a tag
+  # grep both report "no image change" here and both are BLIND; `diff -rq` over the two untarred
+  # charts is what finds it, and it finds exactly two files: Chart.yaml and _helpers.tpl.
+  # WHAT THE NEW IMAGE DOES (krateo-agentiko/kagent-tools#6): every tool result is BOUNDED, 256
+  # KiB by default. A larger result is refused with OUTPUT_TOO_LARGE, the error says how to narrow
+  # the request, and the command is STOPPED at the limit.
+  # THIS IS A BEHAVIOUR CHANGE, NOT A SAFETY NET. agentiko-mcp-server's batch evidence on 0.3.687
+  # included a 704k-character krateo-system Deployment YAML that returned HTTP 200; that same call
+  # is REFUSED after this pin. Anyone comparing batch-path numbers across this roll is comparing
+  # two different contracts.
+  version: 0.1.24
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
@@ -7051,7 +7064,7 @@ components:
   #   recorded reason is specific -- an app pinned past its -crd pin prunes fields SILENTLY -- and it
   #   exists because check-no-silent-downgrade caught installer#727 about to revert all three from
   #   1.8.32 to 1.8.28 together. Moving a republished-identical chart costs a version label.
-  version: 1.8.47
+  version: 1.8.50
   deps:
     - portal
     - kagent
@@ -7126,7 +7139,35 @@ components:
   kind: Agentiko
   agentName: agentiko
   # 0.8.1: the alert-authoring prompt names spec.description.
-  version: 0.8.3
+  # 0.8.6 IS CUMULATIVE OVER 0.8.5 AND BOTH RULES MATTER, so this pin carries one version, not two.
+  #
+  # RULE ONE, from 0.8.5 (agentiko#163): kagent 0.1.24 (pinned in 0.3.688, rolled 2026-11-18
+  # 22:57Z) made kagent-tools REFUSE any tool result over 256 KiB. The cap is PROVEN LIVE on 057:
+  # a 703,643-byte request was refused in 0.69 s at 2026-11-19 00:49:41Z against a 262,144-byte
+  # limit, and the payload never reached the model (input grew 440 tokens). Three instruments
+  # agree -- tool-server WARN with limit_bytes=262144, gateway span Unset, agent span Error.
+  # WHAT IS STILL UNPROVEN is the agent's UNGUIDED response to a refusal: the one live test told
+  # the agent not to call again, so "retry the identical call" was never exercised. THIS PIN is
+  # that rule: narrow the call, never retry it unchanged, never report a refusal as empty.
+  #
+  # DO NOT GATE ON THE STRING `OUTPUT_TOO_LARGE`. It appears NOWHERE on 057 for the kubectl
+  # tools, by design: it is the ToolError's ErrorCode, which kagent-tools renders only through
+  # ToMCPResult (the Prometheus tools' path), while the kubectl tools return err.Error(). The
+  # real in-situ markers are "kubectl output is larger than the 256 KiB tool output limit"
+  # (agent side) and "command output exceeded the tool output limit" (server side).
+  #
+  # RULE TWO, new in 0.8.6 (agentiko#126): a list the Blueprint Composer WROTE is not a rule.
+  # Only a human-declared `allows` is a constraint. Marker: "A container the composer CREATED is
+  # in the same position" -- present in 0.8.6, absent from 0.8.5.
+  #
+  # TREE DIFF 0.8.5 -> 0.8.6 is Chart.yaml, Chart.lock and files/prompts-eng.yaml, NOTHING else.
+  # NO NEW VALUES KEYS: 0 added, 0 removed, so the closed componentValues schema needs no
+  # widening first -- the trap that has caught four pins in one day.
+  # BOTH MARKERS VERIFIED in the pulled chart: the size rule is in 0.8.5 and 0.8.6 and absent
+  # from 0.8.4; the composer rule is in 0.8.6 only. Cumulative, so one pin carries both.
+  #
+  # ORDERING IS ALREADY SATISFIED: this depends on kagent 0.1.24, live on 057 since 22:57Z.
+  version: 0.8.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
     - repo-mcp-server
@@ -7193,7 +7234,7 @@ components:
   # alert-provider#107's ApplyActionStale prompt and re-resolves against the served schema. The
   # second half is INERT until acmp's provider-side condition ships. The Agent's system-prompt
   # ConfigMap changes and the agent pod restarts once.
-  version: 0.3.8
+  version: 0.3.9
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -7883,7 +7924,7 @@ components:
   #   0.11.0 -> 0.14.0 is `controller.retention` -- measured on the charts, not taken from a
   #   per-release note, because 0.12.0 and 0.13.0 are skipped by this jump.
   #   Probes: 0.14.0, 0.13.0, 0.12.0 and 0.11.0 all resolve for both charts; 9.9.9 absent.
-  version: 0.14.0
+  version: 0.11.0
   deps:
   - incident-provider-crd
   tier: observability
@@ -7946,7 +7987,7 @@ components:
   #   0.11.0 -> 0.14.0 is `controller.retention` -- measured on the charts, not taken from a
   #   per-release note, because 0.12.0 and 0.13.0 are skipped by this jump.
   #   Probes: 0.14.0, 0.13.0, 0.12.0 and 0.11.0 all resolve for both charts; 9.9.9 absent.
-  version: 0.14.0
+  version: 0.11.0
   tier: observability
   feature: portal
 - name: alert-provider-crd
@@ -9182,7 +9223,34 @@ components:
   #   whether the versions differing has no valid reading, and here it has one -- the controller has
   #   not changed. Contrast keycloak/keycloak-operator, declared as a line tonight because that
   #   repo's release-tag.yaml packages every chart at the tag and refuses a mismatched archive.
-  version: 0.2.33
+  # 0.2.35 (#1062, tag 0.3.686). The RATIONALE, recorded here because #1062 dropped its pin comment
+  # in its third commit and this file is where the next reader looks -- a PR body is findable only by
+  # someone who already knows which PR to find.
+  #
+  # 0.2.35 (krateo-agentiko/agentgateway-policies#62): tool-history truncation now treats every
+  #   result of the LATEST tool-call batch as fresh and caps each with `newestMaxChars`. On 057,
+  #   where gemini-4-hydrogen batches 4-16 calls per turn, the previous behaviour had cut 650 fresh
+  #   results to 8,000 chars in five days. The change lives in the agentgateway-policies-llm
+  #   AgentgatewayBackend's CEL.
+  # 0.2.34 (#95): new `mcpEntry.backend` / `mcpEntry.bridge.*` / `mcpEntry.oauth.*` keys.
+  #
+  # NOT DECLARED IN componentValues, DELIBERATELY, and that was #1062's call rather than an omission.
+  # Verified against the 0.2.35 chart: 15 leaves added, ALL under mcpEntry, zero changed, zero
+  # removed. The defaults are inert and the dangerous arm fails LOUDLY:
+  #   mcpEntry.enabled        false by default; the whole block is gated on it
+  #   mcpEntry.backend        `kagent` -- 057 sets only {enabled: true}, so it takes this default
+  #                           and the live route agentgateway-policies-mcp-entry still points at
+  #                           kagent-controller:8083 (measured on 057 2026-11-18)
+  #   mcpEntry.oauth.*        read ONLY when backend == agentiko-mcp-server; issuer/clientId/
+  #                           audience/jwks.* all ship EMPTY, and httproute-mcp-entry.yaml:78
+  #                           `fail`s naming the missing key rather than rendering a route with no
+  #                           authentication. So there is no silent-misroute path here.
+  # Declare them in the change that SETS them -- declaring a key nothing uses puts it on the
+  # Installer CRD, and componentValues is a closed object per component, so it is easier to add
+  # than to remove ([[componentvalues-cannot-be-unset-via-values]] is the installer-side version).
+  #
+  # agentgateway-controller STAYS at 0.2.0. See the note above on why these two versions diverge.
+  version: 0.2.35
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
@@ -9604,7 +9672,7 @@ components:
   #   It REQUIRES the snowplow endpoint Secret and snowplow + authn wired into the rdc deployment.
   #   Declared in componentValues in this same change, with no installer default. Inert on
   #   krateo-057 today because features.keycloak is false there.
-  version: 0.9.2
+  version: 0.11.0
   requiresApiGroups:
   - ogen.krateo.io
   - external-secrets.io
@@ -9731,7 +9799,8 @@ components:
   tier: platform
   feature: identityLifecycle
 - name: kyverno
-  # 3.9.2 (Kyverno v1.19.2). A NEW COMPONENT, and the dependency identity-lifecycle could not
+  # 3.9.3, a krateo-blueprints wrapper around upstream 3.9.2 (Kyverno v1.19.2). A NEW COMPONENT,
+  # and the dependency identity-lifecycle could not
   # declare for itself. With accessRequest.enabled the IL chart renders policies.kyverno.io/v1 CEL
   # policies UNCONDITIONALLY -- the decided-by stamp -- so the group must be served or the apply
   # fails. MEASURED on krateo-057 2026-11-16, before this pin existed: ZERO CRDs in any kyverno.io
@@ -9768,11 +9837,29 @@ components:
   # two could disagree -- requiresApiGroups is satisfied by ANY provider of the group, including a
   # hand-installed Kyverno, while deps would demand this component specifically.
   #
-  # OCI, NOT THE CLASSIC HELM REPO. kyverno publishes both; oci://ghcr.io/kyverno/charts/kyverno
-  # 3.9.2 resolves at appVersion v1.19.2, verified. Every other pin in this file is OCI and NO pin
-  # uses chartRepo -- so taking the classic repo would have made this the first exercise of that
-  # render path for no benefit. Third-party OCI orgs are established precedent: cloudnative-pg and
-  # external-secrets both pin from their vendors' own ghcr orgs.
+  # A KRATEO-BLUEPRINTS WRAPPER, NOT UPSTREAM'S CHART, AND THAT IS THE WHOLE POINT OF THIS ENTRY'S
+  # repo. This pin first read oci://ghcr.io/kyverno/charts, with a rationale that third-party OCI
+  # orgs were established precedent. That rationale was sound about the registry and wrong about
+  # the chart: upstream ships NO ROOT values.schema.json at any version, and core-provider's crdgen
+  # builds the composition CRD from that file. MEASURED on kc-roll057 2026-11-17 by
+  # keycloak-provider-kog, with features.identityLifecycle on:
+  #
+  #     CD kyverno  Synced=False: create failed: error getting JSON schema:
+  #                 open kyverno/values.schema.json: file does not exist
+  #
+  # which withheld kyverno AND identity-lifecycle, and left the Installer Ready=False on 1 of 106
+  # children. core-provider refused a permissive fallback (their #566): a typed CRD and the JSON
+  # schema the portal builds its form from are the contract. So the chart is republished at
+  # krateo-blueprints/kyverno-blueprint with a root schema, and this pin follows it.
+  #
+  # THE VERSION MIRRORS UPSTREAM EXCEPT FOR ONE PATCH, DELIBERATELY. The wrapper's 3.9.2 mirrored
+  # upstream exactly, so that the served apiVersion (composition.krateo.io/v<version>) could not
+  # move and turn a pin change into a GVK migration. 3.9.2 then proved to annotate only 11 of the
+  # 22 CRDs -- `crds.annotations` does not reach the separate kyverno-api subchart that carries all
+  # 11 policies.kyverno.io CRDs -- so 3.9.3 adds the second values block. A patch bump rather than
+  # a re-cut, because 3.9.2 was published and already pulled. Safe here and ONLY here: kyverno has
+  # no CompositionDefinition on krateo-057 or krateo-demo, so moving v3-9-2 -> v3-9-3 migrates
+  # nothing. cloudnative-pg and external-secrets have live instances on demo and keep exact mirrors.
   #
   # upstream: true because the appVersion (v1.19.2) is NOT one of our tags -- that flag is about
   # appVersion provenance, not chart ownership, and it disables check-pin-ci's appVersion->tag route.
@@ -9784,11 +9871,34 @@ components:
   chart: kyverno
   feature: identityLifecycle
   kind: Kyverno
-  repo: oci://ghcr.io/kyverno/charts
+  namespace: kyverno
+  repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   upstream: true
-  version: 3.9.2
+  version: 3.9.4
 - name: identity-lifecycle
+  # THE ACCESS-REQUEST INTAKE, and it is a SECOND Service of this component -- the pattern
+  # keycloak already uses (svcMatch keycloak-service). IL's own intake.route renders only for a
+  # HOST-mode gateway, so on a path-mode cluster nothing routed this and a POST to
+  # /request-access/api/... reached the frontend SPA instead (measured: 057 had 0 of 27 HTTPRoute
+  # rules mentioning it).
+  #
+  # gatewayPathsFrom, not a literal gatewayPath, because the route must exist ONLY when
+  # componentValues.identity-lifecycle.accessRequest.intake.enabled is true. The derivation returns
+  # an empty list otherwise and `if $paths` renders nothing -- no rule, no backend.
+  #
+  # NO REWRITE: the intake serves under /request-access/api itself.
+  # PUBLIC auth: requesters are anonymous by definition; the intake carries its own per-IP, global
+  # and per-page rate limits.
+  # svcMatch is the EXACT Service name. identity-lifecycle-intake-metrics (9090) also contains this
+  # string, and the derived-route guard in _helpers.tpl refuses a contains-fallback for exactly that
+  # reason -- a public path on a metrics port would come up healthy.
+  expose: true
+  exposePort: 80
+  svcMatch: identity-lifecycle-intake
+  gatewayPathsFrom: accessRequestIntake
+  gatewayRewrite: false
+  gatewayAuth: public
   # NEW COMPONENT, wired 2026-11-04. Reconciles downstream identity CRs for a user's lifecycle.
   #
   # LANDS DARK: feature `identityLifecycle` defaults FALSE, which is the convention for any new

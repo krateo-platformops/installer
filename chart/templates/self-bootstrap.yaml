@@ -197,7 +197,10 @@ data:
 {{- $_ := set $spec "componentValues" ((include "inst.componentValuesResolved" .) | fromJson) }}
 {{- /* components pins come from the chart FILE (files/component-pins.yaml), NOT .Values, so a
        chart bump always propagates its pins on upgrade even under `helm upgrade --reuse-values`. */}}
-{{- $_ := set $spec "components" (include "inst.componentsYaml" $ | fromYaml).components }}
+{{- /* PIN-OWNED KEYS STRIPPED here too: a fresh install writes the same CR shape as an
+       upgrade patch, or the freeze would reappear only on new clusters -- the hardest case to
+       notice, and the same trap the componentValues comment above records. */}}
+{{- $_ := set $spec "components" ((include "inst.componentsPatchList" $) | fromJsonArray) }}
 {{- $_ := set $spec "bootstrap" (dict "coreProvider" (dict "enabled" false)) }}
 apiVersion: v1
 kind: ConfigMap
@@ -277,7 +280,7 @@ data:
   # merge patch on `helm upgrade` (see the post-upgrade branch below): the `components` list is
   # replaced wholesale; the object fields deep-merge, so chart/values-set keys win and any user-only
   # keys are preserved.
-  components-patch.json: {{ dict "spec" (dict "components" (include "inst.componentsYaml" $ | fromYaml).components "componentValues" ((include "inst.componentValuesPatch" $) | fromJson) "exposure" .Values.exposure "vertexAI" .Values.vertexAI "registryAuth" .Values.registryAuth "hitlApproval" .Values.hitlApproval) | toJson | quote }}
+  components-patch.json: {{ dict "spec" (dict "components" ((include "inst.componentsPatchList" $) | fromJsonArray) "componentValues" ((include "inst.componentValuesPatch" $) | fromJson) "exposure" .Values.exposure "vertexAI" .Values.vertexAI "registryAuth" .Values.registryAuth "hitlApproval" .Values.hitlApproval) | toJson | quote }}
 ---
 {{- /*
   The bootstrap is FOUR ordered, bounded, idempotent hook WAVES (helm hook-weights) instead of one
@@ -399,7 +402,23 @@ spec:
               NS={{ .Values.namespaces.krateo }}
               # Address the CR through the fully-qualified resource.version.group so kubectl pins
               # THIS chart's (now confirmed-served, by w5) version, not a cached preferred version.
-              if kubectl get installers.{{ $crVer }}.composition.krateo.io installer -n "$NS" >/dev/null 2>&1; then
+              # ABSENT AND UNREADABLE ARE DIFFERENT, AND `kubectl get` EXITS 1 FOR BOTH.
+              # This was `if kubectl get ... >/dev/null 2>&1; then patch; else apply; fi`, which takes
+              # the apply branch on ANY get failure -- an RBAC denial, an API timeout, a transient 500
+              # -- and 2>&1 discarded the only text that could tell them apart. On a cluster where the
+              # CR EXISTS but the read blips, that applied the WHOLE CR over it, clobbering
+              # spec.features and every user override: precisely what the comment below says this
+              # branch exists to avoid. On krateo-057 it would have withdrawn internalTls, serviceDesk
+              # and sloRollup, none of which appear in any values file.
+              # --ignore-not-found makes the distinction the exit code cannot: it prints nothing and
+              # exits 0 when the object is absent, and still exits non-zero on a real failure, which
+              # `set -e` turns into an aborted hook. Verified against kubectl: absent -> exit 0, empty
+              # stdout, empty stderr; unknown resource type -> exit 1 with the error on stderr.
+              # FAILING CLOSED IS THE POINT. A hook that cannot read the CR must not guess which
+              # branch it is in: a failed upgrade is recoverable, a clobbered CR is not.
+              EXISTING=$(kubectl get installers.{{ $crVer }}.composition.krateo.io installer \
+                -n "$NS" --ignore-not-found -o name)
+              if [ -n "$EXISTING" ]; then
                 # UPGRADE: the CR is the source of truth for runtime state (spec.features the
                 # installer-agent toggles, user overrides). Re-applying the whole CR would clobber
                 # that, so merge-patch ONLY the chart-managed components + componentValues (+ exposure).

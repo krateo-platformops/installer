@@ -1,0 +1,429 @@
+#!/usr/bin/env python3
+"""Is a component's release COMPLETE -- every chart AND every image actually published?
+
+WHY THIS EXISTS. A release workflow can go green and publish nothing. Measured on
+krateo-platformops/oasgen-provider 0.83.0 on 2026-11-18: a job-level `if` left
+`guard-prerelease-tag` skipped on the tag path, a skipped `needs` dependency skips the
+dependent job with no error, and the publishing job never ran. The run showed a tick, the tag
+existed, and 0 of 5 artifacts were published. A pin to that version would have failed at
+INSTALL time -- on a chart pull, looking like a registry outage rather than a missing version.
+
+So "the workflow is green" and "the artifact is pullable" are different events, and only the
+second one licenses a pin. This script asks the second question.
+
+AND THE IMAGE PROBE NEEDS A TOKEN, which is the trap that made this a script rather than a
+one-liner. Measured against ghcr.io:
+
+    unauthenticated GET /v2/<repo>/manifests/2.13.110   -> 401
+    unauthenticated GET /v2/<repo>/manifests/9.9.9      -> 401     <- SAME
+
+An unauthenticated probe cannot tell an existing tag from an absent one: it answers 401 for
+both, and reading 401 as "exists, needs auth" reports every version as published. With an
+anonymous pull token the same two requests give 200 and 404. So this script fetches a token
+per repository and REFUSES to report anything if its own controls do not discriminate.
+
+AND "PULLABLE BY ME" IS NOT "PULLABLE BY THE CLUSTER". Measured 2026-11-18 on krateo-demo: this
+script reported `chart kyverno PRESENT` for oci://ghcr.io/krateo-blueprints/charts/kyverno 3.9.4,
+the pin went out in 0.3.682, and the cdc could not install it:
+
+    GET https://ghcr.io/token?scope=repository:krateo-blueprints/charts/kyverno:pull
+    response status code 401: unauthorized: authentication required
+
+The package was PRIVATE. `helm show chart` had succeeded here because this machine is logged in to
+ghcr, so the probe answered a question nobody asked: "can Diego pull it", not "can a cluster pull
+it". Every other krateo-blueprints chart that cluster uses is public, so the pin looked ordinary and
+the failure appeared only after the roll, as one CD stuck in Creating.
+
+So presence is probed TWICE: once however this machine is configured, and once ANONYMOUSLY, which
+is what a cdc with no registry credentials does. A chart that is present but not anonymously
+pullable is reported as NOT PINNABLE, because that is the fact that licenses a pin.
+
+CONTROLS ARE MANDATORY, NOT OPTIONAL. Every run probes:
+  - the version under test
+  - a KNOWN-PUBLISHED version (--control), which must come back present
+  - an impossible version (9.9.9), which must come back absent
+If either control misbehaves the exit is 2 and no verdict is printed, because a probe that
+cannot detect absence cannot certify presence. That is the same discipline as
+hack/roll-snapshot.py refusing to call an incomplete child read clean.
+"""
+import argparse
+import json
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+
+REGISTRY = "ghcr.io"
+# THREE REGISTRIES ARE IN USE and the component's `repo` key is the authority, not this default.
+# Measured 2026-11-18: krateo-keycloak-realm lives in krateo-blueprints, and probing it against the
+# default answered ABSENT for 0.6.1, 0.6.2 and 9.9.9 alike -- so the controls caught it and the
+# script refused to report, which is the design working. But refusing is not probing: pass --repo
+# with whatever the pin's `repo` key says.
+DEFAULT_CHART_PREFIX = "oci://ghcr.io/krateo-platformops/charts"
+IMAGE_ORG = "krateo-platformops"
+IMPOSSIBLE = "9.9.9"
+
+# REGISTRIES THAT ARE PRIVATE ON PURPOSE. For these, "not anonymously pullable" is the DESIGNED
+# state, not a defect, and the remedy is a credential -- NEVER a visibility change.
+#
+# Measured 2026-11-18: this script reported incident-agent 0.3.9 as "PUBLISHED BUT NOT PINNABLE"
+# and told the reader to "make the package public first". For krateo-agentiko that instruction is
+# against standing policy: agent charts and images are private by design and clusters pull them
+# through scoped credentials. A tool that confidently advises a prohibited action is worse than one
+# that says nothing, so the org is checked before the verdict is written.
+#
+# krateo-platformops and krateo-blueprints are NOT here: their artifacts are public, and a private
+# one is the real defect this script exists to catch (krateo-blueprints/charts/kyverno, which
+# wedged a demo roll the same day).
+EXPECTED_PRIVATE = ("krateo-agentiko",)
+
+
+def chart_prefix_path(repo):
+    """Turn an OCI chart prefix into the registry path prefix it addresses, or raise.
+
+    A CHART PREFIX IS NOT AN ORG NAME, and accepting one as if it were is how this function came
+    to exist. Measured 2026-11-18: probing agentgateway-policies, I passed `--repo krateo-agentiko`
+    -- the org -- where the pin's `repo` key says `oci://ghcr.io/krateo-agentiko/charts`. The old
+    one-liner stripped a scheme that was not there and a host segment that was the org itself, so it
+    built `krateo-agentiko/agentgateway-policies`, dropping `charts/`. The registry answered 403 to
+    that path, and 403 means ABSENT, so the script reported:
+
+        NO SUCH PACKAGE ... Check the package name before anything else
+
+    -- confident, specific, and about the wrong thing. The chart was published the whole time. I
+    repeated it against two more wrong orgs before reading my own argument help.
+
+    AND THE CONTROLS COULD NOT SAVE IT. `chart_present` would also have failed on all three
+    versions, which is exactly the signature the controls exist to catch. But no-such-package is
+    reported BEFORE failed-controls, deliberately -- when a path really is wrong, the name is the
+    first thing to check and a control complaint would bury it. That ordering is right and it is
+    also what let a malformed prefix read as a naming mistake. So the prefix is validated here,
+    before any probe runs, rather than diagnosed afterwards.
+
+    Returns e.g. "krateo-agentiko/charts" for "oci://ghcr.io/krateo-agentiko/charts".
+    """
+    raw = str(repo or "").strip()
+    if not raw:
+        raise ValueError("--repo is empty; pass the pin's own `repo` key, e.g. %s"
+                         % DEFAULT_CHART_PREFIX)
+    body = raw.split("://", 1)[-1].strip("/")
+    parts = [p for p in body.split("/") if p]
+    # <host>/<org>/<path...> is the only shape that can address a chart. Two segments means a host
+    # and an org with no path, which cannot hold charts; one means somebody passed a bare name.
+    if len(parts) < 3:
+        raise ValueError(
+            "--repo %r is not an OCI chart prefix: it has %d path segment(s) and needs at least "
+            "three (<registry>/<org>/<path>). Pass the pin's own `repo` key verbatim, e.g. %s or "
+            "oci://ghcr.io/krateo-agentiko/charts. A bare org name silently builds the wrong "
+            "registry path and the probe then reports NO SUCH PACKAGE for a chart that exists."
+            % (raw, len(parts), DEFAULT_CHART_PREFIX))
+    if parts[0] != REGISTRY:
+        raise ValueError(
+            "--repo %r names registry %r, but this script only probes %s -- its token and manifest "
+            "endpoints are ghcr-specific. Probing another registry needs more than a flag."
+            % (raw, parts[0], REGISTRY))
+    return "/".join(parts[1:])
+
+
+def _expected_private(path):
+    """True if this registry path is one whose packages are private by design."""
+    return path.split("/", 1)[0] in EXPECTED_PRIVATE
+
+
+def chart_present(name, version, prefix=DEFAULT_CHART_PREFIX, timeout=90):
+    """True if `helm show chart` can read it. helm exits non-zero for an absent version."""
+    try:
+        r = subprocess.run(
+            ["helm", "show", "chart", "%s/%s" % (prefix, name), "--version", version],
+            capture_output=True, text=True, timeout=timeout)
+        return r.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None  # unknown, not absent -- the caller must not read this as a verdict
+
+
+def anon_pullable(path, timeout=30):
+    """Can a client with NO credentials get a pull token for this OCI path?
+
+    `path` is the registry path without the host, e.g. "krateo-blueprints/charts/kyverno".
+    "public"   -> the registry issued an anonymous pull token: a credential-less cdc can fetch it.
+    "private"  -> 401. The package EXISTS and is private, whatever `helm show chart` says here.
+    "no-such-package" -> 403. The package does not exist AT ALL under this path.
+    None       -> the probe itself could not run, which is NOT a verdict.
+
+    401 AND 403 MUST NOT BE CONFLATED, which this function did until keycloak-provider-kog caught
+    it. Their sweep found that a package name that does not exist answers 403, so a probe treating
+    both as "private" sends the reader to change a visibility setting on a package that is not
+    there. Measured 2026-11-18:
+
+        krateo-blueprints/charts/kyverno                  token 401  (exists, private)
+        krateo-blueprints/charts/openstack-keystone-kog   token 403  (WRONG NAME -- the real one
+                                                                      is openstack-keystone-operator-kog)
+        krateo-blueprints/charts/openstack-keystone-operator-kog  token 200  (public)
+        krateo-blueprints/charts/definitely-not-a-real-chart-xyz  token 403  (does not exist)
+
+    The two remedies are completely different -- change the package visibility, or fix the name --
+    so a probe that cannot tell them apart is worse than one that says nothing.
+
+    THE 403 RULE HOLDS ONLY FOR AN UNAUTHENTICATED PROBE, and this function is one: urllib sends
+    no Authorization header and reads no .netrc here. Run the same request WITH a credential that
+    lacks access and 403 means "forbidden for this identity", not "does not exist" -- the acmp
+    session measured exactly that on the same package within the hour, reading 403 where this
+    anonymous probe reads 401. Their conclusion (private) was right by a different route. If this
+    code ever grows a credentialed mode, the 403 branch must not come with it.
+
+    AND DO NOT SWITCH THIS TO THE MANIFEST ENDPOINT. Measured, no Authorization header:
+
+        private package   GET /v2/<path>/manifests/<tag>  -> 401
+        absent package    GET /v2/<path>/manifests/<tag>  -> 401
+        PUBLIC package    GET /v2/<path>/manifests/<tag>  -> 401
+
+    All three identical. The manifest endpoint cannot discriminate anything without a token, which
+    is the whole reason this asks the token endpoint instead.
+
+    AND 403 HAS AT LEAST THREE CAUSES, so it is only a verdict at the endpoint and auth state this
+    function uses. Measured on the same private package:
+
+        token endpoint,  no credentials                 401   (private -- what we rely on)
+        token endpoint,  no credentials, absent package 403   (absent  -- what we rely on)
+        manifest,        no Authorization header        401
+        manifest,        Authorization: Bearer <empty>  403
+        manifest,        Authorization: Bearer <junk>   403
+
+    The acmp session reached 403 on this package by requesting a token without credentials and then
+    sending the manifest HEAD with whatever came back -- for a private package that is an unusable
+    token, and an unusable Bearer is 403. Their "private" verdict came from the GitHub packages API
+    (visibility=private), not from the status code; the code merely agreed. That is the right way
+    round, and the reason this function pins BOTH the endpoint and the auth state in its contract
+    rather than claiming "403 means absent" in general.
+
+    This asks the token endpoint rather than the manifest, because the token answer is the
+    discriminator: GHCR answers 401 on a manifest GET for a public-but-absent TAG too, so a
+    manifest probe cannot separate "private" from "that version does not exist".
+    """
+    url = ("https://%s/token?scope=repository:%s:pull&service=%s" % (REGISTRY, path, REGISTRY))
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as fh:
+            return "public" if (json.load(fh) or {}).get("token") else None
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return "private"
+        if e.code == 403:
+            return "no-such-package"
+        return None
+    except (urllib.error.URLError, json.JSONDecodeError, OSError):
+        return None
+
+
+def _token(repo, org=IMAGE_ORG, timeout=30):
+    url = ("https://%s/token?scope=repository:%s/%s:pull&service=%s"
+           % (REGISTRY, org, repo, REGISTRY))
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as fh:
+            return (json.load(fh) or {}).get("token")
+    except (urllib.error.URLError, json.JSONDecodeError, OSError):
+        return None
+
+
+def image_present(repo, tag, token, org=IMAGE_ORG, timeout=30):
+    """True/False from a TOKENED manifest HEAD. None if the probe itself could not run.
+
+    Without the token this returns 401 for present and absent alike -- see the module
+    docstring. The Accept header must name the index/list types or a multi-arch tag can
+    answer 404 for a manifest it does have in another form.
+    """
+    if not token:
+        return None
+    url = "https://%s/v2/%s/%s/manifests/%s" % (REGISTRY, org, repo, tag)
+    req = urllib.request.Request(url, method="GET")
+    req.add_header("Authorization", "Bearer %s" % token)
+    req.add_header("Accept", ", ".join([
+        "application/vnd.oci.image.index.v1+json",
+        "application/vnd.docker.distribution.manifest.list.v2+json",
+        "application/vnd.oci.image.manifest.v1+json",
+        "application/vnd.docker.distribution.manifest.v2+json",
+    ]))
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as fh:
+            return fh.status == 200
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False
+        return None  # 401/403/5xx -- the probe failed, which is NOT absence
+    except (urllib.error.URLError, OSError):
+        return None
+
+
+def main(argv):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("version", help="the version under test")
+    ap.add_argument("--control", required=True,
+                    help="a KNOWN-PUBLISHED version, to prove the probe can see presence")
+    ap.add_argument("--chart", action="append", default=[], help="chart name; repeatable")
+    ap.add_argument("--image", action="append", default=[], help="image repo name; repeatable")
+    ap.add_argument("--repo", default=DEFAULT_CHART_PREFIX,
+                    help="OCI chart prefix; use the pin's own `repo` key (default: %s)"
+                         % DEFAULT_CHART_PREFIX)
+    ap.add_argument("--image-org", default=IMAGE_ORG,
+                    help="ghcr org for images (default: %s)" % IMAGE_ORG)
+    a = ap.parse_args(argv)
+
+    if not a.chart and not a.image:
+        print("release-complete: nothing to probe -- pass at least one --chart or --image")
+        return 2
+
+    # VALIDATE THE PREFIX BEFORE ANY PROBE. A malformed one makes every subsequent answer a
+    # confident statement about a path nobody meant to ask about.
+    try:
+        prefix = chart_prefix_path(a.repo)
+    except ValueError as e:
+        print("::error::release-complete: %s" % e)
+        return 2
+
+    rows, broken, private, unknown_vis, absent_pkg, by_design = [], [], [], [], [], []
+
+    for name in a.chart:
+        # "pullable by me" and "pullable by a cluster" are different facts -- see the docstring.
+        path = "%s/%s" % (prefix, name)
+        anon = anon_pullable(path)
+        if anon == "private":
+            (by_design if _expected_private(path) else private).append((name, path))
+        elif anon == "no-such-package":
+            absent_pkg.append((name, path))
+        elif anon is None:
+            print("  note: could not run the anonymous visibility probe for %s -- treating its "
+                  "visibility as UNKNOWN, not public" % name)
+            unknown_vis.append(name)
+        under = chart_present(name, a.version, a.repo)
+        ctl_ok = chart_present(name, a.control, a.repo)
+        ctl_no = chart_present(name, IMPOSSIBLE, a.repo)
+        if ctl_ok is not True or ctl_no is not False:
+            broken.append("chart %s at %s: control %s=%r and %s=%r -- the probe does not "
+                          "discriminate. The component's `repo` key is the authority; three "
+                          "registries are in use (krateo-platformops, krateo-blueprints, "
+                          "krateo-agentiko), so check --repo before reading this as absence."
+                          % (name, a.repo, a.control, ctl_ok, IMPOSSIBLE, ctl_no))
+        rows.append(("chart", name, under))
+
+    for repo in a.image:
+        tok = _token(repo, a.image_org)
+        under = image_present(repo, a.version, tok, a.image_org)
+        ctl_ok = image_present(repo, a.control, tok, a.image_org)
+        ctl_no = image_present(repo, IMPOSSIBLE, tok, a.image_org)
+        if ctl_ok is not True or ctl_no is not False:
+            broken.append("image %s: control %s=%r and %s=%r -- the probe does not discriminate "
+                          "(an UNTOKENED probe answers 401 for both, which is the trap this guards)"
+                          % (repo, a.control, ctl_ok, IMPOSSIBLE, ctl_no))
+        rows.append(("image", repo, under))
+
+    if absent_pkg:
+        print("::error::release-complete: NO SUCH PACKAGE. The registry answered 403 to an "
+              "anonymous token request, which means the path does not exist -- NOT that it is "
+              "private (that is 401). Check the package name before anything else:")
+        for name, path in absent_pkg:
+            print("  chart %s: %s does not exist" % (name, path))
+        print("A component's chart name is not always its component name, and a wrong name here "
+              "looks exactly like a permissions problem. Measured case: "
+              "openstack-keystone-kog answers 403; the real package is "
+              "openstack-keystone-operator-kog.")
+        return 2
+
+    if broken:
+        print("::error::release-complete: REFUSING to report. The probe failed its own controls, "
+              "so it can neither certify presence nor absence:")
+        for b in broken:
+            print("  %s" % b)
+        return 2
+
+    for name, path in by_design:
+        print("  note: %s (%s) is PRIVATE, which is EXPECTED for this registry. It is pinnable only "
+              "on a cluster whose registryAuth covers %s -- check that before pinning. Do NOT "
+              "make it public." % (name, path, path.split("/", 1)[0]))
+
+    if private:
+        print("::error::release-complete: %s is PUBLISHED BUT NOT PINNABLE. The registry refuses an "
+              "anonymous pull token, so a cdc with no registry credentials CANNOT fetch it -- even "
+              "though a probe from this machine succeeds, because this machine is logged in:"
+              % a.version)
+        for name, path in private:
+            print("  chart %s: %s is PRIVATE" % (name, path))
+        print("Do NOT pin it. Measured consequence: the pin installs, the CompositionDefinition "
+              "sticks in Ready=False/Creating with a 401 in its Synced message, and nothing else "
+              "reports a problem. Make the package public first, then re-run this.")
+        return 1
+
+    for kind, name, present in rows:
+        print("  %-6s %-34s %s" % (kind, name, "PRESENT" if present else
+                                   ("ABSENT" if present is False else "UNKNOWN")))
+    missing = [n for _k, n, p in rows if p is not True]
+    print()
+    if missing:
+        print("::error::release-complete: %s is INCOMPLETE -- %d of %d artifact(s) not published: %s"
+              % (a.version, len(missing), len(rows), ", ".join(missing)))
+        print("Do NOT pin it. A green release workflow is not a published artifact; see the "
+              "module docstring for the oasgen-provider 0.83.0 case.")
+        return 1
+    print("release-complete: OK -- %s has all %d artifact(s), controls passed (%s present, %s absent)"
+          % (a.version, len(rows), a.control, IMPOSSIBLE))
+    return 0
+
+
+def _selftest():
+    """Prove both private branches are reachable and distinct.
+
+    WHY THIS EXISTS: adding EXPECTED_PRIVATE made the REFUSAL branch harder to reach, and at the
+    time of writing no non-agentiko private package remained to test it against -- the one that
+    motivated the whole check (krateo-blueprints/charts/kyverno) had just been made public. A branch
+    with no live example is exactly the one that rots, so it is exercised here with stubs.
+    """
+    cases = [
+        # (registry path,            expected bucket)
+        ("krateo-agentiko/charts/incident-agent",       "by_design"),
+        ("krateo-agentiko/repo-mcp-server",             "by_design"),
+        ("krateo-blueprints/charts/kyverno",            "refuse"),
+        ("krateo-platformops/charts/core-provider",     "refuse"),
+        ("krateo-blueprints/charts/krateo-private-ca",  "refuse"),
+    ]
+    fails = 0
+    for path, want in cases:
+        got = "by_design" if _expected_private(path) else "refuse"
+        ok = got == want
+        fails += 0 if ok else 1
+        print("  %-4s %-46s -> %-10s (want %s)" % ("ok" if ok else "FAIL", path, got, want))
+    # the name must not be matched loosely: a path merely CONTAINING the org name is not that org
+    for path in ("notkrateo-agentiko/charts/x", "evil/krateo-agentiko/charts/x"):
+        ok = not _expected_private(path)
+        fails += 0 if ok else 1
+        print("  %-4s %-46s -> refuse (must not match loosely)" % ("ok" if ok else "FAIL", path))
+    # THE PREFIX VALIDATOR. Each rejected case is one I actually typed or could type; each
+    # accepted case is a real pin's `repo` key.
+    prefix_cases = [
+        # (--repo value,                                 expected)
+        ("oci://ghcr.io/krateo-platformops/charts",       "krateo-platformops/charts"),
+        ("oci://ghcr.io/krateo-agentiko/charts",          "krateo-agentiko/charts"),
+        ("oci://ghcr.io/krateo-blueprints/charts",        "krateo-blueprints/charts"),
+        ("ghcr.io/krateo-blueprints/charts",              "krateo-blueprints/charts"),
+        ("oci://ghcr.io/krateo-blueprints/charts/",       "krateo-blueprints/charts"),
+        ("krateo-agentiko",                               "REJECT"),
+        ("krateo-blueprints",                             "REJECT"),
+        ("oci://ghcr.io/krateo-agentiko",                 "REJECT"),
+        ("",                                              "REJECT"),
+        ("oci://quay.io/krateo-platformops/charts",        "REJECT"),
+    ]
+    for repo, want in prefix_cases:
+        try:
+            got = chart_prefix_path(repo)
+        except ValueError:
+            got = "REJECT"
+        ok = got == want
+        fails += 0 if ok else 1
+        print("  %-4s %-42s -> %-28s (want %s)"
+              % ("ok" if ok else "FAIL", repr(repo), got, want))
+    print()
+    print("  %d case(s), %d failure(s)" % (len(cases) + 2 + len(prefix_cases), fails))
+    return 1 if fails else 0
+
+
+if __name__ == "__main__":
+    if "--selftest" in sys.argv[1:]:
+        sys.exit(_selftest())
+    sys.exit(main(sys.argv[1:]))

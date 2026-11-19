@@ -1,0 +1,117 @@
+# spec.controller.pool IS MEMBERSHIP, AND IT MUST SHARE ONE `controller:` KEY WITH resources.
+#
+# WHY THIS SUITE EXISTS. `controller:` used to be emitted inside `{{- with $c.resources }}`, so the
+# obvious way to add `pool` was a second `{{- with }}` block -- which would write `controller:`
+# TWICE into the same object. Case 3 is the one that catches it, and it is why this file exists.
+#
+# MEASURED, by planting that exact bug in definitions.yaml in place and running this suite:
+#   CASE 3 FAILS with `Error: yaml: unmarshal errors` -- 1 failed, 1 errored, 3 passed
+#   restored, all 4 pass
+# So the duplicate key is REJECTED by the parser rather than resolved last-key-wins. I had written
+# the opposite here -- "renders as valid YAML, the second key silently replaces the first" -- as a
+# mechanism I had not measured, and the measurement contradicted it. The failure is loud, which is
+# better than I claimed; the case earns its place by proving the shape is right, not by being the
+# only thing standing between us and a silent loss.
+#
+# core-provider #581 is why pool membership could not ship before 2.13.113: a CompositionDefinition's
+# Ready was read from <resource>-<version>-controller for EVERY definition including pool members,
+# and cutover deletes that Deployment -- so a member read Ready=False/Creating indefinitely while its
+# composition was perfectly healthy. The reason there is `Creating`, ALREADY a known reason, so a
+# reason-registry gate stays silent and only an age-based check fires. One instrument, on an ordinary
+# reason, with nothing pointing at the cause.
+suite: spec.controller.pool is membership and shares one controller key with resources
+templates:
+  - templates/definitions.yaml
+tests:
+  - it: "CASE 1 -- pool alone renders at spec.controller.pool"
+    set:
+      components:
+        - name: a-pooled-thing
+          kind: APooledThing
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+          pool: pages
+    asserts:
+      - equal:
+          path: spec.controller.pool
+          value: pages
+        documentSelector:
+          path: metadata.name
+          value: a-pooled-thing
+
+  - it: "CASE 2 -- resources alone still renders at spec.controller.resources, unchanged"
+    set:
+      components:
+        - name: a-sized-thing
+          kind: ASizedThing
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {memory: 512Mi}
+    asserts:
+      - equal:
+          path: spec.controller.resources.limits.memory
+          value: 512Mi
+        documentSelector:
+          path: metadata.name
+          value: a-sized-thing
+      - isNull:
+          path: spec.controller.pool
+        documentSelector:
+          path: metadata.name
+          value: a-sized-thing
+
+  # THE CASE THAT CATCHES THE DUPLICATE-KEY BUG. With two `{{- with }}` blocks each emitting its own
+  # `controller:`, this renders and the LAST key wins -- so resources would be gone and only pool
+  # would survive, silently. Asserting BOTH on the same object is the only way to see it.
+  - it: "CASE 3 -- both set: ONE controller key carrying both, neither silently dropped"
+    set:
+      components:
+        - name: a-pooled-and-sized-thing
+          kind: APooledAndSizedThing
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+          pool: pages
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {memory: 512Mi}
+    asserts:
+      - equal:
+          path: spec.controller.pool
+          value: pages
+        documentSelector:
+          path: metadata.name
+          value: a-pooled-and-sized-thing
+      - equal:
+          path: spec.controller.resources.requests.cpu
+          value: 100m
+        documentSelector:
+          path: metadata.name
+          value: a-pooled-and-sized-thing
+      - equal:
+          path: spec.controller.resources.limits.memory
+          value: 512Mi
+        documentSelector:
+          path: metadata.name
+          value: a-pooled-and-sized-thing
+
+  # CONTROL. Without this, every case above would pass just as well if the template emitted
+  # `controller:` unconditionally -- which would put an empty mapping on all 60 CDs.
+  - it: "CASE 4 CONTROL -- neither set: NO controller key at all"
+    set:
+      components:
+        - name: a-plain-thing
+          kind: APlainThing
+          version: 1.0.0
+          registerOnly: true
+          tier: catalog
+    asserts:
+      - isNull:
+          path: spec.controller
+        documentSelector:
+          path: metadata.name
+          value: a-plain-thing

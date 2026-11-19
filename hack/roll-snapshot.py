@@ -107,7 +107,7 @@ FAILED_REASONS = ("Unavailable", "CreateOutcomeUnknown", "HooksMayNotHaveRun")
 # that learns to ignore the list. core-provider pointed out the fix: classify by the REASON, whose
 # verdict the registry already gives, rather than by reading each child Deployment.
 CD_FAILED_REASONS = ("Unavailable", "RemoteChartUnreachable", "SchemaDefaultContradiction",
-                     "ValuesSchemaMissing")
+                     "ValuesSchemaMissing", "DerivedNameTooLong")
 
 # compositionDefinition.converging, mirrored for the same dependency-free reason.
 CD_CONVERGING_REASONS = ("Creating", "Deleting")
@@ -283,7 +283,7 @@ def never_evaluated_by_coverage(c):
     return evaluated == 0 and unread == 0
 
 
-def stuck_converging(snap, budget_s=CONVERGING_BUDGET_S, now=None):
+def stuck_converging(snap, budget_s=CONVERGING_BUDGET_S, now=None, prior=None):
     """Not-converged compositions, split into (stalled, never_evaluated).
 
     Each list holds (key, Ready, readyAt, age_seconds). A composition is NEVER EVALUATED when
@@ -297,6 +297,10 @@ def stuck_converging(snap, budget_s=CONVERGING_BUDGET_S, now=None):
 
     A composition with no readyAt is in NEITHER list: absence of the field is not evidence of
     staleness, and guessing would turn a gap in the capture into a false finding about the cluster.
+
+    PRIOR carries the age forward. Pass the pre-roll snapshot's compositions and, for any
+    composition whose Ready VALUE is unchanged, the EARLIER readyAt is used. See the block in the
+    body for why; the direction is deliberate -- it can only ever lengthen a measured age.
     """
     import datetime as _dt
 
@@ -312,13 +316,38 @@ def stuck_converging(snap, budget_s=CONVERGING_BUDGET_S, now=None):
         ready = c.get("Ready")
         if ready in CONVERGED or ready is None:
             continue
-        t = _parse(c.get("readyAt"))
+        at = c.get("readyAt")
+        t = _parse(at)
+        # CARRY THE AGE FORWARD when Ready's VALUE is unchanged since the prior snapshot.
+        #
+        # Measured on 057's 0.3.673 roll: 52 of 90 compositions had readyAt MOVE while Ready stayed
+        # byte-identical. agentiko-mcp-server spotted it; I measured the scale and concluded "the
+        # cdc rewrites lastTransitionTime", which was WRONG. core-provider traced it (#577):
+        # chart-inspector becomes unreachable during a core-provider roll, the cdc's Observe fails
+        # and writes Ready=False/Unavailable (cdc assessedfailure.go:30), and it recovers ~35 s
+        # later. unstructured-runtime's condition.Upsert (v1.27.1 condition.go:297-305) PRESERVES
+        # lastTransitionTime on a same-status write, so a moved LTT is proof of a real transition,
+        # not of a rewrite -- I had that inference exactly backwards.
+        #
+        # Either way the consequence for THIS bound is the same and is why the fix stays: a brief
+        # dip RESETS the age without the composition having made any progress. A nine-day stall
+        # reads as four minutes old immediately after the roll most likely to have wedged it --
+        # the check is blind at precisely the moment it exists for.
+        #
+        # Take the EARLIER of the two timestamps, so this can only ever LENGTHEN a measured age.
+        # Under-reporting a real stall is the failure this bound exists to prevent.
+        if prior is not None and ready is not None:
+            p = (prior or {}).get(key) or {}
+            if p.get("Ready") == ready:
+                pt = _parse(p.get("readyAt"))
+                if pt is not None and (t is None or pt < t):
+                    t, at = pt, p.get("readyAt")
         if t is None:
             continue
         age = (now - t).total_seconds()
         if age <= budget_s:
             continue
-        row = (key, ready, c.get("readyAt"), age)
+        row = (key, ready, at, age)
         # THE SCALARS DECIDE WHEN THEY CAN. They are direct evidence about whether the rollup
         # assessed anything; the timestamp comparison below is a heuristic that stood in for them
         # and got selfservice-status wrong by nine days. Fallback order, not a blend.
@@ -472,6 +501,25 @@ def capture(ctx, secrets=()):
                 # object's lifetime and not a stall. installer#1017.
                 "createdAt": o["metadata"].get("creationTimestamp"),
                 "Synced": conds.get("Synced"),
+                # syncedAt + syncedMessage, ADDED 2026-11-18 for a measurement that cannot be taken
+                # without them. core-provider#579 keeps a composition's Ready at its last value for
+                # up to 5 minutes while chart-inspector gives no answer, and signals the grace on
+                # SYNCED: status False, reason ReconcileError, and a MESSAGE ending
+                # "Ready is kept as last assessed until <RFC3339>".
+                #
+                # Status+reason alone cannot distinguish that grace from an ordinary
+                # False/ReconcileError -- the reason string is deliberately unchanged, because
+                # core-provider did not want a new reason consumers would have to learn. The
+                # DEADLINE in the message is the only thing that separates "deliberately holding
+                # the last known Ready until T" from "this reconcile failed". So a capture that
+                # keeps reason but drops message can see the grace and not know it is the grace.
+                #
+                # syncedAt matters for the same reason readyAt does on the line above: it tells a
+                # fresh dip from a stale error. A composition sitting at False/ReconcileError for
+                # nine days and one that entered it 30 seconds ago read identically without it --
+                # and during a roll that difference is the whole question.
+                "syncedAt": (cmap.get("Synced") or {}).get("lastTransitionTime"),
+                "syncedMessage": (cmap.get("Synced") or {}).get("message"),
                 "uid": o["metadata"].get("uid"),
             }
 
@@ -591,7 +639,7 @@ def diff(pre, post, expect_delta=None, matching=None):
             moved[k] = {f: [a.get(f), b.get(f)] for f in ("chart", "revision", "status")
                         if a.get(f) != b.get(f)}
     out["releases"]["moved"] = moved
-    _stalled, _never = stuck_converging(post)
+    _stalled, _never = stuck_converging(post, prior=pre.get("compositions"))
     for key, ready, at, age in _stalled:
         out["problems"].append(
             "STUCK CONVERGING: %s reads %s since %s (%.1f h). Converging is not converged; a "
@@ -674,6 +722,17 @@ def diff(pre, post, expect_delta=None, matching=None):
     ch = {}
     for k in sorted(set(pc) & set(poc)):
         a, b = pc[k], poc[k]
+        # syncedAt AND syncedMessage ARE CAPTURED BUT DELIBERATELY NOT DIFFED. Both move on every
+        # real transition, and core-provider#579's grace message embeds an RFC3339 deadline -- so a
+        # message that advances by one reconcile would read as a CHANGE on every affected
+        # composition. That is the 52-of-90 noise the agentiko-mcp-server session had to filter out
+        # of this very diff: lastTransitionTime-keyed rows swamping three real state changes.
+        #
+        # So the split is by purpose rather than by availability. The diff's verdict stays keyed on
+        # status+reason, which is the granularity a roll is pass/fail at. The two new fields are
+        # FORENSICS, read out of the JSON when a specific question needs them -- "is this
+        # False/ReconcileError the #579 grace, and until when?" cannot be answered from the reason,
+        # because core-provider deliberately did not mint a new reason string for it.
         d = {f: [a.get(f), b.get(f)] for f in ("apiVersion", "managed", "Ready", "Synced", "uid")
              if a.get(f) != b.get(f)}
         if d:
@@ -838,6 +897,7 @@ def _ago(seconds):
 
 
 def _self_test():
+    import datetime as _dt_mod
     PRE = {
         "releases": {
             "krateo-system/publish-a": {"chart": "builder-publish-1.8.128", "revision": "72", "status": "deployed"},
@@ -1104,6 +1164,42 @@ def _self_test():
          None),
     ]
     bad_ne = 0
+    # THE CARRY-FORWARD NEEDS DIRECT ASSERTIONS, for the reason the ne_unit block above records:
+    # the case runner judges only problems>0 vs ==0, so a composition can be misclassified
+    # invisibly. Each case below is a separate claim about stuck_converging(prior=...), and each was
+    # mutation-tested by reverting the carry-forward -- case 1 FAILS without it, which is the point.
+    _T0 = "2026-11-08T10:00:00Z"   # nine days before the frozen clock: a real stall
+    _T1 = "2026-11-17T23:14:51Z"   # the dip: readyAt reset to the roll moment
+    _NOW = _dt_mod.datetime(2026, 11, 17, 23, 24, 51, tzinfo=_dt_mod.timezone.utc)
+
+    def _snap(ready, at):
+        return {"compositions": {"krateo-system/x": {"Ready": ready, "readyAt": at,
+                                                     "coverage": {"managedChildrenCount": 4,
+                                                                  "healthEvaluatedChildren": 4,
+                                                                  "unreadableChildrenCount": 0}}}}
+    cf_unit = [
+        ("Ready value UNCHANGED and readyAt reset by a dip -> the NINE-DAY age survives",
+         _snap("False/Creating", _T1), _snap("False/Creating", _T0)["compositions"], True),
+        ("Ready value CHANGED -> prior is ignored, the new age stands (600 s, under the 900 s budget)",
+         _snap("False/Creating", _T1), _snap("False/Unavailable", _T0)["compositions"], False),
+        ("prior readyAt is NEWER -> the EARLIER post value is kept; never shortens an age",
+         _snap("False/Creating", _T0), _snap("False/Creating", _T1)["compositions"], True),
+        ("key absent from prior -> post value used, so a NEW composition is not aged falsely",
+         _snap("False/Creating", _T1), {"krateo-system/other": {"Ready": "False/Creating",
+                                                                "readyAt": _T0}}, False),
+        ("prior=None -> the single-snapshot behaviour is unchanged (regression guard)",
+         _snap("False/Creating", _T1), None, False),
+    ]
+    bad_cf = 0
+    for label, snap, prior, want_stalled in cf_unit:
+        st, _nv = stuck_converging(snap, now=_NOW, prior=prior)
+        got = bool(st)
+        ok = got is want_stalled
+        bad_cf += 0 if ok else 1
+        print("  %-4s carry-forward: %s" % ("ok" if ok else "FAIL", label))
+        if not ok:
+            print("        want stalled=%r got=%r rows=%r" % (want_stalled, got, st))
+
     for label, cov, want in ne_unit:
         got = never_evaluated_by_coverage({"coverage": cov})
         ok = got is want
@@ -1129,7 +1225,8 @@ def _self_test():
         if not ok:
             print("        want_problems=%s got=%s" % (want, d["problems"]))
     print("self-test: %d case(s), %d failure(s)"
-          % (len(cases) + len(cov_unit) + len(ne_unit), bad + bad_unit + bad_ne))
+          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit),
+             bad + bad_unit + bad_ne + bad_cf))
     return 1 if (bad or bad_unit or bad_ne) else 0
 
 

@@ -30,6 +30,11 @@
 # THE DEPS ARE NOT COUPLED THE SAME WAY, and that is load-bearing for whoever edits this next:
 # authn's fixture entries still say v0-46-0 while the pin is 0.47.0, and the suite passes, because
 # a dep is resolved by ITS OWN served tag, not by the dependent's pin. So on a snowplow pin bump,
+# AND AGAIN moving snowplow 1.12.70 -> 1.12.74 (2026-11-18): the same two lines, and again nothing
+# else had to move. The SnowplowCrds fixture still serves v1-12-67 while snowplow-crd is pinned
+# 1.12.74 -- that is NOT an oversight: this suite's assertions do not depend on that tag, which is
+# why the note below says to change one CRD and not to sweep. A stale fixture tag that nothing
+# asserts on is harmless; sweeping it would couple this suite to a pin it does not test.
 # change the snowplows CRD tag only; do NOT sweep every v1-12-xx / v0-xx-x string in this file, or
 # you will silently stop testing what the dep gate actually does.
 suite: snowplow seedAuthn.authnNamespace follows namespaces.krateo
@@ -66,7 +71,7 @@ tests:
           spec:
             group: composition.krateo.io
             names: {kind: Snowplow}
-            versions: [{name: v1-12-70, served: true}]
+            versions: [{name: v1-12-74, served: true}]
         - apiVersion: apiextensions.k8s.io/v1
           kind: CustomResourceDefinition
           metadata: {name: snowplowcrdses.composition.krateo.io}
@@ -141,7 +146,7 @@ tests:
           spec:
             group: composition.krateo.io
             names: {kind: Snowplow}
-            versions: [{name: v1-12-70, served: true}]
+            versions: [{name: v1-12-74, served: true}]
         - apiVersion: apiextensions.k8s.io/v1
           kind: CustomResourceDefinition
           metadata: {name: snowplowcrdses.composition.krateo.io}
