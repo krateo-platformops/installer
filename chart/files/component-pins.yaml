@@ -3429,7 +3429,58 @@ components:
   # config chart was measured 0.11.0 -> 0.12.0, while this repo pins it at 0.9.0, so it does NOT
   # cover 0.9.0 -> 0.12.0. Nothing here moves the config chart, so the gap is not load-bearing
   # for this pin; it would be for any later bump of it.
-  version: 0.12.0
+  # 0.15.0 -- THE #79/#90 SCHEMA TIGHTENING. Owner-verified 2026-11-20 after I let this pin be
+  # overtaken by three tags (0.3.688, .689, .690) while it sat at 0.12.0.
+  #
+  # WHAT ACTUALLY CHANGES, from the owner's render diff against the 0.80.0 renderer. Their first
+  # answer said "nothing on the 31 others" and they CORRECTED it unprompted:
+  #   4 resource CRDs differ: orgrulesets, orgwebhooks, reporulesets, repowebhooks (.github.krateo.io)
+  #   1 RestDefinition changes its findby query: PullRequest, state=all -> state=open
+  #   0 of the 32 Configuration CRDs differ
+  # THE 4 TIGHTENED KINDS HAVE 0 CRs ON 057, so nothing live can be refused by the new schema.
+  #
+  # NO -crd PIN EXISTS TO PRUNE PAST, which is the usual trap here. ghkog ships NO CRD chart: its
+  # 32 CRDs are GENERATED AT RUNTIME by oasgen-provider from the RestDefinitions in this chart.
+  # The repo publishes exactly two charts, and github-provider-kog-config stays at 0.9.0 --
+  # 0.9.0 and 0.15.0 differ ONLY in Chart.yaml version metadata, templates and values byte-identical.
+  # (The 28 Configuration objects on 057 carry no helm labels, so that chart does not own them.)
+  #
+  # THE COUPLING THAT MATTERS IS OASGEN, and it is already satisfied. 0.15.0 declares
+  # krateo.io/requires-oasgen-provider: '>= 0.76.0, != 0.77.0' -- read from the chart itself, not
+  # from a release note -- and oasgen-provider + oasgen-provider-crd are both pinned 0.80.0.
+  # The owner re-ran RD admission on 0.80.0 against the 0.15.0 chart: 32/32 accepted, negative
+  # control (integer `method`) refused. Their earlier 0.80.0 run had used the PRE-0.15.0 chart
+  # (state=all), so that gap is closed.
+  #
+  # DO NOT BATCH THIS WITH AN OASGEN 0.84.0 BUMP. 0.84.0 adds -lease-name to every RDC's args, so
+  # batching would make the post-roll diff unattributable. This pin goes alone.
+  #
+  # POST-ROLL EXPECTATIONS. The owner corrected these TWICE; this is the second, measured by
+  # rendering published 0.12.0 and 0.15.0 from GHCR and diffing each object. THREE LAYERS CHANGE
+  # AND THEY DO NOT COINCIDE -- collapsing them is what made my first two versions wrong:
+  #
+  #   RestDefinition SPEC differs    1 of 32   pullrequest only
+  #                                            (.resource.verbsDescription: findby state=open)
+  #   asset ConfigMap DATA differs   6 of 32   orgruleset, orgwebhook, reporuleset, repowebhook,
+  #                                            repocontent, userrepository
+  #   generated CRD differs          4 of 32   orgrulesets, orgwebhooks, reporulesets, repowebhooks
+  #
+  #   RD generation moves on the PULLREQUEST RD ONLY. The 4 tightened kinds change through their
+  #   OAS ASSET ConfigMap, not through the RD spec, so their RD generation STAYS PUT.
+  #   7 CONTROLLERS REDEPLOY ONCE: the 6 asset kinds plus pullrequest. oasgen hashes the RAW OAS
+  #   BYTES, so an asset edit redeploys that RD's controller EVEN WHEN THE GENERATED CRD IS
+  #   IDENTICAL -- repocontent and userrepository are exactly that case.
+  #   THE OTHER 25 CONTROLLERS MUST NOT RESTART.
+  #   0 diffs on the 7 immutable RD fields; the 17 PullRequest CRs keep uid and number;
+  #   Configuration CRDs and objects unchanged.
+  #
+  # WHY THE EARLIER LINE WOULD HAVE BITTEN: it said "generation bump on those 4 RDs plus the
+  # PullRequest one". Against a CORRECT roll that reads as 4 MISSING generation bumps and 2
+  # UNEXPLAINED redeploys -- a clean roll reported as two kinds of failure.
+  # Registry probed with controls: 0.15.0 present, 0.12.0 present, 9.9.9 absent, in
+  # krateo-blueprints -- NOT the default registry; the repo key is the authority.
+  # Not in .github/retraction-sources.yaml (checked the file, not its silence).
+  version: 0.15.0
   # 0.7.0 adds two kinds and removes none -- measured on the published chart, not read from the
   # release notes: rendered at --kube-version 1.33.0, rc=0 on both sides, 8104 -> 8882 lines (floor
   # asserted), RestDefinition docs 30 -> 32, ADDED {RepoContent, UserRepository}, REMOVED {} . 0.7.1
