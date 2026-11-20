@@ -127,7 +127,7 @@ components:
   version: 0.9.0
 - name: github-provider-kog
   kind: GithubProviderKog
-  version: 0.12.0
+  version: 0.15.0
   requiresApiGroups:
   - ogen.krateo.io
   repo: oci://ghcr.io/krateo-blueprints/charts
