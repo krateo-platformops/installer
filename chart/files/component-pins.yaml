@@ -365,7 +365,7 @@ components:
   #   which is true only without a `default:` -- a CRD property WITH one is applied by the apiserver to
   #   every existing object on its next read or write. The rule carried forward is "additive AND no
   #   new `default:`", and applying it is what found the Collapse timeout.
-  version: 1.8.50
+  version: 1.8.51
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -2977,7 +2977,7 @@ components:
   #   confirmed it by sha256 per file: ONE file differs in the published chart, Chart.yaml. No values
   #   keys added or changed, no templates touched, no dangerous `required`. Image
   #   ghcr.io/krateo-platformops/frontend:1.8.43, multi-arch amd64+arm64.
-  version: 1.8.50
+  version: 1.8.51
   deps:
   - frontend-crd
   - authn
@@ -3429,7 +3429,58 @@ components:
   # config chart was measured 0.11.0 -> 0.12.0, while this repo pins it at 0.9.0, so it does NOT
   # cover 0.9.0 -> 0.12.0. Nothing here moves the config chart, so the gap is not load-bearing
   # for this pin; it would be for any later bump of it.
-  version: 0.12.0
+  # 0.15.0 -- THE #79/#90 SCHEMA TIGHTENING. Owner-verified 2026-11-20 after I let this pin be
+  # overtaken by three tags (0.3.688, .689, .690) while it sat at 0.12.0.
+  #
+  # WHAT ACTUALLY CHANGES, from the owner's render diff against the 0.80.0 renderer. Their first
+  # answer said "nothing on the 31 others" and they CORRECTED it unprompted:
+  #   4 resource CRDs differ: orgrulesets, orgwebhooks, reporulesets, repowebhooks (.github.krateo.io)
+  #   1 RestDefinition changes its findby query: PullRequest, state=all -> state=open
+  #   0 of the 32 Configuration CRDs differ
+  # THE 4 TIGHTENED KINDS HAVE 0 CRs ON 057, so nothing live can be refused by the new schema.
+  #
+  # NO -crd PIN EXISTS TO PRUNE PAST, which is the usual trap here. ghkog ships NO CRD chart: its
+  # 32 CRDs are GENERATED AT RUNTIME by oasgen-provider from the RestDefinitions in this chart.
+  # The repo publishes exactly two charts, and github-provider-kog-config stays at 0.9.0 --
+  # 0.9.0 and 0.15.0 differ ONLY in Chart.yaml version metadata, templates and values byte-identical.
+  # (The 28 Configuration objects on 057 carry no helm labels, so that chart does not own them.)
+  #
+  # THE COUPLING THAT MATTERS IS OASGEN, and it is already satisfied. 0.15.0 declares
+  # krateo.io/requires-oasgen-provider: '>= 0.76.0, != 0.77.0' -- read from the chart itself, not
+  # from a release note -- and oasgen-provider + oasgen-provider-crd are both pinned 0.80.0.
+  # The owner re-ran RD admission on 0.80.0 against the 0.15.0 chart: 32/32 accepted, negative
+  # control (integer `method`) refused. Their earlier 0.80.0 run had used the PRE-0.15.0 chart
+  # (state=all), so that gap is closed.
+  #
+  # DO NOT BATCH THIS WITH AN OASGEN 0.84.0 BUMP. 0.84.0 adds -lease-name to every RDC's args, so
+  # batching would make the post-roll diff unattributable. This pin goes alone.
+  #
+  # POST-ROLL EXPECTATIONS. The owner corrected these TWICE; this is the second, measured by
+  # rendering published 0.12.0 and 0.15.0 from GHCR and diffing each object. THREE LAYERS CHANGE
+  # AND THEY DO NOT COINCIDE -- collapsing them is what made my first two versions wrong:
+  #
+  #   RestDefinition SPEC differs    1 of 32   pullrequest only
+  #                                            (.resource.verbsDescription: findby state=open)
+  #   asset ConfigMap DATA differs   6 of 32   orgruleset, orgwebhook, reporuleset, repowebhook,
+  #                                            repocontent, userrepository
+  #   generated CRD differs          4 of 32   orgrulesets, orgwebhooks, reporulesets, repowebhooks
+  #
+  #   RD generation moves on the PULLREQUEST RD ONLY. The 4 tightened kinds change through their
+  #   OAS ASSET ConfigMap, not through the RD spec, so their RD generation STAYS PUT.
+  #   7 CONTROLLERS REDEPLOY ONCE: the 6 asset kinds plus pullrequest. oasgen hashes the RAW OAS
+  #   BYTES, so an asset edit redeploys that RD's controller EVEN WHEN THE GENERATED CRD IS
+  #   IDENTICAL -- repocontent and userrepository are exactly that case.
+  #   THE OTHER 25 CONTROLLERS MUST NOT RESTART.
+  #   0 diffs on the 7 immutable RD fields; the 17 PullRequest CRs keep uid and number;
+  #   Configuration CRDs and objects unchanged.
+  #
+  # WHY THE EARLIER LINE WOULD HAVE BITTEN: it said "generation bump on those 4 RDs plus the
+  # PullRequest one". Against a CORRECT roll that reads as 4 MISSING generation bumps and 2
+  # UNEXPLAINED redeploys -- a clean roll reported as two kinds of failure.
+  # Registry probed with controls: 0.15.0 present, 0.12.0 present, 9.9.9 absent, in
+  # krateo-blueprints -- NOT the default registry; the repo key is the authority.
+  # Not in .github/retraction-sources.yaml (checked the file, not its silence).
+  version: 0.15.0
   # 0.7.0 adds two kinds and removes none -- measured on the published chart, not read from the
   # release notes: rendered at --kube-version 1.33.0, rc=0 on both sides, 8104 -> 8882 lines (floor
   # asserted), RestDefinition docs 30 -> 32, ADDED {RepoContent, UserRepository}, REMOVED {} . 0.7.1
@@ -4389,7 +4440,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - frontend
   - git-provider
@@ -4506,7 +4557,7 @@ components:
   # 1.8.73; diff -r reports only Chart.yaml.
   # 1.8.117: CONTENT CHANGE -- 2 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.136
+  version: 1.8.138
   deps: ['portal']
   tier: platform
   feature: portal
@@ -4546,7 +4597,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -4617,7 +4668,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -4628,7 +4679,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -4757,7 +4808,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -4802,7 +4853,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -4940,7 +4991,7 @@ components:
   kind: CompositionsPage
   # 1.8.117: CONTENT CHANGE -- 5 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -4952,7 +5003,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -4964,7 +5015,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -4976,7 +5027,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -4988,7 +5039,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -5000,7 +5051,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -5012,7 +5063,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -5022,7 +5073,7 @@ components:
   kind: SettingsPage
   # 1.8.117: CONTENT CHANGE -- 6 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -5032,7 +5083,7 @@ components:
   kind: ObservabilityPage
   # 1.8.117: CONTENT CHANGE -- 9 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -5051,7 +5102,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -5424,6 +5475,23 @@ components:
 # THE CHECK: no further OOMKilling of a `manager` process followed by an operator restart.
 #
 # CONTROLS: 0.1.2 resolves; the outgoing 0.1.1 resolves; 9.9.9 does not.
+  # The rdc's in-cluster peers (installer#578). Without these two, rest-dynamic-controller
+  # resolves no *ApiRef at all: mutate_restaction.go hard-errors "no snowplow client is
+  # configured" and every delegated observe/apply/delete is SILENTLY INERT. Measured on demo
+  # 2026-11-17: KeycloakServiceAccountRoleMapping krateo-identity-lifecycle-roles sat at
+  # Synced=False/ReconcileError with that exact message while its parent composition read
+  # Ready=True/AvailablePartialCoverage -- the child was one of 8 the rollup never evaluated,
+  # so nothing in the platform reported it.
+  #
+  # The peer's svcMatch and exposePort are resolved from ITS pin, never by name: authn's
+  # <release>-internal:8090 serves only POST /usernames/check behind a NetworkPolicy that
+  # admits identity-lifecycle alone, so name-matching picks a Service that resolves, connects,
+  # and then 404s.
+  internalPeerUrls:
+    - path: rdc.env.URL_SNOWPLOW
+      peer: snowplow
+    - path: rdc.env.URL_AUTHN
+      peer: authn
 - name: clickhouse-operator
   kind: ClickhouseOperator
   version: 0.1.2
@@ -7047,7 +7115,7 @@ components:
   #   recorded reason is specific -- an app pinned past its -crd pin prunes fields SILENTLY -- and it
   #   exists because check-no-silent-downgrade caught installer#727 about to revert all three from
   #   1.8.32 to 1.8.28 together. Moving a republished-identical chart costs a version label.
-  version: 1.8.50
+  version: 1.8.51
   deps:
     - portal
     - kagent
@@ -7122,7 +7190,35 @@ components:
   kind: Agentiko
   agentName: agentiko
   # 0.8.1: the alert-authoring prompt names spec.description.
-  version: 0.8.4
+  # 0.8.6 IS CUMULATIVE OVER 0.8.5 AND BOTH RULES MATTER, so this pin carries one version, not two.
+  #
+  # RULE ONE, from 0.8.5 (agentiko#163): kagent 0.1.24 (pinned in 0.3.688, rolled 2026-11-18
+  # 22:57Z) made kagent-tools REFUSE any tool result over 256 KiB. The cap is PROVEN LIVE on 057:
+  # a 703,643-byte request was refused in 0.69 s at 2026-11-19 00:49:41Z against a 262,144-byte
+  # limit, and the payload never reached the model (input grew 440 tokens). Three instruments
+  # agree -- tool-server WARN with limit_bytes=262144, gateway span Unset, agent span Error.
+  # WHAT IS STILL UNPROVEN is the agent's UNGUIDED response to a refusal: the one live test told
+  # the agent not to call again, so "retry the identical call" was never exercised. THIS PIN is
+  # that rule: narrow the call, never retry it unchanged, never report a refusal as empty.
+  #
+  # DO NOT GATE ON THE STRING `OUTPUT_TOO_LARGE`. It appears NOWHERE on 057 for the kubectl
+  # tools, by design: it is the ToolError's ErrorCode, which kagent-tools renders only through
+  # ToMCPResult (the Prometheus tools' path), while the kubectl tools return err.Error(). The
+  # real in-situ markers are "kubectl output is larger than the 256 KiB tool output limit"
+  # (agent side) and "command output exceeded the tool output limit" (server side).
+  #
+  # RULE TWO, new in 0.8.6 (agentiko#126): a list the Blueprint Composer WROTE is not a rule.
+  # Only a human-declared `allows` is a constraint. Marker: "A container the composer CREATED is
+  # in the same position" -- present in 0.8.6, absent from 0.8.5.
+  #
+  # TREE DIFF 0.8.5 -> 0.8.6 is Chart.yaml, Chart.lock and files/prompts-eng.yaml, NOTHING else.
+  # NO NEW VALUES KEYS: 0 added, 0 removed, so the closed componentValues schema needs no
+  # widening first -- the trap that has caught four pins in one day.
+  # BOTH MARKERS VERIFIED in the pulled chart: the size rule is in 0.8.5 and 0.8.6 and absent
+  # from 0.8.4; the composer rule is in 0.8.6 only. Cumulative, so one pin carries both.
+  #
+  # ORDERING IS ALREADY SATISFIED: this depends on kagent 0.1.24, live on 057 since 22:57Z.
+  version: 0.8.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
     - repo-mcp-server
@@ -9205,7 +9301,7 @@ components:
   # than to remove ([[componentvalues-cannot-be-unset-via-values]] is the installer-side version).
   #
   # agentgateway-controller STAYS at 0.2.0. See the note above on why these two versions diverge.
-  version: 0.2.35
+  version: 0.2.37
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller

@@ -14,7 +14,7 @@ components:
 - name: frontend-crd
   kind: FrontendCrds
   chart: frontend-crds
-  version: 1.8.50
+  version: 1.8.51
   tier: platform
   feature: portal
 - name: showback
@@ -74,7 +74,7 @@ components:
 - name: frontend
   kind: Frontend
   chart: frontend
-  version: 1.8.50
+  version: 1.8.51
   deps:
   - frontend-crd
   - authn
@@ -127,7 +127,7 @@ components:
   version: 0.9.0
 - name: github-provider-kog
   kind: GithubProviderKog
-  version: 0.12.0
+  version: 0.15.0
   requiresApiGroups:
   - ogen.krateo.io
   repo: oci://ghcr.io/krateo-blueprints/charts
@@ -135,7 +135,7 @@ components:
   feature: portal
 - name: portal
   kind: Portal
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - frontend
   - git-provider
@@ -150,14 +150,14 @@ components:
       memory: 512Mi
 - name: portal-agents
   kind: PortalAgents
-  version: 1.8.136
+  version: 1.8.138
   deps: ['portal']
   tier: platform
   feature: portal
   chart: portal-agents
 - name: marketplace-page
   kind: MarketplacePage
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -173,98 +173,98 @@ components:
   feature: selfservice
 - name: service-desk-page
   kind: ServiceDeskPage
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
   feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
   feature: portal
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
   feature: portal
 - name: dashboard-page
   kind: DashboardPage
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
   feature: portal
 - name: compositions-page
   kind: CompositionsPage
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
   feature: portal
 - name: blueprints-page
   kind: BlueprintsPage
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
   feature: portal
 - name: resources-page
   kind: ResourcesPage
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
   feature: portal
 - name: search-page
   kind: SearchPage
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
   feature: portal
 - name: builders-page
   kind: BuildersPage
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
   feature: portal
 - name: clusters-page
   kind: ClustersPage
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
   feature: portal
 - name: reviews-page
   kind: ReviewsPage
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
   feature: portal
 - name: settings-page
   kind: SettingsPage
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
   feature: portal
 - name: observability-page
   kind: ObservabilityPage
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
   feature: portal
 - name: audit-page
   kind: AuditPage
-  version: 1.8.136
+  version: 1.8.138
   deps:
   - portal
   tier: platform
@@ -289,6 +289,11 @@ components:
   - oasgen-provider-crd
   tier: platform
   feature: oasgenProvider
+  internalPeerUrls:
+    - path: rdc.env.URL_SNOWPLOW
+      peer: snowplow
+    - path: rdc.env.URL_AUTHN
+      peer: authn
 - name: clickhouse-operator
   kind: ClickhouseOperator
   version: 0.1.2
@@ -508,7 +513,7 @@ components:
 - name: builder-gate
   kind: BuilderGate
   chart: builder-gate
-  version: 1.8.50
+  version: 1.8.51
   deps:
     - portal
     - kagent
@@ -517,7 +522,7 @@ components:
 - name: agentiko
   kind: Agentiko
   agentName: agentiko
-  version: 0.8.4
+  version: 0.8.6
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
     - repo-mcp-server
@@ -690,7 +695,7 @@ components:
   feature: agentGateway
 - name: agentgateway-policies
   kind: AgentgatewayPolicies
-  version: 0.2.35
+  version: 0.2.37
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
