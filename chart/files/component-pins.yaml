@@ -3455,11 +3455,28 @@ components:
   # DO NOT BATCH THIS WITH AN OASGEN 0.84.0 BUMP. 0.84.0 adds -lease-name to every RDC's args, so
   # batching would make the post-roll diff unattributable. This pin goes alone.
   #
-  # POST-ROLL EXPECTATIONS, which the owner's compare script checks:
-  #   generation bump on those 4 RDs plus the PullRequest one
-  #   0 diffs on the 7 immutable RD fields
-  #   the 17 PullRequest CRs keep uid and number
-  #   Configuration CRDs and objects unchanged
+  # POST-ROLL EXPECTATIONS. The owner corrected these TWICE; this is the second, measured by
+  # rendering published 0.12.0 and 0.15.0 from GHCR and diffing each object. THREE LAYERS CHANGE
+  # AND THEY DO NOT COINCIDE -- collapsing them is what made my first two versions wrong:
+  #
+  #   RestDefinition SPEC differs    1 of 32   pullrequest only
+  #                                            (.resource.verbsDescription: findby state=open)
+  #   asset ConfigMap DATA differs   6 of 32   orgruleset, orgwebhook, reporuleset, repowebhook,
+  #                                            repocontent, userrepository
+  #   generated CRD differs          4 of 32   orgrulesets, orgwebhooks, reporulesets, repowebhooks
+  #
+  #   RD generation moves on the PULLREQUEST RD ONLY. The 4 tightened kinds change through their
+  #   OAS ASSET ConfigMap, not through the RD spec, so their RD generation STAYS PUT.
+  #   7 CONTROLLERS REDEPLOY ONCE: the 6 asset kinds plus pullrequest. oasgen hashes the RAW OAS
+  #   BYTES, so an asset edit redeploys that RD's controller EVEN WHEN THE GENERATED CRD IS
+  #   IDENTICAL -- repocontent and userrepository are exactly that case.
+  #   THE OTHER 25 CONTROLLERS MUST NOT RESTART.
+  #   0 diffs on the 7 immutable RD fields; the 17 PullRequest CRs keep uid and number;
+  #   Configuration CRDs and objects unchanged.
+  #
+  # WHY THE EARLIER LINE WOULD HAVE BITTEN: it said "generation bump on those 4 RDs plus the
+  # PullRequest one". Against a CORRECT roll that reads as 4 MISSING generation bumps and 2
+  # UNEXPLAINED redeploys -- a clean roll reported as two kinds of failure.
   # Registry probed with controls: 0.15.0 present, 0.12.0 present, 9.9.9 absent, in
   # krateo-blueprints -- NOT the default registry; the repo key is the authority.
   # Not in .github/retraction-sources.yaml (checked the file, not its silence).
