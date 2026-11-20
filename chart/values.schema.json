@@ -18369,6 +18369,55 @@
           "title": "settings-page values",
           "type": "object"
         },
+        "public-pages": {
+          "additionalProperties": false,
+          "type": "object",
+          "title": "Public pages",
+          "description": "The public-pages chart (portal 1.8.138): the unauthenticated access-request screens, as CRs only, in their own namespace. Every key here is an OVERRIDE of the chart's own values.yaml and carries NO `default:` -- crdgen propagates a schema default into the generated composition CRD, where the apiserver materialises it into the leaf CR spec while the chart's values.yaml never runs (measured at portal 1.8.78: the marketplacepages CRD defaulted readerGroups to [admins] and the live CR carried it with nothing having written it). THE CONSENT TEXT AND PRIVACY-POLICY URL ARE DECLARED HERE BECAUSE THEY ARE PUBLIC LEGAL TEXT: without these keys the chart's defaults are unreachable from the CR -- an attempt to set them is PRUNED silently while the chart default wins -- so changing the wording or the URL would need a portal chart release plus an installer widening plus a tag. Chart defaults at 1.8.138: namespace krateo-public, privacyPolicy.url https://agentiko.eu/privacy-policy/. Declaring a key here PUBLISHES NOTHING: the pages are gated by features.publicPages, their readability by componentValues.snowplow.publicIdentity.enabled, and their forms' intake by features.identityLifecycle.",
+          "properties": {
+            "namespace": {
+              "type": "string",
+              "title": "Namespace",
+              "description": "The namespace the pages' CRs are created in; the chart creates it (templates/namespace.yaml). This is the ONLY boundary page visibility has, because `resourceNames` cannot narrow `list`. Chart default: krateo-public."
+            },
+            "requestAccess": {
+              "additionalProperties": false,
+              "type": "object",
+              "title": "Request-access form",
+              "description": "Text shown on the public form. The form collects firstName, lastName, email, company, country, phone and useCase from visitors who are not signed in, so this wording is the consent a visitor gives.",
+              "properties": {
+                "processingConsent": {
+                  "type": "string",
+                  "title": "Processing consent",
+                  "description": "The processing-consent sentence beside the required consentProcessing checkbox."
+                },
+                "newsletterConsent": {
+                  "type": "string",
+                  "title": "Newsletter consent",
+                  "description": "The optional-newsletter sentence beside the consentNewsletter checkbox."
+                },
+                "privacyPolicy": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "title": "Privacy policy link",
+                  "description": "The privacy-policy link rendered inside the processing-consent sentence.",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "title": "Link text",
+                      "description": "The link's visible text. Chart default: 'privacy policy'."
+                    },
+                    "url": {
+                      "type": "string",
+                      "title": "Link URL",
+                      "description": "The link's target. Chart default: https://agentiko.eu/privacy-policy/."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "showback": {
           "additionalProperties": false,
           "description": "showback's ClickHouse target. The chart's own values.yaml defaults address to `clickhouse.observability.svc:9000`, which is NOT this platform's service, so these defaults exist to point it at the clickstack ClickHouse instead.",
@@ -18919,7 +18968,6 @@
               "properties": {
                 "enabled": {
                   "type": "boolean",
-                  "default": false,
                   "title": "Enabled",
                   "description": "When true, snowplow serves token-less requests as the public identity and its ClusterRole grants impersonate on users [krateo:public] and groups [system:unauthenticated], restricted by resourceNames. REQUIRES THE CACHE: the chart fails the render unless env.CACHE_ENABLED is \"true\"/\"1\"/\"yes\". krateo-057 already carries env.CACHE_ENABLED=\"true\"; do not remove it when setting this."
                 }

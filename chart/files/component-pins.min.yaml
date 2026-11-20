@@ -269,6 +269,13 @@ components:
   - portal
   tier: platform
   feature: portal
+- name: public-pages
+  kind: PublicPages
+  version: 1.8.138
+  deps:
+  - portal
+  tier: platform
+  feature: publicPages
 - name: blueprint-render-service
   kind: BlueprintRenderService
   version: 0.5.0
