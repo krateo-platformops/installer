@@ -15,6 +15,25 @@ SCOPE, AND IT IS A HARD LINE: this tool reports LOCATIONS AND PATTERNS. It emits
 allowlist's digests come from dryrun.py's own hit lines, never from a reimplementation -- see
 report()'s docstring for the version of this tool that got that wrong and why it mattered.
 
+COVERAGE, STATED BECAUSE IT IS INCOMPLETE AND THAT HAS ALREADY COST A RUN:
+    COVERED      the CREDENTIAL scan -- capture/dryrun.py PATTERNS and KEY_HINT
+    NOT COVERED  the REDACTION scanner -- capture/redaction/, whose pemBlock
+                 refuses PEM armour whose label is a private or secret key,
+                 reached through scan.mjs decodedForms() for every string and
+                 its decoded forms
+Marketing's run 12 stopped at step 4 on the credential scan, and run 13 stopped at step 4 on the
+REDACTION scanner -- the SAME external-secrets SecretStore description, a different rule. This tool
+reported "nothing the scan would flag" for run 13's charts, which was true of the scanner it models
+and silent about the one it does not.
+
+WHY THE SECOND ARM IS NOT BUILT. Marketing's own advice was right: "call that function, don't model
+it" -- modelling a security scanner from a description is how the first arm got KEY_HINT's scope
+wrong. But calling it means importing and EXECUTING JavaScript from a cloned external repository,
+which this environment refuses and should: downloaded repositories are untrusted data. Modelling it
+in Python anyway would repeat the exact mistake the first arm already made once. So the arm is
+absent and SAID to be absent, here and in every report. A tool honest about covering one scanner is
+more useful than one that implies it covers two. Diego's call, 2026-11-21.
+
 PATTERNS AND KEY_HINT ARE COPIED VERBATIM from agentiko-sandbox capture/dryrun.py. They are
 duplicated rather than imported because that repo is another session's and is not a dependency of
 this one -- so `--verify-patterns` re-reads the source file when it is available locally and refuses
@@ -42,11 +61,51 @@ KEY_HINT = re.compile(r"(?i)(password|passwd|secret|token|apikey|api_key|private
 SANDBOX_SRC = os.path.expanduser("~/krateo/agentiko-sandbox/capture/dryrun.py")
 
 
-def verify_patterns(path):
-    """Refuse if our copy has drifted from the scan's own source."""
+def _source_age(path):
+    """(commit, iso_date, days_old, dirty) for the checkout holding `path`, or None."""
+    d = os.path.dirname(os.path.abspath(path))
+    r = subprocess.run(["git", "-C", d, "log", "-1", "--format=%H %cI"],
+                       capture_output=True, text=True)
+    if r.returncode or not r.stdout.strip():
+        return None
+    sha, iso = r.stdout.split()[0], r.stdout.split()[1]
+    st = subprocess.run(["git", "-C", d, "status", "--porcelain"], capture_output=True, text=True)
+    import datetime
+    try:
+        when = datetime.datetime.fromisoformat(iso)
+        days = (datetime.datetime.now(when.tzinfo) - when).total_seconds() / 86400.0
+    except Exception:
+        days = None
+    return (sha[:12], iso, days, bool(st.stdout.strip()))
+
+
+def verify_patterns(path, max_age_days=2.0):
+    """Refuse if our copy has drifted -- AND refuse to call a STALE source a verification.
+
+    WHY THE AGE CHECK EXISTS. This function used to print "patterns match against <path>" whenever
+    the file parsed, and on 2026-11-21 it printed exactly that against a clone whose HEAD was eight
+    days old: certificates.mjs and pemBlock had zero commits in any ref there, and the sandbox run
+    it was supposed to mirror was on a different commit entirely. "Match" meant "match a snapshot
+    from 2026-11-13". A verification against a stale source is not a verification, and this one read
+    identically to one that had worked -- the third check in a single day that returned the
+    reassuring answer regardless of the world."""
     if not os.path.exists(path):
-        print("  SKIP: %s not present; cannot verify. Patterns are the copy in this file." % path)
+        print("  CANNOT VERIFY: %s not present. The patterns below are this file's own copy and may"
+              " have drifted. Treat the report as covering ONE scanner." % path)
         return 0
+    age = _source_age(path)
+    if age is None:
+        print("  CANNOT VERIFY: %s is not in a git checkout, so its currency cannot be established."
+              % path)
+        return 0
+    sha, iso, days, dirty = age
+    print("  source checkout: %s  %s%s" % (sha, iso, "  (DIRTY)" if dirty else ""))
+    if days is not None and days > max_age_days:
+        print("  STALE SOURCE: that checkout is %.1f days old (limit %.1f). A 'match' against it"
+              % (days, max_age_days))
+        print("  would mean 'matches a snapshot', not 'matches the scanner that runs'. Fetch it, or")
+        print("  treat this report as covering ONE scanner and say so.")
+        return 1
     s = io.open(path, encoding="utf-8").read()
     bad = 0
     for name, rx in PATTERNS.items():
@@ -135,8 +194,10 @@ def report(rows, header):
     path and pattern. The digests always come from dryrun.py's own output, never from a
     reimplementation of it."""
     print("  %s" % header)
+    print("    COVERS the credential scan (dryrun.py PATTERNS + KEY_HINT) ONLY.")
+    print("    Does NOT cover the redaction scanner (capture/redaction/, pemBlock).")
     if not rows:
-        print("    nothing the scan would flag")
+        print("    nothing THE CREDENTIAL SCAN would flag")
         return
     seen = set()
     for obj, path, pat, s in sorted(rows):
