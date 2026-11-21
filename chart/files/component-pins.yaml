@@ -365,7 +365,20 @@ components:
   #   which is true only without a `default:` -- a CRD property WITH one is applied by the apiserver to
   #   every existing object on its next read or write. The rule carried forward is "additive AND no
   #   new `default:`", and applying it is what found the Collapse timeout.
-  version: 1.8.51
+  # 1.8.51 -> 1.8.54. DATA BEFORE CONSUMER, and `deps` on the frontend entry already enforces it,
+  # so the ordering is a property of the pin set rather than of how this PR is written.
+  #
+  # NEW CRD: Dropdown (widgets.templates.krateo.io, plural dropdowns) -- an overflow menu holding
+  # Button widgets, for the composition detail header.
+  #
+  # VERIFIED A WIDENING, NOT A REPLACEMENT, by pulling both charts and diffing every
+  # allowedResources enum rather than trusting the release note. A widening and a replacement read
+  # identically in prose and only one is safe:
+  #   CRD kinds 46 -> 47, new: Dropdown, removed: none
+  #   gained `dropdowns`: Card, Col, Collapse, Flex, Row, Steps, Tabs  (53 -> 54 each)
+  #   Dropdown's own allowedResources: buttons
+  #   LOST entries anywhere: ZERO -- so no existing widget tree becomes invalid
+  version: 1.8.54
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -2977,7 +2990,13 @@ components:
   #   confirmed it by sha256 per file: ONE file differs in the published chart, Chart.yaml. No values
   #   keys added or changed, no templates touched, no dangerous `required`. Image
   #   ghcr.io/krateo-platformops/frontend:1.8.43, multi-arch amd64+arm64.
-  version: 1.8.51
+  # 1.8.51 -> 1.8.54, with frontend-crd and builder-gate. Cumulative over 1.8.52 (Status card) and
+  # 1.8.53. The new Dropdown widget is frontend#744.
+  #
+  # WHY THIS PIN IS URGENT WHILE 057 IS FROZEN: portal's own pinned-crds lint fails until
+  # frontend-crds >= 1.8.54 is on installer MAIN, so the portal change that uses Dropdown is blocked
+  # on this merge -- not on the tag and not on a roll. Merging unblocks them; the tag waits.
+  version: 1.8.54
   deps:
   - frontend-crd
   - authn
@@ -6576,6 +6595,46 @@ components:
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: ingress
+  # alsoFeatures + namespace ADDED 2026-11-21 (installer#1082). Two separate problems, one change.
+  #
+  # 1. alsoFeatures: [internalTls] -- WITHOUT THIS, internalTls IS A BROKEN PROMISE. cert-manager is
+  #    gated on `feature: ingress` alone, but features.internalTls needs it just as much: its
+  #    certificates have no issuer and no controller to sign them without cert-manager present.
+  #    cert-manager-issuers directly above already carries alsoFeatures: [internalTls] for exactly
+  #    this reason, so today a cluster with internalTls and no ingress renders the ISSUERS and not
+  #    the thing that serves them. This is the ANY-of semantics inst.compEnabled implements, which
+  #    is why a plain `feature:` cannot express it.
+  #
+  # 2. namespace: cert-manager -- THIS IS WHAT ADOPTS 057's HAND-INSTALLED RELEASE. krateo-057 is
+  #    running cert-manager as a HAND release `cert-manager/cert-manager` (46 objects, rev 1),
+  #    outside the installer entirely, against Diego's rule recorded 2026-11-16: "There never must
+  #    be hand-installed releases outside installer itself." A helm release's identity is
+  #    name+namespace, so pointing the composition instance at the `cert-manager` namespace makes
+  #    the cdc's release THE SAME RELEASE and the migration becomes an upgrade in place.
+  #
+  #    WITHOUT the namespace key, the cdc would install a SECOND cert-manager into krateo-system.
+  #    keycloak-provider-kog measured what that costs in a scratch namespace: two sets of
+  #    controllers contending for the same kube-system leader-election lease, both webhooks live,
+  #    and --cluster-resource-namespace changing to krateo-system, which breaks the
+  #    krateo-selfsigned-ca chain QUIETLY -- certificates keep serving until renewal, so no probe
+  #    reads red. An uninstall-then-reinstall is worse still: helm uninstall deletes by the STORED
+  #    MANIFEST, so it would remove 40 of the 46 objects, both webhooks and all three controllers
+  #    included, while the new release reported green.
+  #
+  #    `namespace` on a PINNED component was rejected by the umbrella until 2026-11-17. It is now
+  #    allowed and kyverno is the precedent. THE SCHEMA DESCRIPTION STILL SAYS OTHERWISE and is
+  #    stale -- it nearly made me reject this. Read the templates, not the description.
+  #
+  # REHEARSAL IS ONLY POSSIBLE FROM A PUBLISHED TAG, which is why this is not already done.
+  # keycloak-provider-kog tried it from a local chart dir on kc-roll057 and got a null result: the
+  # installer's own CompositionDefinition points the cdc at the PUBLISHED chart
+  # (status.helmChartUrl/helmChartVersion), so installer-platform re-renders from THAT and read
+  # neither key. A local dir can change what the umbrella writes to the CR; it can never change
+  # what the platform renders. So this ships as a real tag, kc-roll057 takes it first, and 057
+  # follows only after that rehearsal passes and Diego gives his go.
+  alsoFeatures:
+    - internalTls
+  namespace: cert-manager
 - name: trust-manager
   # WRAPPED, not pinned from the vendor (Diego, 2026-11-15). ingress-blueprint's passthrough,
   # beside cert-manager and internal-ca-bundle: OUR version 0.17.0, jetstack's v0.20.0 in
@@ -7161,7 +7220,11 @@ components:
   #   recorded reason is specific -- an app pinned past its -crd pin prunes fields SILENTLY -- and it
   #   exists because check-no-silent-downgrade caught installer#727 about to revert all three from
   #   1.8.32 to 1.8.28 together. Moving a republished-identical chart costs a version label.
-  version: 1.8.51
+  # 1.8.54 with the rest of the line. NOT optional and NOT bookkeeping: .github/pin-version-lines.yaml
+  # declares frontend + frontend-crd + builder-gate as ONE line, because a single frontend tag
+  # publishes all three charts, and check-same-version-line REFUSES a pin set where they disagree.
+  # The recorded reason is that an app pinned past its -crd pin prunes fields silently.
+  version: 1.8.54
   deps:
     - portal
     - kagent
@@ -8021,7 +8084,32 @@ components:
   #   0.11.0 -> 0.14.0 is `controller.retention` -- measured on the charts, not taken from a
   #   per-release note, because 0.12.0 and 0.13.0 are skipped by this jump.
   #   Probes: 0.14.0, 0.13.0, 0.12.0 and 0.11.0 all resolve for both charts; 9.9.9 absent.
-  version: 0.11.0
+  # RE-APPLIED 2026-11-21 (installer#1083). #1026 reverted this 0.14.0 -> 0.11.0 on 2026-11-17 so a
+  # tag could be cut from main, saying in its own text "deferred, not lost" and "the window is
+  # minutes, not hours". It was never re-applied: 3.4 days and SEVEN tags (0.3.687..0.3.693) shipped
+  # over the revert, nothing tracked it, and no gate could see it -- check-no-silent-downgrade
+  # compares a PR against its MERGE TARGET, which is blind to a deliberate hold nobody released.
+  # Found only because keycloak-provider-kog noticed a version going the wrong way in an unrelated
+  # branch diff.
+  #
+  # RETENTION IS PINNED TO "0s" BELOW IN values.yaml, AND THAT IS LOAD-BEARING. 0.14.0 adds
+  # controller.retention (chart default 720h) and the controller DELETES Closed/Resolved incidents
+  # past it. Measured on krateo-057 before re-applying: 247 incidents, 194 with
+  # status.resolution.at, and 46 older than 720h -- oldest resolved 2026-10-04 (1140 h), newest
+  # 2026-10-21 (731 h), with 3 more inside five days. They carry status.rootCause, .howToFix and
+  # .report, so the first sweep would have permanently destroyed 46 analyses. Diego chose "0s"
+  # (2026-11-21): keep every incident, and enable retention later as its own deliberate change with
+  # the count known in advance. The 46 cannot come back once swept.
+  #
+  # THE CRDs ARE NOT A RISK despite the -crd bump: incidents and incidentapplies keep the same
+  # single version v1alpha1, storage unchanged, 0 fields added, removed or retyped. The only
+  # difference is one description sentence on ApplyActionStale. Verified by observability by
+  # pulling and diffing both published charts.
+  #
+  # ALSO IN 0.14.0: RBAC gains `delete` on incidents (for the sweep) and `get` on
+  # customresourcedefinitions (to decide whether a stale applyAction can be re-targeted to the
+  # storage version without a reanalysis).
+  version: 0.14.0
   deps:
   - incident-provider-crd
   tier: observability
@@ -8084,7 +8172,8 @@ components:
   #   0.11.0 -> 0.14.0 is `controller.retention` -- measured on the charts, not taken from a
   #   per-release note, because 0.12.0 and 0.13.0 are skipped by this jump.
   #   Probes: 0.14.0, 0.13.0, 0.12.0 and 0.11.0 all resolve for both charts; 9.9.9 absent.
-  version: 0.11.0
+  # Moves with incident-provider: same version line, re-applied together (installer#1083).
+  version: 0.14.0
   tier: observability
   feature: portal
 - name: alert-provider-crd

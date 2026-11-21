@@ -14,7 +14,7 @@ components:
 - name: frontend-crd
   kind: FrontendCrds
   chart: frontend-crds
-  version: 1.8.51
+  version: 1.8.54
   tier: platform
   feature: portal
 - name: showback
@@ -74,7 +74,7 @@ components:
 - name: frontend
   kind: Frontend
   chart: frontend
-  version: 1.8.51
+  version: 1.8.54
   deps:
   - frontend-crd
   - authn
@@ -405,6 +405,9 @@ components:
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: ingress
+  alsoFeatures:
+    - internalTls
+  namespace: cert-manager
 - name: trust-manager
   kind: TrustManager
   chart: trust-manager
@@ -520,7 +523,7 @@ components:
 - name: builder-gate
   kind: BuilderGate
   chart: builder-gate
-  version: 1.8.51
+  version: 1.8.54
   deps:
     - portal
     - kagent
@@ -638,7 +641,7 @@ components:
   agent: true
 - name: incident-provider
   kind: IncidentProvider
-  version: 0.11.0
+  version: 0.14.0
   deps:
   - incident-provider-crd
   tier: observability
@@ -648,7 +651,7 @@ components:
 - name: incident-provider-crd
   kind: IncidentProviderCrds
   chart: incident-provider-crds
-  version: 0.11.0
+  version: 0.14.0
   tier: observability
   feature: portal
 - name: alert-provider-crd

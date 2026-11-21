@@ -348,7 +348,32 @@ features:
 # releases live in krateo-system. So 057's correct value is `cert-manager`, NOT the release
 # namespace, and the default would have been wrong there.
 internalTls:
-  certManagerNamespace: ""        # REQUIRED when features.internalTls is true. The namespace
+  # ============================================================================================
+  # SETTING THIS KEY HERE DOES NOTHING ON AN EXISTING CLUSTER, AND NOTHING ON A FRESH ONE EITHER.
+  # It is CR-OWNED. No template writes spec.internalTls to the Installer CR:
+  #   self-bootstrap.yaml:283  the UPGRADE patch carries only components + componentValues
+  #   self-bootstrap.yaml:191  the FRESH-INSTALL pick is ociRepo, installDefinitions, namespaces,
+  #                            exposure, features, vertexAI, hitlApproval, componentValues,
+  #                            registryAuth -- `internalTls` is not among them and is never set
+  # and compositions.yaml:920 reads it FROM THE CR, as $top.Values.internalTls.certManagerNamespace
+  # (the umbrella's .Values IS the CR's spec). So the only value that ever reaches the consumer is
+  # one written to the CR directly, or the schema default materialised through crdgen -- which is
+  # "", the value that fails the guard.
+  #
+  # TO SET IT, PATCH THE CR:
+  #   kubectl patch installers.<ver>.composition.krateo.io installer -n krateo-system \
+  #     --type merge -p '{"spec":{"internalTls":{"certManagerNamespace":"cert-manager"}}}'
+  # and set it in the SAME patch as features.internalTls, because compositions.yaml:923 fails the
+  # whole umbrella render when the feature is on and this is empty -- so one key without the other
+  # wedges ChartRenderable for every component, not just this one.
+  #
+  # Measured 2026-11-21 by keycloak-provider-kog on kc-roll057: a values-file value left the CR at
+  # "" through a full helm upgrade, while componentValues in the same file patched normally.
+  # installer#1084. The same shape as features.* being inert on upgrade, except this key's own
+  # documentation used to point at the layer that does not work.
+  # ============================================================================================
+  certManagerNamespace: ""        # CR-ONLY (see above). Required when features.internalTls is true:
+                                  #   the namespace
                                   #   cert-manager itself runs in -- read it from the live
                                   #   deployment's --cluster-resource-namespace, do not guess.
                                   #   Derived by the chart into BOTH
@@ -429,6 +454,30 @@ localModel:
 #     snowplow:
 #       replicaCount: 2
 componentValues:
+  # incident-provider: NO retention override. Diego decided 2026-11-16 (installer#1006) to use the
+  #   chart's own default of 720h (30 days), so the key is absent here DELIBERATELY rather than set
+  #   to 720h -- setting a value equal to the default adds a second place to maintain it.
+  #
+  #   RE-CONFIRMED 2026-11-21 (installer#1083/#1087). Re-applying #1026's deferred 0.14.0 pin would
+  #   have shipped this sweep as a SIDE EFFECT, so it was put to Diego with the current count. He
+  #   first chose "0s", then on being shown that 720h had been his answer three times -- #1006 here,
+  #   and directly to acmp on 11-16/17 -- confirmed that #1006 STANDS. This file briefly carried a
+  #   "0s" override between those two answers; it is removed again here.
+  #
+  #   WHAT THIS DELETES, and it is irreversible: the retention sweep is a PERMANENT DELETE on the
+  #   first reconcile after the component reaches >=0.12.0. RECOUNTED 2026-11-21 immediately before
+  #   the pin: 247 incidents, 194 with status.resolution.at, and 46 past 720h -- oldest resolved
+  #   2026-10-04 (1140h), newest 2026-10-21 (731h), with 3 more inside five days. #1006 measured 31;
+  #   it grows as incidents resolve, which is why that note says to RECOUNT rather than trust a
+  #   number. Open, Analyzing and Verifying are NEVER touched.
+  #
+  #   THE 46 WERE EXPORTED FIRST, because the controller has no archive step (confirmed by acmp,
+  #   who owns incident-provider): ~/krateo/incident-export-20261121/ holds will-be-deleted-full.json
+  #   (all 46 objects, every status field), all-incidents-raw.json (all 247 as they were) and a
+  #   readable index. That is a copy, not a restore -- the objects and their history still go.
+  #
+  #   SHORTENING IT LATER deletes immediately and irreversibly on the next reconcile, so any future
+  #   change to this is its own decision and its own roll.
   # The fourteen page components carry NO entries here, deliberately -- the charts own both keys.
   #
   # `dataNamespace` is GONE at portal 1.8.80: a page chart's release lives in the shell namespace, so
