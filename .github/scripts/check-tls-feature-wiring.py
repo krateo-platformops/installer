@@ -66,7 +66,13 @@ def _prepare():
 
 
 def render(dst, features):
-    """(set_of_CompositionDefinition_names, stderr) for a feature map. names is None on failure."""
+    """({CompositionDefinition name: namespace}, stderr) for a feature map. None on failure.
+
+    A DICT rather than a set because a component's NAMESPACE is now part of what this gate has to
+    assert: `namespace` on a pinned component moves the composition instance, and therefore the helm
+    release the cdc creates, which is what makes adoption of a hand-installed release possible.
+    Every `X in a` / `X not in a` test below reads a dict exactly as it read the set, so widening
+    this changed no existing assertion."""
     vals = {"bootstrap": {"coreProvider": {"enabled": False}},
             "installDefinitions": True, "features": features}
     fh = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False)
@@ -79,10 +85,11 @@ def render(dst, features):
         os.unlink(fh.name)
     if r.returncode:
         return None, (r.stderr or r.stdout).strip()
-    names = set()
+    names = {}
     for doc in yaml.safe_load_all(r.stdout):
         if isinstance(doc, dict) and doc.get("kind") == "CompositionDefinition":
-            names.add((doc.get("metadata") or {}).get("name"))
+            md = doc.get("metadata") or {}
+            names[md.get("name")] = md.get("namespace")
     return names, ""
 
 
@@ -131,8 +138,35 @@ def main(argv):
         else:
             ck(CMI in a, "RULE 1: internalTls alone enables cert-manager-issuers")
             ck(TM in a, "RULE 1: internalTls alone enables trust-manager")
-            ck(CM not in a, "RULE 1: internalTls alone does NOT render our cert-manager blueprint",
-               "a hand-installed cert-manager is never adopted (cdc TakeOwnership, core-provider 2.13.82)")
+            # REVERSED 2026-11-21 (installer#1082/#1089), and the reason the OLD assertion existed
+            # is now the reason the NEW one is safe, so both halves are asserted rather than one
+            # dropped.
+            #
+            # IT USED TO READ `CM not in a`, with the detail "a hand-installed cert-manager is never
+            # adopted (cdc TakeOwnership, core-provider 2.13.82)". That was RIGHT while `namespace`
+            # was forbidden on a pinned component: without it the cdc creates release `cert-manager`
+            # in namespaces.krateo, which is a DIFFERENT release from a hand-installed
+            # cert-manager/cert-manager -- so TakeOwnership adopts objects one by one and you end up
+            # with TWO releases, two sets of controllers on one kube-system lease, and
+            # --cluster-resource-namespace silently moving to krateo-system. Rendering nothing was
+            # the safer of the two options available then.
+            #
+            # `namespace` ON A PINNED COMPONENT HAS BEEN ALLOWED SINCE 2026-11-17 (kyverno is the
+            # precedent), and it moves the composition instance, so the cdc's release lands in the
+            # named namespace. With `namespace: cert-manager` the cdc's release IS
+            # cert-manager/cert-manager and the upgrade adopts it in place. The third option now
+            # exists, so the gate asserts THAT rather than the absence.
+            #
+            # WHY THE ABSENCE CANNOT SIMPLY BE DELETED: `CM in a` alone would pass for the dangerous
+            # shape too -- a cert-manager rendered into namespaces.krateo is exactly the second
+            # installation the old rule was protecting against. The namespace assertion below is
+            # what distinguishes adoption from collision, so the two are kept together.
+            ck(CM in a, "RULE 1: internalTls alone DOES render our cert-manager blueprint",
+               "alsoFeatures: [internalTls] -- the issuers are useless without something to serve them")
+            ck(a.get(CM) == "cert-manager",
+               "RULE 1: and the cert-manager CompositionDefinition is placed in namespace cert-manager",
+               "got %r -- this is what ADOPTS a hand-installed release instead of standing a second "
+               "one up in krateo-system" % (a.get(CM),))
             ck(GWCRDS not in a, "RULE 1: internalTls alone does NOT bring gateway-api-crds",
                "so #557 cannot fire against agentgateway-controller")
 
