@@ -378,7 +378,20 @@ components:
   #   gained `dropdowns`: Card, Col, Collapse, Flex, Row, Steps, Tabs  (53 -> 54 each)
   #   Dropdown's own allowedResources: buttons
   #   LOST entries anywhere: ZERO -- so no existing widget tree becomes invalid
-  version: 1.8.54
+  # 1.8.54 -> 1.8.55 BEFORE 1.8.54 EVER SHIPPED. 1.8.54 was merged to main (#1090) and never tagged,
+  # because 057 was frozen for marketing's run 12; frontend then published 1.8.55 while the hold was
+  # on. Pinning 1.8.54 and then 1.8.55 would be two rolls of a three-chart line for one roll's worth
+  # of change, so Diego chose to move main to the current version before the first tag carries it.
+  #
+  # 1.8.55 is frontend#745: a card's icon tile now spans the name line and the tag line. CSS/TSX only.
+  #
+  # VERIFIED THE CRDs DID NOT MOVE, by pulling both published frontend-crds charts and diffing them
+  # rather than trusting the release note: Chart.yaml is the ONLY differing file, no file added or
+  # removed on either side, and `kind: Dropdown` (what portal 1.8.146 needs) is still present. So
+  # this carries no schema change on top of 1.8.54's Dropdown CRD.
+  #
+  # Credential-scan delta for the sandbox capture: NOTHING the scan would flag.
+  version: 1.8.61
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1972,6 +1985,42 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+# 1.8.61 -- retargeted from 1.8.55 (never pinned) because portal#484 needs frontend-crds >= 1.8.61:
+# its lint-pinned-crds gate refuses PageHeader's `progress` field until this pin is on main, so #484
+# stays a DRAFT until then. Same shape as the Dropdown at 1.8.54.
+#
+# WHAT 1.8.61 ADDS TO THE CRD, verified against the published chart rather than the release note:
+# PageHeader.crd.yaml gains ONE optional object, widgetData.progress {label, since, live?, hint?},
+# with required [label, since] INSIDE that object only. widgetData.required stays [title], so no
+# existing PageHeader CR becomes invalid. VERIFIED ABSENT AT 1.8.55, so this pin is what delivers it.
+#
+# NO SCHEMA WIDENING IS NEEDED, unlike 1.8.34's agentName. `progress` is a WIDGET CRD field, not a
+# componentValues key, and portal#484 never stores it: the widget CR holds only a
+# widgetDataTemplate forPath, and the value is produced at request time by snowplow from
+# incident-detail's jq. CRD pruning applies to what is STORED, so a resolve-time value cannot be
+# pruned by it. componentValues.frontend is untouched at 27 keys.
+#
+# AND THE CRD PRUNES RATHER THAN REJECTS -- NECESSARILY, not by oversight. PageHeader.schema.json
+# carries additionalProperties:false on `progress`; the shipped CRD leaves it unset, and it MUST:
+# apiextensions-apiserver's validation makes additionalProperties and properties mutually exclusive
+# (validation.go:1044-1057, v0.37.2) "because otherwise they contradict Kubernetes' API convention
+# to ignore unknown fields". A widget object always has properties, so a CRD carrying both would be
+# REFUSED BY THE APISERVER. Omitting it is gen-crds.ts's only legal output.
+#
+# So "this widget CRD rejects an unknown key" is false for EVERY widget, always, and no sweep of the
+# other CRDs is needed -- the result is fixed by the apiserver, not by our generator. MEASURED
+# ACROSS ALL 46 SHIPPED WIDGET CRDs at 1.8.61: 923 schema objects, ZERO carrying
+# additionalProperties beside properties, and the 15 that carry it at all are typed maps
+# (additionalProperties: {type: string}) on objects WITHOUT properties, which the rule allows.
+#
+# What that leaves: a misspelled key is dropped silently with a successful apply. For #484 that is
+# inert, because nothing stores `progress` (see above). What guards it is portal's
+# test-incident-progress.py, which asserts the EXACT object per state by equality, so a renamed key
+# fails CI rather than rendering nothing. frontend established the apiserver constraint; my earlier
+# reading of this as a generator gap was wrong.
+#
+# 1.8.62 is deliberately NOT taken: it is frontend#752, the Blueprint Builder palette, UI only with
+# no CRD change, so it does nothing for #484 and would only move the target again.
   # 1.8.34 -- all THREE frontend components move together, as one line, because they share a
   # version and a release. 1.8.34 is 1.8.33 + F1 (frontend#641, main c5ed7a0), so ONE roll
   # instead of two; it also unblocks portal#386's tooltip, since the List CRD widening is in both.
@@ -2996,7 +3045,8 @@ components:
   # WHY THIS PIN IS URGENT WHILE 057 IS FROZEN: portal's own pinned-crds lint fails until
   # frontend-crds >= 1.8.54 is on installer MAIN, so the portal change that uses Dropdown is blocked
   # on this merge -- not on the tag and not on a roll. Merging unblocks them; the tag waits.
-  version: 1.8.54
+  # Moves with the frontend line (one tag publishes all three). See frontend-crd above.
+  version: 1.8.61
   deps:
   - frontend-crd
   - authn
@@ -7224,7 +7274,8 @@ components:
   # declares frontend + frontend-crd + builder-gate as ONE line, because a single frontend tag
   # publishes all three charts, and check-same-version-line REFUSES a pin set where they disagree.
   # The recorded reason is that an app pinned past its -crd pin prunes fields silently.
-  version: 1.8.54
+  # Moves with the frontend line (one tag publishes all three). See frontend-crd above.
+  version: 1.8.61
   deps:
     - portal
     - kagent
