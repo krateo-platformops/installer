@@ -10260,7 +10260,17 @@ components:
   kind: ZendeskKog
   chart: zendesk-kog
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.2.3
+  # 0.3.0 -- THE PLUGIN IS GONE. 0.3.0 ships no plugin at all: no plugin.* key in its schema, and no
+  # plugin, webhook-receiver or ticket template. So the CR's stored plugin.* and snowplow.* describe
+  # components that no longer exist. They are cleared by componentValuesUnset AT ROLL TIME, not here:
+  # they live ONLY on the CR (helm get values has no zendesk-kog block at all), and the patch is
+  # RFC-7386, so an omitted key is PRESERVED and only an explicit null deletes.
+  #   unset: zendesk-kog.plugin, .restDefinitions.ticket, .restDefinitions.webhook, .snowplow
+  #   KEEP:  zendesk-kog.restDefinitions.request (enabled: true -- the service desk's ONLY
+  #          definition) and zendesk-kog.zendesk.baseUrl
+  # The owner render-checked 0.3.0 against 057's live values with those four removed and `request`
+  # kept: BYTE-IDENTICAL to the render with them present. The unset changes nothing 0.3.0 renders.
+  version: 0.3.0
   requiresApiGroups:
   - ogen.krateo.io
   deps:
@@ -10300,7 +10310,39 @@ components:
   kind: ZendeskOrganisations
   chart: zendesk-organisations
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.2.4
+  # 0.3.0 -- TOKEN ROTATION, which 057 needs because nothing rotates its Zendesk org token today.
+  # 057's first real ZendeskRequest (zendesk-krateo/zr-admin-1795190153) sat at ObserveFailed/401
+  # for 16+ hours when the token expired; 0.2.4 predates `tokenRotation` entirely.
+  #
+  # THIS PIN IS INERT UNTIL THREE THINGS OUTSIDE THE CHART ARE TRUE, and the chart enforces the
+  # third itself -- templates/organisations.yaml:59-64 calls `fail` when tokenRotation is on and
+  # zendesk.baseUrl or zendesk.oauthClientId is missing or malformed. A `fail` in the umbrella is
+  # not a broken object: it aborts the WHOLE render, so ChartRenderable goes false and every
+  # dependent component is withheld. Do not set tokenRotation without both values.
+  #   1. the token Secret re-authorized (Diego, by hand -- never a session)
+  #   2. that Secret labelled external-secrets.io/type=webhook. REQUIRED BY CONTROLLER CODE, NOT
+  #      SCHEMA: generators/v1/webhook/webhook.go:41 sets EnforceLabels=true, so the CRDs mention
+  #      the label 0 times and a CRD read cannot confirm or refute it. Missing => the ExternalSecret
+  #      errors with that exact message, loudly, not silently.
+  #   3. External Secrets Operator on the cluster. Landed with 0.3.692 via
+  #      external-secrets alsoFeatures:[serviceDesk]; 25 CRDs, controller 3/3 on 057.
+  #
+  # VALUES SET AT ROLL TIME (they live in the values file, unlike zendesk-kog's):
+  #   organisations[krateo].tokenRotation: true
+  #   zendesk.baseUrl:       https://krateo.zendesk.com   (read from 057's own CR)
+  #   zendesk.oauthClientId: krateo-cmp-e2e-public
+  # tokenRotation.* left UNSET so the chart's own defaults apply: refreshInterval 24h,
+  # accessTokenExpiresIn 172800 (Zendesk's maximum), refreshTokenExpiresIn 2592000, renewed each
+  # rotation. The chart bounds these at [300,172800] and [604800,7776000] with refresh >= access,
+  # so anything typed here could only re-derive them and get it wrong.
+  #
+  # ON THE CLIENT ID: krateo-cmp-e2e-public is Active with 3 tokens issued and is described as
+  # "end-user support requests (test only)", matching the Secret's krateo.io/credential=zendesk-end-user
+  # label. The other client, krateo_zendesk_provider_kog, is Inactive with 0 tokens and is a
+  # client-credentials grant, which mints no refresh_token -- while the Secret holds one. I raised
+  # the "test only" wording as a concern about production config; Diego chose this client
+  # explicitly on 2026-11-21.
+  version: 0.3.0
   requiresApiGroups:
   - zendesk.ogen.krateo.io
   deps:

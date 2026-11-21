@@ -895,6 +895,50 @@ componentValues:
 # nothing here deletes key material. A bump signs out every session, because the key that
 # signed every outstanding token stops being served; that is the point of the lever, and the
 # reason it is not driven by anything automatic.
+  # zendesk-organisations: TOKEN ROTATION, on at acmp's instruction as the component's owner, and
+  #   Diego's decision of 2026-11-15 (ESO, because organisations 0.2.3/0.2.4 ship no refresher).
+  #
+  #   WHY THIS IS NOT HOUSEKEEPING. Zendesk returns a THIRTY MINUTE access token for this client --
+  #   acmp measured 1799 s on 2026-11-15, which is the default for OAuth clients created after
+  #   2026-04-30, NOT the 48 h accessTokenExpiresIn can request. Nothing on 057 refreshes it: 0
+  #   ExternalSecrets, 0 SecretStores, and 0.2.4 has no rotation (0.2.5+ does). So the token died
+  #   ~2026-11-15 17:45Z and zr-admin-1795190153, created 2026-11-20 15:56Z, has 401'd since the
+  #   moment it existed -- it NEVER had a live token. Re-authorising by hand buys thirty minutes.
+  #   With rotation, ESO refreshes from the refresh_token (30 days) and requests 172800 each time,
+  #   which the refresh grant honours (7199 s honoured 10-31; 6 rotations 11-15).
+  #
+  #   THE ARRAY IS WRITTEN WHOLE. `organisations` is a list, so a merge patch replaces it wholesale.
+  #   The entry below is 057's LIVE value read back verbatim -- createNamespace, requesterGroups
+  #   [admins, sre], tokenSecretRef {name, key} -- with ONLY tokenRotation added.
+  #
+  #   tokenSecretRef.key IS `token`, NOT the chart's `access_token` default, and acmp confirmed that
+  #   is deliberate: their authorize script writes stringData {token, refresh_token}, 057's
+  #   ZendeskRequestConfiguration reads key `token`, and ESO writes under tokenSecretRef.key, so
+  #   `token` stays consistent through rotation. `access_token` would be INERT here and would look
+  #   like it had worked.
+  #
+  #   tokenRotation defaults are left alone: refreshInterval 24h, accessTokenExpiresIn 172800,
+  #   refreshTokenExpiresIn 2592000 -- the interval is at most half the access lifetime, so one
+  #   missed run never lets the token lapse.
+  #
+  #   ORDER DOES NOT BIND. Rotation needs only the refresh_token (30 days), so authorising can
+  #   happen before or after this rolls, provided the roll lands inside that window. The request
+  #   should reach Ready within 30 minutes of authorising, even before the roll.
+  zendesk-organisations:
+    zendesk:
+      baseUrl: https://krateo.zendesk.com
+      oauthClientId: krateo-cmp-e2e-public
+    organisations:
+      - createNamespace: true
+        name: krateo
+        namespace: zendesk-krateo
+        requesterGroups:
+          - admins
+          - sre
+        tokenSecretRef:
+          name: zendesk-request-token
+          key: token
+        tokenRotation: true
   snowplow:
     env:
       # HELD at 50 deliberately. snowplow >=1.12.69 no longer sets GOGC in its chart, so

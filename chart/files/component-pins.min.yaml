@@ -879,7 +879,7 @@ components:
   kind: ZendeskKog
   chart: zendesk-kog
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.2.3
+  version: 0.3.0
   requiresApiGroups:
   - ogen.krateo.io
   deps:
@@ -890,7 +890,7 @@ components:
   kind: ZendeskOrganisations
   chart: zendesk-organisations
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.2.4
+  version: 0.3.0
   requiresApiGroups:
   - zendesk.ogen.krateo.io
   deps:
