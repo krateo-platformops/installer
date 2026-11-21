@@ -208,7 +208,17 @@ def compare(upstream_rows, vendored):
             bad.append("MISSING CONDITION: upstream lists condition %r (e.g. reason %r) and the "
                        "vendored file has no condition_types entry for it." % (cond, reason))
             continue
-        known = set(entry.get("healthy") or []) | set(entry.get("unhealthy") or [])
+        # `unevaluated` COUNTS AS KNOWN. Upstream's non-Ready conditions carry status=Unknown rows
+        # -- SchemaFullyEnforced/OwnedByAnotherDefinition and /SchemaInferred,
+        # SpecSchemaCurrent/OwnedByAnotherDefinition, ValuesSchemaAuthored/OwnedByAnotherDefinition,
+        # ControllerActive/NotObserved -- and before this line the known set was healthy|unhealthy
+        # only, so the gate demanded they be filed as one or the other. That is a forced
+        # misclassification: OwnedByAnotherDefinition means a FOLLOWER definition, not a fault, and
+        # SchemaInferred is Unknown precisely so an inferred schema cannot read as fully enforced.
+        # The blind spot went unnoticed because the only prior non-Ready entry using `unevaluated`
+        # (composition ApiResolved) is an open family and skipped above.
+        known = (set(entry.get("healthy") or []) | set(entry.get("unhealthy") or [])
+                 | set(entry.get("unevaluated") or []))
         if reason not in known:
             bad.append("MISSING: upstream has %s reason %r and the vendored file does not list it "
                        "under condition_types[%r]." % (cond, reason, cond))
