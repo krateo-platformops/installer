@@ -1985,9 +1985,28 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
-# 1.8.61 -- retargeted from 1.8.55 (never pinned) because portal#484 needs frontend-crds >= 1.8.61:
-# its lint-pinned-crds gate refuses PageHeader's `progress` field until this pin is on main, so #484
-# stays a DRAFT until then. Same shape as the Dropdown at 1.8.54.
+# 1.8.61 -- retargeted from 1.8.55 (never pinned) because portal#484 needs frontend-crds >= 1.8.61
+# for its "Re-analysis since HH:MM UTC" line to RENDER. The frontend must know the field to draw it.
+#
+# CORRECTION TO WHAT THIS COMMENT FIRST SAID. I wrote that portal's lint-pinned-crds gate refuses
+# `progress` until this pin is on main, and that #484 stayed a draft because of it. THAT GATE NEVER
+# COULD. #484's pinned-crds check passed at 16:49:43Z against frontend-crds 1.8.54, which has no
+# `progress` at all -- 63 minutes before this pin reached main at 17:52Z. Verified from the PR's own
+# check-run, not from a report.
+#
+# The reason is the same stored-vs-resolved distinction as the pruning note below, which is why it is
+# worth writing down twice: pinned-crds validates the widget CRs portal STORES, and its own docstring
+# says "not resolved widgets. A resolved widget can carry fields a template never writes". `progress`
+# exists only as a widgetDataTemplate forPath, filled at request time, so no stored object ever
+# carries it and no CRD-shaped check can see it.
+#
+# SO THE ORDERING WAS RIGHT AND NOTHING ENFORCED IT. Pinning before #484 is correct -- otherwise the
+# line silently does not appear -- but that order held because two sessions coordinated it, not
+# because any gate would have caught the reverse. If #484 had merged first, every check would have
+# been green and the only symptom would have been a missing line with no error anywhere.
+#
+# What DOES guard the field's shape is portal's test-incident-progress.py, which asserts the exact
+# object per state by equality. Nothing in pinned-crds does.
 #
 # WHAT 1.8.61 ADDS TO THE CRD, verified against the published chart rather than the release note:
 # PageHeader.crd.yaml gains ONE optional object, widgetData.progress {label, since, live?, hint?},
