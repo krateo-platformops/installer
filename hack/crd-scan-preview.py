@@ -79,7 +79,7 @@ def _source_age(path):
     return (sha[:12], iso, days, bool(st.stdout.strip()))
 
 
-def verify_patterns(path, max_age_days=2.0):
+def verify_patterns(path, max_age_days=2.0, expect_sha=None):
     """Refuse if our copy has drifted -- AND refuse to call a STALE source a verification.
 
     WHY THE AGE CHECK EXISTS. This function used to print "patterns match against <path>" whenever
@@ -100,7 +100,21 @@ def verify_patterns(path, max_age_days=2.0):
         return 0
     sha, iso, days, dirty = age
     print("  source checkout: %s  %s%s" % (sha, iso, "  (DIRTY)" if dirty else ""))
-    if days is not None and days > max_age_days:
+    if expect_sha:
+        # AN AGE LIMIT IS A PROXY; A NAMED COMMIT IS THE THING. Marketing offered to give me the
+        # sandbox main SHA their run actually uses, which beats "recent enough" -- a clone can be
+        # two hours old and still be a different branch, and 2026-11-21 produced exactly that: a
+        # checkout 7.8 days stale that was also not the clone their runs use.
+        if not sha.startswith(expect_sha[:len(sha)]) and not expect_sha.startswith(sha):
+            print("  WRONG COMMIT: source is at %s, expected %s." % (sha, expect_sha))
+            print("  A match against the wrong commit is not a verification. Treat this report as")
+            print("  covering ONE scanner and say so.")
+            return 1
+        print("  commit matches the expected %s" % expect_sha[:12])
+        if dirty:
+            print("  but the checkout is DIRTY, so its files are not that commit's. Refusing.")
+            return 1
+    elif days is not None and days > max_age_days:
         print("  STALE SOURCE: that checkout is %.1f days old (limit %.1f). A 'match' against it"
               % (days, max_age_days))
         print("  would mean 'matches a snapshot', not 'matches the scanner that runs'. Fetch it, or")
@@ -219,10 +233,14 @@ def main(argv):
     ap.add_argument("--chart"); ap.add_argument("--old"); ap.add_argument("--new")
     ap.add_argument("--live", action="store_true"); ap.add_argument("--context"); ap.add_argument("--group")
     ap.add_argument("--verify-patterns", nargs="?", const=SANDBOX_SRC, default=None)
+    ap.add_argument("--expect-sha", default=None,
+                    help="the sandbox commit the scan actually runs from; refuses on any other. "
+                         "Preferred over the age heuristic -- a recent clone can still be the "
+                         "wrong branch.")
     a = ap.parse_args(argv[1:])
 
     if a.verify_patterns is not None:
-        return verify_patterns(a.verify_patterns)
+        return verify_patterns(a.verify_patterns, expect_sha=a.expect_sha)
 
     if a.live:
         if not a.context:
