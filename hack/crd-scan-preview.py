@@ -7,9 +7,13 @@ scan matched both, and marketing's run 12 STOPPED AT STEP 4 on two false positiv
 on a change of mine that nobody had looked at from their side.
 
 The scan is right to stop: it cannot tell a placeholder in documentation from a leaked key. So the
-fix is not to loosen it but to tell them BEFORE the roll which strings a pin introduces, so they can
-pin an allowlist (object + path + pattern + sha256 of the matched string) in a reviewed PR.
-The sha256 is what makes it safe: if the text later CHANGES, it flags again.
+fix is not to loosen it but to tell them BEFORE the roll WHICH FINDINGS a pin introduces -- by
+object, path and pattern -- so they can pin an allowlist in a reviewed PR before the run instead of
+discovering it at step 4.
+
+SCOPE, AND IT IS A HARD LINE: this tool reports LOCATIONS AND PATTERNS. It emits no sha256. The
+allowlist's digests come from dryrun.py's own hit lines, never from a reimplementation -- see
+report()'s docstring for the version of this tool that got that wrong and why it mattered.
 
 PATTERNS AND KEY_HINT ARE COPIED VERBATIM from agentiko-sandbox capture/dryrun.py. They are
 duplicated rather than imported because that repo is another session's and is not a dependency of
@@ -22,7 +26,7 @@ Usage:
   crd-scan-preview.py --live --context <ctx> --group <apigroup>   what is on a cluster now
   crd-scan-preview.py --verify-patterns [path]                    check against the real source
 """
-import argparse, hashlib, io, json, os, re, subprocess, sys, tempfile, glob
+import argparse, io, json, os, re, subprocess, sys, tempfile, glob
 
 # --- verbatim from agentiko-sandbox capture/dryrun.py ---
 PATTERNS = {
@@ -93,7 +97,8 @@ def findings(crd):
             for k, v in node.items():
                 p = "%s.%s" % (path, k)
                 if KEY_HINT.search(str(k)) and isinstance(v, str) and v:
-                    hits.append((name, p, "KEY_HINT", "%s=%s" % (k, v)))
+                    # the VALUE alone: that is what the capture's KEY line digests
+                    hits.append((name, p, "KEY_HINT", v))
                 walk(v, p)
         elif isinstance(node, list):
             for i, v in enumerate(node):
@@ -114,6 +119,21 @@ def pull(chart, version, dest):
 
 
 def report(rows, header):
+    """Locations and patterns ONLY. THIS TOOL DELIBERATELY EMITS NO sha256.
+
+    It used to, and the digests were WRONG for the only purpose anyone would use them for.
+    The capture's allowlist pins, per hit line:
+        a PATTERN hit -> sha256 of the WHOLE matched string
+        a KEY hit     -> sha256 of the VALUE (for external-secrets, "controller")
+    I was hashing the matched SUBSTRING ("-----BEGIN PRIVATE KEY-----") and, for key hits, the
+    string "key=value". Those digests look exactly like allowlist digests and would never match,
+    so an allowlist built from them would silently fail to suppress anything -- and the failure
+    would show up as another step-4 stop, which is the thing this tool exists to prevent.
+
+    A number that looks like an allowlist digest but is not one is worse than no number. The
+    division of labour marketing asked for: this tool says WHICH findings a pin adds, by object,
+    path and pattern. The digests always come from dryrun.py's own output, never from a
+    reimplementation of it."""
     print("  %s" % header)
     if not rows:
         print("    nothing the scan would flag")
@@ -124,15 +144,13 @@ def report(rows, header):
         if key in seen:
             continue
         seen.add(key)
-        sha = hashlib.sha256(s.encode("utf-8")).hexdigest()
-        shown = s if len(s) <= 60 else s[:57] + "..."
+        shown = s if len(s) <= 72 else s[:69] + "..."
         print("    object : %s" % obj)
         print("    path   : %s" % path)
         print("    pattern: %s" % pat)
-        print("    string : %r" % shown)
-        print("    sha256 : %s" % sha)
+        print("    %s: %r" % ("value  " if pat == "KEY_HINT" else "matched", shown))
         print()
-    print("    %d finding(s)" % len(seen))
+    print("    %d finding(s) -- locations only; digests come from dryrun.py" % len(seen))
 
 
 def main(argv):
