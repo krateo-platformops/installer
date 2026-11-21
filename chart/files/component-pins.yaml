@@ -9564,6 +9564,32 @@ components:
   repo: oci://ghcr.io/external-secrets/charts
   version: 2.14.0
   upstream: true
+  # ALSO ENABLED BY serviceDesk, from 2026-11-21. Token rotation is part of the service desk, and
+  # it is ESO that performs it -- so gating the operator on `keycloak` alone meant 057, which runs
+  # serviceDesk with keycloak OFF, had NO External Secrets CRDs at all and nothing to rotate with.
+  #
+  # THE LIVE COST OF THAT GAP, measured by acmp: 057's first real ZendeskRequest
+  # (zendesk-krateo/zr-admin-1795190153, created 2026-11-20 15:56Z) sat at ObserveFailed/401 for
+  # 14 HOURS because its org token had expired and nothing rotates it. No duplicate side effects:
+  # oasgen 0.80.0 retries the lookup and sends nothing, which is the measured revoked-on-all path.
+  # Diego re-authorized the token by hand and chose rotation-with-ESO (his 2026-11-15 decision:
+  # rotate with ESO, no proxies).
+  #
+  # `alsoFeatures` IS THE DECLARED KEY FOR THIS and not a workaround: it is ANY-of with `feature`,
+  # for a shared dependency several features need, and cert-manager-issuers + cloudnative-pg are
+  # the precedents. The alternative shapes are both worse: moving the pin to `serviceDesk` alone
+  # would turn ESO OFF underneath any cluster enabling Keycloak for it, and a `deps` entry answers
+  # a different question -- deps say what must be HEALTHY first, not what MAY enable this.
+  #
+  # ENABLING THIS ON 057 BRINGS ONLY THIS COMPONENT. external-secrets declares no `deps`, and the
+  # five other keycloak-gated components (cloudnative-pg, keycloak, keycloak-operator,
+  # keycloak-config-kog, krateo-keycloak-realm) stay withheld because keycloak remains false.
+  #
+  # ORDER MATTERS FOR WHAT FOLLOWS: zendesk-organisations' rotation templates render ExternalSecret
+  # objects, which need these CRDs to exist. So this rolls FIRST, alone, and the zendesk 0.3.0 pair
+  # with tokenRotation on follows as its own tag once the CRDs and controller are Ready.
+  alsoFeatures:
+  - serviceDesk
   tier: platform
   feature: keycloak
 - name: openstack-capabilities
