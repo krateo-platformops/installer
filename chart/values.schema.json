@@ -18369,6 +18369,55 @@
           "title": "settings-page values",
           "type": "object"
         },
+        "public-pages": {
+          "additionalProperties": false,
+          "type": "object",
+          "title": "Public pages",
+          "description": "The public-pages chart (portal 1.8.138): the unauthenticated access-request screens, as CRs only, in their own namespace. Every key here is an OVERRIDE of the chart's own values.yaml and carries NO `default:` -- crdgen propagates a schema default into the generated composition CRD, where the apiserver materialises it into the leaf CR spec while the chart's values.yaml never runs (measured at portal 1.8.78: the marketplacepages CRD defaulted readerGroups to [admins] and the live CR carried it with nothing having written it). THE CONSENT TEXT AND PRIVACY-POLICY URL ARE DECLARED HERE BECAUSE THEY ARE PUBLIC LEGAL TEXT: without these keys the chart's defaults are unreachable from the CR -- an attempt to set them is PRUNED silently while the chart default wins -- so changing the wording or the URL would need a portal chart release plus an installer widening plus a tag. Chart defaults at 1.8.138: namespace krateo-public, privacyPolicy.url https://agentiko.eu/privacy-policy/. Declaring a key here PUBLISHES NOTHING: the pages are gated by features.publicPages, their readability by componentValues.snowplow.publicIdentity.enabled, and their forms' intake by features.identityLifecycle.",
+          "properties": {
+            "namespace": {
+              "type": "string",
+              "title": "Namespace",
+              "description": "The namespace the pages' CRs are created in; the chart creates it (templates/namespace.yaml). This is the ONLY boundary page visibility has, because `resourceNames` cannot narrow `list`. Chart default: krateo-public."
+            },
+            "requestAccess": {
+              "additionalProperties": false,
+              "type": "object",
+              "title": "Request-access form",
+              "description": "Text shown on the public form. The form collects firstName, lastName, email, company, country, phone and useCase from visitors who are not signed in, so this wording is the consent a visitor gives.",
+              "properties": {
+                "processingConsent": {
+                  "type": "string",
+                  "title": "Processing consent",
+                  "description": "The processing-consent sentence beside the required consentProcessing checkbox."
+                },
+                "newsletterConsent": {
+                  "type": "string",
+                  "title": "Newsletter consent",
+                  "description": "The optional-newsletter sentence beside the consentNewsletter checkbox."
+                },
+                "privacyPolicy": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "title": "Privacy policy link",
+                  "description": "The privacy-policy link rendered inside the processing-consent sentence.",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "title": "Link text",
+                      "description": "The link's visible text. Chart default: 'privacy policy'."
+                    },
+                    "url": {
+                      "type": "string",
+                      "title": "Link URL",
+                      "description": "The link's target. Chart default: https://agentiko.eu/privacy-policy/."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "showback": {
           "additionalProperties": false,
           "description": "showback's ClickHouse target. The chart's own values.yaml defaults address to `clickhouse.observability.svc:9000`, which is NOT this platform's service, so these defaults exist to point it at the clickstack ClickHouse instead.",
@@ -18910,6 +18959,19 @@
               "description": "Deployment progressDeadlineSeconds; safety window for cold informer sync.",
               "title": "Progress Deadline Seconds",
               "type": "integer"
+            },
+            "publicIdentity": {
+              "type": "object",
+              "additionalProperties": false,
+              "title": "Public identity",
+              "description": "Mirrors snowplow's own publicIdentity block field-for-field (chart values.schema.json at 1.12.74). Serve requests carrying no Authorization header as user krateo:public with the single group system:unauthenticated, by impersonation. DO NOT add env.PUBLIC_IDENTITY_ENABLED beside it: snowplow's chart REFUSES that env var at render on purpose, so the ConfigMap flag and the impersonate grant come from one reading and cannot disagree.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enabled",
+                  "description": "When true, snowplow serves token-less requests as the public identity and its ClusterRole grants impersonate on users [krateo:public] and groups [system:unauthenticated], restricted by resourceNames. REQUIRES THE CACHE: the chart fails the render unless env.CACHE_ENABLED is \"true\"/\"1\"/\"yes\". krateo-057 already carries env.CACHE_ENABLED=\"true\"; do not remove it when setting this."
+                }
+              }
             },
             "readinessProbe": {
               "additionalProperties": false,
@@ -21015,6 +21077,12 @@
           "default": true,
           "description": "The non-agent platform: authn/snowplow/frontend/portal + portal-starter + the observability stack (operators, krateo-observability, otel collectors, sse-proxy the portal's events bell consumes).",
           "type": "boolean"
+        },
+        "publicPages": {
+          "default": false,
+          "type": "boolean",
+          "title": "Public pages",
+          "description": "Opt-in. Installs public-pages: the unauthenticated access-request screens, as CRs only (no workload) in their own namespace krateo-public, served by the existing frontend SPA at /public/<slug>. DEFAULTS FALSE AND MUST: these pages are reachable with no Authorization header, so turning this on is an exposure decision for that cluster, not packaging. It does NOT by itself make them readable -- that needs componentValues.snowplow.publicIdentity.enabled, and the forms need features.identityLifecycle for the intake they post to. Any one of the three missing gives pages that render and do not work."
         },
         "repoGraph": {
           "description": "Opt-in the repo-mcp-server DOMAIN-graph / OKF tools (graph_find, graph_map, graph_neighbors, graph_path, knowledge_lookup) \u2014 multi-hop structural, reverse-impact and curated-provenance answers grep cannot give. Unlike structureGraph this deploys NO new component: it flips a config layer on three EXISTING coreAgents components in LOCKSTEP \u2014 the server (repo-mcp-server graph.enabled) and its consumers' toolNames (krateo-autopilot, incident-agent, via each pin's graphToggle) \u2014 so it can never half-enable into the silent Accepted-but-empty server/agent mismatch the repo-mcp-server chart warns about. Distinct from structureGraph (the separate code-STRUCTURE AST server). Needs coreAgents. Default false: more grounding tools is not always better \u2014 measure (the repo-mcp-server grounding eval harnesses / a bench A/B) before defaulting on.",

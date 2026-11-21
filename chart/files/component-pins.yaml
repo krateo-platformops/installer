@@ -4440,7 +4440,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - frontend
   - git-provider
@@ -4557,7 +4557,7 @@ components:
   # 1.8.73; diff -r reports only Chart.yaml.
   # 1.8.117: CONTENT CHANGE -- 2 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.138
+  version: 1.8.139
   deps: ['portal']
   tier: platform
   feature: portal
@@ -4597,7 +4597,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - portal
   tier: platform
@@ -4668,7 +4668,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - portal
   tier: platform
@@ -4679,7 +4679,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - portal
   tier: platform
@@ -4808,7 +4808,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - portal
   tier: platform
@@ -4853,7 +4853,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - portal
   tier: platform
@@ -4991,7 +4991,7 @@ components:
   kind: CompositionsPage
   # 1.8.117: CONTENT CHANGE -- 5 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - portal
   tier: platform
@@ -5003,7 +5003,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - portal
   tier: platform
@@ -5015,7 +5015,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - portal
   tier: platform
@@ -5027,7 +5027,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - portal
   tier: platform
@@ -5039,7 +5039,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - portal
   tier: platform
@@ -5051,7 +5051,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - portal
   tier: platform
@@ -5063,7 +5063,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - portal
   tier: platform
@@ -5073,7 +5073,7 @@ components:
   kind: SettingsPage
   # 1.8.117: CONTENT CHANGE -- 6 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - portal
   tier: platform
@@ -5083,7 +5083,7 @@ components:
   kind: ObservabilityPage
   # 1.8.117: CONTENT CHANGE -- 9 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - portal
   tier: platform
@@ -5102,11 +5102,57 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.138
+  version: 1.8.139
   deps:
   - portal
   tier: platform
   feature: portal
+- name: public-pages
+  # PINNED BUT INERT. Its feature flag `publicPages` defaults FALSE and is NOT set on any
+  # cluster, so inst.featureEnabled withholds it and the umbrella emits no
+  # CompositionDefinition for it. This pin ships the ability to turn the pages on; it does not
+  # turn them on. That split is deliberate (Diego, 2026-11-20: prep only): these pages are
+  # reachable with NO Authorization header, and 057's gateways carry public addresses, so
+  # enabling them is an exposure decision about a cluster rather than a packaging decision.
+  #
+  # WHAT IT IS: the portal's unauthenticated access-request screens, published as its own chart
+  # from the portal repo at the PORTAL LINE's version, so it moves with portal and not
+  # independently. CRs only -- no workload, no Deployment, no Service. The existing frontend SPA
+  # serves them; the chart contributes two page roots (page-request-access,
+  # page-request-access-confirm) with their cards, forms and a markdown, plus the namespace.
+  #
+  # THREE GATES, AND ANY ONE MISSING GIVES PAGES THAT RENDER AND DO NOT WORK:
+  #   features.publicPages                              installs these CRs
+  #   componentValues.snowplow.publicIdentity.enabled   makes them READABLE without a token
+  #   features.identityLifecycle                        the intake their forms POST to
+  # The third drags in identity-lifecycle, identity-lifecycle-crd AND kyverno 3.9.4 -- a policy
+  # engine 057 does not have today (0 CRDs, 0 ClusterPolicies). Pages would otherwise render and
+  # every submit would 404.
+  #
+  # THE GRANT MODEL IS THE CHART'S, AND IT IS TIGHT. templates/rbac.public-identity.yaml binds a
+  # NAMESPACED Role to the USER `krateo:public`, never the group `system:unauthenticated` -- that
+  # group is also what an anonymous caller of the APISERVER is, so granting it would publish
+  # these objects through the apiserver rather than through snowplow. `get` only, with
+  # resourceNames on exactly the 7 objects the two page roots reach: 2 flexes, 2 cards, 2 forms,
+  # 1 markdown. No list (resourceNames cannot narrow it), no watch, no write -- the forms post to
+  # identity-lifecycle, not to snowplow. The chart's own test walks the rendered refs from both
+  # roots and fails unless the resourceNames equal that set exactly.
+  #
+  # NO `namespace:` KEY HERE. The chart creates its own (templates/namespace.yaml, default
+  # krateo-public), and a `namespace:` on a PINNED component aborts the entire umbrella render.
+  # Override it through componentValues.public-pages.namespace instead, which this release also
+  # declares -- along with the consent wording and the privacy-policy URL, because those are
+  # PUBLIC LEGAL TEXT and without the schema keys they are unreachable from the CR: an attempt is
+  # pruned silently while the chart default wins.
+  #
+  # The form collects firstName, lastName, email, company, country, phone and useCase from
+  # visitors who are not signed in.
+  kind: PublicPages
+  version: 1.8.139
+  deps:
+  - portal
+  tier: platform
+  feature: publicPages
 - name: blueprint-render-service
   # RUN 2 DONE: the old krateo-helm-render-service component is gone. Its CR was deleted FIRST, while
   # krateohelmrenderservices-v0-4-0-controller was still running, so composition.krateo.io/finalizer was

@@ -216,16 +216,36 @@ lines:
   # named. Either answer STRENGTHENS this line: with 9 shared-name helpers of which 4 already differ,
   # a mixed set is even less likely to be a combination any portal CI ran.
   #
-  # public-pages ships at the same tag and becomes an 18th member WHEN IT IS PINNED -- not before.
-  # It needs a components entry plus a features.publicPages key, both of which grow
-  # chart/values.schema.json, which check-schema-size-budget refuses outright until core-provider
-  # 2.13.95 is pinned. Listing it here now would make the line reference a component that does not
-  # exist, and a typo'd member makes the whole line vacuous.
+  # public-pages became the 18th member on 2026-11-20, when it was pinned. The two preconditions
+  # this note named were CHECKED before adding it, not assumed: the component now exists in
+  # chart/files/component-pins.min.yaml (kind PublicPages, 1.8.138, feature publicPages), and
+  # check-schema-size-budget passes with core-provider 2.13.113 pinned -- well past the 2.13.95
+  # that #485 required -- at 644,608 minified against a 1,048,576 wall, +62,117 archive headroom.
+  #
+  # BEFORE IT WAS LISTED HERE, NOTHING ENFORCED THE COUPLING. The pin's own comment claims
+  # public-pages "moves with portal and not independently", and a drift test confirmed the gate
+  # was blind to it: public-pages at 1.8.137 against portal 1.8.138 PASSED. It fails now.
+  # Members are one per line because a flow list hides which member a diff touched.
   - name: portal-pages
-    members: [portal, portal-agents, marketplace-page, service-desk-page, incidents-page,
-              alerts-page, dashboard-page, compositions-page, blueprints-page, resources-page,
-              search-page, builders-page, clusters-page, reviews-page, settings-page,
-              observability-page, audit-page]
+    members:
+      - portal
+      - portal-agents
+      - marketplace-page
+      - service-desk-page
+      - incidents-page
+      - alerts-page
+      - dashboard-page
+      - compositions-page
+      - blueprints-page
+      - resources-page
+      - search-page
+      - builders-page
+      - clusters-page
+      - reviews-page
+      - settings-page
+      - observability-page
+      - audit-page
+      - public-pages
     reason: >-
       Portal's charts are released and tested together at one tag and share helpers by
       byte-identical copy (_facets.tpl, _agents-gateway.tpl, _duration.tpl, _zendesk.tpl) and
