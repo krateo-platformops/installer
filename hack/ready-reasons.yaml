@@ -187,9 +187,19 @@ compositionDefinition:
   source:
     repo: krateo-platformops/core-provider
     path: docs/cd-ready-reasons.md
-    checked_against: ded4da21785f2d8d13cc2036c59f44be3b2d5d9e
-    checked_on: '2026-11-17'
+    checked_against: 6d067a21e7de7a345299222b35c07c210bd6c147
+    checked_on: '2026-11-21'
     released_in:
+      # All four below land in 2.13.120, which is NOT CUT YET. #602 merged AFTER the 2.13.119 tag
+      # (3f0cfe6), so 2.13.119 does NOT contain them. Until 2.13.120 is released AND rolled, a
+      # classifier using these four will never match anything on any cluster -- which is correct,
+      # not a fault, but means their branches are UNEXERCISED and a clean run proves nothing about
+      # them. On 057 today: 0 of 78 CDs carry krateo.io/management-policy or deletion-policy, so
+      # even after the roll nothing will exercise them without someone setting an annotation.
+      CreateWithheldByPolicy: 2.13.120 (not cut)
+      UpdateWithheldByPolicy: 2.13.120 (not cut)
+      ManagementPolicyInvalid: 2.13.120 (not cut)
+      DeletionPolicyInvalid: 2.13.120 (not cut)
       SchemaDefaultContradiction: null
       ValuesSchemaMissing: null
       RemoteChartUnreachable: already written by 2.13.105; its FAILED rollup verdict is what needs the
@@ -208,6 +218,23 @@ compositionDefinition:
       unhealthy:
       - ReconcileError
       - ReconcilePaused
+      # core-provider#602, vendored 2026-11-21, NOT YET RELEASED -- see released_in. Both are
+      # provider-runtime v1.21.0, and both mean the reconciler acted on NOTHING but observe, so no
+      # Synced outcome from that pass is trustworthy.
+      #
+      # ManagementPolicyInvalid WINS OVER the pass's own Synced outcome -- except that paused and
+      # deferred passes keep theirs. So a CD can read ManagementPolicyInvalid while ALSO being
+      # paused, and the pause is the older truth; do not read this reason as evidence the definition
+      # is otherwise fine.
+      #
+      # DeletionPolicyInvalid is reported on EVERY pass while the annotation is bad, and its
+      # consequence lands at DELETE time: the external resource is KEPT. A CD carrying it looks
+      # ordinary until someone deletes it.
+      #
+      # Neither carries a rollup verdict in the doc -- that column is an em dash -- so both are
+      # classified here by their Synced=False alone, which is a JUDGEMENT of mine, not vendored.
+      - ManagementPolicyInvalid
+      - DeletionPolicyInvalid
       note: 'THE COLLISION THAT FORCED THIS SPLIT. ReconcilePaused here is a SYNCED reason, and core-provider
         is explicit that Ready is LEFT AS IT WAS -- so a paused definition''s Ready is STALE, not healthy.
         On a COMPOSITION the same string is a READY reason meaning healthy-but-paused, and it sits in
@@ -299,12 +326,23 @@ compositionDefinition:
         and an inferred definition reads Available. ValuesSchemaMissing stays in this namespace''s `failed`
         list for the un-annotated case.'
   converged:
+  # core-provider#602, NOT YET RELEASED. Ready=True because the definition WORKS; it is simply
+  # not at its desired state, because Observe found drift and the management policy withholds
+  # update. It replaces a HEALTHY Ready only -- an unhealthy Ready keeps its own reason with
+  # "updates are withheld by policy" appended, so this reason never masks a failure.
+  - UpdateWithheldByPolicy
   - Available
   - ScaledToZero
   converging:
   - Creating
   - Deleting
   failed:
+  # core-provider#602, vendored 2026-11-21, NOT YET RELEASED -- see released_in below.
+  # provider-runtime v1.21.0 writes this on a CD, which is a DIFFERENT writer from the
+  # composition rows above: the cdc writes those. A CD has no release to recover, so there is
+  # no RecoveryWithheldByPolicy here -- that reason is composition-only, and its absence from
+  # this section is deliberate rather than an omission.
+  - CreateWithheldByPolicy
   - Unavailable
   - RemoteChartUnreachable
   - SchemaDefaultContradiction
