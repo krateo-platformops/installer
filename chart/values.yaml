@@ -928,17 +928,17 @@ componentValues:
     zendesk:
       baseUrl: https://krateo.zendesk.com
       oauthClientId: krateo-cmp-e2e-public
-    organisations:
-      - createNamespace: true
-        name: krateo
-        namespace: zendesk-krateo
-        requesterGroups:
-          - admins
-          - sre
-        tokenSecretRef:
-          name: zendesk-request-token
-          key: token
-        tokenRotation: true
+    # NO `organisations:` DEFAULT, deliberately. An entry names a CUSTOMER's namespace and
+    # ITS end user's token, so it is per-install, not estate-wide. 057's entry -- krateo /
+    # zendesk-krateo, bound to the e2e-requester token -- is Krateo's INTERNAL TEST
+    # organisation. As a chart default it would wire every other cluster that enables
+    # features.serviceDesk to file into OUR test org as soon as someone dropped a Secret in,
+    # which is worse than failing. acmp (the chart owner) asked for it to be removed for
+    # exactly that reason after I had written it in.
+    #
+    # So 057's organisation lives on 057's CR ONLY. And the chart now FAILS CLOSED without
+    # one: zendesk-organisations 0.3.1 refuses to render an empty list rather than installing
+    # nothing and reporting success -- see the pin note in component-pins.yaml.
   snowplow:
     env:
       # HELD at 50 deliberately. snowplow >=1.12.69 no longer sets GOGC in its chart, so
