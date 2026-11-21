@@ -294,10 +294,45 @@ def main() -> int:
                   % (repo, e))
             return 1
         try:
-            doc = yaml.safe_load(body) or {}
+            doc = yaml.safe_load(body)
         except Exception as e:
             print("::error::%s's retraction list is not valid YAML (%s) -- FAILING CLOSED."
                   % (repo, e))
+            return 1
+        # A SYNTAX ERROR IS NOT THE DANGEROUS SHAPE. The one above fails closed already. These do
+        # not, and oasgen-provider named the distinction: a broken list can PARSE into something
+        # that reads exactly like "nothing is withdrawn".
+        #
+        # Measured 2026-11-21 against the previous `yaml.safe_load(body) or {}`:
+        #   empty body            -> {}    -> entries=[] -> READS AS NOTHING RETRACTED
+        #   whitespace only       -> {}    -> entries=[] -> READS AS NOTHING RETRACTED
+        #   a GitHub HTML page    -> str   -> CRASH, uncaught AttributeError on .get
+        #   a LIST, not a mapping -> list  -> CRASH, uncaught AttributeError on .get
+        #   valid `retracted: []` -> {...} -> entries=[] -> correct, and INDISTINGUISHABLE
+        #                                     from the first two
+        #
+        # So the first two reported a safety never checked -- the exact fault this file's header
+        # refuses for a tolerated 404, one layer in -- and the middle two took the gate down with a
+        # traceback instead of a verdict.
+        #
+        # TWO REQUIREMENTS FIX ALL FOUR, and they are deliberately separate:
+        #   1. the document must be a MAPPING. Anything else is VOID, not empty.
+        #   2. the `retracted` KEY must be PRESENT. A publisher with nothing withdrawn writes
+        #      `retracted: []` and that is honoured; a body that never mentioned the key cannot
+        #      be read as a claim about retractions at all.
+        # Requirement 2 is what makes "parsed fine, nothing retracted" and "could not be read"
+        # reach different conclusions, which they must.
+        if not isinstance(doc, dict):
+            print("::error::%s's retraction list parsed as %s, not a mapping -- VOID, FAILING "
+                  "CLOSED. An HTML error page or a bare list parses without raising and would "
+                  "otherwise crash this gate or read as an empty list."
+                  % (repo, type(doc).__name__))
+            return 1
+        if "retracted" not in doc:
+            print("::error::%s's retraction list has no `retracted` key -- VOID, FAILING CLOSED. "
+                  "An empty or truncated body parses to an empty mapping, which is NOT the same "
+                  "claim as `retracted: []`. A publisher with nothing withdrawn must say so "
+                  "explicitly." % repo)
             return 1
         entries = doc.get("retracted") or []
         idx, errs = index_entries(entries, repo, allowed)
@@ -510,6 +545,53 @@ def self_test():
               % ("ok  " if good else "FAIL", sorted(want), sorted(fe[0]) if fe else None))
         if not good:
             ok = False
+
+    # ---- THE BODY-SHAPE CASES, asked for by oasgen-provider 2026-11-21.
+    #
+    # A SYNTAX ERROR WAS ALREADY HANDLED. These are the shapes that PARSE and then read as a
+    # claim nobody made. Measured against the previous `yaml.safe_load(body) or {}`: an empty
+    # body and a whitespace-only body both became {} and reported NOTHING RETRACTED -- a safety
+    # never checked, which is exactly what this file's header refuses for a tolerated 404 -- and
+    # an HTML error page or a bare list CRASHED the gate with an uncaught AttributeError instead
+    # of returning a verdict.
+    #
+    # The last two cases are the point of the pair: `retracted: []` is a publisher SAYING nothing
+    # is withdrawn, and an empty body is a publisher saying nothing at all. They must not reach
+    # the same conclusion.
+    def shape_verdict(body):
+        try:
+            doc = yaml.safe_load(body)
+        except Exception:
+            return "syntax"
+        if not isinstance(doc, dict):
+            return "void"
+        if "retracted" not in doc:
+            return "void"
+        return "accepted:%d" % len(doc.get("retracted") or [])
+
+    cases = [
+        ("empty body",              "",                                              "void"),
+        ("whitespace only",         "\n  \n",                                        "void"),
+        ("an HTML error page",      "<!DOCTYPE html><html>Not Found</html>",         "void"),
+        ("a list, not a mapping",   "- chart: x\n  version: 1\n",                    "void"),
+        ("a YAML syntax error",     "retracted:\n  - chart: [unclosed\n",             "syntax"),
+        ("VALID, zero entries",     "retracted: []\n",                               "accepted:0"),
+        ("VALID, one entry",        "retracted:\n  - chart: c\n    version: 1\n",     "accepted:1"),
+    ]
+    for name, body, want in cases:
+        got = shape_verdict(body)
+        good = got == want
+        print("%s  body shape %-24s -> %-12s (want %s)"
+              % ("ok  " if good else "FAIL", name, got, want))
+        if not good:
+            ok = False
+    # Non-vacuity: the two VALID cases must differ from each other, or the pair proves nothing.
+    distinct = shape_verdict("retracted: []\n") != shape_verdict("")
+    print("%s  `retracted: []` and an empty body reach DIFFERENT conclusions: %s"
+          % ("ok  " if distinct else "FAIL", distinct))
+    if not distinct:
+        ok = False
+
 
     print("\nself-test: %s" % ("PASS" if ok else "FAIL"))
     return ok
