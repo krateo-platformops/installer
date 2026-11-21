@@ -10393,7 +10393,7 @@ components:
   # client-credentials grant, which mints no refresh_token -- while the Secret holds one. I raised
   # the "test only" wording as a concern about production config; Diego chose this client
   # explicitly on 2026-11-21.
-  version: 0.3.1
+  version: 0.3.2
   requiresApiGroups:
   - zendesk.ogen.krateo.io
   deps:
