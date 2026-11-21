@@ -13,6 +13,15 @@ composition:
       - ReconcileDeferred
       - ReconcileGracefullyPaused
       - GracefulPausePending
+      # core-provider#600 (unstructured-runtime v1.31.0), vendored 2026-11-21. Written by
+      # unstructured-runtime, NOT the cdc. Both are INDEFINITE until the annotation is fixed --
+      # they do not clear on their own, so a time-bounded wait on Synced will never succeed.
+      # ManagementPolicyInvalid wins over any other pass outcome on Synced, and the message names
+      # the annotation and the bad token. DeletionPolicyInvalid is reported on every pass while
+      # set, and the release is KEPT on delete. 0 compositions on krateo-057 carry a policy
+      # annotation today, so neither is reachable there until one does.
+      - ManagementPolicyInvalid
+      - DeletionPolicyInvalid
       note: a PAUSED composition reports Ready=True with Synced=False/ReconcilePaused. It was healthy
         when paused and nothing is maintaining that state now, so it must not satisfy a dependency gate.
         inst.readyFromConditions requires Synced=True for exactly this reason.
@@ -139,6 +148,11 @@ composition:
   - AvailablePartialCoverage
   - ReconcileGracefullyPaused
   - ReconcilePaused
+  # core-provider#598, vendored 2026-11-21. Ready=True and classified HEALTHY upstream: the
+  # release is running and serving. But the row also says "the release may not be at the
+  # definition's chart version or values" -- an update was withheld, so the INSTALLED chart is
+  # frozen at whatever it was. Healthy, and not necessarily what the definition asks for.
+  - UpdateWithheldByPolicy
   converging:
   - Creating
   - HelmOperationInProgress
@@ -150,12 +164,25 @@ composition:
   - Unavailable
   - CreateOutcomeUnknown
   - HooksMayNotHaveRun
+  # core-provider#598, vendored 2026-11-21. A management policy withheld the operation, so the
+  # desired state was never applied and nothing is retrying it on its own.
+  - CreateWithheldByPolicy
+  - RecoveryWithheldByPolicy
   unevaluated:
   - ZeroEvidence
   - ObserveFailed
   requires_synced_true:
   - ReconcilePaused
   - ReconcileGracefullyPaused
+  # ADDED 2026-11-21 AS A JUDGEMENT, not from upstream's table, and core-provider has been
+  # asked to confirm it. UpdateWithheldByPolicy has the SAME SHAPE as a pause: Ready=True while
+  # nothing is maintaining the state the definition asks for, because the update was withheld
+  # and the installed chart is FROZEN. This list's note applies word for word -- "it was healthy
+  # when paused and nothing is maintaining that state now, so it must not satisfy a dependency
+  # gate". A dependent gating on this being Ready waits on a release deliberately NOT converging
+  # toward its definition. If core-provider says a withheld update is retried and converges,
+  # REMOVE this entry.
+  - UpdateWithheldByPolicy
 compositionDefinition:
   source:
     repo: krateo-platformops/core-provider
