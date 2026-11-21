@@ -10296,6 +10296,21 @@ components:
   tier: platform
   feature: capabilityRoles
 - name: zendesk-kog
+# ciRepo, added 2026-11-21: check-pin-ci asserts THIS repo's CI and does not consult `sources`.
+#
+# Its `sources` legitimately list krateo-platformops/oasgen-provider -- the provider whose
+# generated controller its RestDefinitions drive -- and oasgen-provider carries an ancient tag
+# `0.3.1` from its old 0.3.x line, with no check-runs. The gate consults EVERY source and refuses
+# the pin if ANY is unresolvable, so when the owner added the correct repo as the FIRST source at
+# 0.3.1, the gate STILL refused: krateo-zendesk-kog resolved green AND oasgen-provider resolved
+# norun. Adding a source cannot outvote another source.
+#
+# NOT solved by preferring the OCI stamp. That was tried as installer#1101 and closed the same day:
+# the stamp names the CHART's repo while the inference targets the APP's repo, and for a chart
+# wrapping Krateo's own image the second is the claim that matters. Measured 2026-11-06 --
+# otel-collector-deployment 0.3.13's app commit had 12 green check-runs and nothing testing the
+# code with three _test.go files present, a correct refusal, and stamp-first PASSED it from the
+# chart's repo instead.
   # NEW COMPONENT, 0.2.1. The KOG that turns Zendesk Support resources into Kubernetes CRs, so a
   # service-desk ticket actually reaches Zendesk. Before this, 057 had the Ticket CRD and the raise
   # form from service-desk-page and NOTHING that delivered: a Ticket was written and no controller
@@ -10331,6 +10346,7 @@ components:
   chart: zendesk-kog
   repo: oci://ghcr.io/krateo-blueprints/charts
   version: 0.2.3
+  ciRepo: krateo-blueprints/krateo-zendesk-kog
   requiresApiGroups:
   - ogen.krateo.io
   deps:

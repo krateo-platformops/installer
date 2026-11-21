@@ -20330,6 +20330,11 @@
             "description": "CompositionDefinition spec.chart.repo \u2014 classic helm repo NAME (only for non-OCI helm-repo charts; OCI components don't need it).",
             "type": "string"
           },
+          "ciRepo": {
+            "description": "The repository whose CI check-pin-ci asserts for this component, as owner/name. When set it is the ONLY repo consulted and the chart's `sources` are not used for resolution. EXPLICIT and never inferred, like `upstream`: a chart's `sources` is free-form metadata, so a dependency or an API spec listed there can carry a coincidentally-matching tag and the gate then asserts an unrelated repo's CI. Resolution inside this repo keeps the normal precedence, chart version before appVersion.",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"
+          },
           "configKeys": {
             "items": {
               "type": "string"

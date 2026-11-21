@@ -880,6 +880,7 @@ components:
   chart: zendesk-kog
   repo: oci://ghcr.io/krateo-blueprints/charts
   version: 0.2.3
+  ciRepo: krateo-blueprints/krateo-zendesk-kog
   requiresApiGroups:
   - ogen.krateo.io
   deps:
