@@ -454,22 +454,30 @@ localModel:
 #     snowplow:
 #       replicaCount: 2
 componentValues:
-  # incident-provider 0.14.0 added controller.retention, chart default 720h, and the controller
-  # DELETES Closed/Resolved incidents once status.resolution.at is older than it. "0s" keeps them
-  # for ever; Open, Analyzing and Verifying incidents are never deleted either way.
+  # incident-provider: NO retention override. Diego decided 2026-11-16 (installer#1006) to use the
+  #   chart's own default of 720h (30 days), so the key is absent here DELIBERATELY rather than set
+  #   to 720h -- setting a value equal to the default adds a second place to maintain it.
   #
-  # PINNED TO "0s" DELIBERATELY, AND IT SHIPS IN THE SAME CHANGE AS THE 0.14.0 PIN. Measured on
-  # krateo-057 immediately before that pin: 247 incidents, 194 Closed/Resolved, 46 already past
-  # 720 h -- the oldest resolved 2026-10-04 -- each carrying status.rootCause, .howToFix and
-  # .report. Rolling 0.14.0 on the chart default would have destroyed those 46 analyses on the
-  # first sweep, permanently, as a side effect of re-applying a dropped deferral. Diego chose to
-  # keep them (2026-11-21, installer#1083).
+  #   RE-CONFIRMED 2026-11-21 (installer#1083/#1087). Re-applying #1026's deferred 0.14.0 pin would
+  #   have shipped this sweep as a SIDE EFFECT, so it was put to Diego with the current count. He
+  #   first chose "0s", then on being shown that 720h had been his answer three times -- #1006 here,
+  #   and directly to acmp on 11-16/17 -- confirmed that #1006 STANDS. This file briefly carried a
+  #   "0s" override between those two answers; it is removed again here.
   #
-  # DO NOT remove this to "take the default": enabling retention is its own change, on its own
-  # tag, with the incident count measured first. The objects do not come back.
-  incident-provider:
-    controller:
-      retention: "0s"
+  #   WHAT THIS DELETES, and it is irreversible: the retention sweep is a PERMANENT DELETE on the
+  #   first reconcile after the component reaches >=0.12.0. RECOUNTED 2026-11-21 immediately before
+  #   the pin: 247 incidents, 194 with status.resolution.at, and 46 past 720h -- oldest resolved
+  #   2026-10-04 (1140h), newest 2026-10-21 (731h), with 3 more inside five days. #1006 measured 31;
+  #   it grows as incidents resolve, which is why that note says to RECOUNT rather than trust a
+  #   number. Open, Analyzing and Verifying are NEVER touched.
+  #
+  #   THE 46 WERE EXPORTED FIRST, because the controller has no archive step (confirmed by acmp,
+  #   who owns incident-provider): ~/krateo/incident-export-20261121/ holds will-be-deleted-full.json
+  #   (all 46 objects, every status field), all-incidents-raw.json (all 247 as they were) and a
+  #   readable index. That is a copy, not a restore -- the objects and their history still go.
+  #
+  #   SHORTENING IT LATER deletes immediately and irreversibly on the next reconcile, so any future
+  #   change to this is its own decision and its own roll.
   # The fourteen page components carry NO entries here, deliberately -- the charts own both keys.
   #
   # `dataNamespace` is GONE at portal 1.8.80: a page chart's release lives in the shell namespace, so
