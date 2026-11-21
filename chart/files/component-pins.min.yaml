@@ -764,6 +764,8 @@ components:
   repo: oci://ghcr.io/external-secrets/charts
   version: 2.14.0
   upstream: true
+  alsoFeatures:
+  - serviceDesk
   tier: platform
   feature: keycloak
 - name: openstack-capabilities
