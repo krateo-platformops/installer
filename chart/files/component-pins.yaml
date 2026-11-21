@@ -391,7 +391,7 @@ components:
   # this carries no schema change on top of 1.8.54's Dropdown CRD.
   #
   # Credential-scan delta for the sandbox capture: NOTHING the scan would flag.
-  version: 1.8.55
+  version: 1.8.61
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1985,6 +1985,29 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+# 1.8.61 -- retargeted from 1.8.55 (never pinned) because portal#484 needs frontend-crds >= 1.8.61:
+# its lint-pinned-crds gate refuses PageHeader's `progress` field until this pin is on main, so #484
+# stays a DRAFT until then. Same shape as the Dropdown at 1.8.54.
+#
+# WHAT 1.8.61 ADDS TO THE CRD, verified against the published chart rather than the release note:
+# PageHeader.crd.yaml gains ONE optional object, widgetData.progress {label, since, live?, hint?},
+# with required [label, since] INSIDE that object only. widgetData.required stays [title], so no
+# existing PageHeader CR becomes invalid. VERIFIED ABSENT AT 1.8.55, so this pin is what delivers it.
+#
+# NO SCHEMA WIDENING IS NEEDED, unlike 1.8.34's agentName. `progress` is a WIDGET CRD field, not a
+# componentValues key, and portal#484 never stores it: the widget CR holds only a
+# widgetDataTemplate forPath, and the value is produced at request time by snowplow from
+# incident-detail's jq. CRD pruning applies to what is STORED, so a resolve-time value cannot be
+# pruned by it. componentValues.frontend is untouched at 27 keys.
+#
+# AND THE CRD PRUNES RATHER THAN REJECTS: PageHeader.schema.json carries additionalProperties:false
+# on `progress`, but gen-crds.ts does not carry it into the CRD, so the shipped CRD leaves it unset.
+# A misspelled key would therefore be dropped silently with a successful apply. frontend confirmed
+# this after I measured it. What guards it is portal's test-incident-progress.py, which asserts the
+# EXACT object per state by equality, so a renamed key fails CI rather than rendering nothing.
+#
+# 1.8.62 is deliberately NOT taken: it is frontend#752, the Blueprint Builder palette, UI only with
+# no CRD change, so it does nothing for #484 and would only move the target again.
   # 1.8.34 -- all THREE frontend components move together, as one line, because they share a
   # version and a release. 1.8.34 is 1.8.33 + F1 (frontend#641, main c5ed7a0), so ONE roll
   # instead of two; it also unblocks portal#386's tooltip, since the List CRD widening is in both.
@@ -3010,7 +3033,7 @@ components:
   # frontend-crds >= 1.8.54 is on installer MAIN, so the portal change that uses Dropdown is blocked
   # on this merge -- not on the tag and not on a roll. Merging unblocks them; the tag waits.
   # Moves with the frontend line (one tag publishes all three). See frontend-crd above.
-  version: 1.8.55
+  version: 1.8.61
   deps:
   - frontend-crd
   - authn
@@ -7239,7 +7262,7 @@ components:
   # publishes all three charts, and check-same-version-line REFUSES a pin set where they disagree.
   # The recorded reason is that an app pinned past its -crd pin prunes fields silently.
   # Moves with the frontend line (one tag publishes all three). See frontend-crd above.
-  version: 1.8.55
+  version: 1.8.61
   deps:
     - portal
     - kagent
