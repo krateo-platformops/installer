@@ -6576,6 +6576,46 @@ components:
   repo: oci://ghcr.io/krateo-blueprints/charts
   tier: platform
   feature: ingress
+  # alsoFeatures + namespace ADDED 2026-11-21 (installer#1082). Two separate problems, one change.
+  #
+  # 1. alsoFeatures: [internalTls] -- WITHOUT THIS, internalTls IS A BROKEN PROMISE. cert-manager is
+  #    gated on `feature: ingress` alone, but features.internalTls needs it just as much: its
+  #    certificates have no issuer and no controller to sign them without cert-manager present.
+  #    cert-manager-issuers directly above already carries alsoFeatures: [internalTls] for exactly
+  #    this reason, so today a cluster with internalTls and no ingress renders the ISSUERS and not
+  #    the thing that serves them. This is the ANY-of semantics inst.compEnabled implements, which
+  #    is why a plain `feature:` cannot express it.
+  #
+  # 2. namespace: cert-manager -- THIS IS WHAT ADOPTS 057's HAND-INSTALLED RELEASE. krateo-057 is
+  #    running cert-manager as a HAND release `cert-manager/cert-manager` (46 objects, rev 1),
+  #    outside the installer entirely, against Diego's rule recorded 2026-11-16: "There never must
+  #    be hand-installed releases outside installer itself." A helm release's identity is
+  #    name+namespace, so pointing the composition instance at the `cert-manager` namespace makes
+  #    the cdc's release THE SAME RELEASE and the migration becomes an upgrade in place.
+  #
+  #    WITHOUT the namespace key, the cdc would install a SECOND cert-manager into krateo-system.
+  #    keycloak-provider-kog measured what that costs in a scratch namespace: two sets of
+  #    controllers contending for the same kube-system leader-election lease, both webhooks live,
+  #    and --cluster-resource-namespace changing to krateo-system, which breaks the
+  #    krateo-selfsigned-ca chain QUIETLY -- certificates keep serving until renewal, so no probe
+  #    reads red. An uninstall-then-reinstall is worse still: helm uninstall deletes by the STORED
+  #    MANIFEST, so it would remove 40 of the 46 objects, both webhooks and all three controllers
+  #    included, while the new release reported green.
+  #
+  #    `namespace` on a PINNED component was rejected by the umbrella until 2026-11-17. It is now
+  #    allowed and kyverno is the precedent. THE SCHEMA DESCRIPTION STILL SAYS OTHERWISE and is
+  #    stale -- it nearly made me reject this. Read the templates, not the description.
+  #
+  # REHEARSAL IS ONLY POSSIBLE FROM A PUBLISHED TAG, which is why this is not already done.
+  # keycloak-provider-kog tried it from a local chart dir on kc-roll057 and got a null result: the
+  # installer's own CompositionDefinition points the cdc at the PUBLISHED chart
+  # (status.helmChartUrl/helmChartVersion), so installer-platform re-renders from THAT and read
+  # neither key. A local dir can change what the umbrella writes to the CR; it can never change
+  # what the platform renders. So this ships as a real tag, kc-roll057 takes it first, and 057
+  # follows only after that rehearsal passes and Diego gives his go.
+  alsoFeatures:
+    - internalTls
+  namespace: cert-manager
 - name: trust-manager
   # WRAPPED, not pinned from the vendor (Diego, 2026-11-15). ingress-blueprint's passthrough,
   # beside cert-manager and internal-ca-bundle: OUR version 0.17.0, jetstack's v0.20.0 in
