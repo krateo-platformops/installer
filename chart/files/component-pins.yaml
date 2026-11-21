@@ -8021,7 +8021,32 @@ components:
   #   0.11.0 -> 0.14.0 is `controller.retention` -- measured on the charts, not taken from a
   #   per-release note, because 0.12.0 and 0.13.0 are skipped by this jump.
   #   Probes: 0.14.0, 0.13.0, 0.12.0 and 0.11.0 all resolve for both charts; 9.9.9 absent.
-  version: 0.11.0
+  # RE-APPLIED 2026-11-21 (installer#1083). #1026 reverted this 0.14.0 -> 0.11.0 on 2026-11-17 so a
+  # tag could be cut from main, saying in its own text "deferred, not lost" and "the window is
+  # minutes, not hours". It was never re-applied: 3.4 days and SEVEN tags (0.3.687..0.3.693) shipped
+  # over the revert, nothing tracked it, and no gate could see it -- check-no-silent-downgrade
+  # compares a PR against its MERGE TARGET, which is blind to a deliberate hold nobody released.
+  # Found only because keycloak-provider-kog noticed a version going the wrong way in an unrelated
+  # branch diff.
+  #
+  # RETENTION IS PINNED TO "0s" BELOW IN values.yaml, AND THAT IS LOAD-BEARING. 0.14.0 adds
+  # controller.retention (chart default 720h) and the controller DELETES Closed/Resolved incidents
+  # past it. Measured on krateo-057 before re-applying: 247 incidents, 194 with
+  # status.resolution.at, and 46 older than 720h -- oldest resolved 2026-10-04 (1140 h), newest
+  # 2026-10-21 (731 h), with 3 more inside five days. They carry status.rootCause, .howToFix and
+  # .report, so the first sweep would have permanently destroyed 46 analyses. Diego chose "0s"
+  # (2026-11-21): keep every incident, and enable retention later as its own deliberate change with
+  # the count known in advance. The 46 cannot come back once swept.
+  #
+  # THE CRDs ARE NOT A RISK despite the -crd bump: incidents and incidentapplies keep the same
+  # single version v1alpha1, storage unchanged, 0 fields added, removed or retyped. The only
+  # difference is one description sentence on ApplyActionStale. Verified by observability by
+  # pulling and diffing both published charts.
+  #
+  # ALSO IN 0.14.0: RBAC gains `delete` on incidents (for the sweep) and `get` on
+  # customresourcedefinitions (to decide whether a stale applyAction can be re-targeted to the
+  # storage version without a reanalysis).
+  version: 0.14.0
   deps:
   - incident-provider-crd
   tier: observability
@@ -8084,7 +8109,8 @@ components:
   #   0.11.0 -> 0.14.0 is `controller.retention` -- measured on the charts, not taken from a
   #   per-release note, because 0.12.0 and 0.13.0 are skipped by this jump.
   #   Probes: 0.14.0, 0.13.0, 0.12.0 and 0.11.0 all resolve for both charts; 9.9.9 absent.
-  version: 0.11.0
+  # Moves with incident-provider: same version line, re-applied together (installer#1083).
+  version: 0.14.0
   tier: observability
   feature: portal
 - name: alert-provider-crd
