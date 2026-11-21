@@ -927,7 +927,18 @@ componentValues:
   zendesk-organisations:
     zendesk:
       baseUrl: https://krateo.zendesk.com
-      oauthClientId: krateo-cmp-e2e-public
+      # NO `oauthClientId` HERE EITHER, and for a stronger reason than the organisation above.
+      # Diego decided on 2026-11-11: ONE OAUTH CLIENT PER CUSTOMER. Each customer's support contact
+      # authorizes once against their OWN public client, and only that customer's token is placed in
+      # their cluster. `krateo-cmp-e2e-public` is the TEST client 057's token was minted with, so it
+      # must not be a default anywhere.
+      #
+      # AND IT CANNOT LIVE AT THIS LEVEL AT ALL. A refresh must use the client the token was minted
+      # with, so the client is a property of the ORGANISATION, not of the chart: a single
+      # zendesk.oauthClientId cannot express two organisations with two clients. acmp is moving it to
+      # `organisations[].oauthClientId` in zendesk-organisations 0.3.2, required when that entry sets
+      # `tokenRotation: true` and failing closed by naming the entry. Nothing live sets the chart-level
+      # key -- 057's CR does not carry it -- so 0.3.2 removes it rather than deprecating it.
     # NO `organisations:` DEFAULT, deliberately. An entry names a CUSTOMER's namespace and
     # ITS end user's token, so it is per-install, not estate-wide. 057's entry -- krateo /
     # zendesk-krateo, bound to the e2e-requester token -- is Krateo's INTERNAL TEST
