@@ -782,30 +782,62 @@ def main():
         # route naming a repo that has nothing to do with the component. Check the resolved slug in
         # the detail line before believing the verdict -- the route is printed precisely so this is
         # visible, which is the only reason the keycloak case was caught rather than worked around.
-        for src in sources:
-            slug = repo_slug(src)
-            if not slug:
-                continue
-            route, sha = None, None
-            cv_sha = tag_sha(slug, version)
-            if cv_sha:
-                route, sha = f"chartVersion->tag {version}", cv_sha
-            elif not pin["upstream"]:
-                av_sha = tag_sha(slug, app)
-                if av_sha:
-                    route, sha = f"appVersion->tag {app}", av_sha
-            if not sha:
-                continue
-            verdict, detail = ci_at(slug, sha, chart)
-            checked.append((slug, verdict, f"[{route}] {detail}"))
-
-        if not checked:
-            st_slug, st_sha = stamped_provenance(meta)
-            if st_slug and st_sha:
-                verdict, detail = ci_at(st_slug, st_sha, chart)
-                checked.append((st_slug, verdict,
-                                f"[stamped {st_sha[:8]} -- appVersion {app} matched no Krateo tag, "
-                                f"so this is the CHART's own commit, not the app's] {detail}"))
+        # THE STAMP IS THE AUTHORITY, AND `sources` IS NOT CONSULTED WHEN IT IS PRESENT.
+        #
+        # Diego chose this on 2026-11-21 over the `ciRepo:` design sketched above, which stays
+        # unimplemented and is left in place as the record of why a per-pin field was considered.
+        #
+        # The reasoning the earlier design missed: `org.opencontainers.image.source` and
+        # `.revision` are not an inference. They are written by the publishing workflow, they name
+        # the commit the chart was BUILT FROM, and every chart in this estate already carries them.
+        # `sources` is free-form prose by comparison -- a list of things the author considered
+        # relevant, which is why a dependency or an API spec legitimately appears there. Choosing a
+        # tag inside a repo that `sources` merely MENTIONS is guessing; reading the repo the
+        # publisher stamped is not.
+        #
+        # ZENDESK-KOG 0.3.1 IS WHY THIS LANDED NOW, and it shows that fixing the chart's metadata is
+        # not sufficient. Its owner added krateo-blueprints/krateo-zendesk-kog as the FIRST
+        # `sources` entry at 0.3.1, so that repo resolved GREEN. The gate still refused, because
+        # oasgen-provider is still in the list -- correctly, as the provider its CRs are generated
+        # by -- and still carries an ancient `0.3.1` tag with no check-runs. EVERY source is
+        # consulted and ANY unresolvable one refuses the pin, so adding the right repo cannot
+        # outvote the wrong one. Only not consulting the list can.
+        #
+        # BLAST RADIUS, measured across all 93 pinned charts before the change: 54 are stamped, 39
+        # are unstamped and keep today's behaviour exactly. Of the 54, only TWO resolve to a repo
+        # that is not in their own `sources` -- zendesk-kog (stamp: krateo-zendesk-kog, sources:
+        # oasgen-provider) and clickhouse-operator (stamp: krateo-platformops/observability,
+        # sources: ClickHouse upstream + clickstack-operators-chart). In both the stamp is right.
+        # So this can only change a verdict where the stamp and the guess DISAGREE, and there the
+        # guess was wrong.
+        #
+        # An invalid stamp still declines rather than passing: stamped_provenance() requires a
+        # 40-hex revision and a parseable GitHub slug, and returns (None, None) otherwise, which
+        # falls through to the inference below unchanged.
+        st_slug, st_sha = stamped_provenance(meta)
+        if st_slug and st_sha:
+            verdict, detail = ci_at(st_slug, st_sha, chart)
+            checked.append((st_slug, verdict,
+                            f"[stamped {st_sha[:8]} from org.opencontainers.image.source -- "
+                            f"`sources` NOT consulted, the publisher's own provenance wins] "
+                            f"{detail}"))
+        else:
+            for src in sources:
+                slug = repo_slug(src)
+                if not slug:
+                    continue
+                route, sha = None, None
+                cv_sha = tag_sha(slug, version)
+                if cv_sha:
+                    route, sha = f"chartVersion->tag {version}", cv_sha
+                elif not pin["upstream"]:
+                    av_sha = tag_sha(slug, app)
+                    if av_sha:
+                        route, sha = f"appVersion->tag {app}", av_sha
+                if not sha:
+                    continue
+                verdict, detail = ci_at(slug, sha, chart)
+                checked.append((slug, verdict, f"[{route}] {detail}"))
 
         if not checked and pin["upstream"]:
             # DECLARED THIRD-PARTY APP (`upstream: true` on the pin). The gate's claim is "the
