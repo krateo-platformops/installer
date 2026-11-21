@@ -20268,6 +20268,322 @@
           },
           "title": "Zendesk organisations",
           "type": "object"
+        },
+        "agentiko-mcp-server": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "agentiko-mcp-server: the v1 IDE + personal-agent MCP entry. MIRRORS THE PUBLISHED CHART'S OWN values.schema.json AT 0.2.0 FIELD FOR FIELD, read from oci://ghcr.io/krateo-agentiko/charts/agentiko-mcp-server:0.2.0 rather than from its main, because a bound this schema accepts that the pinned chart then refuses moves the error from a readable schema message to a cdc reconcile. THE WHOLE OBJECT IS MIRRORED, NOT THE `events` NODE ALONE: both sides are additionalProperties:false, so any key declared here-but-not-there is refused by the chart, and any key there-but-not-here is PRUNED BY THE APISERVER while the write reports success. In particular `auth` must be settable, because `events.enabled` requires `auth.mode=exchange` -- declaring only `events` would make the feature impossible to turn on. ZERO `default:` AT ANY DEPTH, verified against the published file by walking it: crdgen propagates schema defaults into the generated CRD, where the apiserver materialises them into every install's Installer CR. The chart declares none either. SHIPS IN ITS OWN TAG, BEFORE THE PIN (installer tag A). The widening is inert -- no component renders from it -- so it rolls at essentially no risk and can be verified on its own; the two pins and features.agentikoMcpServer follow in tag B. If the mirror is imperfect, that is found against a tag that changed nothing else.",
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            },
+            "namespace": {
+              "type": "string",
+              "description": "Namespace the Deployment, Service and ServiceAccount are installed in."
+            },
+            "nameOverride": {
+              "type": "string",
+              "description": "Empty means agentiko-mcp-server."
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string",
+                  "description": "Empty means .Chart.AppVersion, so chart X.Y.Z runs image X.Y.Z. Set it only to test an unreleased build."
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "Always",
+                    "IfNotPresent",
+                    "Never"
+                  ]
+                }
+              }
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              "description": "Pull secrets for the private image."
+            },
+            "serviceAccount": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Empty means the chart name."
+                },
+                "annotations": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "replicaCount": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "The server is stateless; scale freely."
+            },
+            "service": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            },
+            "agentiko": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "description": "Agentiko's A2A endpoint. Empty means derived from gateway, namespace and name."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The Agentiko Agent's name."
+                },
+                "namespace": {
+                  "type": "string",
+                  "description": "The Agentiko Agent's namespace. Empty means .Values.namespace."
+                },
+                "gateway": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "description": "The internal agent gateway's Service."
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "description": "Empty means .Values.namespace."
+                    },
+                    "port": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535
+                    }
+                  }
+                }
+              },
+              "description": "Where Agentiko's A2A endpoint is: through the internal agent gateway, so each call is authorized as the calling user."
+            },
+            "wait": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "defaultSeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "How long a tool call follows a task when the caller gives no wait_seconds."
+                },
+                "maxSeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Cap on a caller's wait_seconds; must be at least defaultSeconds."
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "description": "Container resources (standard Kubernetes shape)."
+            },
+            "auth": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "passthrough",
+                    "exchange"
+                  ],
+                  "description": "passthrough: the IDE sends an authn JWT. exchange: the IDE sends a Keycloak access token, traded at authn's /delegate (authn#155)."
+                },
+                "delegate": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "description": "authn's /delegate. Empty means derived from service, namespace and port."
+                    },
+                    "service": {
+                      "type": "string"
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "description": "authn's namespace. Empty means .Values.namespace."
+                    },
+                    "port": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535
+                    },
+                    "audience": {
+                      "type": "string",
+                      "description": "The aud asked for the issued authn token."
+                    }
+                  }
+                },
+                "actorToken": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "audience": {
+                      "type": "string",
+                      "description": "Audience of the projected ServiceAccount token presented to authn."
+                    },
+                    "expirationSeconds": {
+                      "type": "integer",
+                      "minimum": 600
+                    }
+                  }
+                },
+                "mapping": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "create": {
+                      "type": "boolean",
+                      "description": "Render authn's delegation mapping for this ServiceAccount (exchange mode)."
+                    },
+                    "oidcConfig": {
+                      "type": "string",
+                      "description": "The Keycloak realm's OIDCConfig name, in authn's namespace. Required in exchange mode when create is true."
+                    },
+                    "subjectAudiences": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "The MCP resource URI(s) the Keycloak token must be for, e.g. https://<portal host>/mcp. Required in exchange mode when create is true."
+                    }
+                  }
+                }
+              },
+              "description": "How the IDE user's token becomes the one Agentiko sees."
+            },
+            "events": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Personal-agent events (MCP Events webhook profile). Needs auth.mode=exchange and the agentiko-mcp-server-crds chart.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "namespace": {
+                  "type": "string",
+                  "description": "Namespace of the EventSubscriptions and their signing-key Secrets; it must hold nothing else. Required when enabled."
+                },
+                "createNamespace": {
+                  "type": "boolean"
+                },
+                "sseProxyURL": {
+                  "type": "string"
+                },
+                "resourceMetadataURL": {
+                  "type": "string"
+                },
+                "portalURL": {
+                  "type": "string",
+                  "description": "The portal's public address, for event links. Required when events are enabled."
+                },
+                "snowplowURL": {
+                  "type": "string"
+                },
+                "incidentsNamespace": {
+                  "type": "string",
+                  "description": "Where incidents live. Empty means .Values.namespace."
+                },
+                "readerGroups": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Groups that may read each events RESTAction (mirror each portal page's readerGroups).",
+                  "properties": {
+                    "incidents": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "compositions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       },
       "title": "Per-component spec overrides",
