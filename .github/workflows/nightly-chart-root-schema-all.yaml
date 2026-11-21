@@ -76,4 +76,5 @@ jobs:
             exit 1
           fi
           echo "${{ secrets.PAT }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Gate every pinned chart's root schema
         run: python3 hack/chart-root-schema-gate.py --pins chart/files/component-pins.yaml --all
