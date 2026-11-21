@@ -9436,7 +9436,38 @@ components:
   # than to remove ([[componentvalues-cannot-be-unset-via-values]] is the installer-side version).
   #
   # agentgateway-controller STAYS at 0.2.0. See the note above on why these two versions diverge.
-  version: 0.2.37
+  # 0.2.37 -> 0.2.38. FOUR changes, and one of them REQUIRES a componentValuesUnset in this same
+  # tag -- see componentValuesUnset in values.yaml.
+  #
+  # #108 THE LLM ROUTE NOW HAS EXACTLY ONE RETRY: resiliency.llm.retry = [429,502,503,504] x2 @5s.
+  #   `llm.retry`, when set, REPLACES it on the route. krateo-057 sets it -- measured:
+  #   attempts 3, backoff 15s, codes [429,503] -- so without the unset 057 keeps the 3 x 15s retry
+  #   this release exists to replace, and 502/504 go unretried.
+  #   The condition #108 fixes is LIVE on 057 and has been for 72 days: both
+  #   agentgateway-policies-retry-llm (2026-09-03) and -resiliency-llm (2026-09-10) exist and BOTH
+  #   target HTTPRoute agentgateway-policies-llm, each Accepted=True/Attached=True to
+  #   Gateway/krateo-agent-gateway. Retry is single-winner, so which one applies today is decided by
+  #   a precedence rule, not by anyone's intent.
+  #
+  # #105 adds llm.toolHistory.truncate.agentMaxChars (chart default 100000). The installer schema's
+  #   `truncate` is additionalProperties:false, so the key is declared in this same change -- whole
+  #   object mirrored from the PUBLISHED 0.2.38 schema, BOUNDS ONLY, default stripped. A default here
+  #   is materialised by crdgen into every CR and then beats the chart's own values.yaml.
+  #
+  # #106 fails the render if a server name is in both mcpServers and extraMcpServers. 057 sets
+  #   NEITHER (verified), so nothing to clean.
+  #
+  # #107 agentiko-portal is NOT a default mcpServers entry, superseding #104's default. That matters
+  #   because agentiko-portal-mcp-server is not pinned anywhere: a default entry would have rendered
+  #   an MCP backend for an absent Service, which fails translation permanently
+  #   (Accepted=False/TranslationError) and -- per the cdc rollup, which models only native kinds --
+  #   would NOT have shown up on the composition's Ready. Diego reverted the default for that reason.
+  #
+  # agentgateway-controller STAYS AT 0.2.0, though the same tag republishes it at 0.2.38. Its owner
+  # measured it: `git log 0.2.0..0.2.38 -- helm/agentgateway-controller` and the diff are both EMPTY,
+  # so 0.2.38's controller differs only in the stamped version. No pin-version-line is declared for
+  # the pair and none is wanted until the v1.7.0 release moves the controller and its CRDs together.
+  version: 0.2.38
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller

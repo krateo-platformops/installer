@@ -441,6 +441,41 @@ localModel:
   model: qwen3.6
 
 # ---------------------------------------------------------------------------
+# Dotted paths under componentValues to REMOVE from the live Installer CR.
+#
+# WHY THIS IS NEEDED AT ALL. components-patch.json is applied as an RFC-7386 merge patch, so an
+# OMITTED key is PRESERVED -- which is what protects an operator's own values from a chart upgrade
+# -- and ONLY AN EXPLICIT NULL DELETES. A null cannot be written in the values because the schema
+# types these fields. So without this key a componentValues entry can be set and changed but NEVER
+# removed, and a temporary override becomes permanent.
+#
+# THREE PATHS, ALL FOR THE agentgateway-policies 0.2.38 PIN IN THIS SAME TAG:
+#
+# agentgateway-policies.llm.retry
+#   REQUIRED BY THE PIN, not housekeeping. agp 0.2.38 (#108) makes the LLM route carry exactly one
+#   retry: resiliency.llm.retry = [429,502,503,504] x2 @5s. `llm.retry`, when set, REPLACES it.
+#   krateo-057 sets it -- measured: attempts 3, backoff 15s, codes [429,503] -- so WITHOUT this
+#   unset 057 keeps the 3 x 15s retry the release exists to replace, and 502/504 go unretried.
+#
+# agentgateway-policies.cors
+# agentgateway-policies.certReplayHop
+#   NO OBSERVABLE CHANGE, and that is verified rather than assumed. These are 15 schema defaults
+#   that crdgen materialised into the CR; the same tag strips them from values.schema.json so new
+#   installs never inherit them, but a schema strip does NOT clean a CR that already has them.
+#   Their owner confirmed every materialised value equals agp's own chart default, so unsetting
+#   makes the chart the source again without changing a value.
+#   AND compositions.yaml FORCES the two that would otherwise matter: cors.enabled -> true
+#   (line 602) and cors.allowOrigins -> ["https://<exposure.tls.host>"] (line 619), both via
+#   inst.forcePath, which overrides componentValues either way. Verified on 057's live composition:
+#   spec.cors.enabled=true, allowOrigins=["https://portal.krateo.dev"] -- NOT the CR's ["*"].
+#   So the CR's cors block has been inert, and removing it stays inert.
+componentValuesUnset:
+  - agentgateway-policies.llm.retry
+  - agentgateway-policies.cors
+  - agentgateway-policies.certReplayHop
+
+
+# ---------------------------------------------------------------------------
 # Per-component spec overrides, keyed by component name. Each entry is deep-merged
 # into that component's rendered Composition spec (Pass B). The installer-computed
 # wiring (service.type / config / vertexAI / hitlApproval) stays authoritative — it
