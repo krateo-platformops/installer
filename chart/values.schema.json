@@ -20513,19 +20513,9 @@
                     "create": {
                       "type": "boolean",
                       "description": "Render authn's delegation mapping for this ServiceAccount (exchange mode)."
-                    },
-                    "oidcConfig": {
-                      "type": "string",
-                      "description": "The Keycloak realm's OIDCConfig name, in authn's namespace. Required in exchange mode when create is true."
-                    },
-                    "subjectAudiences": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      },
-                      "description": "The MCP resource URI(s) the Keycloak token must be for, e.g. https://<portal host>/mcp. Required in exchange mode when create is true."
                     }
-                  }
+                  },
+                  "description": "oidcConfig AND subjectAudiences ARE DELIBERATELY NOT DECLARED HERE, and `mapping` is additionalProperties:false, so setting either is REFUSED by this schema rather than pruned. The chart's own values.yaml states the contract: both are derived under the Krateo installer from componentValues.krateo-keycloak-realm (oidcConfig.name and ideClient.audience) and are \"not a componentValues key of this chart: setting it there is refused at chart load\". WHY REFUSING MATTERS RATHER THAN ALLOWING AN OVERRIDE: the chart requires subjectAudiences[0] to equal krateo-keycloak-realm's ideClient.audience and agentgateway-policies' mcpEntry.oauth.audience BYTE FOR BYTE, no trailing slash, and records that a mismatch fails sign-in with 401 WHILE EVERYTHING REPORTS READY. A second place to set a value that must agree can only ever disagree, and the disagreement is silent. Same shape as componentValues.cert-manager-issuers.internalCA.namespace, which is also refused for being derived. THE DERIVATION DOES NOT EXIST YET, and that is why this is written down rather than assumed: compositions.yaml contains no reference to oidcConfig, subjectAudiences or ideClient as of 2026-11-21, so the chart documents installer behaviour the installer has not implemented. Consequence, stated plainly: with these keys unsettable and no derivation, auth.mode=exchange CANNOT be enabled through the installer -- the chart's own fail in authn-mapping.yaml aborts the render when either is empty, and a chart render failure aborts the WHOLE umbrella. That is the correct state for now (exchange waits on kc-roll057/ideClient anyway) and it fails LOUDLY at render rather than quietly at sign-in. The derivation must be implemented, with forcePath into the component's own spec, BEFORE exchange mode is turned on anywhere."
                 }
               },
               "description": "How the IDE user's token becomes the one Agentiko sees."
