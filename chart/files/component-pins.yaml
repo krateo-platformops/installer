@@ -1985,9 +1985,28 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
-# 1.8.61 -- retargeted from 1.8.55 (never pinned) because portal#484 needs frontend-crds >= 1.8.61:
-# its lint-pinned-crds gate refuses PageHeader's `progress` field until this pin is on main, so #484
-# stays a DRAFT until then. Same shape as the Dropdown at 1.8.54.
+# 1.8.61 -- retargeted from 1.8.55 (never pinned) because portal#484 needs frontend-crds >= 1.8.61
+# for its "Re-analysis since HH:MM UTC" line to RENDER. The frontend must know the field to draw it.
+#
+# CORRECTION TO WHAT THIS COMMENT FIRST SAID. I wrote that portal's lint-pinned-crds gate refuses
+# `progress` until this pin is on main, and that #484 stayed a draft because of it. THAT GATE NEVER
+# COULD. #484's pinned-crds check passed at 16:49:43Z against frontend-crds 1.8.54, which has no
+# `progress` at all -- 63 minutes before this pin reached main at 17:52Z. Verified from the PR's own
+# check-run, not from a report.
+#
+# The reason is the same stored-vs-resolved distinction as the pruning note below, which is why it is
+# worth writing down twice: pinned-crds validates the widget CRs portal STORES, and its own docstring
+# says "not resolved widgets. A resolved widget can carry fields a template never writes". `progress`
+# exists only as a widgetDataTemplate forPath, filled at request time, so no stored object ever
+# carries it and no CRD-shaped check can see it.
+#
+# SO THE ORDERING WAS RIGHT AND NOTHING ENFORCED IT. Pinning before #484 is correct -- otherwise the
+# line silently does not appear -- but that order held because two sessions coordinated it, not
+# because any gate would have caught the reverse. If #484 had merged first, every check would have
+# been green and the only symptom would have been a missing line with no error anywhere.
+#
+# What DOES guard the field's shape is portal's test-incident-progress.py, which asserts the exact
+# object per state by equality. Nothing in pinned-crds does.
 #
 # WHAT 1.8.61 ADDS TO THE CRD, verified against the published chart rather than the release note:
 # PageHeader.crd.yaml gains ONE optional object, widgetData.progress {label, since, live?, hint?},
@@ -4509,7 +4528,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - frontend
   - git-provider
@@ -4626,7 +4645,7 @@ components:
   # 1.8.73; diff -r reports only Chart.yaml.
   # 1.8.117: CONTENT CHANGE -- 2 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.141
+  version: 1.8.154
   deps: ['portal']
   tier: platform
   feature: portal
@@ -4666,7 +4685,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -4737,7 +4756,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -4748,7 +4767,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -4877,7 +4896,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -4922,7 +4941,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5060,7 +5079,7 @@ components:
   kind: CompositionsPage
   # 1.8.117: CONTENT CHANGE -- 5 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5072,7 +5091,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5084,7 +5103,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5096,7 +5115,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5108,7 +5127,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5120,7 +5139,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5132,7 +5151,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5142,7 +5161,7 @@ components:
   kind: SettingsPage
   # 1.8.117: CONTENT CHANGE -- 6 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5152,7 +5171,7 @@ components:
   kind: ObservabilityPage
   # 1.8.117: CONTENT CHANGE -- 9 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5171,7 +5190,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5217,7 +5236,7 @@ components:
   # The form collects firstName, lastName, email, company, country, phone and useCase from
   # visitors who are not signed in.
   kind: PublicPages
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -10277,6 +10296,21 @@ components:
   tier: platform
   feature: capabilityRoles
 - name: zendesk-kog
+# ciRepo, added 2026-11-21: check-pin-ci asserts THIS repo's CI and does not consult `sources`.
+#
+# Its `sources` legitimately list krateo-platformops/oasgen-provider -- the provider whose
+# generated controller its RestDefinitions drive -- and oasgen-provider carries an ancient tag
+# `0.3.1` from its old 0.3.x line, with no check-runs. The gate consults EVERY source and refuses
+# the pin if ANY is unresolvable, so when the owner added the correct repo as the FIRST source at
+# 0.3.1, the gate STILL refused: krateo-zendesk-kog resolved green AND oasgen-provider resolved
+# norun. Adding a source cannot outvote another source.
+#
+# NOT solved by preferring the OCI stamp. That was tried as installer#1101 and closed the same day:
+# the stamp names the CHART's repo while the inference targets the APP's repo, and for a chart
+# wrapping Krateo's own image the second is the claim that matters. Measured 2026-11-06 --
+# otel-collector-deployment 0.3.13's app commit had 12 green check-runs and nothing testing the
+# code with three _test.go files present, a correct refusal, and stamp-first PASSED it from the
+# chart's repo instead.
   # NEW COMPONENT, 0.2.1. The KOG that turns Zendesk Support resources into Kubernetes CRs, so a
   # service-desk ticket actually reaches Zendesk. Before this, 057 had the Ticket CRD and the raise
   # form from service-desk-page and NOTHING that delivered: a Ticket was written and no controller
@@ -10322,6 +10356,7 @@ components:
   # The owner render-checked 0.3.0 against 057's live values with those four removed and `request`
   # kept: BYTE-IDENTICAL to the render with them present. The unset changes nothing 0.3.0 renders.
   version: 0.3.1
+  ciRepo: krateo-blueprints/krateo-zendesk-kog
   requiresApiGroups:
   - ogen.krateo.io
   deps:
