@@ -2000,11 +2000,24 @@ components:
 # incident-detail's jq. CRD pruning applies to what is STORED, so a resolve-time value cannot be
 # pruned by it. componentValues.frontend is untouched at 27 keys.
 #
-# AND THE CRD PRUNES RATHER THAN REJECTS: PageHeader.schema.json carries additionalProperties:false
-# on `progress`, but gen-crds.ts does not carry it into the CRD, so the shipped CRD leaves it unset.
-# A misspelled key would therefore be dropped silently with a successful apply. frontend confirmed
-# this after I measured it. What guards it is portal's test-incident-progress.py, which asserts the
-# EXACT object per state by equality, so a renamed key fails CI rather than rendering nothing.
+# AND THE CRD PRUNES RATHER THAN REJECTS -- NECESSARILY, not by oversight. PageHeader.schema.json
+# carries additionalProperties:false on `progress`; the shipped CRD leaves it unset, and it MUST:
+# apiextensions-apiserver's validation makes additionalProperties and properties mutually exclusive
+# (validation.go:1044-1057, v0.37.2) "because otherwise they contradict Kubernetes' API convention
+# to ignore unknown fields". A widget object always has properties, so a CRD carrying both would be
+# REFUSED BY THE APISERVER. Omitting it is gen-crds.ts's only legal output.
+#
+# So "this widget CRD rejects an unknown key" is false for EVERY widget, always, and no sweep of the
+# other CRDs is needed -- the result is fixed by the apiserver, not by our generator. MEASURED
+# ACROSS ALL 46 SHIPPED WIDGET CRDs at 1.8.61: 923 schema objects, ZERO carrying
+# additionalProperties beside properties, and the 15 that carry it at all are typed maps
+# (additionalProperties: {type: string}) on objects WITHOUT properties, which the rule allows.
+#
+# What that leaves: a misspelled key is dropped silently with a successful apply. For #484 that is
+# inert, because nothing stores `progress` (see above). What guards it is portal's
+# test-incident-progress.py, which asserts the EXACT object per state by equality, so a renamed key
+# fails CI rather than rendering nothing. frontend established the apiserver constraint; my earlier
+# reading of this as a generator gap was wrong.
 #
 # 1.8.62 is deliberately NOT taken: it is frontend#752, the Blueprint Builder palette, UI only with
 # no CRD change, so it does nothing for #484 and would only move the target again.
