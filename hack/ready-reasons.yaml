@@ -141,8 +141,8 @@ composition:
   source:
     repo: krateo-platformops/core-provider
     path: docs/ready-reasons.md
-    checked_against: 7f7680a30a97977b64376ad84f8d4eed81eda751
-    checked_on: '2026-11-17'
+    checked_against: b62aa1577cc7b331602378c67941da148d6ceed0
+    checked_on: '2026-11-21'
   converged:
   - Available
   - AvailablePartialCoverage
