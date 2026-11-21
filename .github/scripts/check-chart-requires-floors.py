@@ -48,6 +48,7 @@ import sys
 import yaml
 
 PINS = "chart/files/component-pins.yaml"
+CHART = "chart/Chart.yaml"
 DEFAULT_REPO = "oci://ghcr.io/krateo-platformops/charts"
 ANNOT_RE = re.compile(r"^krateo\.io/requires-(?P<comp>[a-z0-9][a-z0-9-]*)$")
 # A term is an operator and a version, or a bare version (treated as ==). Anything else is a refusal.
@@ -134,8 +135,63 @@ def load_pins(path=PINS):
     return {c["name"]: c for c in d["components"]}
 
 
+def load_chart_deps(path=CHART):
+    """Umbrella Chart.yaml dependencies, shaped like pins so the rest of this gate cannot tell.
+
+    WHY THIS IS HERE. core-provider and core-provider-crds are BOOTSTRAP SUBCHARTS: they live in
+    chart/Chart.yaml's `dependencies`, not in component-pins.yaml, because the umbrella must install
+    them before any composition exists. Until 2026-11-21 this gate loaded only the pins, so:
+
+      - a floor DECLARED BY core-provider's chart was never read -- the chart was never pulled;
+      - a floor declared ABOUT `core-provider` by any pinned chart was a REFUSAL, because the
+        component "is not pinned";
+      - and a core-provider version change triggered no scan at all.
+
+    So `krateo.io/requires-portal: ">= 1.8.133"` on core-provider's chart would have been EXACTLY
+    the failure this gate exists to prevent: a declaration that looks machine-checked and is inert.
+    core-provider asked whether it would be read before adding it, which is the only reason this was
+    found rather than shipped.
+
+    check-same-version-line had the identical blindness and fixed it on 2026-11-14; its comment says
+    so in as many words. Two gates, one cause -- the pins file is not the whole universe.
+    """
+    doc = yaml.safe_load(io.open(path, encoding="utf-8")) or {}
+    out = {}
+    for d in (doc.get("dependencies") or []):
+        name = d.get("name")
+        if not name or not d.get("version"):
+            continue
+        out[name] = {"name": name, "version": str(d["version"]),
+                     "chart": d.get("chart") or name,
+                     "repo": d.get("repository") or DEFAULT_REPO,
+                     "_from": CHART}
+    return out
+
+
+def load_universe(pins_path=PINS, chart_path=CHART):
+    """Every component this gate can read or name: pins PLUS Chart.yaml dependencies.
+
+    A name in both is a REFUSAL rather than a silent precedence choice: the two files would disagree
+    about which version is installed, and picking one would make this gate assert a floor against a
+    version that is not deployed."""
+    pins = load_pins(pins_path)
+    deps = load_chart_deps(chart_path)
+    clash = sorted(set(pins) & set(deps))
+    if clash:
+        raise ValueError(
+            "%s and %s both declare %s. This gate will not choose between them: the two files would "
+            "disagree about the installed version, and a floor asserted against the wrong one is "
+            "worse than no floor." % (PINS, CHART, ", ".join(clash)))
+    univ = dict(pins)
+    univ.update(deps)
+    return univ
+
+
 def changed_pins(pins, base):
-    """Names whose pinned VERSION differs from `base`'s, or None if base is unreadable."""
+    """Names whose version differs from `base`'s, across BOTH files, or None if either is unreadable.
+
+    Reads component-pins.yaml AND chart/Chart.yaml, because a core-provider bump lives only in the
+    second one and must trigger a scan exactly as a pin bump does."""
     out, rc, _ = sh("git", "show", "%s:%s" % (base, PINS))
     if rc != 0:
         return None
@@ -143,7 +199,19 @@ def changed_pins(pins, base):
         old = {c["name"]: c["version"] for c in (yaml.safe_load(out) or {}).get("components", [])}
     except yaml.YAMLError:
         return None
-    return {n for n, c in pins.items() if old.get(n) != c["version"]}
+
+    cout, crc, _ = sh("git", "show", "%s:%s" % (base, CHART))
+    if crc != 0:
+        return None
+    try:
+        cdoc = yaml.safe_load(cout) or {}
+    except yaml.YAMLError:
+        return None
+    for d in (cdoc.get("dependencies") or []):
+        if d.get("name") and d.get("version"):
+            old[d["name"]] = str(d["version"])
+
+    return {n for n, c in pins.items() if old.get(n) != str(c["version"])}
 
 
 def evaluate(pins, scope, fetch=chart_annotations):
@@ -205,7 +273,8 @@ def evaluate(pins, scope, fetch=chart_annotations):
                     "timeouts. Pin the pair or neither."
                     % (name, pin["version"], dep, constraint, dep, dep_pin["version"]))
         if not found:
-            lines.append("  %-26s %-8s (no krateo.io/requires-* annotation)" % (name, pin["version"]))
+            lines.append("  %-26s %-8s %s(no krateo.io/requires-* annotation)"
+                         % (name, pin["version"], "[Chart.yaml dep] " if pin.get("_from") else ""))
     return lines, failures
 
 
@@ -250,6 +319,62 @@ SELF_TESTS = [
 ]
 
 
+UNIVERSE_CASES = 6
+
+
+def self_test_universe():
+    """Prove the Chart.yaml half is real: a dep is readable, nameable, and a clash is refused."""
+    import tempfile, os as _os
+    failures = 0
+    pins_doc = "components:\n- name: portal\n  version: 1.8.141\n"
+    good_chart = ("apiVersion: v2\nname: installer\nversion: 0.0.0\ndependencies:\n"
+                  "- name: core-provider\n  version: 2.13.117\n"
+                  "  repository: oci://ghcr.io/krateo-platformops/charts\n")
+    clash_chart = ("apiVersion: v2\nname: installer\nversion: 0.0.0\ndependencies:\n"
+                   "- name: portal\n  version: 9.9.9\n")
+    with tempfile.TemporaryDirectory() as d:
+        p = _os.path.join(d, "pins.yaml"); io.open(p, "w", encoding="utf-8").write(pins_doc)
+        g = _os.path.join(d, "Chart.yaml"); io.open(g, "w", encoding="utf-8").write(good_chart)
+        c = _os.path.join(d, "clash.yaml"); io.open(c, "w", encoding="utf-8").write(clash_chart)
+
+        univ = load_universe(p, g)
+        ok = "core-provider" in univ and univ["core-provider"]["version"] == "2.13.117"
+        print("  %-36s %s" % ("a Chart.yaml dep enters the universe", "OK" if ok else "FAIL"))
+        failures += 0 if ok else 1
+
+        ok = univ.get("core-provider", {}).get("_from") is not None
+        print("  %-36s %s" % ("and is labelled as Chart.yaml-sourced", "OK" if ok else "FAIL"))
+        failures += 0 if ok else 1
+
+        ok = chart_ref(univ["core-provider"]).endswith("/core-provider")
+        print("  %-36s %s" % ("its chart ref resolves for a pull", "OK" if ok else "FAIL"))
+        failures += 0 if ok else 1
+
+        # a floor ABOUT a Chart.yaml dep must now evaluate instead of refusing as "not pinned"
+        lines, fails = evaluate(univ, {"portal"},
+                                fetch=lambda pin: ({"krateo.io/requires-core-provider": ">= 2.13.100"}, None)
+                                if pin["name"] == "portal" else ({}, None))
+        ok = not fails
+        print("  %-36s %s" % ("a floor ABOUT a dep is EVALUATED", "OK" if ok else "FAIL: %s" % fails))
+        failures += 0 if ok else 1
+
+        lines, fails = evaluate(univ, {"portal"},
+                                fetch=lambda pin: ({"krateo.io/requires-core-provider": ">= 2.14.0"}, None)
+                                if pin["name"] == "portal" else ({}, None))
+        ok = bool(fails)
+        print("  %-36s %s" % ("and a VIOLATED one is refused", "OK" if ok else "FAIL"))
+        failures += 0 if ok else 1
+
+        try:
+            load_universe(p, c)
+            ok = False
+        except ValueError:
+            ok = True
+        print("  %-36s %s" % ("a name in BOTH files is refused", "OK" if ok else "FAIL"))
+        failures += 0 if ok else 1
+    return failures
+
+
 def self_test():
     bad = []
     for label, pins, annot_map, scope, want_fail in SELF_TESTS:
@@ -267,7 +392,13 @@ def self_test():
     if bad:
         print("::error::check-chart-requires-floors SELF-TEST FAILED: %s" % bad)
         return 1
-    print("check-chart-requires-floors: OK -- %d cases" % len(SELF_TESTS))
+    uf = self_test_universe()
+    if uf:
+        print("::error::check-chart-requires-floors --self-test: %d universe case(s) failed" % uf)
+        return 1
+
+    print("check-chart-requires-floors: OK -- %d constraint case(s) + %d universe case(s)"
+          % (len(SELF_TESTS), UNIVERSE_CASES))
     return 0
 
 
@@ -301,12 +432,19 @@ def print_registry_breakdown(pins):
 def main(argv):
     if "--self-test" in argv:
         return self_test()
-    pins = load_pins()
+    try:
+        pins = load_universe()
+    except ValueError as e:
+        print("::error::chart-requires-floors: %s" % e)
+        return 2
+    n_deps = sum(1 for c in pins.values() if c.get("_from"))
+    print("  universe: %d pinned component(s) + %d %s dependency(ies) = %d"
+          % (len(pins) - n_deps, n_deps, CHART, len(pins)))
     print_registry_breakdown(pins)
     sweep_all = "--all" in argv
     if sweep_all:
         scope = set(pins)
-        note = "ALL %d pins" % len(scope)
+        note = "ALL %d component(s), pins + %s dependencies" % (len(scope), CHART)
     else:
         base = os.environ.get("GITHUB_BASE_REF") or "origin/main"
         ch = changed_pins(pins, base)
