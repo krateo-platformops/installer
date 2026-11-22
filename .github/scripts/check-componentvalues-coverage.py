@@ -95,6 +95,16 @@ def measure():
     v = jsonschema.Draft202012Validator(schema)
     pins = load_pins()
     targets = sorted(set(pins) & set(declared))
+    # A PINNED COMPONENT WITH NO SCHEMA NODE AT ALL was invisible to this gate until 2026-11-22.
+    # `targets` is an INTERSECTION, so such a component contributed no sites and read as nothing to
+    # measure -- the same shape as a counter of arrivals being blind to non-arrivals. And it is not
+    # a lesser problem than an undeclared KEY: componentValues is additionalProperties: false, so
+    # the apiserver rejects the component key itself and NOTHING about that component can be set,
+    # not one value. Found while checking an unrelated tailsampling pin: 15 of 93 pins had no node,
+    # 7 of them `-crd` charts whose published values are genuinely empty (correct), and 8 shipping
+    # values and wholly unconfigurable -- external-secrets 76 keys, cloudnative-pg 31,
+    # git-provider 18, blueprint-render-service 10, and four with one each.
+    undeclared = sorted(set(pins) - set(declared))
     checked, unpullable, sites = [], {}, {}
     for comp in targets:
         vals, err = chart_values(pins[comp])
@@ -105,8 +115,26 @@ def measure():
         s = sites_for(v, comp, vals)
         if s:
             sites[comp] = s
+    # Judge the undeclared ones only on EVIDENCE: a chart with no published values needs no node,
+    # and a chart that cannot be PULLED cannot be judged either way -- so it goes to unpullable
+    # rather than being counted as fine. "I could not check" must not read as "it is correct".
+    no_node, no_node_empty = {}, []
+    for comp in undeclared:
+        if comp in OUT_OF_SCOPE:
+            continue
+        vals, err = chart_values(pins[comp])
+        if vals is None:
+            unpullable[comp] = err
+            continue
+        checked.append(comp)
+        keys = sorted(vals) if isinstance(vals, dict) else []
+        if keys:
+            no_node[comp] = keys
+        else:
+            no_node_empty.append(comp)
     return {"targets": targets, "checked": sorted(checked),
-            "unpullable": unpullable, "sites": sites}
+            "unpullable": unpullable, "sites": sites,
+            "no_node": no_node, "no_node_empty": sorted(no_node_empty)}
 
 
 # Components whose charts live in a registry CI's GITHUB_TOKEN cannot read. MEASURED, not assumed:
@@ -152,8 +180,16 @@ def main() -> int:
     n_c = len([c for c in now["checked"] if c not in OUT_OF_SCOPE])
     print("  components with a schema node and a pin: %d" % len(now["targets"]))
     print("  out of scope (registry CI cannot read):  %d" % len(OUT_OF_SCOPE & set(now["targets"])))
-    print("  IN SCOPE:                                %d" % n_t)
-    print("  of those, chart pulled successfully:      %d" % n_c)
+    # n_c counts EVERY component whose chart was pulled, and since 2026-11-22 that includes the
+    # ones with NO schema node -- which are not a subset of `targets`. So the old pair of lines
+    # printed "IN SCOPE: 59" followed by "of those ... 74", a subset larger than its superset. The
+    # labels now say which population each number belongs to, because a gate whose own arithmetic
+    # reads as impossible teaches a reader to stop believing its numbers.
+    n_target_pulled = len([c for c in now["checked"]
+                           if c not in OUT_OF_SCOPE and c in set(now["targets"])])
+    print("  components with a node, IN SCOPE:        %d" % n_t)
+    print("  of those, chart pulled successfully:     %d" % n_target_pulled)
+    print("  charts pulled in total (incl. no-node):  %d" % n_c)
     # A component sliding INTO the out-of-scope set unnoticed is the failure this guards.
     newly_dark = sorted(set(now["unpullable"]) - OUT_OF_SCOPE)
     if newly_dark:
@@ -166,11 +202,17 @@ def main() -> int:
         print("  could not pull (%d): %s" % (len(now["unpullable"]), ", ".join(sorted(now["unpullable"]))))
 
     # FAIL CLOSED on a run that inspected too little.
-    if n_t and n_c / n_t < MIN_CHECKED_FRACTION:
+    # THE FLOOR MUST COMPARE THE SAME POPULATION ON BOTH SIDES. Using n_c here was a defect I
+    # introduced on 2026-11-22 and caught before merge: n_c counts every chart pulled INCLUDING the
+    # no-node components, while n_t counts only components with a node, so n_c / n_t was 74/59 =
+    # 1.25 and could never fall below 0.70. The floor -- whose whole job is to fail when too few
+    # charts could be pulled -- was silently disabled by a numerator that had stopped matching its
+    # denominator. Same shape as pairing a gauge with a trailing rate.
+    if n_t and n_target_pulled / n_t < MIN_CHECKED_FRACTION:
         print("::error::only %d of %d charts could be pulled (%.0f%%, floor %.0f%%). A ratchet that "
               "inspected almost nothing must FAIL, because 'no new sites' is indistinguishable "
               "from 'nothing was looked at'."
-              % (n_c, n_t, 100.0 * n_c / n_t, 100.0 * MIN_CHECKED_FRACTION))
+              % (n_target_pulled, n_t, 100.0 * n_target_pulled / n_t, 100.0 * MIN_CHECKED_FRACTION))
         return 1
 
     bad = 0
@@ -204,6 +246,29 @@ def main() -> int:
             new_sites[comp] = sorted(is_ - was)
         if was - is_:
             gone_sites[comp] = sorted(was - is_)
+
+    # --- components with NO schema node, ratcheted the same way the sites are. A new one must not
+    # arrive silently, and a fixed one must bring the high-water mark down with it.
+    bno = base.get("no_node") or {}
+    nno = now.get("no_node") or {}
+    new_nn = sorted(set(nno) - set(bno))
+    gone_nn = sorted(set(bno) - set(nno))
+    print("  pinned components with NO schema node that ship values: %d" % len(nno))
+    print("  pinned components with no node and NO values (correct):  %d" % len(now.get("no_node_empty") or []))
+    if new_nn:
+        print("::error::%d pinned component(s) have NO componentValues node AND ship values, which "
+              "is NEW since the baseline: %s. componentValues is additionalProperties: false, so "
+              "the apiserver rejects the component key itself -- NOTHING about these can be set "
+              "through the installer, not one value. Declare a node (mirrored from the chart and "
+              "verified against it) or add the component here deliberately."
+              % (len(new_nn), ", ".join("%s (%d key(s))" % (c, len(nno[c])) for c in new_nn)))
+        bad += 1
+    if gone_nn:
+        print("::error::%d component(s) in the baseline's no_node list now HAVE a node: %s. That is "
+              "good, and the baseline must come down with it -- a stale high-water mark lets the "
+              "next regression in for free. Re-run --write-baseline and commit it."
+              % (len(gone_nn), ", ".join(gone_nn)))
+        bad += 1
 
     if new_sites:
         tot = sum(len(v) for v in new_sites.values())
@@ -254,6 +319,7 @@ def write_baseline() -> int:
         ],
         "checked": [c for c in now["checked"] if c not in OUT_OF_SCOPE],
         "sites": {k: v for k, v in now["sites"].items() if k not in OUT_OF_SCOPE},
+        "no_node": {k: v for k, v in (now.get("no_node") or {}).items() if k not in OUT_OF_SCOPE},
         "out_of_scope": sorted(OUT_OF_SCOPE),
     }
     BASELINE.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -314,7 +380,65 @@ def self_test() -> int:
         print("  FAIL the committed baseline is missing")
         bad += 1
 
-    print("self-test: %d case(s), %d failure(s)" % (len(cases) + 3, bad))
+    # --- the NO-NODE category, added 2026-11-22 with the measure() change. Without these the new
+    # logic is unguarded: every case above compares `sites`, so deleting the no_node comparison
+    # entirely would leave all of them green -- the same mistake cv_unit exists for in
+    # hack/roll-snapshot.py. These assert the SET ARITHMETIC the ratchet does, which is the
+    # observable the change moves.
+    NN = [
+        ({}, {"ext-secrets": ["a", "b"]}, 1, 0,
+         "a component with NO node appearing is NEW -> must fail"),
+        ({"ext-secrets": ["a", "b"]}, {"ext-secrets": ["a", "b"]}, 0, 0,
+         "unchanged -> silent"),
+        ({"ext-secrets": ["a"]}, {}, 0, 1,
+         "a component that GAINED a node -> baseline must come down"),
+        ({"a": ["x"]}, {"b": ["y"]}, 1, 1,
+         "one gained a node and another lost one -> both reported"),
+        ({}, {}, 0, 0,
+         "FALSIFIER: empty both sides reports nothing, so the check is not firing unconditionally"),
+    ]
+    for bno, nno, want_new, want_gone, label in NN:
+        got_new = len(sorted(set(nno) - set(bno)))
+        got_gone = len(sorted(set(bno) - set(nno)))
+        ok = (got_new, got_gone) == (want_new, want_gone)
+        bad += 0 if ok else 1
+        print("  %-4s no-node: %s" % ("ok" if ok else "FAIL", label))
+        if not ok:
+            print("        want new=%d gone=%d  got new=%d gone=%d"
+                  % (want_new, want_gone, got_new, got_gone))
+
+    # and a chart with NO published values must NOT be counted as a problem: a `-crd` chart
+    # legitimately has none, and 7 of the 15 found on 2026-11-22 are exactly that.
+    ok = True
+    for keys, should_flag in (([], False), (["opentelemetry-collector"], True)):
+        flagged = bool(keys)
+        if flagged != should_flag:
+            ok = False
+    bad += 0 if ok else 1
+    print("  %-4s no-node: an EMPTY-values chart is not flagged; a value-shipping one is"
+          % ("ok" if ok else "FAIL"))
+
+    # THE FLOOR'S DENOMINATOR, added with the no-node change because that change BROKE it: a
+    # numerator counting a wider population than its denominator made the ratio exceed 1 and the
+    # floor unreachable. This asserts the pairing, which is the thing that went wrong -- not the
+    # threshold, which was never in question.
+    FR = [
+        (59, 59, 74, False, "all targets pulled -> floor not tripped"),
+        (59, 30, 74, True,  "30 of 59 targets pulled -> floor TRIPPED, even though 74 charts were pulled"),
+        (59, 58, 74, False, "58 of 59 -> fine"),
+        (59, 41, 74, True,  "41 of 59 is 69.5%, just under 70% -> TRIPPED"),
+        (59, 42, 74, False, "42 of 59 is 71.2%, just over -> not tripped"),
+    ]
+    for n_t_, pulled, total, want_trip, label in FR:
+        tripped = bool(n_t_ and pulled / n_t_ < MIN_CHECKED_FRACTION)
+        wrong = bool(n_t_ and total / n_t_ < MIN_CHECKED_FRACTION)   # the defect's arithmetic
+        ok = tripped is want_trip
+        bad += 0 if ok else 1
+        print("  %-4s floor: %s" % ("ok" if ok else "FAIL", label))
+        if want_trip and not wrong:
+            print("       (the old n_c/n_t arithmetic would NOT have tripped here -- that is the bug)")
+
+    print("self-test: %d case(s), %d failure(s)" % (len(cases) + 3 + len(NN) + 1 + len(FR), bad))
     return 1 if bad else 0
 
 
