@@ -8,7 +8,7 @@ components:
 - name: oasgen-provider-crd
   kind: OasgenProviderCrds
   chart: oasgen-provider-crds
-  version: 0.80.0
+  version: 0.90.0
   tier: platform
   feature: oasgenProvider
 - name: frontend-crd
@@ -284,14 +284,14 @@ components:
   chart: blueprint-render-service
 - name: controller-render-service
   kind: ControllerRenderService
-  version: 0.80.0
+  version: 0.90.0
   tier: platform
   feature: portal
   chart: controller-render-service
 - name: oasgen-provider
   kind: OasgenProvider
   chart: oasgen-provider
-  version: 0.80.0
+  version: 0.90.0
   deps:
   - oasgen-provider-crd
   tier: platform
