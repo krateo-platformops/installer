@@ -44,8 +44,26 @@ sources:
     # .github/scripts/verify-release-artifacts.sh, so the two sides cannot disagree -- the same
     # property frontend confirmed for theirs.
     charts:
+    #
+    # core-provider-target ADDED 2026-11-23, BEFORE their #624 merges and not after. Their 2.13.125
+    # entry names THREE charts; this file authorised two, and index_entries() turns an entry naming
+    # a chart outside the declared set into an AUTHORITY ERROR -- which fails this gate and so EVERY
+    # pull request here, not only a core-provider one. Their merge would have blocked this repo.
+    #
+    # Found by reading their entry against this file, not by CI telling me: they listed three charts
+    # in a message, I compared, the third was absent here. Same omission shape as the oasgen entry,
+    # where I declared two charts and they corrected both halves -- the chart is oasgen-provider-crdS
+    # and I had left out controller-render-service entirely.
+    #
+    # VERIFIED THEY PUBLISH IT rather than taking the message, three probes:
+    #   core-provider-target 2.13.124  PRESENT
+    #   core-provider-target 2.13.117  PRESENT   (the version this repo depends on)
+    #   core-provider-target 2.13.999  absent    (negative control)
+    # The installer pins none of it -- not a component pin, not a Chart.yaml dependency -- so
+    # authorising it retracts nothing today. Authority is about who MAY speak, not what we consume.
       - core-provider
       - core-provider-crds
+      - core-provider-target
   - repo: krateo-platformops/frontend
     # Confirmed by frontend 2026-11-14: exactly the set crdgen/retracted_test.go enforces on
     # their side, so the two cannot disagree.

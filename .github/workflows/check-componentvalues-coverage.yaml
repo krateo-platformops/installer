@@ -42,7 +42,37 @@ jobs:
         # The pins span three registries and some charts are private by design. Without a login the
         # pull fails for those, and a component that cannot be pulled contributes ZERO sites — which
         # is why the gate pins the CHECKED SET and fails when one drops out, rather than passing.
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+        #
+        # secrets.PAT, NOT GITHUB_TOKEN, since 2026-11-22. This gate used GITHUB_TOKEN and declared
+        # 19 components OUT_OF_SCOPE because that token cannot read krateo-agentiko. Its own comment
+        # said closing the gap "needs credentials, which is a separate decision and not this gate's"
+        # -- and that was WRONG: check-pin-ci and check-chart-requires-floors BOTH use secrets.PAT and
+        # read those same charts successfully in CI today. So the 19 were dark through an asymmetry
+        # between three gates in one repository, not through any decision. Diego chose to switch it.
+        # Verified before changing rather than after: check-pin-ci's latest run succeeded with 23 log
+        # lines mentioning agentiko.
+        #
+        # FAIL-CLOSED on a missing secret. A gate that SKIPS when its credential is absent reports
+        # success for charts it never read, which is the failure every other refusal here prevents.
+        run: |
+          if [ -z "${{ secrets.PAT }}" ]; then
+            echo "::error::PAT is not set or not visible to this repository. This gate pulls each"
+            echo "::error::pinned chart's published values to find keys the schema cannot set, and"
+            echo "::error::private packages answer 401 to an unauthenticated runner."
+            exit 1
+          fi
+          echo "${{ secrets.PAT }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # POSITIVE CONTROL, copied from check-chart-requires-floors rather than reinvented: a login
+      # that SUCCEEDS proves a handshake, not read access. A PAT lacking read:packages on a private
+      # org logs in cleanly and then makes every private pull fail -- which THIS gate would read as
+      # "those components dropped out", firing its lost-component guard for the wrong reason and
+      # sending the next reader to look for a chart nobody deleted.
+      - name: A chart in the private org is actually readable
+        run: |
+          set -e
+          helm show chart oci://ghcr.io/krateo-agentiko/charts/kagent --version 0.1.24 >/dev/null
+          echo "positive control OK: a currently-pinned krateo-agentiko chart is readable"
       - name: Install PyYAML and jsonschema
         run: pip install --quiet pyyaml jsonschema
       # FIRST: the gate must prove its comparison detects a new site, a lost component and a
