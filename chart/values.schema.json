@@ -1179,6 +1179,15 @@
                   "maximum": 65535,
                   "minimum": 1,
                   "type": "integer"
+                },
+                "externalTrafficPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "",
+                    "Cluster",
+                    "Local"
+                  ],
+                  "description": "Service.spec.externalTrafficPolicy for the gateway's LoadBalancer. REQUIRED TO BE `Local` for any platformRoutes[].rateLimits entry that uses perClientIP: Cluster-mode SNAT replaces the client IP with a node IP, so a per-IP limit would bucket the whole cluster together. agp's chart REFUSES the combination outright, so a mismatch fails the render loudly rather than silently mis-limiting -- which is why this is documented here and not enforced by a schema conditional (that would add a second CEL rule binding at admission on the Installer CRD, for something the chart already catches). Mirrored from agp's own values.schema.json; its `default: \"\"` is deliberately not mirrored."
                 }
               },
               "type": "object"
@@ -5408,6 +5417,91 @@
                   "rewrite": {
                     "description": "Whether the gateway strips pathPrefix before forwarding to the backend.",
                     "type": "boolean"
+                  },
+                  "rateLimits": {
+                    "type": "array",
+                    "description": "Rate limits applied to sub-paths of this route. NOTE ON HOW TO SET THESE: platformRoutes is COMPUTED by the installer and filled only if absent, so a componentValues override replaces the WHOLE route table rather than one entry -- an operator wanting one route's limits would have to copy every other route, and they would then stop tracking the computation. The intended route is for the installer's own computed table to emit rateLimits on the entry that needs them. This node exists because agp's chart validates what the installer injects, so the shape must be declarable either way.",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "name",
+                        "pathPrefix"
+                      ],
+                      "description": "One rate limit. agp's chart requires at least one of perClientIP or total, and requires pathPrefix to sit under the parent route's pathPrefix plus \"/\". Neither is enforced here: both are cross-field rules the chart already refuses loudly, and expressing them would add CEL rules that bind at ADMISSION on the Installer CRD.",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+                          "description": "RFC-1123 name for the generated limit object"
+                        },
+                        "pathPrefix": {
+                          "type": "string",
+                          "pattern": "^/",
+                          "description": "Sub-path the limit applies to; must sit under the parent route's pathPrefix plus \"/\""
+                        },
+                        "perClientIP": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "requests",
+                            "unit"
+                          ],
+                          "properties": {
+                            "requests": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "description": "Requests permitted per `unit`"
+                            },
+                            "unit": {
+                              "type": "string",
+                              "enum": [
+                                "Seconds",
+                                "Minutes",
+                                "Hours"
+                              ],
+                              "description": "Window the request count applies to"
+                            },
+                            "burst": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "description": "Optional burst allowance above the steady rate"
+                            }
+                          },
+                          "description": "Limit per client IP. REQUIRES gateway.externalTrafficPolicy: Local -- agp's chart refuses it otherwise, because Cluster-mode SNAT would bucket every client together behind a node IP."
+                        },
+                        "total": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "requests",
+                            "unit"
+                          ],
+                          "properties": {
+                            "requests": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "description": "Requests permitted per `unit`"
+                            },
+                            "unit": {
+                              "type": "string",
+                              "enum": [
+                                "Seconds",
+                                "Minutes",
+                                "Hours"
+                              ],
+                              "description": "Window the request count applies to"
+                            },
+                            "burst": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "description": "Optional burst allowance above the steady rate"
+                            }
+                          },
+                          "description": "Limit across all clients for this sub-path."
+                        }
+                      }
+                    }
                   }
                 },
                 "type": "object"
