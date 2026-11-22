@@ -127,11 +127,11 @@ CD_FAILED_REASONS = ("Unavailable", "RemoteChartUnreachable", "SchemaDefaultCont
                      # Forget() runs on SUCCESS ONLY, so the count never resets and the budget is
                      # spent once per OBJECT LIFETIME. Every later resync is dropped at DEBUG with
                      # no condition, which is why the reason had to be added upstream at all --
-                     # before it, "stopped retrying" and "still retrying" were indistinguishable
-                     # from `kubectl get`.
+                     # before it, a stopped-retrying object and a still-retrying one were
+                     # indistinguishable from `kubectl get`.
                      #
                      # WHY IT GOES IN BEFORE THE 0.88.0 PIN AND NOT AFTER: without it, a resource
-                     # finally reporting "I stopped retrying" is classified as an UNRECOGNISED
+                     # finally reporting that it stopped retrying is classified as UNRECOGNISED
                      # condition rather than a failure. A new signal arriving and being silently
                      # dropped by the instrument watching for it is strictly worse than not having
                      # the signal, because the roll would read as clean. Found because
