@@ -95,7 +95,13 @@ CONVERGED = ("True/Available", "True/AvailablePartialCoverage",
 # cause in the message. There is no new reason to classify -- Unavailable is already failed here
 # -- but there WAS no check that looked. A composition left failed after a roll was reported as a
 # changed field and nothing more.
-FAILED_REASONS = ("Unavailable", "CreateOutcomeUnknown", "HooksMayNotHaveRun")
+# CreateWithheldByPolicy / RecoveryWithheldByPolicy: core-provider#598, vendored 2026-11-21.
+# A management policy withheld the operation, so the desired state was NEVER APPLIED and
+# nothing retries it on its own -- a roll that leaves a composition here has not landed, and
+# a time-bounded wait on it never succeeds. Both ship in core-provider 2.13.120, NOT CUT YET,
+# so these two branches are UNEXERCISED and a clean run proves nothing about them.
+FAILED_REASONS = ("Unavailable", "CreateOutcomeUnknown", "HooksMayNotHaveRun",
+                  "CreateWithheldByPolicy", "RecoveryWithheldByPolicy")
 
 # The COMPOSITIONDEFINITION failed set, which is a DIFFERENT namespace from the one above.
 # ready-reasons.yaml carries both and check-roll-snapshot.yaml cross-checks each against its own
@@ -109,7 +115,11 @@ FAILED_REASONS = ("Unavailable", "CreateOutcomeUnknown", "HooksMayNotHaveRun")
 # that learns to ignore the list. core-provider pointed out the fix: classify by the REASON, whose
 # verdict the registry already gives, rather than by reading each child Deployment.
 CD_FAILED_REASONS = ("Unavailable", "RemoteChartUnreachable", "SchemaDefaultContradiction",
-                     "ValuesSchemaMissing", "DerivedNameTooLong")
+                     "ValuesSchemaMissing", "DerivedNameTooLong",
+                     # core-provider#598, same reasoning as FAILED_REASONS above. A CD left
+                     # here had its create withheld, so the definition exists and the chart
+                     # was never applied.
+                     "CreateWithheldByPolicy")
 
 # compositionDefinition.converging, mirrored for the same dependency-free reason.
 CD_CONVERGING_REASONS = ("Creating", "Deleting")
