@@ -102,6 +102,27 @@ def patch_from(manifest):
                   "NOTHING. That is not a pass.")
 
 
+def _is_explicit_null(root, path):
+    """True when `path` inside `root` holds None -- an RFC 7386 delete, not a value.
+
+    Walks the error's own absolute_path rather than guessing: a null one level up or down is a
+    different fact and must still be reported.
+    """
+    node = root
+    for p in path:
+        if isinstance(node, dict):
+            if p not in node:
+                return False
+            node = node[p]
+        elif isinstance(node, list):
+            if not isinstance(p, int) or p >= len(node):
+                return False
+            node = node[p]
+        else:
+            return False
+    return node is None
+
+
 def main():
     if shutil.which("helm") is None:
         _err("helm is not on PATH. A guard that skips when its tool is missing reports success "
@@ -171,6 +192,32 @@ def main():
         v = jsonschema.Draft7Validator(sub)
         for e in v.iter_errors(spec[key]):
             path = "/".join(str(p) for p in e.absolute_path) or "(root)"
+            # AN EXPLICIT NULL IS A DELETION INSTRUCTION, NOT A VALUE. components-patch.json is
+            # applied as an RFC 7386 JSON Merge Patch, where null at a member means REMOVE THAT
+            # MEMBER -- which is the entire mechanism componentValuesUnset exists for, and what
+            # values.schema.json's own description of that key says ("only an explicit null
+            # deletes"). The apiserver applies the merge and validates the RESULT, so a null never
+            # reaches the type check.
+            #
+            # MEASURED 2026-11-22 on krateo-057, because this gate asserted the opposite and I
+            # would not change it on a reading of the RFC:
+            #   kubectl patch installers.../installer --type=merge --dry-run=server \
+            #     -p '{"spec":{"componentValues":{"agentgateway-policies":{"llm":{"retry":null}}}}}'
+            #   -> ACCEPTED, exit 0, and the returned object's `llm` had NO `retry` member.
+            #      resourceVersion 1795296584012079016 and generation 581 identical before and
+            #      after; the live value was untouched, so nothing persisted.
+            #
+            # WHY IT WENT UNNOTICED: this gate (#1065) was added AFTER componentValuesUnset (#712),
+            # and ZERO tags have ever shipped a non-empty componentValuesUnset -- so the gate
+            # forbade the mechanism outright and nothing exercised the contradiction. Before this
+            # exemption it refused values.schema.json's OWN documented example,
+            # authn.env.AUTHN_DUMP_ENV, identically.
+            #
+            # SCOPE OF THE EXEMPTION, deliberately narrow: only a `None` AT THE ERROR'S OWN PATH.
+            # A null nested inside an otherwise-illegal value is still reported, and every
+            # non-null violation is untouched -- those genuinely do break the whole patch.
+            if _is_explicit_null(spec[key], e.absolute_path):
+                continue
             findings.append((key, path, e.message))
 
     # THE INSTRUMENT MUST HAVE FOUND SOMETHING TO CHECK. A patch with no recognised keys, or a
@@ -207,5 +254,36 @@ def main():
     return 0
 
 
+def self_test():
+    """Exercise _is_explicit_null's NARROWNESS, which is the whole risk in the exemption.
+
+    A too-broad version would swallow real violations and this gate's purpose with them. These
+    assert that ONLY a None at the error's own path is exempt -- not its parent, not a falsy value,
+    not an absent path, and not a container that merely holds a null somewhere inside.
+    """
+    cases = [
+        ({"a": {"b": None}},   ["a", "b"], True,  "null AT the error's own path -> exempt"),
+        ({"a": {"b": None}},   ["a"],      False, "the PARENT of a null is not itself null"),
+        ({"a": {"b": 1}},      ["a", "b"], False, "a real value is reported"),
+        ({"a": {"b": ""}},     ["a", "b"], False, "empty string is NOT null"),
+        ({"a": {"b": 0}},      ["a", "b"], False, "zero is NOT null"),
+        ({"a": {"b": False}},  ["a", "b"], False, "false is NOT null"),
+        ({"a": {"b": {}}},     ["a", "b"], False, "empty object is NOT null"),
+        ({"a": {}},            ["a", "b"], False, "an ABSENT path is reported, not assumed null"),
+        ({"a": [None]},        ["a", 0],   True,  "null at its own list index -> exempt"),
+        ({"a": [{"b": None}]}, ["a", 0],   False, "a list item CONTAINING a null is not null"),
+        ({"a": [1]},           ["a", "0"], False, "a string index into a list: reported, no crash"),
+        ({"a": 1},             ["a", "b"], False, "descending into a scalar: reported, no crash"),
+    ]
+    bad = 0
+    for root, path, want, label in cases:
+        got = _is_explicit_null(root, path)
+        ok = got is want
+        bad += 0 if ok else 1
+        print("  %-4s %s" % ("ok" if ok else "FAIL", label))
+    print("self-test: %d case(s), %d failure(s)" % (len(cases), bad))
+    return 1 if bad else 0
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(self_test() if "--self-test" in sys.argv else main())
