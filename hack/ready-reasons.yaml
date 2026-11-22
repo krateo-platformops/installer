@@ -206,6 +206,32 @@ compositionDefinition:
         7da7248 release
       ScaledToZero: 2.13.84
   condition_types:
+    MigratedValuesValid:
+      universal: false
+      note: >-
+        core-provider#614, PR #622, vendored from its branch before merge so the equality window is
+        seconds rather than minutes -- this gate compares the two files for EQUALITY, so vendoring
+        first fails "extra in vendored" and merging first fails "missing", and either order is red
+        briefly. core-provider merges on green and pings; this lands immediately after.
+
+        ABSENT MEANS "NO MIGRATION SINCE THE RELEASE", NOT VALID. core-provider's own words. The
+        condition only appears once a version migration has moved at least one instance, so on 057
+        today no CompositionDefinition carries it. A classifier reading absence as healthy would
+        report every un-migrated definition as having passed a check that never ran -- the same
+        mistake as treating Unknown/ZeroEvidence as a stall.
+
+        WHAT IT REPORTS, and why it matters to the installer specifically: after a migration,
+        core-provider dry-run-creates a copy of each instance through the NEW version and names the
+        ones that version refuses. CRD validation ratcheting let those instances migrate, so they
+        are already stored -- the condition does not block or undo the migration, and a write that
+        touches the refused fields is what fails. EVERY INSTALLER PIN BUMP IS ONE OF THESE
+        MIGRATIONS, so this condition exists to report a thing installer rolls cause.
+      healthy:
+        - AllValid
+      unhealthy:
+        - ValuesRefusedByNewVersion
+      unevaluated:
+        - ValidationIncomplete
     Ready:
       universal: true
       note: the CRD serves the version and is Established, and the cdc's own controller Deployment has
