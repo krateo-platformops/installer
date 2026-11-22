@@ -7338,6 +7338,27 @@
               "type": "object"
             },
             "serviceAccount": {
+              "if": {
+                "properties": {
+                  "create": {
+                    "const": false
+                  }
+                },
+                "required": [
+                  "create"
+                ]
+              },
+              "then": {
+                "description": "DERIVED FROM authn's OWN CHART SCHEMA (#170), mirrored here so the installer refuses at the CR what the authn chart would otherwise refuse later at helm upgrade. The chart has enforced this with a template `fail` since 0.53.0 and declared it in its values schema at 0.56.0. crdgen COMPILES this into an x-kubernetes-validations CEL rule -- measured at plumbing v1.100.0 (the version core-provider 2.13.117 carries) and v1.104.0, identical output, 0 warnings: !(has(self.create) && has(self.create) && self.create == false) || (has(self.name) && has(self.name) && size(self.name) >= 1). It is the FIRST CEL rule on the Installer CRD, and the apiserver accepted its estimated cost on a server dry-run against krateo-057 (a control placing the same rule under two unbounded arrays was refused at factor 1.153434x, so that probe can detect an over-budget rule). A CEL rule binds at ADMISSION: an existing CR that violates it becomes silently UNUPDATABLE rather than flagged. Verified before adding -- no Installer CR on 057 or on demo sets componentValues.authn.serviceAccount at all, so this binds nothing that exists.",
+                "properties": {
+                  "name": {
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              },
               "additionalProperties": false,
               "properties": {
                 "annotations": {
