@@ -14601,8 +14601,9 @@
                         "type": "string"
                       },
                       "threshold": {
-                        "description": "A row count. Typed integer, not number: crdgen types number as a string in the Installer CRD.",
-                        "type": "integer"
+                        "type": "string",
+                        "pattern": "^-?[0-9]+([.][0-9]+)?$",
+                        "description": "A plain decimal as a STRING ('0.001', '500'): crdgen types `number` as string, and the chart's template renders it back as a number. MEASURED on 057's live Installer CRD -- the two `number` nodes this schema declares are both {\"type\": \"string\"} there, so `number` here would be silently retyped and `integer` refuses the 0.001 the chart ships. The pattern is the template's OWN refusal, read from the published chart at 0.1.55 (templates/default-alerts.yaml:89): it `fail`s on a string not matching ^-?[0-9]+([.][0-9]+)?$, then renders a whole number as int64 (so 3221225472 does not print as 3.2e+09) and a fraction as itself. So this bound refuses exactly what the chart refuses, as a readable schema error instead of a cdc failure. NOT applied to alert-provider.config.defaultAlerts[].threshold, whose own schema declares `integer` for a row count and whose template has no decimal refusal."
                       },
                       "thresholdType": {
                         "enum": [
@@ -14627,9 +14628,91 @@
                       },
                       "where": {
                         "type": "string"
+                      },
+                      "aggregation": {
+                        "type": "string",
+                        "enum": [
+                          "avg",
+                          "max",
+                          "min",
+                          "sum",
+                          "p95",
+                          "increase"
+                        ],
+                        "description": "How a metric alert's points over the interval become the compared value. Required with metricRef."
+                      },
+                      "consecutiveWindows": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 60,
+                        "description": "Fire only once the condition has held for this many consecutive intervals; counted per series with groupBy. An empty interval restarts the count. Needs alert-provider 0.2.64."
+                      },
+                      "groupBy": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256,
+                          "pattern": "^[A-Za-z0-9_./-]+$"
+                        },
+                        "description": "Metric alerts only: one series per distinct value of these attribute keys, e.g. [k8s.namespace.name, k8s.pod.name, k8s.container.name]. Needs alert-provider 0.2.64."
+                      },
+                      "labels": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "description": "Metric alerts only: keep points whose attribute or resource attribute has this value. Resource attributes need alert-provider 0.2.61. With ratio, these select the numerator."
+                      },
+                      "metadataLabels": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "description": "Extra labels on the Alert resource, e.g. observability.krateo.io/analysis: human."
+                      },
+                      "metricRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Name of a Metric in defaultMetrics to aggregate instead of counting log rows. Excludes where."
+                      },
+                      "ratio": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "labels": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "description": "The denominator's points, ANDed; empty keeps every point of the metric."
+                          }
+                        },
+                        "description": "Metric alerts only, with aggregation sum or increase: compare a share, the aggregation of the points labels keep divided by that of the points ratio.labels keep. Needs alert-provider 0.2.58. Not with groupBy."
+                      },
+                      "runbook": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 3072,
+                        "description": "Operator guidance, rendered as spec.runbook (alert-provider >= 0.2.69). It follows the description in the HyperDX notification (description, a blank line, the runbook; at most 4096 characters in all) and goes to the RCA prompt between <runbook> tags. No '{{' and no @word after whitespace: HyperDX compiles the message as Handlebars. The template refuses both, and the 4096 overflow."
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "logs",
+                          "traces"
+                        ],
+                        "description": "Which rows where reads: logs (default) or traces. Needs alert-provider 0.2.62. Not with metricRef."
                       }
                     },
-                    "type": "object"
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "threshold",
+                      "thresholdType",
+                      "interval"
+                    ]
                   },
                   "type": "array"
                 },

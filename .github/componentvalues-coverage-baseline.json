@@ -150,18 +150,7 @@
       "clickstack/clickhouse/cluster/spec/settings/extraUsersConfig",
       "clickstack/hyperdx",
       "clickstack/hyperdx/deployment",
-      "clickstack/mongodb/spec",
-      "defaultAlerts/alerts/18",
-      "defaultAlerts/alerts/19",
-      "defaultAlerts/alerts/23",
-      "defaultAlerts/alerts/24",
-      "defaultAlerts/alerts/25",
-      "defaultAlerts/alerts/26",
-      "defaultAlerts/alerts/27",
-      "defaultAlerts/alerts/28",
-      "defaultAlerts/alerts/29",
-      "defaultAlerts/alerts/30",
-      "defaultAlerts/alerts/7"
+      "clickstack/mongodb/spec"
     ],
     "krateo-sse-proxy": [
       "<root>"
