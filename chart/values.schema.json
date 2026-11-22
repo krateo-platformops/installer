@@ -11090,7 +11090,7 @@
                   "type": "array"
                 },
                 "secretRefs": {
-                  "description": "Specific Secrets the identity-lifecycle controller may read, one Role per namespace with get and resourceNames. Prefer this over secretNamespaces, which grants get on EVERY Secret in a namespace -- krateo-system holds 183. Mirrors identity-lifecycle's own schema.",
+                  "description": "Specific Secrets the identity-lifecycle controller may read, one Role per namespace with get and resourceNames. Prefer this over secretNamespaces, which grants get on EVERY Secret in a namespace -- krateo-system holds 183. Mirrors identity-lifecycle's own schema. `uniqueItems` was declared here and REMOVED: crdgen emits nothing for a non-scalar uniqueItems with no maxItems (transpile.go:815-831), so the uniqueness was enforced nowhere while the schema claimed it. Enforcing it needs maxItems, which makes it a CEL rule binding at ADMISSION -- that is its own change, with a live-CR check first.",
                   "items": {
                     "additionalProperties": false,
                     "properties": {
@@ -11112,8 +11112,7 @@
                     "type": "object"
                   },
                   "title": "Identity-provider Secret references",
-                  "type": "array",
-                  "uniqueItems": true
+                  "type": "array"
                 }
               },
               "type": "object"

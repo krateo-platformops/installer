@@ -65,6 +65,9 @@ def node_at(schema, path):
     return n
 
 
+SCALAR_TYPES = {"string", "integer", "number", "boolean"}
+
+
 def count_conditionals(schema):
     """Every if/then pair in the schema -- each compiles to one CEL rule on the Installer CRD."""
     found = []
@@ -81,6 +84,73 @@ def count_conditionals(schema):
 
     walk(schema, [])
     return sorted(found)
+
+
+def count_cel_sources(schema):
+    """EVERY construct crdgen compiles into x-kubernetes-validations, not just if/then.
+
+    Counting if/then alone was this gate's blind spot: the claim "exactly one CEL rule on the
+    Installer CRD" happened to be true, but a `dependentRequired` or a bounded non-scalar
+    `uniqueItems` could be added and the if/then count would not move. A gate whose subject is
+    narrower than the claim it implies passes while the claim becomes false.
+
+    The four sources, from plumbing's crdgen at main (read by authn, not measured -- they had no
+    build during marketing's hold, and the measurement is noted below):
+
+        1. if/then/else                  emitIfThenElse, transpile_keywords.go:340
+        2. dependentRequired             emitDependentRequired, transpile_keywords.go:141
+        3. uniqueItems: true             transpile.go:815-831, and ONLY sometimes:
+                                           scalar items        -> x-kubernetes-list-type: set (no CEL)
+                                           non-scalar + maxItems -> CEL
+                                           non-scalar, no maxItems -> emits NOTHING AT ALL
+        4. author-written x-kubernetes-validations   passthroughExtensions, :111
+
+    `enum` inside an array item is NOT a source: `items` is transpiled recursively
+    (transpile.go:394-395) and copyEnum (:639) puts the values on the typed child node, so the
+    apiserver enforces it natively with no CEL and no CEL cost. On an UNTYPED node an enum is
+    dropped with a ConstraintDropped warning -- never turned into CEL. `not`, `const`, `pattern`
+    and the numeric bounds are all native too.
+
+    TO SETTLE THIS BY MEASUREMENT rather than by crdgen's source: generate the CRD and run
+      yq '.. | select(has("x-kubernetes-validations")) | path'
+    with the known if/then pair as the positive control -- it MUST appear, or the probe is wrong.
+
+    Returns {source: [paths]}. Native-but-not-CEL constraints (enums, required, patterns, bounds)
+    are deliberately NOT counted: they bind at admission too, but this function's subject is CEL.
+    """
+    out = {"if_then": [], "dependentRequired": [], "uniqueItems_cel": [], "passthrough": []}
+    inert = []
+
+    def label(p):
+        return ".".join(x for x in p if x not in ("properties", "items")) or "<root>"
+
+    def walk(n, p):
+        if isinstance(n, dict):
+            if "if" in n and "then" in n:
+                out["if_then"].append(label(p))
+            if "dependentRequired" in n:
+                out["dependentRequired"].append(label(p))
+            if "x-kubernetes-validations" in n:
+                out["passthrough"].append(label(p))
+            if n.get("uniqueItems") is True:
+                it = n.get("items") or {}
+                if it.get("type") in SCALAR_TYPES:
+                    pass  # becomes x-kubernetes-list-type: set, enforced natively
+                elif "maxItems" in n:
+                    out["uniqueItems_cel"].append(label(p))
+                else:
+                    inert.append(label(p))
+            for k, v in n.items():
+                walk(v, p + [k])
+        elif isinstance(n, list):
+            for i, v in enumerate(n):
+                walk(v, p + [str(i)])
+
+    walk(schema, [])
+    for k in out:
+        out[k] = sorted(out[k])
+    out["_inert_uniqueItems"] = sorted(inert)
+    return out
 
 
 def main() -> int:
@@ -137,6 +207,32 @@ def main() -> int:
     # --- 3. the CEL-rule count. A SECOND conditional means a second admission constraint.
     conds = count_conditionals(schema)
     print("  if/then pairs in the schema: %d -> %s" % (len(conds), conds))
+
+    # --- 3b. EVERY other construct that compiles to CEL, because counting if/then alone would
+    # let a dependentRequired or a bounded non-scalar uniqueItems add an admission constraint
+    # without moving the number this gate asserts on.
+    src = count_cel_sources(schema)
+    extra = {k: v for k, v in src.items()
+             if k not in ("if_then", "_inert_uniqueItems") and v}
+    total = sum(len(v) for k, v in src.items() if k != "_inert_uniqueItems")
+    print("  CEL-emitting constructs: if_then=%d dependentRequired=%d uniqueItems_cel=%d "
+          "passthrough=%d  -> %d CEL rule(s) expected on the CRD"
+          % (len(src["if_then"]), len(src["dependentRequired"]),
+             len(src["uniqueItems_cel"]), len(src["passthrough"]), total))
+    if extra:
+        print("::error::%d CEL rule(s) come from a construct other than the counted if/then pair: "
+              "%s. Each binds at ADMISSION exactly as an if/then does -- an existing CR that "
+              "violates a new one becomes silently UNUPDATABLE. If intended, say so here "
+              "deliberately and check no live CR violates it first."
+              % (total - len(src["if_then"]), extra))
+        bad += 1
+    if src["_inert_uniqueItems"]:
+        print("::error::%d `uniqueItems: true` site(s) have NON-SCALAR items and no `maxItems`, so "
+              "crdgen emits NOTHING for them and the uniqueness is NOT enforced anywhere: %s. "
+              "Add maxItems (which makes it a CEL rule) or drop the uniqueItems, but do not leave "
+              "a declared constraint that silently does nothing."
+              % (len(src["_inert_uniqueItems"]), src["_inert_uniqueItems"]))
+        bad += 1
     if len(conds) != EXPECTED_CONDITIONALS:
         print("::error::expected exactly %d if/then pair(s), found %d: %s. Each compiles to one "
               "x-kubernetes-validations CEL rule on the Installer CRD, and a CEL rule binds at "
