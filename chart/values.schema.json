@@ -4182,6 +4182,11 @@
                           "description": "Characters kept from the newest tool result, half from its head and half from its tail; 0 keeps it whole at any length. Must be 0 or at least maxChars. Defaults to 100000 (~25-30k tokens). Needs agentgateway-policies >= 0.2.31.",
                           "minimum": 0,
                           "type": "integer"
+                        },
+                        "agentMaxChars": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "Characters kept from an older tool result that answers a call to another agent (a kagent agent tool, named <namespace>__NS__<agent>), half from its head and half from its tail; 0 keeps it whole. Must be 0 or at least maxChars. Such a result is the agent's report and costs minutes to produce again; cut to maxChars, the caller re-runs the agent."
                         }
                       },
                       "type": "object"
