@@ -378,7 +378,20 @@ components:
   #   gained `dropdowns`: Card, Col, Collapse, Flex, Row, Steps, Tabs  (53 -> 54 each)
   #   Dropdown's own allowedResources: buttons
   #   LOST entries anywhere: ZERO -- so no existing widget tree becomes invalid
-  version: 1.8.54
+  # 1.8.54 -> 1.8.55 BEFORE 1.8.54 EVER SHIPPED. 1.8.54 was merged to main (#1090) and never tagged,
+  # because 057 was frozen for marketing's run 12; frontend then published 1.8.55 while the hold was
+  # on. Pinning 1.8.54 and then 1.8.55 would be two rolls of a three-chart line for one roll's worth
+  # of change, so Diego chose to move main to the current version before the first tag carries it.
+  #
+  # 1.8.55 is frontend#745: a card's icon tile now spans the name line and the tag line. CSS/TSX only.
+  #
+  # VERIFIED THE CRDs DID NOT MOVE, by pulling both published frontend-crds charts and diffing them
+  # rather than trusting the release note: Chart.yaml is the ONLY differing file, no file added or
+  # removed on either side, and `kind: Dropdown` (what portal 1.8.146 needs) is still present. So
+  # this carries no schema change on top of 1.8.54's Dropdown CRD.
+  #
+  # Credential-scan delta for the sandbox capture: NOTHING the scan would flag.
+  version: 1.8.61
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -1972,6 +1985,61 @@ components:
   # 1.6.71 (#386): LEG 3 OF 3. Preview builds stand-ins from the draft's architecture descriptor and
   # reports which gates it opened. 1.6.70...1.6.71 is 8 files, all under ui/, none under helm/.
 - name: frontend
+# 1.8.61 -- retargeted from 1.8.55 (never pinned) because portal#484 needs frontend-crds >= 1.8.61
+# for its "Re-analysis since HH:MM UTC" line to RENDER. The frontend must know the field to draw it.
+#
+# CORRECTION TO WHAT THIS COMMENT FIRST SAID. I wrote that portal's lint-pinned-crds gate refuses
+# `progress` until this pin is on main, and that #484 stayed a draft because of it. THAT GATE NEVER
+# COULD. #484's pinned-crds check passed at 16:49:43Z against frontend-crds 1.8.54, which has no
+# `progress` at all -- 63 minutes before this pin reached main at 17:52Z. Verified from the PR's own
+# check-run, not from a report.
+#
+# The reason is the same stored-vs-resolved distinction as the pruning note below, which is why it is
+# worth writing down twice: pinned-crds validates the widget CRs portal STORES, and its own docstring
+# says "not resolved widgets. A resolved widget can carry fields a template never writes". `progress`
+# exists only as a widgetDataTemplate forPath, filled at request time, so no stored object ever
+# carries it and no CRD-shaped check can see it.
+#
+# SO THE ORDERING WAS RIGHT AND NOTHING ENFORCED IT. Pinning before #484 is correct -- otherwise the
+# line silently does not appear -- but that order held because two sessions coordinated it, not
+# because any gate would have caught the reverse. If #484 had merged first, every check would have
+# been green and the only symptom would have been a missing line with no error anywhere.
+#
+# What DOES guard the field's shape is portal's test-incident-progress.py, which asserts the exact
+# object per state by equality. Nothing in pinned-crds does.
+#
+# WHAT 1.8.61 ADDS TO THE CRD, verified against the published chart rather than the release note:
+# PageHeader.crd.yaml gains ONE optional object, widgetData.progress {label, since, live?, hint?},
+# with required [label, since] INSIDE that object only. widgetData.required stays [title], so no
+# existing PageHeader CR becomes invalid. VERIFIED ABSENT AT 1.8.55, so this pin is what delivers it.
+#
+# NO SCHEMA WIDENING IS NEEDED, unlike 1.8.34's agentName. `progress` is a WIDGET CRD field, not a
+# componentValues key, and portal#484 never stores it: the widget CR holds only a
+# widgetDataTemplate forPath, and the value is produced at request time by snowplow from
+# incident-detail's jq. CRD pruning applies to what is STORED, so a resolve-time value cannot be
+# pruned by it. componentValues.frontend is untouched at 27 keys.
+#
+# AND THE CRD PRUNES RATHER THAN REJECTS -- NECESSARILY, not by oversight. PageHeader.schema.json
+# carries additionalProperties:false on `progress`; the shipped CRD leaves it unset, and it MUST:
+# apiextensions-apiserver's validation makes additionalProperties and properties mutually exclusive
+# (validation.go:1044-1057, v0.37.2) "because otherwise they contradict Kubernetes' API convention
+# to ignore unknown fields". A widget object always has properties, so a CRD carrying both would be
+# REFUSED BY THE APISERVER. Omitting it is gen-crds.ts's only legal output.
+#
+# So "this widget CRD rejects an unknown key" is false for EVERY widget, always, and no sweep of the
+# other CRDs is needed -- the result is fixed by the apiserver, not by our generator. MEASURED
+# ACROSS ALL 46 SHIPPED WIDGET CRDs at 1.8.61: 923 schema objects, ZERO carrying
+# additionalProperties beside properties, and the 15 that carry it at all are typed maps
+# (additionalProperties: {type: string}) on objects WITHOUT properties, which the rule allows.
+#
+# What that leaves: a misspelled key is dropped silently with a successful apply. For #484 that is
+# inert, because nothing stores `progress` (see above). What guards it is portal's
+# test-incident-progress.py, which asserts the EXACT object per state by equality, so a renamed key
+# fails CI rather than rendering nothing. frontend established the apiserver constraint; my earlier
+# reading of this as a generator gap was wrong.
+#
+# 1.8.62 is deliberately NOT taken: it is frontend#752, the Blueprint Builder palette, UI only with
+# no CRD change, so it does nothing for #484 and would only move the target again.
   # 1.8.34 -- all THREE frontend components move together, as one line, because they share a
   # version and a release. 1.8.34 is 1.8.33 + F1 (frontend#641, main c5ed7a0), so ONE roll
   # instead of two; it also unblocks portal#386's tooltip, since the List CRD widening is in both.
@@ -2996,7 +3064,8 @@ components:
   # WHY THIS PIN IS URGENT WHILE 057 IS FROZEN: portal's own pinned-crds lint fails until
   # frontend-crds >= 1.8.54 is on installer MAIN, so the portal change that uses Dropdown is blocked
   # on this merge -- not on the tag and not on a roll. Merging unblocks them; the tag waits.
-  version: 1.8.54
+  # Moves with the frontend line (one tag publishes all three). See frontend-crd above.
+  version: 1.8.61
   deps:
   - frontend-crd
   - authn
@@ -4459,7 +4528,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - frontend
   - git-provider
@@ -4576,7 +4645,7 @@ components:
   # 1.8.73; diff -r reports only Chart.yaml.
   # 1.8.117: CONTENT CHANGE -- 2 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.141
+  version: 1.8.154
   deps: ['portal']
   tier: platform
   feature: portal
@@ -4616,7 +4685,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -4687,7 +4756,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -4698,7 +4767,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -4827,7 +4896,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -4872,7 +4941,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5010,7 +5079,7 @@ components:
   kind: CompositionsPage
   # 1.8.117: CONTENT CHANGE -- 5 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5022,7 +5091,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5034,7 +5103,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5046,7 +5115,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5058,7 +5127,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5070,7 +5139,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5082,7 +5151,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5092,7 +5161,7 @@ components:
   kind: SettingsPage
   # 1.8.117: CONTENT CHANGE -- 6 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5102,7 +5171,7 @@ components:
   kind: ObservabilityPage
   # 1.8.117: CONTENT CHANGE -- 9 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5121,7 +5190,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -5167,7 +5236,7 @@ components:
   # The form collects firstName, lastName, email, company, country, phone and useCase from
   # visitors who are not signed in.
   kind: PublicPages
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -7224,7 +7293,8 @@ components:
   # declares frontend + frontend-crd + builder-gate as ONE line, because a single frontend tag
   # publishes all three charts, and check-same-version-line REFUSES a pin set where they disagree.
   # The recorded reason is that an app pinned past its -crd pin prunes fields silently.
-  version: 1.8.54
+  # Moves with the frontend line (one tag publishes all three). See frontend-crd above.
+  version: 1.8.61
   deps:
     - portal
     - kagent
@@ -10226,6 +10296,21 @@ components:
   tier: platform
   feature: capabilityRoles
 - name: zendesk-kog
+# ciRepo, added 2026-11-21: check-pin-ci asserts THIS repo's CI and does not consult `sources`.
+#
+# Its `sources` legitimately list krateo-platformops/oasgen-provider -- the provider whose
+# generated controller its RestDefinitions drive -- and oasgen-provider carries an ancient tag
+# `0.3.1` from its old 0.3.x line, with no check-runs. The gate consults EVERY source and refuses
+# the pin if ANY is unresolvable, so when the owner added the correct repo as the FIRST source at
+# 0.3.1, the gate STILL refused: krateo-zendesk-kog resolved green AND oasgen-provider resolved
+# norun. Adding a source cannot outvote another source.
+#
+# NOT solved by preferring the OCI stamp. That was tried as installer#1101 and closed the same day:
+# the stamp names the CHART's repo while the inference targets the APP's repo, and for a chart
+# wrapping Krateo's own image the second is the claim that matters. Measured 2026-11-06 --
+# otel-collector-deployment 0.3.13's app commit had 12 green check-runs and nothing testing the
+# code with three _test.go files present, a correct refusal, and stamp-first PASSED it from the
+# chart's repo instead.
   # NEW COMPONENT, 0.2.1. The KOG that turns Zendesk Support resources into Kubernetes CRs, so a
   # service-desk ticket actually reaches Zendesk. Before this, 057 had the Ticket CRD and the raise
   # form from service-desk-page and NOTHING that delivered: a Ticket was written and no controller
@@ -10260,7 +10345,18 @@ components:
   kind: ZendeskKog
   chart: zendesk-kog
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.2.3
+  # 0.3.0 -- THE PLUGIN IS GONE. 0.3.0 ships no plugin at all: no plugin.* key in its schema, and no
+  # plugin, webhook-receiver or ticket template. So the CR's stored plugin.* and snowplow.* describe
+  # components that no longer exist. They are cleared by componentValuesUnset AT ROLL TIME, not here:
+  # they live ONLY on the CR (helm get values has no zendesk-kog block at all), and the patch is
+  # RFC-7386, so an omitted key is PRESERVED and only an explicit null deletes.
+  #   unset: zendesk-kog.plugin, .restDefinitions.ticket, .restDefinitions.webhook, .snowplow
+  #   KEEP:  zendesk-kog.restDefinitions.request (enabled: true -- the service desk's ONLY
+  #          definition) and zendesk-kog.zendesk.baseUrl
+  # The owner render-checked 0.3.0 against 057's live values with those four removed and `request`
+  # kept: BYTE-IDENTICAL to the render with them present. The unset changes nothing 0.3.0 renders.
+  version: 0.3.1
+  ciRepo: krateo-blueprints/krateo-zendesk-kog
   requiresApiGroups:
   - ogen.krateo.io
   deps:
@@ -10300,7 +10396,39 @@ components:
   kind: ZendeskOrganisations
   chart: zendesk-organisations
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.2.4
+  # 0.3.0 -- TOKEN ROTATION, which 057 needs because nothing rotates its Zendesk org token today.
+  # 057's first real ZendeskRequest (zendesk-krateo/zr-admin-1795190153) sat at ObserveFailed/401
+  # for 16+ hours when the token expired; 0.2.4 predates `tokenRotation` entirely.
+  #
+  # THIS PIN IS INERT UNTIL THREE THINGS OUTSIDE THE CHART ARE TRUE, and the chart enforces the
+  # third itself -- templates/organisations.yaml:59-64 calls `fail` when tokenRotation is on and
+  # zendesk.baseUrl or zendesk.oauthClientId is missing or malformed. A `fail` in the umbrella is
+  # not a broken object: it aborts the WHOLE render, so ChartRenderable goes false and every
+  # dependent component is withheld. Do not set tokenRotation without both values.
+  #   1. the token Secret re-authorized (Diego, by hand -- never a session)
+  #   2. that Secret labelled external-secrets.io/type=webhook. REQUIRED BY CONTROLLER CODE, NOT
+  #      SCHEMA: generators/v1/webhook/webhook.go:41 sets EnforceLabels=true, so the CRDs mention
+  #      the label 0 times and a CRD read cannot confirm or refute it. Missing => the ExternalSecret
+  #      errors with that exact message, loudly, not silently.
+  #   3. External Secrets Operator on the cluster. Landed with 0.3.692 via
+  #      external-secrets alsoFeatures:[serviceDesk]; 25 CRDs, controller 3/3 on 057.
+  #
+  # VALUES SET AT ROLL TIME (they live in the values file, unlike zendesk-kog's):
+  #   organisations[krateo].tokenRotation: true
+  #   zendesk.baseUrl:       https://krateo.zendesk.com   (read from 057's own CR)
+  #   zendesk.oauthClientId: krateo-cmp-e2e-public
+  # tokenRotation.* left UNSET so the chart's own defaults apply: refreshInterval 24h,
+  # accessTokenExpiresIn 172800 (Zendesk's maximum), refreshTokenExpiresIn 2592000, renewed each
+  # rotation. The chart bounds these at [300,172800] and [604800,7776000] with refresh >= access,
+  # so anything typed here could only re-derive them and get it wrong.
+  #
+  # ON THE CLIENT ID: krateo-cmp-e2e-public is Active with 3 tokens issued and is described as
+  # "end-user support requests (test only)", matching the Secret's krateo.io/credential=zendesk-end-user
+  # label. The other client, krateo_zendesk_provider_kog, is Inactive with 0 tokens and is a
+  # client-credentials grant, which mints no refresh_token -- while the Secret holds one. I raised
+  # the "test only" wording as a concern about production config; Diego chose this client
+  # explicitly on 2026-11-21.
+  version: 0.3.2
   requiresApiGroups:
   - zendesk.ogen.krateo.io
   deps:

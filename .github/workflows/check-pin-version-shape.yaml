@@ -1,0 +1,49 @@
+name: check-pin-version-shape
+
+# Every pinned component version must be a plain `N.N.N`. Diego's standing rule is "no -rc, stable
+# only", and until 2026-11-22 it was enforced only by whoever held the work remembering it.
+#
+# MEASURED, by planting `authn 0.53.0-rc1` in the pins file and running every pin gate: three
+# refused it (check-pin-ci, check-pin-crd-lockstep, check-same-version-line) and seven did not --
+# and all three fired for OTHER reasons, namely that the sibling had not moved and that the version
+# does not exist in the registry. A *published* pre-release, pinned on both members of a declared
+# line, would pass every gate in this repo.
+#
+# WHY NOW. core-provider #610 (2.13.123) routes chart versions through versionname.ForChart, which
+# makes a non-plain version resolve to a SERVED apiVersion. Today `1.0.0-RC1` yields the unserved
+# `v1-0-0-RC1` and everything derived from it 404s, which is loud and self-limiting. After .123 it
+# resolves and quietly works. The incidental protection stops being load-bearing exactly when .123
+# lands, and nothing announces that.
+#
+# The blast radius is the whole pins file, not a subset: all 93 pins declare a `kind`, so the
+# installer renders a CompositionDefinition for each and every pin's version passes through
+# ForChart. core-provider confirmed that; it is why this is one predicate with no exemptions.
+
+on:
+  pull_request:
+      # NO `branches:` filter: a branches: [main] here means the gate does not run on a STACKED
+      # pull request, which then shows "all checks passed" with every gate skipped.
+    # NO `paths:` filter: a path-filtered workflow never STARTS on a PR that misses its paths, so
+    # a required context would wait forever on "Expected".
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  pin-version-shape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      # FIRST, and as its own step: the gate must prove it refuses each shape it claims to refuse
+      # AND accepts the plain ones. A predicate that refused everything would pass a
+      # refusal-only self-test perfectly and block every pin bump in the repo.
+      - name: This gate detects each refused shape, and accepts plain versions
+        run: python3 .github/scripts/check-pin-version-shape.py --self-test
+      - name: Every pinned version is a plain N.N.N
+        run: python3 .github/scripts/check-pin-version-shape.py

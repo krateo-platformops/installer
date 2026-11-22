@@ -58,6 +58,35 @@ MERGE_TARGETS = ("origin/main", "main")
 # the entry is stale. Values that silently substitute for a guard are worse than no entry.
 RENDER_VALUES = {
     "internal-ca-bundle": {"target": {"namespaces": ["krateo-system"]}},
+    # zendesk-kog and zendesk-organisations 0.3.1, added 2026-11-21. THESE TWO ARE THE REASON THE
+    # "must not mask a regression" rule above is written as it is, because at 0.3.0 they did NOT
+    # fail -- they rendered ZERO objects and EXITED 0, which is the vacuous pass this gate exists to
+    # refuse. Measured, not inferred: `helm template` on each 0.3.0 chart printed nothing with no
+    # error. So a fixture at 0.3.0 would have been me supplying values to paper over a missing
+    # guard, and the rule would have refused the entry anyway.
+    #
+    # acmp (the chart owner) made them fail closed in krateo-zendesk-kog#21, released as 0.3.1:
+    #   zendesk-kog            restDefinitions.request enabled by default; defaults fail on the
+    #                          missing baseUrl, and `enabled: false` fails with "would install
+    #                          nothing and report success"
+    #   zendesk-organisations  an empty `organisations` fails with "organisations is empty, so
+    #                          zendesk-organisations would install nothing"
+    # Both messages say the same thing: to turn the service desk off, do not install the chart --
+    # disable its FEATURE. That is builder-gate's wording and the same hazard.
+    #
+    # The guards are template `fail`s rather than schema `required`, so a DISABLED subchart is never
+    # affected. And their CI now renders each chart without its ci/render-values.yaml and requires a
+    # failure, then with it and requires >= 1 object -- the same two-sided check this gate performs,
+    # so the two agree by construction rather than by coincidence.
+    #
+    # The organisation here is a PROBE, not 057's. 057's real entry lives on 057's CR only, because
+    # an organisation names a customer's namespace and its end user's token. See chart/values.yaml.
+    "zendesk-kog": {"zendesk": {"baseUrl": "https://krateo.zendesk.com"}},
+    "zendesk-organisations": {
+        "organisations": [
+            {"name": "probe", "namespace": "probe", "tokenSecretRef": {"name": "probe"}}
+        ]
+    },
     # krateo-keycloak-realm has ALWAYS required this -- templates/userprofile.yaml:2 fails with
     # "parentClient.redirectUris is required when parentClient.enabled". VERIFIED AGAINST THE
     # OUTGOING PIN: 0.5.1 fails identically, so this is not a 0.5.3 regression. The gate only hit it
