@@ -137,15 +137,24 @@ def measure():
             "no_node": no_node, "no_node_empty": sorted(no_node_empty)}
 
 
-# Components whose charts live in a registry CI's GITHUB_TOKEN cannot read. MEASURED, not assumed:
-# the first CI run of this gate pulled 59 of 78 and named exactly these 19 -- every one from
-# krateo-agentiko (private by design) plus two krateo-blueprints charts. My laptop pulls them with
-# a gcloud/docker login CI does not have, which made my locally generated baseline unreproducible.
+# Components the gate could not pull. MEASURED, not assumed: the first CI run pulled 59 of 78 and
+# named exactly these 19 -- every one from krateo-agentiko (private by design) plus two
+# krateo-blueprints charts.
 #
-# THEY ARE OUT OF SCOPE, AND THAT IS A REAL GAP, NOT A FIX: drift inside these 19 is unguarded by
-# this gate. Named here rather than silently absent, and the gate REFUSES to let the list grow --
-# so a component sliding out of reach is still a failure, which is the whole point of pinning the
-# checked set. Closing the gap needs credentials, which is a separate decision and not this gate's.
+# THE REASON THEY WERE DARK HAS CHANGED, AND THIS LIST IS NOW STALE BY CONSTRUCTION. The old comment
+# here said they live "in a registry CI's GITHUB_TOKEN cannot read" and that closing the gap "needs
+# credentials, which is a separate decision and not this gate's". That was WRONG: check-pin-ci and
+# check-chart-requires-floors both use secrets.PAT and read these same charts in CI today, so the
+# 19 were unguarded through an asymmetry between three gates in one repository rather than through
+# any decision. Diego chose to switch this gate to the PAT (2026-11-22).
+#
+# SO THIS LIST MUST BE RE-DERIVED FROM THE FIRST PAT-CREDENTIALED RUN, not edited by hand here.
+# Whatever that run still cannot pull is the real out-of-scope set, and it will name them exactly as
+# the original run named these -- the gate's lost-component guard reports anything that drops out.
+# Until then the list stays as-is, which is conservative in the right direction: the gate checks MORE
+# than the list claims and cannot report a false pass because of it. It can only under-claim.
+#
+# The gate still REFUSES to let the list GROW, so a component sliding out of reach is a failure.
 OUT_OF_SCOPE = {
     "agentgateway-controller", "agentgateway-policies", "agentiko", "authn-agent",
     "clickhouse-mcp-server", "clickstack-agent", "config-refs-mcp-server", "core-provider-agent",
