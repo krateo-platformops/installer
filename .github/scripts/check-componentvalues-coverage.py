@@ -109,6 +109,24 @@ def measure():
             "unpullable": unpullable, "sites": sites}
 
 
+# Components whose charts live in a registry CI's GITHUB_TOKEN cannot read. MEASURED, not assumed:
+# the first CI run of this gate pulled 59 of 78 and named exactly these 19 -- every one from
+# krateo-agentiko (private by design) plus two krateo-blueprints charts. My laptop pulls them with
+# a gcloud/docker login CI does not have, which made my locally generated baseline unreproducible.
+#
+# THEY ARE OUT OF SCOPE, AND THAT IS A REAL GAP, NOT A FIX: drift inside these 19 is unguarded by
+# this gate. Named here rather than silently absent, and the gate REFUSES to let the list grow --
+# so a component sliding out of reach is still a failure, which is the whole point of pinning the
+# checked set. Closing the gap needs credentials, which is a separate decision and not this gate's.
+OUT_OF_SCOPE = {
+    "agentgateway-controller", "agentgateway-policies", "agentiko", "authn-agent",
+    "clickhouse-mcp-server", "clickstack-agent", "config-refs-mcp-server", "core-provider-agent",
+    "frontend-agent", "incident-agent", "installer-agent", "kagent", "kagent-crds",
+    "krateo-capability-roles", "model-configs", "repo-mcp-server", "snowplow-agent",
+    "structure-graph-mcp-server", "tenant-onboarding",
+}
+
+
 def main() -> int:
     for p in (PINS, SCHEMA):
         if not p.is_file():
@@ -129,9 +147,21 @@ def main() -> int:
     base = json.loads(BASELINE.read_text(encoding="utf-8"))
     now = measure()
 
-    n_t, n_c = len(now["targets"]), len(now["checked"])
-    print("  components with a schema node and a pin: %d" % n_t)
-    print("  of those, chart pulled successfully:     %d" % n_c)
+    in_scope = [c for c in now["targets"] if c not in OUT_OF_SCOPE]
+    n_t = len(in_scope)
+    n_c = len([c for c in now["checked"] if c not in OUT_OF_SCOPE])
+    print("  components with a schema node and a pin: %d" % len(now["targets"]))
+    print("  out of scope (registry CI cannot read):  %d" % len(OUT_OF_SCOPE & set(now["targets"])))
+    print("  IN SCOPE:                                %d" % n_t)
+    print("  of those, chart pulled successfully:      %d" % n_c)
+    # A component sliding INTO the out-of-scope set unnoticed is the failure this guards.
+    newly_dark = sorted(set(now["unpullable"]) - OUT_OF_SCOPE)
+    if newly_dark:
+        print("::error::%d component(s) could not be pulled and are NOT in the declared "
+              "out-of-scope list: %s" % (len(newly_dark), ", ".join(newly_dark)))
+        print("::error::Each contributes ZERO sites while dark, so drift inside it is invisible. "
+              "Fix the pull, or add it to OUT_OF_SCOPE deliberately with the reason.")
+        return 1
     if now["unpullable"]:
         print("  could not pull (%d): %s" % (len(now["unpullable"]), ", ".join(sorted(now["unpullable"]))))
 
@@ -146,7 +176,7 @@ def main() -> int:
     bad = 0
 
     # A component the BASELINE checked that can no longer be pulled hides whatever it holds.
-    lost = sorted(set(base.get("checked") or []) - set(now["checked"]))
+    lost = sorted((set(base.get("checked") or []) - set(now["checked"])) - OUT_OF_SCOPE)
     if lost:
         print("::error::%d component(s) the baseline CHECKED can no longer be pulled: %s"
               % (len(lost), ", ".join(lost)))
@@ -160,6 +190,13 @@ def main() -> int:
     bsites = base.get("sites") or {}
     new_sites, gone_sites = {}, {}
     for comp in sorted(set(bsites) | set(now["sites"])):
+        if comp in OUT_OF_SCOPE:
+            # Out of scope by declaration. My laptop CAN pull these (a gcloud/docker login CI does
+            # not have), so measure() finds their sites while the baseline deliberately omits them
+            # -- comparing would report every one as NEW on my machine and as nothing in CI. The
+            # comparison must agree with the baseline's scope or the gate means different things in
+            # two places, which is worse than not having it.
+            continue
         if comp not in now["checked"] and comp not in now["sites"]:
             continue  # unpullable now; already reported above if the baseline had it
         was, is_ = set(bsites.get(comp) or []), set(now["sites"].get(comp) or [])
@@ -215,8 +252,9 @@ def write_baseline() -> int:
             "`checked` is load-bearing: a component whose chart cannot be pulled contributes zero",
             "sites, so without pinning the checked SET a failing pull would look like a fix.",
         ],
-        "checked": now["checked"],
-        "sites": now["sites"],
+        "checked": [c for c in now["checked"] if c not in OUT_OF_SCOPE],
+        "sites": {k: v for k, v in now["sites"].items() if k not in OUT_OF_SCOPE},
+        "out_of_scope": sorted(OUT_OF_SCOPE),
     }
     BASELINE.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print("wrote %s: %d component(s) checked, %d site(s) in %d component(s)"

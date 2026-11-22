@@ -12,57 +12,42 @@
   "checked": [
     "access-review",
     "agentgateway",
-    "agentgateway-controller",
-    "agentgateway-policies",
-    "agentiko",
     "alert-provider",
     "alerts-page",
     "audit-page",
     "authn",
-    "authn-agent",
     "authn-crd",
     "blueprints-page",
     "builder-gate",
     "builders-page",
     "cert-manager",
     "cert-manager-issuers",
-    "clickhouse-mcp-server",
     "clickhouse-operator",
-    "clickstack-agent",
     "clusters-page",
     "compositions-page",
-    "config-refs-mcp-server",
     "controller-render-service",
-    "core-provider-agent",
     "dashboard-page",
     "external-dns",
     "frontend",
-    "frontend-agent",
     "frontend-crd",
     "gcp-configconnector",
     "gcp-configconnector-crd",
     "github-provider-kog",
     "github-provider-kog-config",
     "identity-lifecycle",
-    "incident-agent",
     "incident-provider",
     "incidents-page",
-    "installer-agent",
     "internal-ca-bundle",
-    "kagent",
-    "kagent-crds",
     "keycloak",
     "keycloak-config-kog",
     "keycloak-operator",
     "krateo-audit-worm",
-    "krateo-capability-roles",
     "krateo-keycloak-realm",
     "krateo-observability",
     "krateo-slo-rollup",
     "krateo-sse-proxy",
     "kyverno",
     "marketplace-page",
-    "model-configs",
     "mongodb-operator",
     "nightly-review",
     "oasgen-provider",
@@ -73,7 +58,6 @@
     "portal",
     "portal-agents",
     "public-pages",
-    "repo-mcp-server",
     "resources-page",
     "reviews-page",
     "search-page",
@@ -82,36 +66,38 @@
     "settings-page",
     "showback",
     "snowplow",
-    "snowplow-agent",
     "snowplow-crd",
-    "structure-graph-mcp-server",
-    "tenant-onboarding",
     "zendesk-kog",
     "zendesk-organisations"
+  ],
+  "out_of_scope": [
+    "agentgateway-controller",
+    "agentgateway-policies",
+    "agentiko",
+    "authn-agent",
+    "clickhouse-mcp-server",
+    "clickstack-agent",
+    "config-refs-mcp-server",
+    "core-provider-agent",
+    "frontend-agent",
+    "incident-agent",
+    "installer-agent",
+    "kagent",
+    "kagent-crds",
+    "krateo-capability-roles",
+    "model-configs",
+    "repo-mcp-server",
+    "snowplow-agent",
+    "structure-graph-mcp-server",
+    "tenant-onboarding"
   ],
   "sites": {
     "agentgateway": [
       "<root>",
       "agentgateway"
     ],
-    "agentgateway-controller": [
-      "agentgateway"
-    ],
-    "agentgateway-policies": [
-      "kagent",
-      "llm",
-      "mcpEntry"
-    ],
-    "agentiko": [
-      "<root>",
-      "mcpServers/kubernetes"
-    ],
     "alert-provider": [
       "config"
-    ],
-    "authn-agent": [
-      "<root>",
-      "vertexAI"
     ],
     "cert-manager": [
       "cert-manager"
@@ -119,26 +105,12 @@
     "cert-manager-issuers": [
       "internalCA"
     ],
-    "clickhouse-mcp-server": [
-      "<root>",
-      "image"
-    ],
     "clickhouse-operator": [
       "operator",
       "operator/webhook"
     ],
-    "clickstack-agent": [
-      "<root>",
-      "vertexAI"
-    ],
     "controller-render-service": [
       "<root>"
-    ],
-    "core-provider-agent": [
-      "<root>",
-      "mcpServers/chartGate",
-      "repoSearch",
-      "vertexAI"
     ],
     "dashboard-page": [
       "<root>"
@@ -146,28 +118,8 @@
     "frontend": [
       "previewSandbox"
     ],
-    "frontend-agent": [
-      "<root>",
-      "vertexAI"
-    ],
     "github-provider-kog": [
       "<root>"
-    ],
-    "incident-agent": [
-      "<root>",
-      "tools",
-      "vertexAI"
-    ],
-    "installer-agent": [
-      "<root>"
-    ],
-    "kagent": [
-      "kagentapp",
-      "kagentapp/controller",
-      "kagentapp/kagent-tools",
-      "kagentapp/providers",
-      "kagentapp/ui",
-      "perUserRbac"
     ],
     "keycloak": [
       "<root>",
@@ -184,10 +136,6 @@
     ],
     "krateo-audit-worm": [
       "<root>"
-    ],
-    "krateo-capability-roles": [
-      "<root>",
-      "tenantReader"
     ],
     "krateo-keycloak-realm": [
       "<root>"
@@ -217,10 +165,6 @@
     ],
     "krateo-sse-proxy": [
       "<root>"
-    ],
-    "model-configs": [
-      "<root>",
-      "models/flashLow"
     ],
     "mongodb-operator": [
       "operator/operator"
@@ -269,9 +213,6 @@
     "portal-agents": [
       "<root>"
     ],
-    "repo-mcp-server": [
-      "<root>"
-    ],
     "showback": [
       "<root>",
       "clickhouse"
@@ -280,10 +221,6 @@
       "<root>",
       "env",
       "serviceAccount"
-    ],
-    "snowplow-agent": [
-      "<root>",
-      "vertexAI"
     ]
   }
 }
