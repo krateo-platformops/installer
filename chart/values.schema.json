@@ -663,11 +663,9 @@
               "description": "Cert-replay hop (issue #12): a per-user-RBAC hop so kagent tool calls run under the CALLING USER's RBAC (kagent-tools with tokenPassthrough, mounting the hop's kubeconfig). This is the policies chart's ONLY Layer 5 mechanism (the earlier SAR-on-claims decider, nativeRbac, was removed) and is default-on. The installer auto-wires image.pullSecrets from registryAuth for the private cert-replay-hop image (a third private-krateo-agentiko-image component, alongside repo-mcp-server and chart-gate); the rest are the policies chart's own knobs.",
               "properties": {
                 "affinity": {
-                  "default": {},
                   "type": "object"
                 },
                 "apiserverURLOverride": {
-                  "default": "",
                   "type": "string"
                 },
                 "audience": {
@@ -675,7 +673,6 @@
                   "type": "string"
                 },
                 "clientconfigNamespace": {
-                  "default": "",
                   "type": "string"
                 },
                 "enabled": {
@@ -683,7 +680,6 @@
                   "type": "boolean"
                 },
                 "env": {
-                  "default": [],
                   "type": "array"
                 },
                 "image": {
@@ -721,11 +717,9 @@
                   "type": "string"
                 },
                 "jwksURL": {
-                  "default": "",
                   "type": "string"
                 },
                 "nodeSelector": {
-                  "default": {},
                   "type": "object"
                 },
                 "replicas": {
@@ -733,14 +727,10 @@
                   "type": "integer"
                 },
                 "resources": {
-                  "default": {},
                   "type": "object"
                 },
                 "service": {
                   "additionalProperties": false,
-                  "default": {
-                    "port": 8443
-                  },
                   "properties": {
                     "port": {
                       "maximum": 65535,
@@ -755,7 +745,6 @@
                   "type": "string"
                 },
                 "tolerations": {
-                  "default": [],
                   "type": "array"
                 }
               },
@@ -766,35 +755,22 @@
               "description": "CORS for the gateway. Only needed when a BROWSER calls it directly (the Krateo portal's Autopilot rail does): the browser sends an unauthenticated OPTIONS preflight first, which the authorization policy would 403, and refuses the real request unless the answer carries Access-Control-Allow-*. Short-circuits the preflight ONLY — a real request with no/bad token is still 403/401. Server-to-server callers are unaffected. The Krateo installer enables it with features.agentGateway.",
               "properties": {
                 "allowCredentials": {
-                  "default": false,
                   "description": "Leave false: no cookies are involved, and true alongside allowOrigins ['*'] is rejected by browsers.",
                   "type": "boolean"
                 },
                 "allowHeaders": {
-                  "default": [
-                    "Authorization",
-                    "Content-Type"
-                  ],
                   "items": {
                     "type": "string"
                   },
                   "type": "array"
                 },
                 "allowMethods": {
-                  "default": [
-                    "GET",
-                    "POST",
-                    "OPTIONS"
-                  ],
                   "items": {
                     "type": "string"
                   },
                   "type": "array"
                 },
                 "allowOrigins": {
-                  "default": [
-                    "*"
-                  ],
                   "description": "Origins allowed to call the gateway from a browser. Defaults to '*' because the portal's browser-facing origin is not knowable in-cluster; pin it to the real portal origin when you know it. Safe by default only while allowCredentials is false — the credential is a Bearer header the page must set itself, not a cookie.",
                   "items": {
                     "type": "string"
@@ -802,11 +778,9 @@
                   "type": "array"
                 },
                 "enabled": {
-                  "default": false,
                   "type": "boolean"
                 },
                 "maxAge": {
-                  "default": 300,
                   "description": "Seconds a browser may cache the preflight answer.",
                   "type": "integer"
                 }
