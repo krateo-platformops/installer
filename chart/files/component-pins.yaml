@@ -104,7 +104,7 @@ components:
   # 0.28.1: co-versioned with oasgen-provider. Same k8s >= 1.36 floor; carries no part of the
   # regression fix, which is provider-side only.
   # 0.64.0: moves with the oasgen line (one tag publishes all three charts).
-  version: 0.80.0
+  version: 0.90.0
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -391,7 +391,7 @@ components:
   # this carries no schema change on top of 1.8.54's Dropdown CRD.
   #
   # Credential-scan delta for the sandbox capture: NOTHING the scan would flag.
-  version: 1.8.61
+  version: 1.8.68
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -564,7 +564,7 @@ components:
   #   differing has no valid reading -- which is why the pairing is now a DECLARED version line in
   #   .github/pin-version-lines.yaml rather than a convention. Minimum for 1.12.71: CRD content
   #   >= 1.12.65; pin 1.12.71/1.12.71 together.
-  version: 1.12.74
+  version: 1.12.76
   tier: platform
   feature: portal
 # 0.35.4 (2026-11-05, authn main 75aedb1): owner re-diffed both charts against 0.34.0 and
@@ -1933,7 +1933,7 @@ components:
   # Also needs frontend >= 1.8.37 for the fix to be complete; this repo pins the frontend line at
   # 1.8.44, so that half is already satisfied -- asserted here so the next reader does not have to
   # re-derive it.
-  version: 1.12.74
+  version: 1.12.76
   deps:
   - snowplow-crd
   - authn
@@ -3065,7 +3065,7 @@ components:
   # frontend-crds >= 1.8.54 is on installer MAIN, so the portal change that uses Dropdown is blocked
   # on this merge -- not on the tag and not on a roll. Merging unblocks them; the tag waits.
   # Moves with the frontend line (one tag publishes all three). See frontend-crd above.
-  version: 1.8.61
+  version: 1.8.68
   deps:
   - frontend-crd
   - authn
@@ -4528,7 +4528,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - frontend
   - git-provider
@@ -4645,7 +4645,7 @@ components:
   # 1.8.73; diff -r reports only Chart.yaml.
   # 1.8.117: CONTENT CHANGE -- 2 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.154
+  version: 1.8.163
   deps: ['portal']
   tier: platform
   feature: portal
@@ -4685,7 +4685,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -4756,7 +4756,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -4767,7 +4767,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -4896,7 +4896,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -4941,7 +4941,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -5079,7 +5079,7 @@ components:
   kind: CompositionsPage
   # 1.8.117: CONTENT CHANGE -- 5 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -5091,7 +5091,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -5103,7 +5103,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -5115,7 +5115,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -5127,7 +5127,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -5139,7 +5139,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -5151,7 +5151,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -5161,7 +5161,7 @@ components:
   kind: SettingsPage
   # 1.8.117: CONTENT CHANGE -- 6 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -5171,7 +5171,7 @@ components:
   kind: ObservabilityPage
   # 1.8.117: CONTENT CHANGE -- 9 template file(s) differ from 1.8.116 (verified by
   #   sha256 per file, not by diff -rq).
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -5190,7 +5190,7 @@ components:
   #   Chart.yaml (version, appVersion, OCI annotations). The portal repo's release-oci
   #   publishes every first-class chart on every tag, so this chart's version carries no
   #   content signal; moved only to keep the page line uniform.
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -5236,7 +5236,7 @@ components:
   # The form collects firstName, lastName, email, company, country, phone and useCase from
   # visitors who are not signed in.
   kind: PublicPages
-  version: 1.8.154
+  version: 1.8.163
   deps:
   - portal
   tier: platform
@@ -5319,7 +5319,7 @@ components:
   #   not render (oasgen#628). Declared in componentValues in THIS SAME CHANGE: the node is closed,
   #   so a split would prune maxBodyMiB silently while kubectl printed "patched".
   #   The bounds are mirrored; the chart's `default: 4` deliberately is NOT.
-  version: 0.80.0
+  version: 0.90.0
   tier: platform
   feature: portal
   chart: controller-render-service
@@ -5534,7 +5534,7 @@ components:
   #   genuinely create-less and would then report it, correctly.
   #   github-provider-kog verified its 32+32 CRDs render byte-identically to 0.63.1's, same 5
   #   warnings, 0 whole-object differences, with a maxLength positive control present in both.
-  version: 0.80.0
+  version: 0.90.0
   # 0.43.0, NOT the 0.42.0 this PR first proposed. The two extra releases are correctness fixes a
   # consumer feels, both reported by the openstack-nova-operator-kog session and CLOSED upstream:
   #   #322 a populated spec object compared EQUAL to an EMPTY remote object, so
@@ -6184,7 +6184,7 @@ components:
   #
   # CONTROLS: 0.1.1 resolves; 0.1.0 resolves; 9.9.9 does not.
   kind: OtelCollectorTailsampling
-  version: 0.1.17
+  version: 0.1.18
   deps:
     - otel-collector-deployment
   tier: observability
@@ -6368,7 +6368,7 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.35
+  version: 0.1.36
   deps:
   - otel-collector-deployment
   tier: observability
@@ -7294,7 +7294,7 @@ components:
   # publishes all three charts, and check-same-version-line REFUSES a pin set where they disagree.
   # The recorded reason is that an app pinned past its -crd pin prunes fields silently.
   # Moves with the frontend line (one tag publishes all three). See frontend-crd above.
-  version: 1.8.61
+  version: 1.8.68
   deps:
     - portal
     - kagent

@@ -48,6 +48,16 @@ UPSTREAM_PATHS = {
     "compositionDefinition": "docs/cd-ready-reasons.md",
 }
 
+# `foreignWriters` has NO core-provider table and never will: it holds reasons written by OTHER
+# controllers on objects core-provider does not touch. Diego's decision, 2026-11-22, after this gate
+# correctly refused a rest-dynamic-controller reason that had been filed in the compositionDefinition
+# mirror -- core-provider's docs do not list it, so the equality check called the mirror stale.
+#
+# IT IS STILL CHECKED, just not against upstream. check_foreign_writers() below asserts what CAN be
+# asserted about it, because a namespace the gate merely TOLERATES reads exactly like a checked one,
+# which is the failure this gate's own refusal message names.
+NO_UPSTREAM_NAMESPACES = {"foreignWriters"}
+
 # core-provider's `parent verdict` -> the class this repo files the reason under.
 # The two "unevaluated" rows are a DELIBERATE difference, documented in the vendored file: their
 # rollup counts such a child healthy for a PARENT, while this repo's tooling counts the composition
@@ -236,7 +246,7 @@ def namespace_problems(doc_namespaces, known_namespaces):
     the exact shape every other refusal in this file exists to prevent.
     """
     out = []
-    missing = set(doc_namespaces) - set(known_namespaces)
+    missing = set(doc_namespaces) - set(known_namespaces) - NO_UPSTREAM_NAMESPACES
     if missing:
         out.append("%s declares namespace(s) %s that this gate does not know how to check. Add "
                    "them to UPSTREAM_PATHS -- an unchecked namespace reads exactly like a checked "

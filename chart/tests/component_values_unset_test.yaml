@@ -1,0 +1,121 @@
+# componentValuesUnset must put an EXPLICIT NULL in the CR merge patch -- not drop the key, and
+# never forward a null to helm as a value.
+#
+# WHY THIS SUITE EXISTS, and it is not a style preference. components-patch.json is applied as an
+# RFC 7386 merge patch: an OMITTED key is PRESERVED and only an explicit null DELETES. So the
+# distinction between "the key is absent from the patch" and "the key is present with value null"
+# is the entire difference between a no-op and a removal, and both render as valid JSON that a
+# human reading the diff cannot tell apart.
+#
+# THE MEASURED CASE THIS GUARDS. agentgateway-policies 0.2.39 moves its own retry default to
+# {attempts: 0, backoff: 15s, codes: [429, 502, 503, 504]}, which only takes effect if 057's CR
+# stops carrying the older {attempts: 3, backoff: "15s", codes: [429, 503]}. Without a working
+# unset the pin is a NO-OP for retry behaviour while every signal reports success.
+#
+# AND THE NEGATIVE CONTROL IS NOT HYPOTHETICAL -- agentiko-mcp-server rendered it: a values file
+# carrying `llm: {retry: null}` fails the policies chart outright,
+#     policy-resiliency.yaml:21:22 ... <.Values.llm.retry.attempts>: nil pointer, exit 1
+# because a null in HELM VALUES deletes the chart's own default too. So if this mechanism ever
+# forwarded the null as a value instead of writing it into the patch, the umbrella render would
+# ABORT. That is a loud failure rather than a silent one, which is the only reason it has not
+# bitten -- but it is also why the two paths must stay distinguishable in a test.
+#
+# CASE 3 IS THE ONE THAT EARNS THE FILE. Cases 1 and 2 would both pass against an implementation
+# that simply OMITTED the key from the patch, which is the bug: omission preserves the live value.
+# Case 3 asserts the literal `null` is there.
+suite: componentValuesUnset writes an explicit null into the CR merge patch
+templates:
+  - templates/self-bootstrap.yaml
+tests:
+  - it: "CASE 1 -- with the unset list EMPTIED, the componentValue survives into the patch"
+    set:
+      bootstrap.coreProvider.enabled: true
+      # values.yaml ALREADY carries `componentValuesUnset: [agentgateway-policies.llm.retry]`
+      # (added with the agp 0.2.39 pin), so this case must EMPTY the list rather than omit it.
+      # Learned by writing the case the obvious way and watching it fail: `set:` cannot remove a
+      # values.yaml entry, and without this line the case was asserting the opposite of its name.
+      componentValuesUnset: []
+      componentValues:
+        agentgateway-policies:
+          llm:
+            retry:
+              attempts: 3
+    asserts:
+      - matchRegex:
+          path: data["components-patch.json"]
+          pattern: '"attempts":3'
+        documentSelector:
+          path: metadata.name
+          value: installer-self-cr
+
+  - it: "CASE 2 -- with the unset, the old VALUE is gone from the patch"
+    set:
+      bootstrap.coreProvider.enabled: true
+      componentValuesUnset:
+        - agentgateway-policies.llm.retry
+      componentValues:
+        agentgateway-policies:
+          llm:
+            retry:
+              attempts: 3
+    asserts:
+      - notMatchRegex:
+          path: data["components-patch.json"]
+          pattern: '"attempts":3'
+        documentSelector:
+          path: metadata.name
+          value: installer-self-cr
+
+  - it: "CASE 3 -- THE POINT: the patch carries an explicit `retry: null`, not an absent key"
+    set:
+      bootstrap.coreProvider.enabled: true
+      componentValuesUnset:
+        - agentgateway-policies.llm.retry
+      componentValues:
+        agentgateway-policies:
+          llm:
+            retry:
+              attempts: 3
+    asserts:
+      # An OMITTED key would be PRESERVED by RFC 7386 and the live value would survive. Only this
+      # literal null deletes it.
+      - matchRegex:
+          path: data["components-patch.json"]
+          pattern: '"retry":null'
+        documentSelector:
+          path: metadata.name
+          value: installer-self-cr
+
+  - it: "CASE 4 CONTROL -- an unset does not disturb a SIBLING key under the same parent"
+    set:
+      bootstrap.coreProvider.enabled: true
+      componentValuesUnset:
+        - agentgateway-policies.llm.retry
+      componentValues:
+        agentgateway-policies:
+          llm:
+            provider: vertexai
+            retry:
+              attempts: 3
+    asserts:
+      - matchRegex:
+          path: data["components-patch.json"]
+          pattern: '"provider":"vertexai"'
+        documentSelector:
+          path: metadata.name
+          value: installer-self-cr
+
+  - it: "CASE 5 CONTROL -- an unset whose PARENT is absent is a no-op, not an error"
+    set:
+      bootstrap.coreProvider.enabled: true
+      componentValuesUnset:
+        - agentgateway-policies.llm.retry
+    asserts:
+      # Re-running an unset after it has taken effect must stay safe, or the values file becomes
+      # un-rerunnable. The render must succeed and must NOT invent the parent.
+      - notMatchRegex:
+          path: data["components-patch.json"]
+          pattern: '"attempts"'
+        documentSelector:
+          path: metadata.name
+          value: installer-self-cr

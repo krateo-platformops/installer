@@ -119,7 +119,24 @@ CD_FAILED_REASONS = ("Unavailable", "RemoteChartUnreachable", "SchemaDefaultCont
                      # core-provider#598, same reasoning as FAILED_REASONS above. A CD left
                      # here had its create withheld, so the definition exists and the chart
                      # was never applied.
-                     "CreateWithheldByPolicy")
+                     "CreateWithheldByPolicy",
+                     # oasgen-provider >= 0.85.0. MEASURED: 26 occurrences at 0.88.0 against 0 at
+                     # 0.84.0, with NoCreateVerbDeclared 20 -> 24 as the positive control in the
+                     # same probe. It reports that rest-dynamic-controller has SPENT its retry
+                     # budget for an object and dropped it: --max-error-retries defaults to 5,
+                     # Forget() runs on SUCCESS ONLY, so the count never resets and the budget is
+                     # spent once per OBJECT LIFETIME. Every later resync is dropped at DEBUG with
+                     # no condition, which is why the reason had to be added upstream at all --
+                     # before it, a stopped-retrying object and a still-retrying one were
+                     # indistinguishable from `kubectl get`.
+                     #
+                     # WHY IT GOES IN BEFORE THE 0.88.0 PIN AND NOT AFTER: without it, a resource
+                     # finally reporting that it stopped retrying is classified as UNRECOGNISED
+                     # condition rather than a failure. A new signal arriving and being silently
+                     # dropped by the instrument watching for it is strictly worse than not having
+                     # the signal, because the roll would read as clean. Found because
+                     # aruba-provider-kog asked an unrelated question about a pin I do not carry.
+                     "CreateRefusedPersistently")
 
 # compositionDefinition.converging, mirrored for the same dependency-free reason.
 CD_CONVERGING_REASONS = ("Creating", "Deleting")
@@ -1263,6 +1280,46 @@ def _self_test():
          "diff emits unconditionally",
          post(), None),
     ]
+    # cdr_unit, 2026-11-22. THE CONSTANT ALONE IS NOT GUARDED BY ANYTHING ABOVE. Adding
+    # "CreateRefusedPersistently" to CD_FAILED_REASONS changes how a CD's condition is CLASSIFIED,
+    # and no case in `cases`, cov_unit, ne_unit, cf_unit or cv_unit reads that classification --
+    # so deleting the reason again would leave all 65 of them green while a real failure silently
+    # became "unclassified". Same shape as the compositionVersion mistake cv_unit exists for.
+    #
+    # These assert the OBSERVABLE: which bucket the reason lands in, via the problem text. A reason
+    # in CD_FAILED_REASONS produces "COMPOSITIONDEFINITIONS FAILED"; an unknown one produces the
+    # unclassified bucket instead. The last case is the falsifier -- an invented reason MUST NOT be
+    # classified as failed, or the check would pass for any string at all.
+    def _cd_snap(reason):
+        return {"compositions": {}, "definitions": {"krateo-system/x": {
+            "Ready": "False/%s" % reason, "readyAt": "2026-11-22T10:00:00Z"}},
+            "releases": {}, "secrets": {}}
+
+    def _cd_problem_kind(reason):
+        probs = " ".join(diff(_cd_snap(reason), _cd_snap(reason)).get("problems", []))
+        if "COMPOSITIONDEFINITIONS FAILED" in probs:
+            return "failed"
+        if "COMPOSITIONDEFINITIONS" in probs and "classif" in probs.lower():
+            return "unclassified"
+        return "other:%s" % (probs[:40] or "<none>")
+
+    cdr_unit = [
+        ("CreateRefusedPersistently is classified FAILED (oasgen >= 0.85.0; 26 at 0.88.0 vs 0 at 0.84.0)",
+         "CreateRefusedPersistently", "failed"),
+        ("CONTROL: a pre-existing reason is still classified failed",
+         "CreateWithheldByPolicy", "failed"),
+        ("FALSIFIER: an INVENTED reason must NOT be classified failed",
+         "NotARealReasonAtAll", "unclassified"),
+    ]
+    bad_cdr = 0
+    for label, reason, want in cdr_unit:
+        got = _cd_problem_kind(reason)
+        ok = got == want
+        bad_cdr += 0 if ok else 1
+        print("  %-4s cd-reason: %s" % ("ok" if ok else "FAIL", label))
+        if not ok:
+            print("        want=%r got=%r" % (want, got))
+
     bad_cv = 0
     for label, _po, want_row in cv_unit:
         got_row = diff(PRE, _po)["compositions"]["changed"].get(_CVK)
@@ -1307,11 +1364,11 @@ def _self_test():
         if not ok:
             print("        want_problems=%s got=%s" % (want, d["problems"]))
     print("self-test: %d case(s), %d failure(s)"
-          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit),
-             bad + bad_unit + bad_ne + bad_cf + bad_cv))
+          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit) + len(cdr_unit),
+             bad + bad_unit + bad_ne + bad_cf + bad_cv + bad_cdr))
     # bad_cf and bad_cv were BOTH missing from this return. A failing carry-forward or
     # composition-version unit printed FAIL and still exited 0, so CI would have passed it.
-    return 1 if (bad or bad_unit or bad_ne or bad_cf or bad_cv) else 0
+    return 1 if (bad or bad_unit or bad_ne or bad_cf or bad_cv or bad_cdr) else 0
 
 
 def main():

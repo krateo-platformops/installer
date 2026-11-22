@@ -1179,6 +1179,15 @@
                   "maximum": 65535,
                   "minimum": 1,
                   "type": "integer"
+                },
+                "externalTrafficPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "",
+                    "Cluster",
+                    "Local"
+                  ],
+                  "description": "Service.spec.externalTrafficPolicy for the gateway's LoadBalancer. REQUIRED TO BE `Local` for any platformRoutes[].rateLimits entry that uses perClientIP: Cluster-mode SNAT replaces the client IP with a node IP, so a per-IP limit would bucket the whole cluster together. agp's chart REFUSES the combination outright, so a mismatch fails the render loudly rather than silently mis-limiting -- which is why this is documented here and not enforced by a schema conditional (that would add a second CEL rule binding at admission on the Installer CRD, for something the chart already catches). Mirrored from agp's own values.schema.json; its `default: \"\"` is deliberately not mirrored."
                 }
               },
               "type": "object"
@@ -5408,6 +5417,91 @@
                   "rewrite": {
                     "description": "Whether the gateway strips pathPrefix before forwarding to the backend.",
                     "type": "boolean"
+                  },
+                  "rateLimits": {
+                    "type": "array",
+                    "description": "Rate limits applied to sub-paths of this route. NOTE ON HOW TO SET THESE: platformRoutes is COMPUTED by the installer and filled only if absent, so a componentValues override replaces the WHOLE route table rather than one entry -- an operator wanting one route's limits would have to copy every other route, and they would then stop tracking the computation. The intended route is for the installer's own computed table to emit rateLimits on the entry that needs them. This node exists because agp's chart validates what the installer injects, so the shape must be declarable either way.",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "name",
+                        "pathPrefix"
+                      ],
+                      "description": "One rate limit. agp's chart requires at least one of perClientIP or total, and requires pathPrefix to sit under the parent route's pathPrefix plus \"/\". Neither is enforced here: both are cross-field rules the chart already refuses loudly, and expressing them would add CEL rules that bind at ADMISSION on the Installer CRD.",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+                          "description": "RFC-1123 name for the generated limit object"
+                        },
+                        "pathPrefix": {
+                          "type": "string",
+                          "pattern": "^/",
+                          "description": "Sub-path the limit applies to; must sit under the parent route's pathPrefix plus \"/\""
+                        },
+                        "perClientIP": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "requests",
+                            "unit"
+                          ],
+                          "properties": {
+                            "requests": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "description": "Requests permitted per `unit`"
+                            },
+                            "unit": {
+                              "type": "string",
+                              "enum": [
+                                "Seconds",
+                                "Minutes",
+                                "Hours"
+                              ],
+                              "description": "Window the request count applies to"
+                            },
+                            "burst": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "description": "Optional burst allowance above the steady rate"
+                            }
+                          },
+                          "description": "Limit per client IP. REQUIRES gateway.externalTrafficPolicy: Local -- agp's chart refuses it otherwise, because Cluster-mode SNAT would bucket every client together behind a node IP."
+                        },
+                        "total": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "requests",
+                            "unit"
+                          ],
+                          "properties": {
+                            "requests": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "description": "Requests permitted per `unit`"
+                            },
+                            "unit": {
+                              "type": "string",
+                              "enum": [
+                                "Seconds",
+                                "Minutes",
+                                "Hours"
+                              ],
+                              "description": "Window the request count applies to"
+                            },
+                            "burst": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "description": "Optional burst allowance above the steady rate"
+                            }
+                          },
+                          "description": "Limit across all clients for this sub-path."
+                        }
+                      }
+                    }
                   }
                 },
                 "type": "object"
@@ -11090,7 +11184,7 @@
                   "type": "array"
                 },
                 "secretRefs": {
-                  "description": "Specific Secrets the identity-lifecycle controller may read, one Role per namespace with get and resourceNames. Prefer this over secretNamespaces, which grants get on EVERY Secret in a namespace -- krateo-system holds 183. Mirrors identity-lifecycle's own schema.",
+                  "description": "Specific Secrets the identity-lifecycle controller may read, one Role per namespace with get and resourceNames. Prefer this over secretNamespaces, which grants get on EVERY Secret in a namespace -- krateo-system holds 183. Mirrors identity-lifecycle's own schema. `uniqueItems` was declared here and REMOVED: crdgen emits nothing for a non-scalar uniqueItems with no maxItems (transpile.go:815-831), so the uniqueness was enforced nowhere while the schema claimed it. Enforcing it needs maxItems, which makes it a CEL rule binding at ADMISSION -- that is its own change, with a live-CR check first.",
                   "items": {
                     "additionalProperties": false,
                     "properties": {
@@ -11112,8 +11206,7 @@
                     "type": "object"
                   },
                   "title": "Identity-provider Secret references",
-                  "type": "array",
-                  "uniqueItems": true
+                  "type": "array"
                 }
               },
               "type": "object"
@@ -13263,22 +13356,287 @@
           "type": "object"
         },
         "krateo-capability-roles": {
+          "type": "object",
           "additionalProperties": false,
-          "description": "Values for krateo-capability-roles. Deliberately MINIMAL: only the one key a cluster must be able to change is exposed. Every other chart value (capabilities, capabilityRoles.namePrefix, aggregationRoles, composer, and the rest of tenantReader) stays at the chart default, which is what krateo-demo runs today — helm get values returns null there. NOTE: these nodes are additionalProperties:false, so a key that is not declared here is silently PRUNED on its way to the composition; widen the schema in a tag BEFORE anything sets a new key.",
           "properties": {
-            "tenantReader": {
+            "aggregationRoles": {
               "additionalProperties": false,
-              "description": "The tenant-reader Kyverno policies. Set enabled=false on any cluster without Kyverno; the chart default is true and requires policies.kyverno.io/v1.",
+              "description": "Predefined aggregating ClusterRoles (aggregationRule mechanism). Role names/titles are overridable reference examples.",
               "properties": {
                 "enabled": {
-                  "description": "Render the tenant-reader ValidatingPolicy and GeneratingPolicy. NO schema default on purpose: a default here would propagate into the composition CR. The chart's own default (true) applies when this is unset.",
+                  "description": "Render the predefined aggregating ClusterRoles",
+                  "title": "enabled",
                   "type": "boolean"
+                },
+                "namePrefix": {
+                  "description": "Prefix for aggregating ClusterRole names",
+                  "title": "namePrefix",
+                  "type": "string"
+                },
+                "roles": {
+                  "description": "Aggregating roles to render. Capabilities join a role via the rbac.krateo.io/aggregate-to-<name> label.",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "description": "Role name suffix (RFC-1123)",
+                        "type": "string"
+                      },
+                      "title": {
+                        "description": "Human-readable role title",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "title": "roles",
+                  "type": "array"
                 }
               },
+              "title": "aggregationRoles",
+              "type": "object"
+            },
+            "capabilities": {
+              "description": "Capability entries to render as annotated, aggregation-labeled ClusterRoles. Empty by default - service charts provide their own entries.",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "aggregateTo": {
+                    "description": "Predefined roles this capability auto-joins (rendered as rbac.krateo.io/aggregate-to-<role> labels)",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "enforcement": {
+                    "description": "Enforcement layer tag for this capability",
+                    "enum": [
+                      "rbac",
+                      "abac",
+                      "acr",
+                      "cross-org"
+                    ],
+                    "type": "string"
+                  },
+                  "id": {
+                    "description": "RFC-1123 capability id, becomes the ClusterRole name suffix",
+                    "type": "string"
+                  },
+                  "requiresAcr": {
+                    "description": "Optional ACR/LoA value required for step-up guarded actions",
+                    "type": "string"
+                  },
+                  "rules": {
+                    "description": "Native RBAC PolicyRules for this capability",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "verbs"
+                      ],
+                      "description": "One rbac.authorization.k8s.io/v1 PolicyRule. The chart toYaml's these into a ClusterRole's `rules:`, so the apiserver validates them; this node is deliberately stricter than the chart's own open item, which lets a misspelled `verb:` or `resource:` fail at the CR rather than render a ClusterRole that grants nothing. All five PolicyRule fields are declared.",
+                      "properties": {
+                        "apiGroups": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "API groups the rule applies to; \"\" is the core group"
+                        },
+                        "resources": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Resources the rule applies to"
+                        },
+                        "resourceNames": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Optional: restrict the rule to these object names"
+                        },
+                        "verbs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "minItems": 1,
+                          "description": "Verbs allowed; required and non-empty, since a rule with no verb grants nothing"
+                        },
+                        "nonResourceURLs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Non-resource URL paths; only valid in a ClusterRole, and refused by the chart's own tenant-reader guard policy"
+                        }
+                      }
+                    },
+                    "type": "array"
+                  },
+                  "title": {
+                    "description": "Human-readable label shown in the composer",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "type": "object"
+              },
+              "title": "capabilities",
+              "type": "array"
+            },
+            "capabilityRoles": {
+              "additionalProperties": false,
+              "description": "Naming and labeling knobs for the rendered capability ClusterRoles",
+              "properties": {
+                "namePrefix": {
+                  "description": "Prefix for capability ClusterRole names",
+                  "title": "namePrefix",
+                  "type": "string"
+                }
+              },
+              "title": "capabilityRoles",
+              "type": "object"
+            },
+            "composer": {
+              "additionalProperties": false,
+              "description": "snowplow capability catalog + role composer widgets",
+              "properties": {
+                "enabled": {
+                  "description": "Render the snowplow RESTAction/Table/Form widgets",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "page": {
+                  "additionalProperties": false,
+                  "description": "Admin page for the composer, listed in the sidebar (portal sidebar-nav annotations). Visible only to identities that can read Flexes in the release namespace.",
+                  "properties": {
+                    "enabled": {
+                      "description": "Render the admin page (PageHeader + Flex) for the composer widgets",
+                      "title": "enabled",
+                      "type": "boolean"
+                    },
+                    "navGroup": {
+                      "description": "Sidebar group (krateo.io/nav-group)",
+                      "title": "navGroup",
+                      "type": "string"
+                    },
+                    "navIcon": {
+                      "description": "Font Awesome icon (krateo.io/nav-icon)",
+                      "title": "navIcon",
+                      "type": "string"
+                    },
+                    "navLabel": {
+                      "description": "Sidebar label and page title (krateo.io/nav-label)",
+                      "title": "navLabel",
+                      "type": "string"
+                    },
+                    "navOrder": {
+                      "description": "Sidebar order (krateo.io/nav-order); Administration holds Settings at 31 and Clusters at 32",
+                      "title": "navOrder",
+                      "type": "integer"
+                    },
+                    "navPath": {
+                      "description": "Portal route of the page (krateo.io/nav-path)",
+                      "title": "navPath",
+                      "type": "string"
+                    }
+                  },
+                  "title": "page",
+                  "type": "object"
+                }
+              },
+              "title": "composer",
+              "type": "object"
+            },
+            "tenantAdmin": {
+              "additionalProperties": false,
+              "description": "The tenant's role in their own namespace. Renders three Kyverno policies (policies.kyverno.io/v1). A GeneratingPolicy binds each tenant user, in their own namespace, to <aggregationRoles.namePrefix><defaultRole>, or to the role an admin lists for them in the ConfigMap <rolesConfigMap.namespace>/<rolesConfigMap.name> (data `<user>: <role>`). A ValidatingPolicy keeps that ConfigMap's entries to the catalog's roles, and a MutatingPolicy re-evaluates every tenant namespace when it changes. Kyverno's background controller needs `bind` on each role it may bind (policies/kyverno/kyverno-values.yaml).",
+              "properties": {
+                "enabled": {
+                  "description": "Render the tenant role binding, its ConfigMap guard and its resync policy",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "defaultRole": {
+                  "description": "Role a tenant user gets in their own namespace when the ConfigMap lists no other. One of aggregationRoles.roles[].name.",
+                  "title": "defaultRole",
+                  "type": "string"
+                },
+                "bindingNamePrefix": {
+                  "description": "Prefix of the RoleBinding generated in each tenant namespace; the role name follows it (krateo-tenant-admin, krateo-tenant-auditor, ...). One name per role, because a RoleBinding's roleRef cannot change.",
+                  "title": "bindingNamePrefix",
+                  "type": "string"
+                },
+                "rolesConfigMap": {
+                  "additionalProperties": false,
+                  "description": "The ConfigMap where an admin lists another role for a tenant user (data `<user>: <role>`). Tenants cannot write it.",
+                  "title": "rolesConfigMap",
+                  "type": "object",
+                  "properties": {
+                    "namespace": {
+                      "description": "Namespace of the roles ConfigMap",
+                      "title": "namespace",
+                      "type": "string"
+                    },
+                    "name": {
+                      "description": "Name of the roles ConfigMap",
+                      "title": "name",
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "title": "tenantAdmin",
+              "type": "object"
+            },
+            "tenantReader": {
+              "additionalProperties": false,
+              "description": "Tenant read access to the resources a tenant's compositions manage. Renders the aggregating ClusterRole <aggregationRoles.namePrefix><roleName>, a Kyverno GeneratingPolicy that binds it with a namespaced RoleBinding in every tenant namespace, and a Kyverno ValidatingPolicy that keeps it read-only and Secret-free (policies.kyverno.io/v1). Requires Kyverno 3.9.2 (v1.19) installed with policies/kyverno/kyverno-values.yaml (the controller permissions these policies need).",
+              "properties": {
+                "bindingName": {
+                  "description": "Name of the RoleBinding generated in each tenant namespace. Changing it on a live install is not covered by the tests; reinstall the chart instead, which only recreates these RoleBindings.",
+                  "title": "bindingName",
+                  "type": "string"
+                },
+                "enabled": {
+                  "description": "Render the tenant reader role, its binding policy and its guard policy",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "policyNamePrefix": {
+                  "description": "Prefix of the two Kyverno ClusterPolicies (<prefix>binding and <prefix>guard)",
+                  "title": "policyNamePrefix",
+                  "type": "string"
+                },
+                "roleName": {
+                  "description": "Aggregation name of the tenant reader role. Charts grant tenants read access to the kinds they manage by labeling a capability ClusterRole rbac.krateo.io/aggregate-to-<roleName>=true (or listing <roleName> in a capability's aggregateTo).",
+                  "title": "roleName",
+                  "type": "string"
+                },
+                "tenantNamespaceLabel": {
+                  "description": "Namespace label that marks a tenant namespace (value \"true\"), as set by the tenant onboarding policy",
+                  "title": "tenantNamespaceLabel",
+                  "type": "string"
+                },
+                "tenantUserLabel": {
+                  "description": "Namespace label that carries the tenant's user name; the RoleBinding subject is User:<value>. Namespaces without it get no binding.",
+                  "title": "tenantUserLabel",
+                  "type": "string"
+                }
+              },
+              "title": "tenantReader",
               "type": "object"
             }
           },
-          "type": "object"
+          "description": "Values for krateo-capability-roles. Deliberately MINIMAL: only the one key a cluster must be able to change is exposed. Every other chart value (capabilities, capabilityRoles.namePrefix, aggregationRoles, composer, and the rest of tenantReader) stays at the chart default, which is what krateo-demo runs today — helm get values returns null there. NOTE: these nodes are additionalProperties:false, so a key that is not declared here is silently PRUNED on its way to the composition; widen the schema in a tag BEFORE anything sets a new key."
         },
         "krateo-helm-render-service": {
           "additionalProperties": false,
@@ -14601,8 +14959,9 @@
                         "type": "string"
                       },
                       "threshold": {
-                        "description": "A row count. Typed integer, not number: crdgen types number as a string in the Installer CRD.",
-                        "type": "integer"
+                        "type": "string",
+                        "pattern": "^-?[0-9]+([.][0-9]+)?$",
+                        "description": "A plain decimal as a STRING ('0.001', '500'): crdgen types `number` as string, and the chart's template renders it back as a number. MEASURED on 057's live Installer CRD -- the two `number` nodes this schema declares are both {\"type\": \"string\"} there, so `number` here would be silently retyped and `integer` refuses the 0.001 the chart ships. The pattern is the template's OWN refusal, read from the published chart at 0.1.55 (templates/default-alerts.yaml:89): it `fail`s on a string not matching ^-?[0-9]+([.][0-9]+)?$, then renders a whole number as int64 (so 3221225472 does not print as 3.2e+09) and a fraction as itself. So this bound refuses exactly what the chart refuses, as a readable schema error instead of a cdc failure. NOT applied to alert-provider.config.defaultAlerts[].threshold, whose own schema declares `integer` for a row count and whose template has no decimal refusal."
                       },
                       "thresholdType": {
                         "enum": [
@@ -14627,9 +14986,91 @@
                       },
                       "where": {
                         "type": "string"
+                      },
+                      "aggregation": {
+                        "type": "string",
+                        "enum": [
+                          "avg",
+                          "max",
+                          "min",
+                          "sum",
+                          "p95",
+                          "increase"
+                        ],
+                        "description": "How a metric alert's points over the interval become the compared value. Required with metricRef."
+                      },
+                      "consecutiveWindows": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 60,
+                        "description": "Fire only once the condition has held for this many consecutive intervals; counted per series with groupBy. An empty interval restarts the count. Needs alert-provider 0.2.64."
+                      },
+                      "groupBy": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256,
+                          "pattern": "^[A-Za-z0-9_./-]+$"
+                        },
+                        "description": "Metric alerts only: one series per distinct value of these attribute keys, e.g. [k8s.namespace.name, k8s.pod.name, k8s.container.name]. Needs alert-provider 0.2.64."
+                      },
+                      "labels": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "description": "Metric alerts only: keep points whose attribute or resource attribute has this value. Resource attributes need alert-provider 0.2.61. With ratio, these select the numerator."
+                      },
+                      "metadataLabels": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "description": "Extra labels on the Alert resource, e.g. observability.krateo.io/analysis: human."
+                      },
+                      "metricRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Name of a Metric in defaultMetrics to aggregate instead of counting log rows. Excludes where."
+                      },
+                      "ratio": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "labels": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "description": "The denominator's points, ANDed; empty keeps every point of the metric."
+                          }
+                        },
+                        "description": "Metric alerts only, with aggregation sum or increase: compare a share, the aggregation of the points labels keep divided by that of the points ratio.labels keep. Needs alert-provider 0.2.58. Not with groupBy."
+                      },
+                      "runbook": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 3072,
+                        "description": "Operator guidance, rendered as spec.runbook (alert-provider >= 0.2.69). It follows the description in the HyperDX notification (description, a blank line, the runbook; at most 4096 characters in all) and goes to the RCA prompt between <runbook> tags. No '{{' and no @word after whitespace: HyperDX compiles the message as Handlebars. The template refuses both, and the 4096 overflow."
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "logs",
+                          "traces"
+                        ],
+                        "description": "Which rows where reads: logs (default) or traces. Needs alert-provider 0.2.62. Not with metricRef."
                       }
                     },
-                    "type": "object"
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "threshold",
+                      "thresholdType",
+                      "interval"
+                    ]
                   },
                   "type": "array"
                 },
@@ -17207,6 +17648,53 @@
                     }
                   },
                   "type": "object"
+                },
+                "tolerations": {
+                  "type": "array",
+                  "description": "Pod tolerations for the collector DaemonSet, passed to the upstream opentelemetry-collector subchart. VERIFIED BY RENDERING, not by reading: the subchart consumes it at templates/_pod.tpl:282 (a named template, which is why a grep of daemonset.yaml finds nothing) and the value reaches DaemonSet.spec.template.spec.tolerations. Needed on any cluster whose nodes carry a taint: without it the node-local OTLP agent cannot schedule there and workloads on that node have no receiver.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "One core/v1 Toleration. All five fields are optional; an empty object tolerates nothing useful.",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "description": "Taint key to tolerate; empty with operator Exists tolerates all taints"
+                      },
+                      "operator": {
+                        "type": "string",
+                        "enum": [
+                          "Exists",
+                          "Equal"
+                        ],
+                        "description": "Equal requires `value` to match; Exists ignores it"
+                      },
+                      "value": {
+                        "type": "string",
+                        "description": "Taint value to match when operator is Equal"
+                      },
+                      "effect": {
+                        "type": "string",
+                        "enum": [
+                          "NoSchedule",
+                          "PreferNoSchedule",
+                          "NoExecute"
+                        ],
+                        "description": "Taint effect to tolerate; empty tolerates all effects"
+                      },
+                      "tolerationSeconds": {
+                        "type": "integer",
+                        "description": "For NoExecute only: how long the pod stays bound after the taint is added"
+                      }
+                    }
+                  }
+                },
+                "nodeSelector": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Node labels the collector DaemonSet requires, passed to the upstream subchart. A typed map: label values are strings."
                 }
               },
               "type": "object"
