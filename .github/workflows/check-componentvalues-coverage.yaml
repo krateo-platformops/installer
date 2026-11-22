@@ -1,0 +1,53 @@
+name: check-componentvalues-coverage
+
+# A pinned chart must not gain a values key this schema cannot set. Every
+# `componentValues.<component>` node is a MIRROR of that chart's own values schema and is
+# `additionalProperties: false`, so a key the chart offers and this schema does not declare is
+# PRUNED by the apiserver on the way into the Installer CR WHILE THE WRITE REPORTS SUCCESS: the
+# value vanishes and the chart's own default wins, with nothing red and nothing logged.
+#
+# MEASURED 2026-11-22: 41 components already offer such keys, across 113 sites — worst
+# krateo-observability (21) and otel-collector-daemonset (17). Closing them needs each owning
+# session's shapes; stopping the number GROWING is what this gate is for. So it is a RATCHET: a NEW
+# site fails, a fixed one asks for a decrement, the count only goes down.
+#
+# It needs the network (it pulls each pinned chart's published values from the repo THE PIN NAMES —
+# three registries are in use and the pin's `repo` key is the authority).
+
+on:
+  pull_request:
+      # NO `branches:` filter: a branches: [main] here means the gate does not run on a STACKED
+      # pull request, which then shows "all checks passed" with every gate skipped.
+    # NO `paths:` filter: a path-filtered workflow never STARTS on a PR that misses its paths, so
+    # a required context would wait forever on "Expected".
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  componentvalues-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Install helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4
+        with:
+          version: v3.19.0
+      - name: Log in to ghcr.io
+        # The pins span three registries and some charts are private by design. Without a login the
+        # pull fails for those, and a component that cannot be pulled contributes ZERO sites — which
+        # is why the gate pins the CHECKED SET and fails when one drops out, rather than passing.
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Install PyYAML and jsonschema
+        run: pip install --quiet pyyaml jsonschema
+      # FIRST: the gate must prove its comparison detects a new site, a lost component and a
+      # too-small run. A ratchet that only proves it passes today would pass with its logic deleted.
+      - name: This gate detects a new site, a lost component and an undersized run
+        run: python3 .github/scripts/check-componentvalues-coverage.py --self-test
+      - name: No pinned chart offers a key this schema cannot set, beyond the baseline
+        run: python3 .github/scripts/check-componentvalues-coverage.py
