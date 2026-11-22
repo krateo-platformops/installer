@@ -99,7 +99,7 @@ jobs:
           }
           probe oci://ghcr.io/krateo-agentiko/charts/repo-mcp-server 0.1.6
           probe oci://ghcr.io/krateo-blueprints/charts/internal-ca-bundle 0.16.0
-          probe oci://ghcr.io/krateo-platformops/krateo-saas/krateo-capability-roles 0.6.2
+          probe oci://ghcr.io/krateo-platformops/krateo-saas/krateo-capability-roles 0.7.1
           [ "$fail" = "0" ] || exit 1
           echo "positive control OK: a currently-pinned chart in EACH private org is readable"
 

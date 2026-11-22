@@ -870,7 +870,7 @@ components:
   kind: KrateoCapabilityRoles
   chart: krateo-capability-roles
   repo: oci://ghcr.io/krateo-platformops/krateo-saas
-  version: 0.6.2
+  version: 0.7.1
   deps:
   - portal
   tier: platform
