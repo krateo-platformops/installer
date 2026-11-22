@@ -23,7 +23,9 @@ today's revision half as a pass, correctly.
 WHAT IT CAPTURES, which is exactly what frontend asked for so their signatures become checkable:
 
     per helm release      name, namespace, chart, chart version, latest revision, status
-    per composition       apiVersion, status.managed COUNT, Ready status + reason, Synced,
+    per composition       apiVersion AND the krateo.io/composition-version label (they are
+                          different things -- see the capture comment), status.managed COUNT,
+                          Ready status + reason, Synced,
                           uid (so a recreate is distinguishable from an update)
 
 The uid is mine, not theirs: without it "updated in place" and "deleted and recreated with the same
@@ -474,8 +476,30 @@ def capture(ctx, secrets=()):
             # the SAME unverified episode or a new one.
             hooks_unverified = (o["metadata"].get("annotations") or {}).get(
                 "krateo.io/hooks-unverified")
+            # apiVersion IS NOT THE GVK-ARRIVAL FIELD, and this capture stored only it until
+            # 2026-11-21. In a response `apiVersion` is whatever SERVED version the client
+            # negotiated, not a property of the stored object -- so it can move with no change to
+            # the composition at all, purely because the set of served versions changed under a
+            # roll. The field that tracks arrival is the `krateo.io/composition-version` LABEL,
+            # stamped at admission and rewritten when the parent re-renders the CR at the new
+            # apiVersion (core-provider, measured read-only on 057 2026-11-21).
+            #
+            # MEASURED CONSEQUENCE, which is why both are now stored. On 0.3.697 I read
+            # `apiVersion` by hand four minutes after the charts had migrated, got v1-8-141 while
+            # the CDs served v1-8-154, and reported to another session that the instances had not
+            # arrived. Two errors at once: the wrong field, AND read during the handover window
+            # while both versions were still served. The portal CRDs now serve only v1-8-154 and
+            # all 17 read label == apiVersion == v1-8-154, so nothing was wrong with the cluster.
+            #
+            # With both stored the diff can tell three cases apart instead of two:
+            #   label moved                  the GVK genuinely arrived
+            #   apiVersion moved, label not  a READ ARTIFACT -- negotiation, or a served-version
+            #                                prune between the two captures
+            #   both moved, same uid         an in-place update (the existing falsifier)
             snap["compositions"][key] = {
                 "apiVersion": o["apiVersion"],
+                "compositionVersion": (o["metadata"].get("labels") or {}).get(
+                    "krateo.io/composition-version"),
                 "hooksUnverified": hooks_unverified,
                 "coverage": _coverage(st),
                 # Only the KRATEO-GROUP refs, which are the ones carrying a `Synced`
@@ -733,7 +757,8 @@ def diff(pre, post, expect_delta=None, matching=None):
         # FORENSICS, read out of the JSON when a specific question needs them -- "is this
         # False/ReconcileError the #579 grace, and until when?" cannot be answered from the reason,
         # because core-provider deliberately did not mint a new reason string for it.
-        d = {f: [a.get(f), b.get(f)] for f in ("apiVersion", "managed", "Ready", "Synced", "uid")
+        d = {f: [a.get(f), b.get(f)]
+             for f in ("apiVersion", "compositionVersion", "managed", "Ready", "Synced", "uid")
              if a.get(f) != b.get(f)}
         if d:
             ch[k] = d
@@ -915,7 +940,8 @@ def _self_test():
                                              "coverage": {"managedChildrenCount": 64,
                                                           "healthEvaluatedChildren": 64,
                                                           "unreadableChildrenCount": 0},
-                                             "Synced": "True/ReconcileSuccess", "uid": "u-portal"},
+                                             "Synced": "True/ReconcileSuccess", "uid": "u-portal",
+                                             "compositionVersion": "v1-8-128"},
         },
         "definitions": {
             "krateo-system/portal": {"chartVersion": "1.8.129", "Ready": "True/Available",
@@ -946,6 +972,7 @@ def _self_test():
             if k == "drop_a": del p["releases"]["krateo-system/publish-a"]
             if k == "uid": p["compositions"]["portals/krateo-system/portal"]["uid"] = v
             if k == "av": p["compositions"]["portals/krateo-system/portal"]["apiVersion"] = v
+            if k == "cv": p["compositions"]["portals/krateo-system/portal"]["compositionVersion"] = v
             if k == "managed": p["compositions"]["portals/krateo-system/portal"]["managed"] = v
             if k == "cov": p["compositions"]["portals/krateo-system/portal"]["coverage"] = v
             if k == "kids": p["compositions"]["portals/krateo-system/portal"]["childrenSynced"] = v
@@ -1037,6 +1064,19 @@ def _self_test():
          post(uid="u-NEW"), None, None, 1),
         ("FALSIFIER: an apiVersion move with the SAME uid is an in-place update, not a problem",
          post(av="composition.krateo.io/v1-8-129"), None, None, 0),
+        # THE THREE-WAY DISTINCTION, added 2026-11-21 with compositionVersion. apiVersion in a
+        # response is whatever SERVED version the client negotiated; the arrival field is the
+        # krateo.io/composition-version label. Storing only apiVersion cannot tell a real GVK
+        # arrival from a read artifact, and on 0.3.697 I read apiVersion by hand and reported that
+        # 17 compositions had not arrived when they had. None of these three is a "problem" -- the
+        # point is that the diff now REPORTS them distinguishably instead of collapsing them.
+        ("apiVersion moved AND the label moved: a real GVK arrival",
+         post(av="composition.krateo.io/v1-8-154", cv="v1-8-154"), None, None, 0),
+        ("apiVersion moved but the LABEL did NOT: a read artifact, not an arrival",
+         post(av="composition.krateo.io/v1-8-154"), None, None, 0),
+        ("FALSIFIER: the label moving with apiVersion UNCHANGED is also reported, so the field is "
+         "compared and not merely captured",
+         post(cv="v1-8-154"), None, None, 0),
         ("FALSIFIER: managed count changing is REPORTED but is not by itself a problem",
          post(managed=65), None, None, 0),
         ("a Secret's resourceVersion moving is reported as WRITTEN, not as a problem",
@@ -1190,6 +1230,38 @@ def _self_test():
         ("prior=None -> the single-snapshot behaviour is unchanged (regression guard)",
          _snap("False/Creating", _T1), None, False),
     ]
+    # cv_unit, 2026-11-22. THE `cases` LIST ABOVE CANNOT TEST FIELD COMPARISON AT ALL. Its runner
+    # asserts only `(len(problems) > 0) == (want > 0)`, so every case expecting 0 problems passes
+    # whether or not a field is compared -- including the three added with compositionVersion and
+    # the one of them labelled FALSIFIER, which claimed the field was "compared and not merely
+    # captured" while asserting nothing of the kind. Measured: deleting "compositionVersion" from
+    # the compared tuple left all 61 cases GREEN. These assert on the `changed` ROW, which is the
+    # observable the field actually moves, and the last one is the real falsifier.
+    _CVK = "portals/krateo-system/portal"
+    _CVA = "composition.krateo.io/v1-8-128"
+    _CVB = "composition.krateo.io/v1-8-154"
+    cv_unit = [
+        ("the LABEL moving alone puts compositionVersion in the changed row",
+         post(cv="v1-8-154"), {"compositionVersion": ["v1-8-128", "v1-8-154"]}),
+        ("apiVersion moving alone puts ONLY apiVersion there -- a read artifact stays "
+         "distinguishable from an arrival",
+         post(av=_CVB), {"apiVersion": [_CVA, _CVB]}),
+        ("both moving puts BOTH there, which is a real GVK arrival",
+         post(av=_CVB, cv="v1-8-154"),
+         {"apiVersion": [_CVA, _CVB], "compositionVersion": ["v1-8-128", "v1-8-154"]}),
+        ("FALSIFIER: with nothing moved there is NO row, so the three above are not rows the "
+         "diff emits unconditionally",
+         post(), None),
+    ]
+    bad_cv = 0
+    for label, _po, want_row in cv_unit:
+        got_row = diff(PRE, _po)["compositions"]["changed"].get(_CVK)
+        ok = got_row == want_row
+        bad_cv += 0 if ok else 1
+        print("  %-4s composition-version: %s" % ("ok" if ok else "FAIL", label))
+        if not ok:
+            print("        want=%s got=%s" % (want_row, got_row))
+
     bad_cf = 0
     for label, snap, prior, want_stalled in cf_unit:
         st, _nv = stuck_converging(snap, now=_NOW, prior=prior)
@@ -1225,9 +1297,11 @@ def _self_test():
         if not ok:
             print("        want_problems=%s got=%s" % (want, d["problems"]))
     print("self-test: %d case(s), %d failure(s)"
-          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit),
-             bad + bad_unit + bad_ne + bad_cf))
-    return 1 if (bad or bad_unit or bad_ne) else 0
+          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit),
+             bad + bad_unit + bad_ne + bad_cf + bad_cv))
+    # bad_cf and bad_cv were BOTH missing from this return. A failing carry-forward or
+    # composition-version unit printed FAIL and still exited 0, so CI would have passed it.
+    return 1 if (bad or bad_unit or bad_ne or bad_cf or bad_cv) else 0
 
 
 def main():

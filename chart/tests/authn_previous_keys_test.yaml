@@ -1,0 +1,237 @@
+# authn's previousKeys overlap list is DERIVED and FORCED, never set by hand.
+#
+# WHY THIS SUITE EXISTS. keyGeneration is a REVOCATION lever: authn has no per-token revocation,
+# so its only purpose is to stop honouring already-issued tokens, which is why compositions.yaml
+# FORCES signKeySecretName and kid rather than filling them. previousKeys is the OPPOSITE lever --
+# a listed key keeps VERIFYING. Set by hand alongside a keyGeneration bump, the two produce a
+# rotation that invalidates nothing while every signal reports success: new Secret created, authn
+# Ready, clean boot. That is the exact failure check-signing-key.py exists for, so the pair must be
+# UNEXPRESSIBLE rather than merely refused -- an operator writes one integer and the list is
+# derived from it.
+#
+# compositions.yaml is lookup-GATED (it LISTs every CRD and threads the slice into
+# inst.crdExists), so `helm template` renders ZERO composition objects and no plain render can
+# exercise this file at all. helm-unittest's kubernetesProvider serves both that LIST and the
+# per-name Secret lookups this block needs, which is what makes the derivation testable.
+#
+# THE FIXTURE, learned by running it: authn's CRD must be served at authn's PINNED version
+# (inst.crdExists compares served tags against the pin -- on an authn pin bump, change the two
+# v0-52-0 strings and nothing else), and authn's only dep is authn-crd, which must read
+# Ready=True AND Synced=True because inst.readyFromConditions requires both.
+#
+# CASE 4 IS THE ONE THAT MATTERS. Cases 1-3 would all pass against a template that merely FILLED
+# previousKeys when absent -- which is the bug. Case 4 sets it by hand to a bogus value and
+# asserts the derived list WINS. Without it this suite agrees with itself.
+suite: authn previousKeys is derived from keyGeneration/overlapGenerations and forced
+templates:
+  - templates/compositions.yaml
+tests:
+  # ---------------------------------------------------------------------------------------------
+  - it: "at the defaults (generation 1, overlap 0) writes NO previousKeys at all, so an existing cluster is untouched"
+    set:
+      features.portal: true
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider: &prov
+      scheme:
+        "apiextensions.k8s.io/v1/CustomResourceDefinition":
+          gvr: {version: v1, group: apiextensions.k8s.io, resource: customresourcedefinitions}
+        "v1/Secret":
+          gvr: {version: v1, group: "", resource: secrets}
+          namespaced: true
+        "composition.krateo.io/v0-52-0/AuthnCrds":
+          gvr: {group: composition.krateo.io, version: v0-52-0, resource: authncrdses}
+          namespaced: true
+      objects: &objs
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: authns.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: Authn}
+            versions: [{name: v0-52-0, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: authncrdses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: AuthnCrds}
+            versions: [{name: v0-52-0, served: true}]
+        - apiVersion: composition.krateo.io/v0-52-0
+          kind: AuthnCrds
+          metadata: {name: authn-crd, namespace: krateo-system}
+          status:
+            conditions:
+              - {type: Ready, status: "True"}
+              - {type: Synced, status: "True"}
+        # all three generations' Secrets exist, so a case that omits one is omitting it for a
+        # reason the template decided, not because the fixture lacked it
+        - apiVersion: v1
+          kind: Secret
+          metadata: {name: authn-jwt-signing-key, namespace: krateo-system}
+          data: {private.pem: Zm9v}
+        - apiVersion: v1
+          kind: Secret
+          metadata: {name: authn-jwt-signing-key-2, namespace: krateo-system}
+          data: {private.pem: Zm9v}
+        - apiVersion: v1
+          kind: Secret
+          metadata: {name: authn-jwt-signing-key-3, namespace: krateo-system}
+          data: {private.pem: Zm9v}
+    asserts:
+      - notFailedTemplate: {}
+      - notExists:
+          path: spec.jwt.previousKeys
+        documentSelector: {path: kind, value: Authn}
+
+  # ---------------------------------------------------------------------------------------------
+  - it: "generation 3 with overlap 1 honours generation 2 only, with secretKey forced to private.pem"
+    set:
+      features.portal: true
+      bootstrap.coreProvider.enabled: false
+      authn.jwt.keyGeneration: 3
+      authn.jwt.overlapGenerations: 1
+    kubernetesProvider: *prov
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.jwt.previousKeys
+          value:
+            - kid: krateo-authn-key-2
+              secretName: authn-jwt-signing-key-2
+              secretKey: private.pem
+        documentSelector: {path: kind, value: Authn}
+      # and the two sibling forced fields still track the CURRENT generation
+      - equal:
+          path: spec.jwt.kid
+          value: krateo-authn-key-3
+        documentSelector: {path: kind, value: Authn}
+      - equal:
+          path: spec.jwt.signKeySecretName
+          value: authn-jwt-signing-key-3
+        documentSelector: {path: kind, value: Authn}
+
+  # ---------------------------------------------------------------------------------------------
+  - it: "overlap 2 honours generations 2 and 1, newest first, and never the CURRENT kid"
+    set:
+      features.portal: true
+      bootstrap.coreProvider.enabled: false
+      authn.jwt.keyGeneration: 3
+      authn.jwt.overlapGenerations: 2
+    kubernetesProvider: *prov
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.jwt.previousKeys
+          value:
+            - kid: krateo-authn-key-2
+              secretName: authn-jwt-signing-key-2
+              secretKey: private.pem
+            - kid: krateo-authn-key-1
+              secretName: authn-jwt-signing-key
+              secretKey: private.pem
+        documentSelector: {path: kind, value: Authn}
+
+  # ---------------------------------------------------------------------------------------------
+  # THE CASE THAT DISTINGUISHES FORCE FROM FILL. Every case above passes just as happily against a
+  # fillPath, which would let a stale hand-set list survive a rotation -- the one outcome the
+  # rotation exists to prevent.
+  - it: "FORCE, not fill: a hand-set componentValues previousKeys is OVERRIDDEN by the derived list"
+    set:
+      features.portal: true
+      bootstrap.coreProvider.enabled: false
+      authn.jwt.keyGeneration: 3
+      authn.jwt.overlapGenerations: 1
+      componentValues.authn.jwt.previousKeys:
+        - kid: operator-set-stale-key
+          secretName: some-other-secret
+          secretKey: private.pem
+    kubernetesProvider: *prov
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.jwt.previousKeys
+          value:
+            - kid: krateo-authn-key-2
+              secretName: authn-jwt-signing-key-2
+              secretKey: private.pem
+        documentSelector: {path: kind, value: Authn}
+
+  # ---------------------------------------------------------------------------------------------
+  # A keyGeneration JUMP never created the skipped generation's Secret. authn refuses to START on a
+  # listed Secret that is absent -- the pod hangs mounting the volume -- so the derivation measures
+  # existence. Omitting generation 2 loses nothing: no token was ever signed by a key never created.
+  - it: "a generation whose Secret does not exist is OMITTED, not listed"
+    set:
+      features.portal: true
+      bootstrap.coreProvider.enabled: false
+      authn.jwt.keyGeneration: 3
+      authn.jwt.overlapGenerations: 2
+    kubernetesProvider:
+      scheme:
+        "apiextensions.k8s.io/v1/CustomResourceDefinition":
+          gvr: {version: v1, group: apiextensions.k8s.io, resource: customresourcedefinitions}
+        "v1/Secret":
+          gvr: {version: v1, group: "", resource: secrets}
+          namespaced: true
+        "composition.krateo.io/v0-52-0/AuthnCrds":
+          gvr: {group: composition.krateo.io, version: v0-52-0, resource: authncrdses}
+          namespaced: true
+      objects:
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: authns.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: Authn}
+            versions: [{name: v0-52-0, served: true}]
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: authncrdses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: AuthnCrds}
+            versions: [{name: v0-52-0, served: true}]
+        - apiVersion: composition.krateo.io/v0-52-0
+          kind: AuthnCrds
+          metadata: {name: authn-crd, namespace: krateo-system}
+          status:
+            conditions:
+              - {type: Ready, status: "True"}
+              - {type: Synced, status: "True"}
+        # generation 2's Secret is DELIBERATELY ABSENT -- the jump case
+        - apiVersion: v1
+          kind: Secret
+          metadata: {name: authn-jwt-signing-key, namespace: krateo-system}
+          data: {private.pem: Zm9v}
+        - apiVersion: v1
+          kind: Secret
+          metadata: {name: authn-jwt-signing-key-3, namespace: krateo-system}
+          data: {private.pem: Zm9v}
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.jwt.previousKeys
+          value:
+            - kid: krateo-authn-key-1
+              secretName: authn-jwt-signing-key
+              secretKey: private.pem
+        documentSelector: {path: kind, value: Authn}
+
+  # ---------------------------------------------------------------------------------------------
+  # Lowering overlap back to 0 must SHRINK the list. spec.components is applied as an RFC-7386
+  # merge patch, where an OMITTED key is PRESERVED -- so a block that rendered nothing here would
+  # leave the previous list in the CR and a retired kid would keep verifying forever, with the
+  # rotation silently never completing.
+  - it: "overlap lowered back to 0 while a rotation is engaged forces an EMPTY list, not an absent one"
+    set:
+      features.portal: true
+      bootstrap.coreProvider.enabled: false
+      authn.jwt.keyGeneration: 3
+      authn.jwt.overlapGenerations: 0
+    kubernetesProvider: *prov
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.jwt.previousKeys
+          value: []
+        documentSelector: {path: kind, value: Authn}

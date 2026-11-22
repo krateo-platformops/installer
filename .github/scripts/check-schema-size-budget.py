@@ -100,6 +100,22 @@ CHART_YAML = "chart/Chart.yaml"
 # carries a full copy of the COMPILED schema per SERVED version; `vacuum` is an unserved storage
 # placeholder and cannot absorb the bulk, because a served version must carry its own schema in
 # spec.versions[].schema.
+#
+# THIS WALL AND core-provider's 2.13.85-2.13.94 RETRACTION ARE THE SAME MECHANISM FROM OPPOSITE
+# ENDS, and a reader of either should know the other exists. core-provider#484 kept every VACATED
+# served version through its grace period, so a definition's CRD could carry a third large schema
+# version; they measured the consequence on envtest against real etcd -- a CRD with a third
+# ~560 KB-schema version is refused with "etcdserver: request is too large" -- and retracted ten
+# releases over it (their retracted-versions.yaml, read by check-retracted-versions.py since
+# 2026-11-21). That is the DOWNSTREAM observation. This wall is the UPSTREAM refusal: it declines
+# growth that would make the n+1 row exceed APISERVER_LIMIT, which is why the n+1 row is modelled at
+# all rather than the current count.
+#
+# The scale is not hypothetical for this repo. Measured on 057 on 2026-11-21, at ONE served version
+# each: installers.composition.krateo.io is 660,805 bytes serialised -- LARGER than the ~560 KB that
+# wedged core-provider -- with agentgatewaypolicies at 181,908 and snowplows at 47,291. Nothing on
+# that cluster served more than one version at the time, which is the only reason the multiplication
+# was not in play.
 APISERVER_LIMIT = 1_572_864
 VACUUM_BYTES = 7_947
 COMPILE_RATIO = 0.96        # compiled-per-version / minified; measured 0.96 at both 0.3.633 and 0.3.634

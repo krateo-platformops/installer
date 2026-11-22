@@ -916,6 +916,70 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
 {{- end -}}
 
 {{/* ---------------------------------------------------------------------------------------
+     inst.authnPreviousKeys — the OVERLAP list for authn's JWKS, derived from ONE integer
+     (authn.jwt.overlapGenerations) on top of the generation counter. Returns a JSON array the
+     caller parses with fromJsonArray; a define cannot return a list.
+
+     WHY DERIVED AND NOT SET. keyGeneration is a REVOCATION lever: authn has no per-token
+     revocation, so its only purpose is to stop honouring already-issued tokens, and
+     compositions.yaml FORCES signKeySecretName and kid for exactly that reason. previousKeys is
+     the OPPOSITE lever -- a listed key keeps verifying. Exposed as a plain mirror field the two
+     combine into a rotation that invalidates nothing while every signal reports success: new
+     Secret created, authn Ready, clean boot. That is the failure check-signing-key.py exists
+     for, so the pair must be unexpressible rather than merely refused. An operator writes one
+     integer; this derives the list.
+
+     A PREVIOUS KEY NEVER SIGNS. authn's jwks.ParsePreviousKeys reads each file through
+     publicKeyFromPEM and keeps ONLY the public half (verified by authn against
+     TestParsePreviousKeys, which covers a private PEM and a PKIX PUBLIC KEY). secretKey is
+     FORCED to private.pem rather than omitted: authn's chart defaults it to private.pem today,
+     but a derived field that silently tracks another chart's default is the coupling the two
+     forced fields above already avoid. Retaining the retired PRIVATE key for the overlap is
+     therefore a security COST, not a necessity -- a verify-only Secret holding just the public
+     half would do. Helm cannot derive a public half from a private PEM (sprig has no such
+     function), so that needs a hook Job or the controller and is deliberately NOT in this
+     change.
+
+     WHY EXISTENCE IS AN INPUT. authn refuses to START on a previousKeys entry whose Secret or
+     key is absent -- the pod hangs mounting the volume, or the parse is a fatal boot error. A
+     keyGeneration JUMP (1 -> 3) never creates generation 2's Secret, so a naive
+     keyGen-1..keyGen-N range points at a Secret that was never written. Omitting a generation
+     that does not exist loses nothing: no token was ever signed with a key that was never
+     created. So the caller passes the names it found and this filters to those.
+
+     NEITHER THIS NOR ITS SIBLINGS CALL `lookup`, for the reason spelled out above
+     inst.authnSigningKeySecretName: `helm template` disables lookup, so anything downstream of
+     it is unreachable in CI. This is a pure function of (generation, overlap, names-that-exist)
+     and .github/scripts/check-authn-previous-keys.py renders it directly.
+     --------------------------------------------------------------------------------------- */}}
+{{- define "inst.authnPreviousKeys" -}}
+{{- $gen := index . 0 | default 1 | int -}}
+{{- $overlap := index . 1 | default 0 | int -}}
+{{- $existing := index . 2 | default (list) -}}
+{{- $out := list -}}
+{{- $curKid := include "inst.authnSigningKeyKid" (list $gen) -}}
+{{- if gt $overlap 0 -}}
+{{- range $i := until $overlap -}}
+{{- $g := sub $gen (add1 $i) | int -}}
+{{- if ge $g 1 -}}
+{{- $nm := include "inst.authnSigningKeySecretName" (list $g) -}}
+{{- $kid := include "inst.authnSigningKeyKid" (list $g) -}}
+{{- /* three refusals authn enforces fatally at startup: a previous kid equal to the current
+       one, a duplicate kid, and a Secret that does not exist. */ -}}
+{{- if and (ne $kid $curKid) (has $nm $existing) -}}
+{{- $dup := "" -}}
+{{- range $o := $out -}}{{- if eq (get $o "kid") $kid -}}{{- $dup = "y" -}}{{- end -}}{{- end -}}
+{{- if not $dup -}}
+{{- $out = append $out (dict "kid" $kid "secretName" $nm "secretKey" "private.pem") -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $out | toJson -}}
+{{- end -}}
+
+{{/* ---------------------------------------------------------------------------------------
      inst.unmetApiGroups — the API groups a component DECLARES and the cluster does not serve.
      Returns a comma-joined list, or "" when every declared group is present.
 

@@ -19,9 +19,9 @@
 # behind features that default false, which is exactly why nobody noticed: the latent cases are the
 # ones nobody has installed yet.
 #
-# REQUIRES the secret CHART_READ_TOKEN with packages:read. Until it exists this workflow fails at
-# the login step, loudly, which is the correct failure: a gate that silently skips is worse than a
-# gate that is absent, because its green tells you nothing.
+# REQUIRES the secret PAT, with packages:read. It used to name CHART_READ_TOKEN, which HAS NEVER
+# EXISTED -- see the Log in to GHCR step for the measurement and for the 20 consecutive nightly
+# failures that caused. Still fails rather than skips when the secret is absent.
 name: nightly-chart-root-schema-all
 
 on:
@@ -43,13 +43,38 @@ jobs:
       - name: Install PyYAML
         run: python3 -m pip install --quiet pyyaml
       - name: Log in to GHCR
+        # USES `PAT`, NOT `CHART_READ_TOKEN`, AND THAT IS WHY THIS WORKFLOW FAILED EVERY NIGHT
+        # FROM AT LEAST 2026-11-01 TO 2026-11-21 -- 20 consecutive scheduled runs, each failing
+        # loudly at this step with nobody reading the result.
+        #
+        # CHART_READ_TOKEN HAS NEVER EXISTED. check-pin-ci.yaml records the measurement:
+        # orgs/krateo-platformops/actions/secrets/CHART_READ_TOKEN -> 404, five org secrets
+        # present and all visibility=all, repo-level secrets 0. Diego chose `PAT` over creating a
+        # new secret, and check-pin-ci was changed to use it. This workflow was the sibling that
+        # never got the same change, so it kept referencing a name that resolves to nothing.
+        #
+        # WHAT WENT UNCHECKED FOR THOSE 20 NIGHTS, from this file's own header: the `--all` run is
+        # the ONLY check that guards the PINS rather than the gate's rules. A pin whose chart's
+        # ROOT schema the installer's componentValues cannot satisfy renders a CR the generated
+        # CRD rejects, so the composition can never deploy. Three such charts sat latent until
+        # 2026-10-31 -- agentgateway, cert-manager-issuers and external-dns -- found only because
+        # someone ran --all by hand. All three were behind features defaulting false, which is
+        # exactly why nobody noticed. The gate went dark two days after it last found real bugs.
+        #
+        # WHETHER `PAT` CARRIES read:packages FOR krateo-agentiko IS STILL UNKNOWN, as
+        # check-pin-ci's own note says. If it does not, this step now fails with a 401 from the
+        # registry instead of on a missing secret -- which is a different and far more useful
+        # failure: it names a permission to fix rather than a name that resolves to nothing.
+        #
+        # FAILS, NEVER SKIPS. Unchanged, and the reason is unchanged: a gate that quietly stops
+        # verifying reports green without having checked anything.
         run: |
-          if [ -z "${{ secrets.CHART_READ_TOKEN }}" ]; then
-            echo "::error::CHART_READ_TOKEN is not set. This gate pulls every pinned chart and needs"
-            echo "::error::packages:read. Failing rather than skipping: a gate that silently skips"
-            echo "::error::reports green without having checked anything."
+          if [ -z "${{ secrets.PAT }}" ]; then
+            echo "::error::PAT is not set or not visible to this repository. This gate pulls every"
+            echo "::error::pinned chart and needs packages:read. Failing rather than skipping: a gate"
+            echo "::error::that silently skips reports green without having checked anything."
             exit 1
           fi
-          echo "${{ secrets.CHART_READ_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          echo "${{ secrets.PAT }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
       - name: Gate every pinned chart's root schema
         run: python3 hack/chart-root-schema-gate.py --pins chart/files/component-pins.yaml --all
