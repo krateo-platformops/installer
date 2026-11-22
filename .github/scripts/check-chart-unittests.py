@@ -38,7 +38,7 @@ import sys
 import tempfile
 
 CHART = pathlib.Path("chart")
-MIN_SUITES = 13  # 14 suites on 2026-11-22. Raise when suites are added; never lower.
+MIN_SUITES = 15  # 15 suites on 2026-11-22. Raise when suites are added; never lower.
 # RAISED FROM 2 on 2026-11-22. The floor had stayed at 2 while the suite grew to 14, so
 # TWELVE suites could have been deleted and this runner would still have reported OK --
 # which defeats the reason the floor exists, stated below: '0 suites, 0 failures' is
