@@ -14,7 +14,7 @@ components:
 - name: frontend-crd
   kind: FrontendCrds
   chart: frontend-crds
-  version: 1.8.54
+  version: 1.8.61
   tier: platform
   feature: portal
 - name: showback
@@ -74,7 +74,7 @@ components:
 - name: frontend
   kind: Frontend
   chart: frontend
-  version: 1.8.54
+  version: 1.8.61
   deps:
   - frontend-crd
   - authn
@@ -135,7 +135,7 @@ components:
   feature: portal
 - name: portal
   kind: Portal
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - frontend
   - git-provider
@@ -150,14 +150,14 @@ components:
       memory: 512Mi
 - name: portal-agents
   kind: PortalAgents
-  version: 1.8.141
+  version: 1.8.154
   deps: ['portal']
   tier: platform
   feature: portal
   chart: portal-agents
 - name: marketplace-page
   kind: MarketplacePage
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -173,105 +173,105 @@ components:
   feature: selfservice
 - name: service-desk-page
   kind: ServiceDeskPage
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
   feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
   feature: portal
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
   feature: portal
 - name: dashboard-page
   kind: DashboardPage
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
   feature: portal
 - name: compositions-page
   kind: CompositionsPage
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
   feature: portal
 - name: blueprints-page
   kind: BlueprintsPage
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
   feature: portal
 - name: resources-page
   kind: ResourcesPage
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
   feature: portal
 - name: search-page
   kind: SearchPage
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
   feature: portal
 - name: builders-page
   kind: BuildersPage
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
   feature: portal
 - name: clusters-page
   kind: ClustersPage
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
   feature: portal
 - name: reviews-page
   kind: ReviewsPage
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
   feature: portal
 - name: settings-page
   kind: SettingsPage
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
   feature: portal
 - name: observability-page
   kind: ObservabilityPage
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
   feature: portal
 - name: audit-page
   kind: AuditPage
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
   feature: portal
 - name: public-pages
   kind: PublicPages
-  version: 1.8.141
+  version: 1.8.154
   deps:
   - portal
   tier: platform
@@ -523,7 +523,7 @@ components:
 - name: builder-gate
   kind: BuilderGate
   chart: builder-gate
-  version: 1.8.54
+  version: 1.8.61
   deps:
     - portal
     - kagent
@@ -879,7 +879,8 @@ components:
   kind: ZendeskKog
   chart: zendesk-kog
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.2.3
+  version: 0.3.1
+  ciRepo: krateo-blueprints/krateo-zendesk-kog
   requiresApiGroups:
   - ogen.krateo.io
   deps:
@@ -890,7 +891,7 @@ components:
   kind: ZendeskOrganisations
   chart: zendesk-organisations
   repo: oci://ghcr.io/krateo-blueprints/charts
-  version: 0.2.4
+  version: 0.3.2
   requiresApiGroups:
   - zendesk.ogen.krateo.io
   deps:
