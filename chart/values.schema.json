@@ -13263,22 +13263,287 @@
           "type": "object"
         },
         "krateo-capability-roles": {
+          "type": "object",
           "additionalProperties": false,
-          "description": "Values for krateo-capability-roles. Deliberately MINIMAL: only the one key a cluster must be able to change is exposed. Every other chart value (capabilities, capabilityRoles.namePrefix, aggregationRoles, composer, and the rest of tenantReader) stays at the chart default, which is what krateo-demo runs today — helm get values returns null there. NOTE: these nodes are additionalProperties:false, so a key that is not declared here is silently PRUNED on its way to the composition; widen the schema in a tag BEFORE anything sets a new key.",
           "properties": {
-            "tenantReader": {
+            "aggregationRoles": {
               "additionalProperties": false,
-              "description": "The tenant-reader Kyverno policies. Set enabled=false on any cluster without Kyverno; the chart default is true and requires policies.kyverno.io/v1.",
+              "description": "Predefined aggregating ClusterRoles (aggregationRule mechanism). Role names/titles are overridable reference examples.",
               "properties": {
                 "enabled": {
-                  "description": "Render the tenant-reader ValidatingPolicy and GeneratingPolicy. NO schema default on purpose: a default here would propagate into the composition CR. The chart's own default (true) applies when this is unset.",
+                  "description": "Render the predefined aggregating ClusterRoles",
+                  "title": "enabled",
                   "type": "boolean"
+                },
+                "namePrefix": {
+                  "description": "Prefix for aggregating ClusterRole names",
+                  "title": "namePrefix",
+                  "type": "string"
+                },
+                "roles": {
+                  "description": "Aggregating roles to render. Capabilities join a role via the rbac.krateo.io/aggregate-to-<name> label.",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "description": "Role name suffix (RFC-1123)",
+                        "type": "string"
+                      },
+                      "title": {
+                        "description": "Human-readable role title",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "title": "roles",
+                  "type": "array"
                 }
               },
+              "title": "aggregationRoles",
+              "type": "object"
+            },
+            "capabilities": {
+              "description": "Capability entries to render as annotated, aggregation-labeled ClusterRoles. Empty by default - service charts provide their own entries.",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "aggregateTo": {
+                    "description": "Predefined roles this capability auto-joins (rendered as rbac.krateo.io/aggregate-to-<role> labels)",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "enforcement": {
+                    "description": "Enforcement layer tag for this capability",
+                    "enum": [
+                      "rbac",
+                      "abac",
+                      "acr",
+                      "cross-org"
+                    ],
+                    "type": "string"
+                  },
+                  "id": {
+                    "description": "RFC-1123 capability id, becomes the ClusterRole name suffix",
+                    "type": "string"
+                  },
+                  "requiresAcr": {
+                    "description": "Optional ACR/LoA value required for step-up guarded actions",
+                    "type": "string"
+                  },
+                  "rules": {
+                    "description": "Native RBAC PolicyRules for this capability",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "verbs"
+                      ],
+                      "description": "One rbac.authorization.k8s.io/v1 PolicyRule. The chart toYaml's these into a ClusterRole's `rules:`, so the apiserver validates them; this node is deliberately stricter than the chart's own open item, which lets a misspelled `verb:` or `resource:` fail at the CR rather than render a ClusterRole that grants nothing. All five PolicyRule fields are declared.",
+                      "properties": {
+                        "apiGroups": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "API groups the rule applies to; \"\" is the core group"
+                        },
+                        "resources": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Resources the rule applies to"
+                        },
+                        "resourceNames": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Optional: restrict the rule to these object names"
+                        },
+                        "verbs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "minItems": 1,
+                          "description": "Verbs allowed; required and non-empty, since a rule with no verb grants nothing"
+                        },
+                        "nonResourceURLs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Non-resource URL paths; only valid in a ClusterRole, and refused by the chart's own tenant-reader guard policy"
+                        }
+                      }
+                    },
+                    "type": "array"
+                  },
+                  "title": {
+                    "description": "Human-readable label shown in the composer",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "type": "object"
+              },
+              "title": "capabilities",
+              "type": "array"
+            },
+            "capabilityRoles": {
+              "additionalProperties": false,
+              "description": "Naming and labeling knobs for the rendered capability ClusterRoles",
+              "properties": {
+                "namePrefix": {
+                  "description": "Prefix for capability ClusterRole names",
+                  "title": "namePrefix",
+                  "type": "string"
+                }
+              },
+              "title": "capabilityRoles",
+              "type": "object"
+            },
+            "composer": {
+              "additionalProperties": false,
+              "description": "snowplow capability catalog + role composer widgets",
+              "properties": {
+                "enabled": {
+                  "description": "Render the snowplow RESTAction/Table/Form widgets",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "page": {
+                  "additionalProperties": false,
+                  "description": "Admin page for the composer, listed in the sidebar (portal sidebar-nav annotations). Visible only to identities that can read Flexes in the release namespace.",
+                  "properties": {
+                    "enabled": {
+                      "description": "Render the admin page (PageHeader + Flex) for the composer widgets",
+                      "title": "enabled",
+                      "type": "boolean"
+                    },
+                    "navGroup": {
+                      "description": "Sidebar group (krateo.io/nav-group)",
+                      "title": "navGroup",
+                      "type": "string"
+                    },
+                    "navIcon": {
+                      "description": "Font Awesome icon (krateo.io/nav-icon)",
+                      "title": "navIcon",
+                      "type": "string"
+                    },
+                    "navLabel": {
+                      "description": "Sidebar label and page title (krateo.io/nav-label)",
+                      "title": "navLabel",
+                      "type": "string"
+                    },
+                    "navOrder": {
+                      "description": "Sidebar order (krateo.io/nav-order); Administration holds Settings at 31 and Clusters at 32",
+                      "title": "navOrder",
+                      "type": "integer"
+                    },
+                    "navPath": {
+                      "description": "Portal route of the page (krateo.io/nav-path)",
+                      "title": "navPath",
+                      "type": "string"
+                    }
+                  },
+                  "title": "page",
+                  "type": "object"
+                }
+              },
+              "title": "composer",
+              "type": "object"
+            },
+            "tenantAdmin": {
+              "additionalProperties": false,
+              "description": "The tenant's role in their own namespace. Renders three Kyverno policies (policies.kyverno.io/v1). A GeneratingPolicy binds each tenant user, in their own namespace, to <aggregationRoles.namePrefix><defaultRole>, or to the role an admin lists for them in the ConfigMap <rolesConfigMap.namespace>/<rolesConfigMap.name> (data `<user>: <role>`). A ValidatingPolicy keeps that ConfigMap's entries to the catalog's roles, and a MutatingPolicy re-evaluates every tenant namespace when it changes. Kyverno's background controller needs `bind` on each role it may bind (policies/kyverno/kyverno-values.yaml).",
+              "properties": {
+                "enabled": {
+                  "description": "Render the tenant role binding, its ConfigMap guard and its resync policy",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "defaultRole": {
+                  "description": "Role a tenant user gets in their own namespace when the ConfigMap lists no other. One of aggregationRoles.roles[].name.",
+                  "title": "defaultRole",
+                  "type": "string"
+                },
+                "bindingNamePrefix": {
+                  "description": "Prefix of the RoleBinding generated in each tenant namespace; the role name follows it (krateo-tenant-admin, krateo-tenant-auditor, ...). One name per role, because a RoleBinding's roleRef cannot change.",
+                  "title": "bindingNamePrefix",
+                  "type": "string"
+                },
+                "rolesConfigMap": {
+                  "additionalProperties": false,
+                  "description": "The ConfigMap where an admin lists another role for a tenant user (data `<user>: <role>`). Tenants cannot write it.",
+                  "title": "rolesConfigMap",
+                  "type": "object",
+                  "properties": {
+                    "namespace": {
+                      "description": "Namespace of the roles ConfigMap",
+                      "title": "namespace",
+                      "type": "string"
+                    },
+                    "name": {
+                      "description": "Name of the roles ConfigMap",
+                      "title": "name",
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "title": "tenantAdmin",
+              "type": "object"
+            },
+            "tenantReader": {
+              "additionalProperties": false,
+              "description": "Tenant read access to the resources a tenant's compositions manage. Renders the aggregating ClusterRole <aggregationRoles.namePrefix><roleName>, a Kyverno GeneratingPolicy that binds it with a namespaced RoleBinding in every tenant namespace, and a Kyverno ValidatingPolicy that keeps it read-only and Secret-free (policies.kyverno.io/v1). Requires Kyverno 3.9.2 (v1.19) installed with policies/kyverno/kyverno-values.yaml (the controller permissions these policies need).",
+              "properties": {
+                "bindingName": {
+                  "description": "Name of the RoleBinding generated in each tenant namespace. Changing it on a live install is not covered by the tests; reinstall the chart instead, which only recreates these RoleBindings.",
+                  "title": "bindingName",
+                  "type": "string"
+                },
+                "enabled": {
+                  "description": "Render the tenant reader role, its binding policy and its guard policy",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "policyNamePrefix": {
+                  "description": "Prefix of the two Kyverno ClusterPolicies (<prefix>binding and <prefix>guard)",
+                  "title": "policyNamePrefix",
+                  "type": "string"
+                },
+                "roleName": {
+                  "description": "Aggregation name of the tenant reader role. Charts grant tenants read access to the kinds they manage by labeling a capability ClusterRole rbac.krateo.io/aggregate-to-<roleName>=true (or listing <roleName> in a capability's aggregateTo).",
+                  "title": "roleName",
+                  "type": "string"
+                },
+                "tenantNamespaceLabel": {
+                  "description": "Namespace label that marks a tenant namespace (value \"true\"), as set by the tenant onboarding policy",
+                  "title": "tenantNamespaceLabel",
+                  "type": "string"
+                },
+                "tenantUserLabel": {
+                  "description": "Namespace label that carries the tenant's user name; the RoleBinding subject is User:<value>. Namespaces without it get no binding.",
+                  "title": "tenantUserLabel",
+                  "type": "string"
+                }
+              },
+              "title": "tenantReader",
               "type": "object"
             }
           },
-          "type": "object"
+          "description": "Values for krateo-capability-roles. Deliberately MINIMAL: only the one key a cluster must be able to change is exposed. Every other chart value (capabilities, capabilityRoles.namePrefix, aggregationRoles, composer, and the rest of tenantReader) stays at the chart default, which is what krateo-demo runs today — helm get values returns null there. NOTE: these nodes are additionalProperties:false, so a key that is not declared here is silently PRUNED on its way to the composition; widen the schema in a tag BEFORE anything sets a new key."
         },
         "krateo-helm-render-service": {
           "additionalProperties": false,
