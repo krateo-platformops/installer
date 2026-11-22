@@ -960,6 +960,31 @@ componentValues:
       # needs componentValuesUnset. GOMEMLIMIT is deliberately NOT set: snowplow derives it as
       # 7/8 of the container memory limit, which on 057 (8Gi) reproduces the previous 7GiB.
       GOGC: "50"
+# ---------------------------------------------------------------------------
+# Dotted paths under componentValues to REMOVE from the live Installer CR.
+#
+# WHY THIS KEY HAS TO EXIST. components-patch.json is applied as an RFC-7386 merge patch, so an
+# OMITTED key is PRESERVED -- which is what protects an operator's own values from a chart upgrade
+# -- and ONLY AN EXPLICIT NULL DELETES. A null cannot be written in the values because the schema
+# types these fields. So without this key a componentValues entry can be set and changed but NEVER
+# removed, and a temporary override becomes permanent.
+#
+# agentgateway-policies.llm.retry -- REQUIRED BY THE 0.2.39 PIN IN THIS SAME TAG, not housekeeping.
+#   agp 0.2.39 makes the LLM route carry exactly one retry: [429,502,503,504] x2 @5s. `llm.retry`,
+#   when set, REPLACES it. MEASURED on 057 before writing this, from the live CR:
+#     llm.retry = {attempts: 3, backoff: "15s", codes: [429, 503]}
+#   so pinning 0.2.39 WITHOUT this unset installs the new chart and leaves the OLD retry in force --
+#   the pin's headline feature a complete no-op, while every signal reports success: the chart
+#   version moves, the composition goes Ready, the pod restarts.
+#
+#   ASSERT AFTER THE ROLL by reading the rendered route, not the chart version.
+#
+# DELIBERATELY NOT HERE: agentgateway-policies.cors and .certReplayHop. Both still carry on the CR
+# the defaults that #1114 stripped from the schema, and unsetting them would make agp's own chart
+# defaults govern them -- a LIVE CONFIG CHANGE with its own before/after. Keeping this tag to one
+# live change means a post-roll problem has one candidate, not three. Diego's call, 2026-11-22.
+componentValuesUnset:
+  - agentgateway-policies.llm.retry
 authn:
   jwt:
     keyGeneration: 1

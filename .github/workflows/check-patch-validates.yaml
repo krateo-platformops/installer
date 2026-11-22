@@ -47,5 +47,11 @@ jobs:
         # skipping, because a guard that skips when its tool is missing reports success for a
         # thing it did not do.
         run: pip install --quiet pyyaml jsonschema
+      - name: The null exemption is NARROW -- only a null at the error's own path
+        # Without this, a too-broad exemption would swallow real violations and this
+        # gate's purpose with them. The exemption exists because an RFC 7386 null is a
+        # DELETE instruction, measured on krateo-057 2026-11-22 with a server dry-run:
+        # the apiserver accepted a null at a typed path and removed the member.
+        run: python3 .github/scripts/check-patch-validates.py --self-test
       - name: The rendered CR patch must satisfy values.schema.json
         run: python3 .github/scripts/check-patch-validates.py
