@@ -6368,7 +6368,7 @@ components:
   # than it is: that gate diffs CRD constraints, and three versions of a collector chart can carry
   # OTLP pipeline changes that touch no CRD at all. This pin rests on acmp's reading of the
   # changelog as family owner, not on the gate.
-  version: 0.1.35
+  version: 0.1.36
   deps:
   - otel-collector-deployment
   tier: observability
