@@ -1,0 +1,43 @@
+name: check-authn-sa-conditional
+
+# componentValues.authn.serviceAccount's `if create is false then name is required` conditional,
+# mirrored from authn's own values.schema.json (#170), and the CEL-rule count it implies.
+#
+# WHY A GATE. crdgen COMPILES that if/then into an x-kubernetes-validations CEL rule -- measured by
+# authn at plumbing v1.100.0 (what core-provider 2.13.117 carries) and at v1.104.0, identical
+# output and 0 warnings. A CEL rule binds at ADMISSION: an existing object that violates a new one
+# is not flagged, it becomes silently UNUPDATABLE, and the failure appears on whatever next writes
+# it. alert-provider 0.2.64 -> 0.2.65 is the measured case -- key sets 36 -> 36, description bytes
+# 931 -> 931, CEL rules 15 -> 17, and two instruments called it cosmetic.
+#
+# So the gate asserts the conditional BEHAVES on the six values authn measured against the emitted
+# rule, and that the schema carries exactly ONE if/then pair -- so a second admission constraint
+# cannot arrive without the count changing and someone deciding to change it.
+
+on:
+  pull_request:
+      # NO `branches:` filter: a branches: [main] here means the gate does not run on a STACKED
+      # pull request, which then shows "all checks passed" with every gate skipped.
+    # NO `paths:` filter: a path-filtered workflow never STARTS on a PR that misses its paths, so
+    # a required context would wait forever on "Expected".
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  authn-sa-conditional:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Install jsonschema
+        run: pip install --quiet jsonschema
+      # FIRST: the gate must prove it catches a removed conditional, a dropped minLength (the half
+      # plumbing <v1.95.0 silently dropped), and a SECOND conditional appearing elsewhere.
+      - name: This gate detects a removed, weakened or duplicated conditional
+        run: python3 .github/scripts/check-authn-sa-conditional.py --self-test
+      - name: The conditional is declared, behaves, and is the only one
+        run: python3 .github/scripts/check-authn-sa-conditional.py
