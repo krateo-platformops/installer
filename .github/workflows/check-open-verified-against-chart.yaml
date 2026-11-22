@@ -1,0 +1,52 @@
+name: check-open-verified-against-chart
+
+# Diego's decision, 2026-11-22: `additionalProperties: true` may be permitted at a node ONLY when
+# the pinned chart's own schema is open at that exact node, VERIFIED AGAINST THE PUBLISHED CHART
+# RATHER THAN ASSERTED.
+#
+# WHY A SECOND GATE instead of extending check-no-unknowns. That gate is a fast structural walk with
+# no network, and its K8S_NATIVE_OPEN / DECLARED_OPEN lists are the right answer for Kubernetes-native
+# structures -- mirroring upstream's PodSpec would be enormous and would drift every k8s release.
+# A name list is the WRONG answer for a component's own values surface: it records what someone
+# believed when they added the entry and keeps passing after the chart closes the node, at which
+# point the installer accepts keys the chart refuses and the failure lands at `helm upgrade` inside
+# a cdc, far from the values file that caused it. This gate pulls the charts; that one must stay fast.
+#
+# FALSIFIED IN FOUR DIRECTIONS before merge, with real charts over the network:
+#   open in mine, open in the chart      -> PASSES  (certReplayHop.resources, agp 0.2.39)
+#   open in mine, CLOSED in the chart    -> exit 1  (authn 0.56.0 bounds serviceAccount)
+#   CLOSED in mine                       -> exit 1  (the row checks nothing; remove it)
+#   path absent from the schema          -> exit 1  (a stale row stops covering what it claims)
+
+on:
+  pull_request:
+      # NO `branches:` filter: a branches: [main] here means the gate does not run on a STACKED
+      # pull request, which then shows "all checks passed" with every gate skipped.
+    # NO `paths:` filter: a path-filtered workflow never STARTS on a PR that misses its paths, so
+    # a required context would wait forever on "Expected".
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  open-verified-against-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+      # FIRST: the verifier must DISCRIMINATE. A checker that calls everything open is useless and
+      # one that calls everything closed blocks every legitimate entry, so both halves are asserted
+      # -- including that `properties` with no additionalProperties is CLOSED, which is the subtle
+      # case (JSON Schema's open-by-default does NOT carry through crdgen for such a node).
+      - name: This gate tells an open chart node from a closed one
+        run: python3 .github/scripts/check-open-verified-against-chart.py --self-test
+      - name: Every chart-verified open node is still open in its pinned chart
+        run: python3 .github/scripts/check-open-verified-against-chart.py
