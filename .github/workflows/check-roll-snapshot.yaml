@@ -92,15 +92,17 @@ jobs:
               m2 = re.search(r"^%s = \((.*?)\)$" % const, src, re.M | re.S)
               assert m2, "%s not found in hack/roll-snapshot.py" % const
               got = sorted(re.findall(r'"([^"]+)"', m2.group(1)))
-              # A THIRD WRITER's reasons live in foreignWriters, not in the core-provider mirror, because
-    # check-ready-reasons-current asserts the mirror EQUALS core-provider's docs and a
-    # rest-dynamic-controller reason is not in them. The TOOL must still classify them, so the
-    # comparison is against mirror + foreignWriters -- otherwise this gate and that one pull in
-    # opposite directions and whichever runs second looks broken.
-    foreign = []
-    for w in (yaml.safe_load(open("hack/ready-reasons.yaml", encoding="utf-8")).get("foreignWriters") or {}).values():
-        foreign += ((w.get("compositionDefinition") or {}).get(key) or []) if ns == "compositionDefinition" else []
-    want = sorted(list(cdy[key]) + foreign)
+              # A THIRD WRITER's reasons live in foreignWriters, not in the core-provider mirror:
+              # check-ready-reasons-current asserts the mirror EQUALS core-provider's docs, and a
+              # rest-dynamic-controller reason is not in them. The TOOL must still classify them,
+              # so the comparison is against mirror + foreignWriters -- otherwise this gate and
+              # that one pull in opposite directions and whichever runs second looks broken.
+              # Both constants in this loop are compositionDefinition, so no namespace test is
+              # needed here; an earlier draft referenced an `ns` that does not exist in this scope.
+              foreign = []
+              for w in (yaml.safe_load(open("hack/ready-reasons.yaml", encoding="utf-8")).get("foreignWriters") or {}).values():
+                  foreign += ((w.get("compositionDefinition") or {}).get(key) or [])
+              want = sorted(list(cdy[key]) + foreign)
               assert got == want, (
                   "%s is %s but ready-reasons.yaml compositionDefinition.%s is %s"
                   % (const, got, key, want))
