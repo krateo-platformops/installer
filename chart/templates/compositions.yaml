@@ -657,24 +657,6 @@
 {{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "gatewayClass" "create") "value" false) -}}
 {{- end -}}
 {{- end -}}
-{{- /* authn's JWT signing key. The umbrella CREATES the Secret (templates/secret.yaml); authn
-     MOUNTS it and advertises its kid. At generation 1 this block renders nothing at all, so the
-     composition CR keeps exactly the fields it has today and authn's own chart defaults stand --
-     an upgrade of an existing cluster is a no-op here by construction.
-
-     At generation >= 2 a rotation is in progress and these two fields are FORCED, not filled.
-     Fill-if-absent is wrong precisely here: a leftover componentValues.authn.jwt.signKeySecretName
-     from an earlier install would win, authn would keep mounting the OLD Secret, and the rotation
-     would complete with every outstanding token still valid -- the one outcome the rotation exists
-     to prevent, reported as success by every signal (new Secret created, authn Ready, clean boot).
-     keyGeneration is the single lever; while it is engaged it owns both derived fields. */ -}}
-{{- if eq $c.name "authn" -}}
-{{- $keyGen := ((($top.Values.authn).jwt).keyGeneration) | default 1 | int -}}
-{{- if gt $keyGen 1 -}}
-{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "jwt" "signKeySecretName") "value" (include "inst.authnSigningKeySecretName" (list $keyGen))) -}}
-{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "jwt" "kid") "value" (include "inst.authnSigningKeyKid" (list $keyGen))) -}}
-{{- end -}}
-{{- end -}}
 {{- /* alert-provider is a plain service (NOT a kagent agent), so it can't carry a caller's
      token the way the agents above do — it has no caller; its own loop evaluates the alerts. Instead it
      exchanges its OWN projected SA token (audience "authn") at authn for a Krateo JWT and presents
@@ -731,6 +713,65 @@
 {{- if $hdxOrigin -}}
 {{- $_ := include "inst.fillPath" (dict "target" $spec "path" (list "clickstack" "hyperdx" "config" "FRONTEND_URL") "value" $hdxOrigin) -}}
 {{- end -}}
+{{- end -}}
+{{- end -}}
+{{- /* MOVED OUT of the features.agentGateway conditional, 2026-11-22. It had been nested
+     inside the `if $top.Values.features.agentGateway` opened above, so on any cluster
+     with that feature OFF -- which is every cluster on the mutually-exclusive
+     features.ingress path (#557) -- NEITHER of the two fields below was forced, while
+     templates/secret.yaml, gated on PORTAL and not on agentGateway, still CREATED the new
+     generation Secret. So a keyGeneration bump there made a new key, left authn mounting
+     the OLD one, and completed with every outstanding token still valid: verbatim the
+     outcome the comment below says this block exists to prevent, reported as success by
+     every signal. Measured with a two-arm render: agentGateway true writes
+     signKeySecretName, agentGateway false leaves the path absent. */ -}}
+{{- /* authn's JWT signing key. The umbrella CREATES the Secret (templates/secret.yaml); authn
+     MOUNTS it and advertises its kid. At generation 1 this block renders nothing at all, so the
+     composition CR keeps exactly the fields it has today and authn's own chart defaults stand --
+     an upgrade of an existing cluster is a no-op here by construction.
+
+     At generation >= 2 a rotation is in progress and these two fields are FORCED, not filled.
+     Fill-if-absent is wrong precisely here: a leftover componentValues.authn.jwt.signKeySecretName
+     from an earlier install would win, authn would keep mounting the OLD Secret, and the rotation
+     would complete with every outstanding token still valid -- the one outcome the rotation exists
+     to prevent, reported as success by every signal (new Secret created, authn Ready, clean boot).
+     keyGeneration is the single lever; while it is engaged it owns both derived fields. */ -}}
+{{- if eq $c.name "authn" -}}
+{{- $keyGen := ((($top.Values.authn).jwt).keyGeneration) | default 1 | int -}}
+{{- if gt $keyGen 1 -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "jwt" "signKeySecretName") "value" (include "inst.authnSigningKeySecretName" (list $keyGen))) -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "jwt" "kid") "value" (include "inst.authnSigningKeyKid" (list $keyGen))) -}}
+{{- end -}}
+{{- /* previousKeys — the OVERLAP list, FORCED for the same reason and from the same counter. A
+     listed key keeps VERIFYING (it never signs), so a hand-set value combined with a
+     keyGeneration bump produces a rotation that invalidates nothing while every signal reports
+     success. Derived, so that pair is unexpressible; see inst.authnPreviousKeys.
+
+     THE LOOKUP LIVES HERE, NOT IN THE HELPER, exactly as inst.jwtSigningKeyPEM takes its Secret
+     as a parameter: `helm template` disables lookup, so a helper that called it would be
+     unreachable in CI. authn refuses to START on an entry whose Secret is missing (the pod hangs
+     mounting the volume), and a keyGeneration JUMP never creates the skipped generation's
+     Secret -- so existence is measured, not assumed.
+
+     FORCED EVEN WHEN EMPTY once overlap is engaged: an operator who lowers overlapGenerations
+     back to 0 must see the list shrink, or a retired kid keeps verifying forever and the
+     rotation silently never completes. At generation 1 with overlap 0 (the default) this block
+     renders nothing, so an existing cluster is untouched by construction. */ -}}
+{{- $overlap := ((($top.Values.authn).jwt).overlapGenerations) | default 0 | int -}}
+{{- if gt $keyGen 1 -}}
+{{- $ns := $top.Values.namespaces.krateo -}}
+{{- $have := list -}}
+{{- range $i := until (int (add $overlap 1)) -}}
+{{- $g := sub $keyGen $i | int -}}
+{{- if ge $g 1 -}}
+{{- $nm := include "inst.authnSigningKeySecretName" (list $g) -}}
+{{- $s := lookup "v1" "Secret" $ns $nm -}}
+{{- if and $s $s.data (hasKey $s.data "private.pem") -}}
+{{- $have = append $have $nm -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := include "inst.forcePath" (dict "target" $spec "path" (list "jwt" "previousKeys") "value" (include "inst.authnPreviousKeys" (list $keyGen $overlap $have) | fromJsonArray)) -}}
 {{- end -}}
 {{- end -}}
 {{- /* snowplow's seed identity: the chart defaults seedAuthn.authnNamespace to the LITERAL

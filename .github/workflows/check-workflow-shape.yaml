@@ -1,0 +1,34 @@
+name: check-workflow-shape
+
+# Refuses a workflow file GitHub Actions would reject before running a job. Such a file fails at
+# STARTUP: conclusion `failure`, zero jobs, no logs, no annotations, no check-run -- so its gates go
+# dark while its tick is merely red. #1060 did exactly that to check-platform-routes for three days
+# by adding a second `run:` key to one step, and PyYAML's safe_load silently keeps the last
+# duplicate, so every other script in .github/scripts agreed with the broken file.
+#
+# This workflow runs the detector's OWN self-test first, in the same job. A scan that passes because
+# the detector stopped detecting is the failure mode this gate would otherwise have.
+
+on:
+  pull_request:
+      # NO `branches:` filter: a branches: [main] here means the gate does not run on a STACKED
+      # pull request, which then shows "all checks passed" with every gate skipped.
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-shape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Prove the detector still detects
+        run: python3 .github/scripts/check-workflow-shape.py --self-test
+      - name: Refuse any workflow GitHub would not start
+        run: python3 .github/scripts/check-workflow-shape.py

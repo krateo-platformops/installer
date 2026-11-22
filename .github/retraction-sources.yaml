@@ -18,11 +18,34 @@
 # 404 FAILS CLOSED and blocks every PR here, by design: a tolerated 404 reads exactly like
 # every pin being clean, which is the one thing a guard must never report by accident.
 #
-# NOT YET LISTED, and deliberately: krateo-platformops/core-provider. They have no
-# retracted-versions.yaml at their repo root today. Listing them before they publish one would
-# block this repo's CI for a reason unrelated to any PR. Add the line in the same change that
-# their list goes live -- their charts are core-provider and core-provider-crds.
+# core-provider's list went live 2026-11-21 (their #604, main 355cd2d) and this is that same
+# change, as the note below required. Verified before adding, because a listed repo whose list
+# 404s fails closed and blocks EVERY PR here:
+#   the raw URL this script fetches returns HTTP 200, 1966 bytes
+#   krateo-platformops/installer's own path returns 404 -- the negative control
+#   this script's entry_versions() returns the ten versions 2.13.85-2.13.94 from the fetched file
+#
+# WHAT IS AND IS NOT ON THEIR LIST, which is the interesting part. 2.13.85-2.13.94 is there:
+# core-provider#484 kept every vacated served version through its grace period, so a CRD could
+# carry a third large schema version. Their reason separates what was measured (envtest, real
+# etcd: a third ~560 KB-schema version is refused with "etcdserver: request is too large") from
+# what was inferred from the code and never reproduced on a cluster (the controller wedging on
+# retry). It names `charts: [core-provider]` only -- the controller; core-provider-crds at the
+# same versions is unaffected.
+#
+# 2.13.120 is NOT on it, and that is the right call by its publisher. They first told me to treat
+# it as do-not-pin, then had provider-runtime probe the v1.20.1 tag directly and found the
+# Ready=Deleting/Creating LastTransitionTime churn dates back to v1.8.1 -- so 057's live 2.13.117
+# has it too and .120 is no worse than its neighbours. An entry would have claimed otherwise.
+# Superseded is not withdrawn.
 sources:
+  - repo: krateo-platformops/core-provider
+    # Their go/core-provider/retracted_versions_test.go enforces this set from
+    # .github/scripts/verify-release-artifacts.sh, so the two sides cannot disagree -- the same
+    # property frontend confirmed for theirs.
+    charts:
+      - core-provider
+      - core-provider-crds
   - repo: krateo-platformops/frontend
     # Confirmed by frontend 2026-11-14: exactly the set crdgen/retracted_test.go enforces on
     # their side, so the two cannot disagree.

@@ -895,6 +895,61 @@ componentValues:
 # nothing here deletes key material. A bump signs out every session, because the key that
 # signed every outstanding token stops being served; that is the point of the lever, and the
 # reason it is not driven by anything automatic.
+  # zendesk-organisations: TOKEN ROTATION, on at acmp's instruction as the component's owner, and
+  #   Diego's decision of 2026-11-15 (ESO, because organisations 0.2.3/0.2.4 ship no refresher).
+  #
+  #   WHY THIS IS NOT HOUSEKEEPING. Zendesk returns a THIRTY MINUTE access token for this client --
+  #   acmp measured 1799 s on 2026-11-15, which is the default for OAuth clients created after
+  #   2026-04-30, NOT the 48 h accessTokenExpiresIn can request. Nothing on 057 refreshes it: 0
+  #   ExternalSecrets, 0 SecretStores, and 0.2.4 has no rotation (0.2.5+ does). So the token died
+  #   ~2026-11-15 17:45Z and zr-admin-1795190153, created 2026-11-20 15:56Z, has 401'd since the
+  #   moment it existed -- it NEVER had a live token. Re-authorising by hand buys thirty minutes.
+  #   With rotation, ESO refreshes from the refresh_token (30 days) and requests 172800 each time,
+  #   which the refresh grant honours (7199 s honoured 10-31; 6 rotations 11-15).
+  #
+  #   THE ARRAY IS WRITTEN WHOLE. `organisations` is a list, so a merge patch replaces it wholesale.
+  #   The entry below is 057's LIVE value read back verbatim -- createNamespace, requesterGroups
+  #   [admins, sre], tokenSecretRef {name, key} -- with ONLY tokenRotation added.
+  #
+  #   tokenSecretRef.key IS `token`, NOT the chart's `access_token` default, and acmp confirmed that
+  #   is deliberate: their authorize script writes stringData {token, refresh_token}, 057's
+  #   ZendeskRequestConfiguration reads key `token`, and ESO writes under tokenSecretRef.key, so
+  #   `token` stays consistent through rotation. `access_token` would be INERT here and would look
+  #   like it had worked.
+  #
+  #   tokenRotation defaults are left alone: refreshInterval 24h, accessTokenExpiresIn 172800,
+  #   refreshTokenExpiresIn 2592000 -- the interval is at most half the access lifetime, so one
+  #   missed run never lets the token lapse.
+  #
+  #   ORDER DOES NOT BIND. Rotation needs only the refresh_token (30 days), so authorising can
+  #   happen before or after this rolls, provided the roll lands inside that window. The request
+  #   should reach Ready within 30 minutes of authorising, even before the roll.
+  zendesk-organisations:
+    zendesk:
+      baseUrl: https://krateo.zendesk.com
+      # NO `oauthClientId` HERE EITHER, and for a stronger reason than the organisation above.
+      # Diego decided on 2026-11-11: ONE OAUTH CLIENT PER CUSTOMER. Each customer's support contact
+      # authorizes once against their OWN public client, and only that customer's token is placed in
+      # their cluster. `krateo-cmp-e2e-public` is the TEST client 057's token was minted with, so it
+      # must not be a default anywhere.
+      #
+      # AND IT CANNOT LIVE AT THIS LEVEL AT ALL. A refresh must use the client the token was minted
+      # with, so the client is a property of the ORGANISATION, not of the chart: a single
+      # zendesk.oauthClientId cannot express two organisations with two clients. acmp is moving it to
+      # `organisations[].oauthClientId` in zendesk-organisations 0.3.2, required when that entry sets
+      # `tokenRotation: true` and failing closed by naming the entry. Nothing live sets the chart-level
+      # key -- 057's CR does not carry it -- so 0.3.2 removes it rather than deprecating it.
+    # NO `organisations:` DEFAULT, deliberately. An entry names a CUSTOMER's namespace and
+    # ITS end user's token, so it is per-install, not estate-wide. 057's entry -- krateo /
+    # zendesk-krateo, bound to the e2e-requester token -- is Krateo's INTERNAL TEST
+    # organisation. As a chart default it would wire every other cluster that enables
+    # features.serviceDesk to file into OUR test org as soon as someone dropped a Secret in,
+    # which is worse than failing. acmp (the chart owner) asked for it to be removed for
+    # exactly that reason after I had written it in.
+    #
+    # So 057's organisation lives on 057's CR ONLY. And the chart now FAILS CLOSED without
+    # one: zendesk-organisations 0.3.1 refuses to render an empty list rather than installing
+    # nothing and reporting success -- see the pin note in component-pins.yaml.
   snowplow:
     env:
       # HELD at 50 deliberately. snowplow >=1.12.69 no longer sets GOGC in its chart, so
@@ -908,3 +963,17 @@ componentValues:
 authn:
   jwt:
     keyGeneration: 1
+    # How many RETIRED generations keep VERIFYING after a keyGeneration bump. 0 is exactly
+    # today's behaviour: a bump signs out every session, which is what keyGeneration is FOR
+    # (authn has no per-token revocation). Raise it to 1 and hold it for at least 24h to rotate
+    # the signing key WITHOUT invalidating live tokens -- 24h is AUTHN_KUBECONFIG_CRT_EXPIRES_IN,
+    # which clamps the login JWT; delegated tokens last at most 15m.
+    #
+    # previousKeys is DERIVED from this and FORCED onto the component. Never set
+    # componentValues.authn.jwt.previousKeys by hand: a listed key keeps verifying, so hand-set
+    # alongside a keyGeneration bump it yields a rotation that invalidates nothing while every
+    # signal reports success. The pair is unexpressible by construction, not merely refused.
+    #
+    # LOWER THIS BEFORE DELETING A RETIRED SECRET, never in the same apply: authn refuses to
+    # start on a listed Secret that is absent and the pod hangs mounting the volume.
+    overlapGenerations: 0
