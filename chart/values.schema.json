@@ -15,6 +15,12 @@
               "minimum": 1,
               "title": "JWT signing key generation",
               "type": "integer"
+            },
+            "overlapGenerations": {
+              "description": "How many RETIRED generations keep VERIFYING after a keyGeneration bump. 0 (the default when absent) is today's behaviour exactly: a bump signs out every session, which is what keyGeneration is for. N > 0 derives previousKeys entries for generations keyGeneration-1 .. keyGeneration-N and FORCES them onto the component, so a rotation stops SIGNING with the old key while still honouring tokens it already issued. Carries NO default on purpose -- crdgen materialises installer-schema defaults into every install's CR, where they beat the chart's own values.yaml, so a default would pin this against any future chart change. A previous key NEVER signs: authn keeps only its public half, so retaining the retired private key for the overlap is a security cost rather than a necessity. HOW LONG TO HOLD IT: an entry can go once every token it signed has expired, at most AUTHN_KUBECONFIG_CRT_EXPIRES_IN (24h by default), which also clamps the login JWT; delegated tokens are at most 15m. So 1, held at least 24h after a bump, covers every live token. ORDERING THAT MATTERS: lower this (dropping a generation from the list) BEFORE deleting that generation's Secret, never in the same apply -- authn refuses to START on a listed Secret that is absent and the pod hangs mounting the volume. A keyGeneration JUMP (1 -> 3) never created the skipped generation's Secret, so the derivation measures existence and omits what was never written; nothing is lost, because no token was ever signed by a key that never existed.",
+              "minimum": 0,
+              "title": "JWT verification overlap (retired generations still honoured)",
+              "type": "integer"
             }
           },
           "type": "object"
@@ -6891,6 +6897,10 @@
                   "title": "Pull policy",
                   "type": "string"
                 },
+                "registry": {
+                  "description": "Registry HOST for this image, e.g. ghcr.io. The chart defaults it; global.imageRegistry, when set, replaces it for every image (_helpers.tpl). Declared with NO default here: crdgen materialises installer-schema defaults into every install's CR, where they beat the chart's own values.yaml, so a default would pin the host against any future chart change.",
+                  "type": "string"
+                },
                 "repository": {
                   "title": "Repository",
                   "type": "string"
@@ -7149,6 +7159,37 @@
                   "description": "Name of the Secret holding the PEM-encoded RSA private key (created by the installer umbrella before authn).",
                   "title": "JWT sign key secret name",
                   "type": "string"
+                },
+                "previousKeys": {
+                  "description": "RETIRED keys that still VERIFY. NEVER set this by hand: it is DERIVED from authn.jwt.keyGeneration and authn.jwt.overlapGenerations and FORCED onto this component, for the same reason signKeySecretName and kid are. A listed key keeps verifying, while keyGeneration exists to STOP honouring already-issued tokens -- so the two levers are opposites, and set together by hand they produce a rotation that invalidates nothing while every signal reports success: new Secret created, authn Ready, clean boot. That is the failure check-signing-key.py exists for. Declared here only because the forced value must validate against this schema. No default, for the crdgen reason above.",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kid": {
+                        "description": "Key ID of the retired key, as it appears in the JWKS and in every token that key signed. No comma, equals sign or whitespace: authn receives the entries as kid=path pairs.",
+                        "minLength": 1,
+                        "pattern": "^[^,=\\s]+$",
+                        "type": "string"
+                      },
+                      "secretKey": {
+                        "description": "Key inside that Secret holding the PEM. The derivation FORCES private.pem rather than omitting it: authn defaults it to private.pem today, but a derived field that silently tracks another chart's default is the coupling the sibling forced fields avoid.",
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "secretName": {
+                        "description": "Secret holding the retired key. authn reads only its PUBLIC half (jwks.ParsePreviousKeys -> publicKeyFromPEM), so a previous key never signs. This Secret must EXIST for as long as it is listed: authn refuses to start otherwise and the pod hangs mounting the volume, so drop the generation from this list BEFORE deleting its Secret.",
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kid",
+                      "secretName"
+                    ],
+                    "type": "object"
+                  },
+                  "title": "Retired signing keys that still verify (DERIVED, never set by hand)",
+                  "type": "array"
                 }
               },
               "title": "JWT signing key",
@@ -9651,6 +9692,10 @@
                     "Never"
                   ],
                   "title": "Image pull policy",
+                  "type": "string"
+                },
+                "registry": {
+                  "description": "Registry HOST for this image, e.g. ghcr.io. The chart defaults it; global.imageRegistry, when set, replaces it for every image (_helpers.tpl). Declared with NO default here: crdgen materialises installer-schema defaults into every install's CR, where they beat the chart's own values.yaml, so a default would pin the host against any future chart change.",
                   "type": "string"
                 },
                 "repository": {
@@ -15074,6 +15119,10 @@
                   ],
                   "type": "string"
                 },
+                "registry": {
+                  "description": "Registry HOST for this image, e.g. ghcr.io. The chart defaults it; global.imageRegistry, when set, replaces it for every image (_helpers.tpl). Declared with NO default here: crdgen materialises installer-schema defaults into every install's CR, where they beat the chart's own values.yaml, so a default would pin the host against any future chart change.",
+                  "type": "string"
+                },
                 "repository": {
                   "type": "string"
                 },
@@ -15964,6 +16013,10 @@
                   "title": "Image pull policy",
                   "type": "string"
                 },
+                "registry": {
+                  "description": "Registry HOST for this image, e.g. ghcr.io. The chart defaults it; global.imageRegistry, when set, replaces it for every image (_helpers.tpl). Declared with NO default here: crdgen materialises installer-schema defaults into every install's CR, where they beat the chart's own values.yaml, so a default would pin the host against any future chart change.",
+                  "type": "string"
+                },
                 "repository": {
                   "title": "Image repository",
                   "type": "string"
@@ -16089,6 +16142,10 @@
                         "Never"
                       ],
                       "title": "Image pull policy",
+                      "type": "string"
+                    },
+                    "registry": {
+                      "description": "Registry HOST for this image, e.g. ghcr.io. The chart defaults it; global.imageRegistry, when set, replaces it for every image (_helpers.tpl). Declared with NO default here: crdgen materialises installer-schema defaults into every install's CR, where they beat the chart's own values.yaml, so a default would pin the host against any future chart change.",
                       "type": "string"
                     },
                     "repository": {
@@ -18752,6 +18809,10 @@
                     "Never"
                   ],
                   "title": "Pull Policy",
+                  "type": "string"
+                },
+                "registry": {
+                  "description": "Registry HOST for this image, e.g. ghcr.io. The chart defaults it; global.imageRegistry, when set, replaces it for every image (_helpers.tpl). Declared with NO default here: crdgen materialises installer-schema defaults into every install's CR, where they beat the chart's own values.yaml, so a default would pin the host against any future chart change.",
                   "type": "string"
                 },
                 "repository": {
