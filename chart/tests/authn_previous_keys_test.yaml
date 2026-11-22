@@ -48,7 +48,7 @@ tests:
           spec:
             group: composition.krateo.io
             names: {kind: Authn}
-            versions: [{name: v0-52-0, served: true}]
+            versions: [{name: v0-56-0, served: true}]
         - apiVersion: apiextensions.k8s.io/v1
           kind: CustomResourceDefinition
           metadata: {name: authncrdses.composition.krateo.io}
@@ -183,7 +183,7 @@ tests:
           spec:
             group: composition.krateo.io
             names: {kind: Authn}
-            versions: [{name: v0-52-0, served: true}]
+            versions: [{name: v0-56-0, served: true}]
         - apiVersion: apiextensions.k8s.io/v1
           kind: CustomResourceDefinition
           metadata: {name: authncrdses.composition.krateo.io}
