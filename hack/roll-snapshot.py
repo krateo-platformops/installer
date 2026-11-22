@@ -1230,6 +1230,38 @@ def _self_test():
         ("prior=None -> the single-snapshot behaviour is unchanged (regression guard)",
          _snap("False/Creating", _T1), None, False),
     ]
+    # cv_unit, 2026-11-22. THE `cases` LIST ABOVE CANNOT TEST FIELD COMPARISON AT ALL. Its runner
+    # asserts only `(len(problems) > 0) == (want > 0)`, so every case expecting 0 problems passes
+    # whether or not a field is compared -- including the three added with compositionVersion and
+    # the one of them labelled FALSIFIER, which claimed the field was "compared and not merely
+    # captured" while asserting nothing of the kind. Measured: deleting "compositionVersion" from
+    # the compared tuple left all 61 cases GREEN. These assert on the `changed` ROW, which is the
+    # observable the field actually moves, and the last one is the real falsifier.
+    _CVK = "portals/krateo-system/portal"
+    _CVA = "composition.krateo.io/v1-8-128"
+    _CVB = "composition.krateo.io/v1-8-154"
+    cv_unit = [
+        ("the LABEL moving alone puts compositionVersion in the changed row",
+         post(cv="v1-8-154"), {"compositionVersion": ["v1-8-128", "v1-8-154"]}),
+        ("apiVersion moving alone puts ONLY apiVersion there -- a read artifact stays "
+         "distinguishable from an arrival",
+         post(av=_CVB), {"apiVersion": [_CVA, _CVB]}),
+        ("both moving puts BOTH there, which is a real GVK arrival",
+         post(av=_CVB, cv="v1-8-154"),
+         {"apiVersion": [_CVA, _CVB], "compositionVersion": ["v1-8-128", "v1-8-154"]}),
+        ("FALSIFIER: with nothing moved there is NO row, so the three above are not rows the "
+         "diff emits unconditionally",
+         post(), None),
+    ]
+    bad_cv = 0
+    for label, _po, want_row in cv_unit:
+        got_row = diff(PRE, _po)["compositions"]["changed"].get(_CVK)
+        ok = got_row == want_row
+        bad_cv += 0 if ok else 1
+        print("  %-4s composition-version: %s" % ("ok" if ok else "FAIL", label))
+        if not ok:
+            print("        want=%s got=%s" % (want_row, got_row))
+
     bad_cf = 0
     for label, snap, prior, want_stalled in cf_unit:
         st, _nv = stuck_converging(snap, now=_NOW, prior=prior)
@@ -1265,9 +1297,11 @@ def _self_test():
         if not ok:
             print("        want_problems=%s got=%s" % (want, d["problems"]))
     print("self-test: %d case(s), %d failure(s)"
-          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit),
-             bad + bad_unit + bad_ne + bad_cf))
-    return 1 if (bad or bad_unit or bad_ne) else 0
+          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit),
+             bad + bad_unit + bad_ne + bad_cf + bad_cv))
+    # bad_cf and bad_cv were BOTH missing from this return. A failing carry-forward or
+    # composition-version unit printed FAIL and still exited 0, so CI would have passed it.
+    return 1 if (bad or bad_unit or bad_ne or bad_cf or bad_cv) else 0
 
 
 def main():
