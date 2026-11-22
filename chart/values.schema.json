@@ -17207,6 +17207,53 @@
                     }
                   },
                   "type": "object"
+                },
+                "tolerations": {
+                  "type": "array",
+                  "description": "Pod tolerations for the collector DaemonSet, passed to the upstream opentelemetry-collector subchart. VERIFIED BY RENDERING, not by reading: the subchart consumes it at templates/_pod.tpl:282 (a named template, which is why a grep of daemonset.yaml finds nothing) and the value reaches DaemonSet.spec.template.spec.tolerations. Needed on any cluster whose nodes carry a taint: without it the node-local OTLP agent cannot schedule there and workloads on that node have no receiver.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "One core/v1 Toleration. All five fields are optional; an empty object tolerates nothing useful.",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "description": "Taint key to tolerate; empty with operator Exists tolerates all taints"
+                      },
+                      "operator": {
+                        "type": "string",
+                        "enum": [
+                          "Exists",
+                          "Equal"
+                        ],
+                        "description": "Equal requires `value` to match; Exists ignores it"
+                      },
+                      "value": {
+                        "type": "string",
+                        "description": "Taint value to match when operator is Equal"
+                      },
+                      "effect": {
+                        "type": "string",
+                        "enum": [
+                          "NoSchedule",
+                          "PreferNoSchedule",
+                          "NoExecute"
+                        ],
+                        "description": "Taint effect to tolerate; empty tolerates all effects"
+                      },
+                      "tolerationSeconds": {
+                        "type": "integer",
+                        "description": "For NoExecute only: how long the pod stays bound after the taint is added"
+                      }
+                    }
+                  }
+                },
+                "nodeSelector": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Node labels the collector DaemonSet requires, passed to the upstream subchart. A typed map: label values are strings."
                 }
               },
               "type": "object"
