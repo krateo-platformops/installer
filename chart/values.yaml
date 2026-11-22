@@ -963,3 +963,17 @@ componentValues:
 authn:
   jwt:
     keyGeneration: 1
+    # How many RETIRED generations keep VERIFYING after a keyGeneration bump. 0 is exactly
+    # today's behaviour: a bump signs out every session, which is what keyGeneration is FOR
+    # (authn has no per-token revocation). Raise it to 1 and hold it for at least 24h to rotate
+    # the signing key WITHOUT invalidating live tokens -- 24h is AUTHN_KUBECONFIG_CRT_EXPIRES_IN,
+    # which clamps the login JWT; delegated tokens last at most 15m.
+    #
+    # previousKeys is DERIVED from this and FORCED onto the component. Never set
+    # componentValues.authn.jwt.previousKeys by hand: a listed key keeps verifying, so hand-set
+    # alongside a keyGeneration bump it yields a rotation that invalidates nothing while every
+    # signal reports success. The pair is unexpressible by construction, not merely refused.
+    #
+    # LOWER THIS BEFORE DELETING A RETIRED SECRET, never in the same apply: authn refuses to
+    # start on a listed Secret that is absent and the pod hangs mounting the volume.
+    overlapGenerations: 0
