@@ -663,11 +663,9 @@
               "description": "Cert-replay hop (issue #12): a per-user-RBAC hop so kagent tool calls run under the CALLING USER's RBAC (kagent-tools with tokenPassthrough, mounting the hop's kubeconfig). This is the policies chart's ONLY Layer 5 mechanism (the earlier SAR-on-claims decider, nativeRbac, was removed) and is default-on. The installer auto-wires image.pullSecrets from registryAuth for the private cert-replay-hop image (a third private-krateo-agentiko-image component, alongside repo-mcp-server and chart-gate); the rest are the policies chart's own knobs.",
               "properties": {
                 "affinity": {
-                  "default": {},
                   "type": "object"
                 },
                 "apiserverURLOverride": {
-                  "default": "",
                   "type": "string"
                 },
                 "audience": {
@@ -675,7 +673,6 @@
                   "type": "string"
                 },
                 "clientconfigNamespace": {
-                  "default": "",
                   "type": "string"
                 },
                 "enabled": {
@@ -683,7 +680,6 @@
                   "type": "boolean"
                 },
                 "env": {
-                  "default": [],
                   "type": "array"
                 },
                 "image": {
@@ -721,11 +717,9 @@
                   "type": "string"
                 },
                 "jwksURL": {
-                  "default": "",
                   "type": "string"
                 },
                 "nodeSelector": {
-                  "default": {},
                   "type": "object"
                 },
                 "replicas": {
@@ -733,14 +727,10 @@
                   "type": "integer"
                 },
                 "resources": {
-                  "default": {},
                   "type": "object"
                 },
                 "service": {
                   "additionalProperties": false,
-                  "default": {
-                    "port": 8443
-                  },
                   "properties": {
                     "port": {
                       "maximum": 65535,
@@ -755,7 +745,6 @@
                   "type": "string"
                 },
                 "tolerations": {
-                  "default": [],
                   "type": "array"
                 }
               },
@@ -766,35 +755,22 @@
               "description": "CORS for the gateway. Only needed when a BROWSER calls it directly (the Krateo portal's Autopilot rail does): the browser sends an unauthenticated OPTIONS preflight first, which the authorization policy would 403, and refuses the real request unless the answer carries Access-Control-Allow-*. Short-circuits the preflight ONLY — a real request with no/bad token is still 403/401. Server-to-server callers are unaffected. The Krateo installer enables it with features.agentGateway.",
               "properties": {
                 "allowCredentials": {
-                  "default": false,
                   "description": "Leave false: no cookies are involved, and true alongside allowOrigins ['*'] is rejected by browsers.",
                   "type": "boolean"
                 },
                 "allowHeaders": {
-                  "default": [
-                    "Authorization",
-                    "Content-Type"
-                  ],
                   "items": {
                     "type": "string"
                   },
                   "type": "array"
                 },
                 "allowMethods": {
-                  "default": [
-                    "GET",
-                    "POST",
-                    "OPTIONS"
-                  ],
                   "items": {
                     "type": "string"
                   },
                   "type": "array"
                 },
                 "allowOrigins": {
-                  "default": [
-                    "*"
-                  ],
                   "description": "Origins allowed to call the gateway from a browser. Defaults to '*' because the portal's browser-facing origin is not knowable in-cluster; pin it to the real portal origin when you know it. Safe by default only while allowCredentials is false — the credential is a Bearer header the page must set itself, not a cookie.",
                   "items": {
                     "type": "string"
@@ -802,11 +778,9 @@
                   "type": "array"
                 },
                 "enabled": {
-                  "default": false,
                   "type": "boolean"
                 },
                 "maxAge": {
-                  "default": 300,
                   "description": "Seconds a browser may cache the preflight answer.",
                   "type": "integer"
                 }
@@ -4208,6 +4182,11 @@
                           "description": "Characters kept from the newest tool result, half from its head and half from its tail; 0 keeps it whole at any length. Must be 0 or at least maxChars. Defaults to 100000 (~25-30k tokens). Needs agentgateway-policies >= 0.2.31.",
                           "minimum": 0,
                           "type": "integer"
+                        },
+                        "agentMaxChars": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "Characters kept from an older tool result that answers a call to another agent (a kagent agent tool, named <namespace>__NS__<agent>), half from its head and half from its tail; 0 keeps it whole. Must be 0 or at least maxChars. Such a result is the agent's report and costs minutes to produce again; cut to maxChars, the caller re-runs the agent."
                         }
                       },
                       "type": "object"
@@ -20351,6 +20330,312 @@
           },
           "title": "Zendesk organisations",
           "type": "object"
+        },
+        "agentiko-mcp-server": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "agentiko-mcp-server: the v1 IDE + personal-agent MCP entry. MIRRORS THE PUBLISHED CHART'S OWN values.schema.json AT 0.2.0 FIELD FOR FIELD, read from oci://ghcr.io/krateo-agentiko/charts/agentiko-mcp-server:0.2.0 rather than from its main, because a bound this schema accepts that the pinned chart then refuses moves the error from a readable schema message to a cdc reconcile. THE WHOLE OBJECT IS MIRRORED, NOT THE `events` NODE ALONE: both sides are additionalProperties:false, so any key declared here-but-not-there is refused by the chart, and any key there-but-not-here is PRUNED BY THE APISERVER while the write reports success. In particular `auth` must be settable, because `events.enabled` requires `auth.mode=exchange` -- declaring only `events` would make the feature impossible to turn on. ZERO `default:` AT ANY DEPTH, verified against the published file by walking it: crdgen propagates schema defaults into the generated CRD, where the apiserver materialises them into every install's Installer CR. The chart declares none either. SHIPS IN ITS OWN TAG, BEFORE THE PIN (installer tag A). The widening is inert -- no component renders from it -- so it rolls at essentially no risk and can be verified on its own; the two pins and features.agentikoMcpServer follow in tag B. If the mirror is imperfect, that is found against a tag that changed nothing else.",
+          "properties": {
+            "global": {
+              "type": "object",
+              "title": "Global values (injected by the Krateo composition engine)",
+              "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
+              "additionalProperties": false,
+              "properties": {
+                "compositionName": {
+                  "type": "string"
+                },
+                "compositionNamespace": {
+                  "type": "string"
+                },
+                "compositionId": {
+                  "type": "string"
+                },
+                "compositionApiVersion": {
+                  "type": "string"
+                },
+                "compositionGroup": {
+                  "type": "string"
+                },
+                "compositionKind": {
+                  "type": "string"
+                },
+                "compositionResource": {
+                  "type": "string"
+                },
+                "compositionInstalledVersion": {
+                  "type": "string"
+                },
+                "gracefullyPaused": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "krateoNamespace": {
+                  "type": "string"
+                },
+                "imageRegistry": {
+                  "type": "string"
+                }
+              }
+            },
+            "namespace": {
+              "type": "string",
+              "description": "Namespace the Deployment, Service and ServiceAccount are installed in."
+            },
+            "nameOverride": {
+              "type": "string",
+              "description": "Empty means agentiko-mcp-server."
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string",
+                  "description": "Empty means .Chart.AppVersion, so chart X.Y.Z runs image X.Y.Z. Set it only to test an unreleased build."
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "Always",
+                    "IfNotPresent",
+                    "Never"
+                  ]
+                }
+              }
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              "description": "Pull secrets for the private image."
+            },
+            "serviceAccount": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "create": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Empty means the chart name."
+                },
+                "annotations": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "replicaCount": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "The server is stateless; scale freely."
+            },
+            "service": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            },
+            "agentiko": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "description": "Agentiko's A2A endpoint. Empty means derived from gateway, namespace and name."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The Agentiko Agent's name."
+                },
+                "namespace": {
+                  "type": "string",
+                  "description": "The Agentiko Agent's namespace. Empty means .Values.namespace."
+                },
+                "gateway": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "description": "The internal agent gateway's Service."
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "description": "Empty means .Values.namespace."
+                    },
+                    "port": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535
+                    }
+                  }
+                }
+              },
+              "description": "Where Agentiko's A2A endpoint is: through the internal agent gateway, so each call is authorized as the calling user."
+            },
+            "wait": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "defaultSeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "How long a tool call follows a task when the caller gives no wait_seconds."
+                },
+                "maxSeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Cap on a caller's wait_seconds; must be at least defaultSeconds."
+                }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "description": "Container resources (standard Kubernetes shape)."
+            },
+            "auth": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "passthrough",
+                    "exchange"
+                  ],
+                  "description": "passthrough: the IDE sends an authn JWT. exchange: the IDE sends a Keycloak access token, traded at authn's /delegate (authn#155)."
+                },
+                "delegate": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "description": "authn's /delegate. Empty means derived from service, namespace and port."
+                    },
+                    "service": {
+                      "type": "string"
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "description": "authn's namespace. Empty means .Values.namespace."
+                    },
+                    "port": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535
+                    },
+                    "audience": {
+                      "type": "string",
+                      "description": "The aud asked for the issued authn token."
+                    }
+                  }
+                },
+                "actorToken": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "audience": {
+                      "type": "string",
+                      "description": "Audience of the projected ServiceAccount token presented to authn."
+                    },
+                    "expirationSeconds": {
+                      "type": "integer",
+                      "minimum": 600
+                    }
+                  }
+                },
+                "mapping": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "create": {
+                      "type": "boolean",
+                      "description": "Render authn's delegation mapping for this ServiceAccount (exchange mode)."
+                    }
+                  },
+                  "description": "oidcConfig AND subjectAudiences ARE DELIBERATELY NOT DECLARED HERE, and `mapping` is additionalProperties:false, so setting either is REFUSED by this schema rather than pruned. The chart's own values.yaml states the contract: both are derived under the Krateo installer from componentValues.krateo-keycloak-realm (oidcConfig.name and ideClient.audience) and are \"not a componentValues key of this chart: setting it there is refused at chart load\". WHY REFUSING MATTERS RATHER THAN ALLOWING AN OVERRIDE: the chart requires subjectAudiences[0] to equal krateo-keycloak-realm's ideClient.audience and agentgateway-policies' mcpEntry.oauth.audience BYTE FOR BYTE, no trailing slash, and records that a mismatch fails sign-in with 401 WHILE EVERYTHING REPORTS READY. A second place to set a value that must agree can only ever disagree, and the disagreement is silent. Same shape as componentValues.cert-manager-issuers.internalCA.namespace, which is also refused for being derived. THE DERIVATION DOES NOT EXIST YET, and that is why this is written down rather than assumed: compositions.yaml contains no reference to oidcConfig, subjectAudiences or ideClient as of 2026-11-21, so the chart documents installer behaviour the installer has not implemented. Consequence, stated plainly: with these keys unsettable and no derivation, auth.mode=exchange CANNOT be enabled through the installer -- the chart's own fail in authn-mapping.yaml aborts the render when either is empty, and a chart render failure aborts the WHOLE umbrella. That is the correct state for now (exchange waits on kc-roll057/ideClient anyway) and it fails LOUDLY at render rather than quietly at sign-in. The derivation must be implemented, with forcePath into the component's own spec, BEFORE exchange mode is turned on anywhere."
+                }
+              },
+              "description": "How the IDE user's token becomes the one Agentiko sees."
+            },
+            "events": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Personal-agent events (MCP Events webhook profile). Needs auth.mode=exchange and the agentiko-mcp-server-crds chart.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "namespace": {
+                  "type": "string",
+                  "description": "Namespace of the EventSubscriptions and their signing-key Secrets; it must hold nothing else. Required when enabled."
+                },
+                "createNamespace": {
+                  "type": "boolean"
+                },
+                "sseProxyURL": {
+                  "type": "string"
+                },
+                "resourceMetadataURL": {
+                  "type": "string"
+                },
+                "portalURL": {
+                  "type": "string",
+                  "description": "The portal's public address, for event links. Required when events are enabled."
+                },
+                "snowplowURL": {
+                  "type": "string"
+                },
+                "incidentsNamespace": {
+                  "type": "string",
+                  "description": "Where incidents live. Empty means .Values.namespace."
+                },
+                "readerGroups": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Groups that may read each events RESTAction (mirror each portal page's readerGroups).",
+                  "properties": {
+                    "incidents": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "compositions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       },
       "title": "Per-component spec overrides",
