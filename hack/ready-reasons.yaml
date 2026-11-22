@@ -348,13 +348,33 @@ compositionDefinition:
   - SchemaDefaultContradiction
   - ValuesSchemaMissing
   - DerivedNameTooLong
-  # oasgen-provider >= 0.85.0, which is a DIFFERENT WRITER again: rest-dynamic-controller, not the
-  # cdc and not provider-runtime. It reports that the controller spent its retry budget for an
-  # object and dropped it -- --max-error-retries defaults to 5 and Forget() runs on success only,
-  # so the budget is spent once per OBJECT LIFETIME and every later resync is dropped at DEBUG.
-  # MEASURED from source: 26 occurrences at oasgen 0.88.0 against 0 at 0.84.0, with
-  # NoCreateVerbDeclared 20 -> 24 as the positive control in the same probe. UNEXERCISED until the
-  # oasgen 0.88.0 pin rolls, so a clean run proves nothing about this branch either.
-  - CreateRefusedPersistently
   unevaluated:
   - NotObserved
+
+# REASONS WRITTEN BY CONTROLLERS OTHER THAN core-provider / the cdc / provider-runtime.
+#
+# WHY THIS SECTION EXISTS. The sections above MIRROR core-provider's docs/ready-reasons.md and
+# docs/cd-ready-reasons.md, and check-ready-reasons-current asserts they are EQUAL to upstream. That
+# equality is the whole value: a reason the classifier names but upstream cannot write hides the real
+# set, and a reason upstream added but the classifier lacks is silently unclassified.
+#
+# A THIRD WRITER BREAKS THAT ASSUMPTION rather than the mirror. rest-dynamic-controller writes its
+# own Ready reasons on objects core-provider never touches, so core-provider's docs correctly do NOT
+# list them -- and putting one in the mirror made the gate refuse the file, which is the gate working.
+# Diego's decision, 2026-11-22: a separate section, with its writer named, that the equality check
+# leaves alone and the classifier still reads.
+#
+# EACH ENTRY NAMES ITS WRITER AND ITS SOURCE, so the next person can check it against something.
+foreignWriters:
+  rest-dynamic-controller:
+    source: oasgen-provider, go/rest-dynamic-controller -- no docs page equivalent to
+      core-provider's exists upstream, so this is sourced from the code and the measurement below
+    compositionDefinition:
+      failed:
+        # MEASURED from source: 26 occurrences at oasgen 0.88.0 against 0 at 0.84.0, with
+        # NoCreateVerbDeclared 20 -> 24 as the positive control in the same probe. It reports that
+        # the controller spent its retry budget for an object and dropped it: --max-error-retries
+        # defaults to 5 and Forget() runs on SUCCESS ONLY, so the budget is spent once per OBJECT
+        # LIFETIME and every later resync is dropped at DEBUG with no condition. UNEXERCISED until
+        # the oasgen 0.90.0 pin rolls, so a clean run proves nothing about this branch.
+        - CreateRefusedPersistently
