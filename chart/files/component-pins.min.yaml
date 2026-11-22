@@ -343,7 +343,7 @@ components:
   feature: sloRollup
 - name: otel-collector-tailsampling
   kind: OtelCollectorTailsampling
-  version: 0.1.17
+  version: 0.1.18
   deps:
     - otel-collector-deployment
   tier: observability
