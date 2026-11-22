@@ -141,6 +141,22 @@ CD_FAILED_REASONS = ("Unavailable", "RemoteChartUnreachable", "SchemaDefaultCont
 # compositionDefinition.converging, mirrored for the same dependency-free reason.
 CD_CONVERGING_REASONS = ("Creating", "Deleting")
 
+# MigratedValuesValid, core-provider#614 (PR #622, 2.13.125). A SEPARATE condition type, not a
+# Ready reason -- core-provider confirmed it never touches Ready, so the Ready classification above
+# is unaffected and no existing gate sees a new Ready reason.
+#
+# THE THREE STATES ARE NOT A TRUE/FALSE PAIR plus noise. From the vendored rows:
+#   True/AllValid                   every instance passed a dry-run create through the served version
+#   False/ValuesRefusedByNewVersion some instances hold values the served version REFUSES; ratcheting
+#                                   let them migrate, so they are stored and the failure lands on the
+#                                   next write that touches a refused field
+#   Unknown/ValidationIncomplete    no instance was refused, but some could not be JUDGED
+#
+# Unknown is NOT a milder False: nothing was refused. It means the check did not complete, which is
+# the same distinction as unsynced children counting as UNKNOWN rather than unhealthy.
+MV_FAILED_REASONS = ("ValuesRefusedByNewVersion",)
+MV_UNVERIFIED_REASONS = ("ValidationIncomplete",)
+
 
 def _age_seconds(ts, now=None):
     """Seconds since an RFC 3339 timestamp, or None if it cannot be parsed or is absent.
@@ -611,6 +627,19 @@ def capture(ctx, secrets=()):
             # Which parent rolls this up, so an umbrella child is distinguishable from a stray.
             "parent": ann.get("meta.helm.sh/release-name"),
             "compositionId": lab.get("krateo.io/composition-id") or ann.get("krateo.io/composition-id"),
+            # core-provider#614 / PR #622, 2.13.125. After a version migration core-provider
+            # dry-run-creates each instance through the NEW version and names those it refuses.
+            # EVERY INSTALLER PIN BUMP IS ONE OF THOSE MIGRATIONS, so this condition reports a
+            # thing this tool's own rolls cause -- which is why it is captured rather than left to
+            # a later sweep.
+            #
+            # ABSENT IS NOT VALID. core-provider's words: the condition appears only once a
+            # migration has moved at least one instance. So None here means "no migration since the
+            # release", and a reader treating it as healthy would credit every un-migrated
+            # definition with a check that never ran. Captured as None rather than defaulted, and
+            # classify_migrated() below refuses to call None a pass.
+            "MigratedValuesValid": ("%s/%s" % (mv.get("status"), mv.get("reason", ""))
+                                    if (mv := conds.get("MigratedValuesValid")) else None),
         }
 
     # Secrets: metadata only. Never a value, and the data KEY NAMES only so a key appearing or
@@ -895,6 +924,34 @@ def diff(pre, post, expect_delta=None, matching=None):
                 cd_conv_late[k] = "%s for %.0fs" % (v.get("Ready"), age)
         else:
             cd_other[k] = v.get("Ready")
+    # MigratedValuesValid, reported SEPARATELY from the Ready classification because it is a
+    # different condition type and core-provider confirmed it never touches Ready. A definition can
+    # be Ready=True/Available and still hold instances the served version refuses.
+    mv_failed, mv_unver = {}, {}
+    for k, v in pod.items():
+        raw = v.get("MigratedValuesValid")
+        if not raw:
+            continue  # ABSENT means no migration since the release -- NOT a pass. Never counted.
+        reason = str(raw).split("/", 1)[-1]
+        if reason in MV_FAILED_REASONS:
+            mv_failed[k] = raw
+        elif reason in MV_UNVERIFIED_REASONS:
+            mv_unver[k] = raw
+    if mv_failed:
+        out["problems"].append(
+            "MIGRATED VALUES REFUSED: %d definition(s) hold instances the served version REFUSES"
+            " -- %s. Validation ratcheting let those instances migrate, so they are STORED and"
+            " nothing is broken yet: the failure lands on the next write that touches a refused"
+            " field, which may be a controller's and may be days later. A pin bump is one of these"
+            " migrations, so this is attributable to the roll."
+            % (len(mv_failed), json.dumps(mv_failed, sort_keys=True)))
+    if mv_unver:
+        out["problems"].append(
+            "MIGRATED VALUES NOT JUDGED: %d definition(s) read Unknown/ValidationIncomplete -- %s."
+            " NOTHING WAS REFUSED; the dry run could not complete for some instances. That is a gap"
+            " in the check, not a finding about the values, and it must not be read either way."
+            % (len(mv_unver), json.dumps(mv_unver, sort_keys=True)))
+
     if cd_failed:
         out["problems"].append(
             "COMPOSITIONDEFINITIONS FAILED: %d of %d -- %s. These reasons are classified `failed`"
@@ -1363,12 +1420,52 @@ def _self_test():
         print("  %-4s %s" % ("ok" if ok else "FAIL", label))
         if not ok:
             print("        want_problems=%s got=%s" % (want, d["problems"]))
+    # mv_unit, 2026-11-22. The constants and the classification are otherwise UNGUARDED: nothing
+    # above reads MigratedValuesValid, so deleting the whole block would leave all 68 cases green --
+    # the same mistake cv_unit and cdr_unit exist for. These assert the OBSERVABLE: which problem
+    # text a definition's MigratedValuesValid produces.
+    #
+    # THE THIRD CASE IS THE ONE THAT EARNS THE UNIT. Absent must produce NOTHING, because absent
+    # means "no migration since the release" and a reader crediting it as a pass would report every
+    # un-migrated definition as having passed a check that never ran.
+    def _mv_snap(raw):
+        d = {"compositions": {}, "releases": {}, "secrets": {},
+             "definitions": {"krateo-system/x": {"Ready": "True/Available",
+                                                 "readyAt": "2026-11-22T10:00:00Z"}}}
+        if raw is not None:
+            d["definitions"]["krateo-system/x"]["MigratedValuesValid"] = raw
+        return d
+
+    def _mv_kind(raw):
+        probs = " ".join(diff(_mv_snap(raw), _mv_snap(raw)).get("problems", []))
+        if "MIGRATED VALUES REFUSED" in probs:
+            return "refused"
+        if "MIGRATED VALUES NOT JUDGED" in probs:
+            return "not-judged"
+        return "silent"
+
+    mv_unit = [
+        ("False/ValuesRefusedByNewVersion -> REFUSED", "False/ValuesRefusedByNewVersion", "refused"),
+        ("Unknown/ValidationIncomplete -> NOT JUDGED", "Unknown/ValidationIncomplete", "not-judged"),
+        ("ABSENT -> silent, and NOT a pass (the case that earns this unit)", None, "silent"),
+        ("True/AllValid -> silent", "True/AllValid", "silent"),
+        ("FALSIFIER: an invented reason is silent, not refused", "False/ZZMadeUp", "silent"),
+    ]
+    bad_mv = 0
+    for label, raw, want in mv_unit:
+        got = _mv_kind(raw)
+        ok = got == want
+        bad_mv += 0 if ok else 1
+        print("  %-4s migrated-values: %s" % ("ok" if ok else "FAIL", label))
+        if not ok:
+            print("        want=%r got=%r" % (want, got))
+
     print("self-test: %d case(s), %d failure(s)"
-          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit) + len(cdr_unit),
-             bad + bad_unit + bad_ne + bad_cf + bad_cv + bad_cdr))
+          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit) + len(cdr_unit) + len(mv_unit),
+             bad + bad_unit + bad_ne + bad_cf + bad_cv + bad_cdr + bad_mv))
     # bad_cf and bad_cv were BOTH missing from this return. A failing carry-forward or
     # composition-version unit printed FAIL and still exited 0, so CI would have passed it.
-    return 1 if (bad or bad_unit or bad_ne or bad_cf or bad_cv or bad_cdr) else 0
+    return 1 if (bad or bad_unit or bad_ne or bad_cf or bad_cv or bad_cdr or bad_mv) else 0
 
 
 def main():
