@@ -704,6 +704,16 @@ def capture(ctx, secrets=()):
     return snap
 
 
+DEFINITION_DIFF_EXCLUDED = frozenset()
+"""Captured definition keys that `diff` deliberately does NOT compare.
+
+EMPTY ON PURPOSE, and it stays empty until there is a measured reason. Every name added here must
+carry why, because an entry makes the diff blind to that key -- the exact failure this replaced.
+`assert_diff_compares_every_captured_key()` in the self-test fails if a captured key is neither
+compared nor listed here, so a future key cannot be forgotten the way MigratedValuesValid was.
+"""
+
+
 def diff(pre, post, expect_delta=None, matching=None):
     """Pure, so the self-test drives it without a cluster."""
     out = {"releases": {}, "compositions": {}, "definitions": {},
@@ -880,9 +890,26 @@ def diff(pre, post, expect_delta=None, matching=None):
     dch = {}
     for k in sorted(set(pd) & set(pod)):
         a, b = pd[k], pod[k]
+        # EVERY captured key is compared, MINUS an explicit exclusion list. It was an INCLUDE
+        # list of six names until 2026-11-23, and that shape fails silently: #1136 added
+        # `MigratedValuesValid` to the capture and to the classifier, the self-test went 61 -> 73
+        # cases, CI was green, and the diff did not compare the new key at all. Found by planting
+        # None -> "False/MigrationFailed" on cert-manager/cert-manager and getting an EMPTY diff.
+        # `compositionId` had been uncompared the same way, with no comment claiming it was meant to
+        # be -- a changed compositionId on the same definition key means it now belongs to a
+        # DIFFERENT composition, which is exactly the silent re-parenting a roll can cause.
+        #
+        # An include list fails CLOSED-BLIND (a new key is silently uncompared); an exclusion list
+        # fails OPEN-NOISY (a new key is compared, perhaps spuriously). For an instrument whose job
+        # is to report change, noisy is strictly safer than blind: noise is visible and gets fixed,
+        # blindness reads exactly like "nothing happened".
+        #
+        # Measured before switching, on a quiet pre/post pair from 057 (79 definitions, nothing
+        # between the two captures): 0 of 79 rows would differ on compositionId and 0 of 79 on
+        # MigratedValuesValid. So neither addition brings noise with it.
         d = {f: [a.get(f), b.get(f)]
-             for f in ("chartVersion", "Ready", "readyAt", "Synced", "uid", "parent")
-             if a.get(f) != b.get(f)}
+             for f in sorted(set(a) | set(b))
+             if f not in DEFINITION_DIFF_EXCLUDED and a.get(f) != b.get(f)}
         if d:
             dch[k] = d
     out["definitions"]["changed"] = dch
@@ -1003,6 +1030,30 @@ def _ago(seconds):
     import datetime as _dt
     return (_dt.datetime.now(_dt.timezone.utc)
             - _dt.timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _excl_probe():
+    """With an EMPTY exclusion list, prove the mechanism anyway by excluding one key locally.
+
+    The list is empty on purpose, so there is no real entry to test. Rather than skip the case --
+    a skipped case prints as nothing and reads as a pass -- this temporarily excludes `Ready`,
+    asserts the diff goes quiet on a Ready change, and restores it. If the mechanism ever stops
+    working, an author adding a genuine exclusion would otherwise find it silently ignored.
+    """
+    global DEFINITION_DIFF_EXCLUDED
+    keep = DEFINITION_DIFF_EXCLUDED
+    try:
+        DEFINITION_DIFF_EXCLUDED = frozenset({"Ready"})
+        pre = {"definitions": {"x/y": {"Ready": "a"}}, "compositions": {}, "releases": {},
+               "secrets": {}}
+        post = {"definitions": {"x/y": {"Ready": "b"}}, "compositions": {}, "releases": {},
+                "secrets": {}}
+        quiet = not (diff(pre, post).get("definitions", {}).get("changed", {}) or {})
+        DEFINITION_DIFF_EXCLUDED = frozenset()
+        loud = bool(diff(pre, post).get("definitions", {}).get("changed", {}) or {})
+        return quiet and loud
+    finally:
+        DEFINITION_DIFF_EXCLUDED = keep
 
 
 def _self_test():
@@ -1460,12 +1511,69 @@ def _self_test():
         if not ok:
             print("        want=%r got=%r" % (want, got))
 
+    # ------------------------------------------------------------------ dk_unit
+    # THE UNIT THAT WOULD HAVE CAUGHT 2026-11-23's BLIND DIFF.
+    #
+    # #1136 added `MigratedValuesValid` to the capture and to the classifier. The self-test went
+    # 61 -> 73 cases and all 73 passed -- every one of the twelve new cases exercised the
+    # CLASSIFIER, and none exercised `diff`. The diff's field list was a hardcoded tuple of six
+    # names, so it never compared the new key: a definition going from absent to
+    # "False/MigrationFailed" produced an EMPTY definitions.changed.
+    #
+    # Found by planting that exact transition on cert-manager/cert-manager in a real capture and
+    # getting nothing back. Not by CI, and not by reading the diff code -- by falsifying a result
+    # that had looked like a pass.
+    #
+    # So this unit asserts the PROPERTY, not the six names: a key nobody has thought of yet is
+    # still compared. That is what makes it survive the next added field.
+    def _defs_diff(a_row, b_row):
+        pre = {"definitions": {"x/y": a_row}, "compositions": {}, "releases": {}, "secrets": {}}
+        post = {"definitions": {"x/y": b_row}, "compositions": {}, "releases": {}, "secrets": {}}
+        return (diff(pre, post).get("definitions", {}).get("changed", {}) or {}).get("x/y", {})
+
+    _BASE = {"Ready": "True/Available", "Synced": "True/", "chartVersion": "1.0.0",
+             "compositionId": "abc123", "parent": "p", "readyAt": "t", "uid": "u",
+             "MigratedValuesValid": None}
+
+    def _moved(field, new):
+        a = dict(_BASE)
+        b = dict(_BASE)
+        b[field] = new
+        return field in _defs_diff(a, b)
+
+    dk_unit = [
+        ("MigratedValuesValid absent -> False/MigrationFailed is REPORTED (the 11-23 blind spot)",
+         lambda: _moved("MigratedValuesValid", "False/MigrationFailed")),
+        ("MigratedValuesValid True/AllValid -> False/... is REPORTED",
+         lambda: (lambda a, b: "MigratedValuesValid" in _defs_diff(a, b))(
+             dict(_BASE, MigratedValuesValid="True/AllValid"),
+             dict(_BASE, MigratedValuesValid="False/ValuesRefusedByNewVersion"))),
+        ("compositionId change is REPORTED -- silent re-parenting under the same key",
+         lambda: _moved("compositionId", "zzz999")),
+        ("A KEY THAT DOES NOT EXIST YET is compared: the property, not a name list",
+         lambda: _moved("someFieldAddedNextMonth", "v")),
+        ("an EXCLUDED key is NOT reported, so the exclusion list does what an author expects",
+         lambda: not (lambda: (DEFINITION_DIFF_EXCLUDED
+                               and "Ready" in _defs_diff(dict(_BASE), dict(_BASE, Ready="x"))))()
+                 if DEFINITION_DIFF_EXCLUDED else _excl_probe()),
+        ("FALSIFIER: an IDENTICAL pair reports nothing, so the above are not vacuous",
+         lambda: _defs_diff(dict(_BASE), dict(_BASE)) == {}),
+    ]
+    bad_dk = 0
+    for label, fn in dk_unit:
+        try:
+            ok = bool(fn())
+        except Exception as e:
+            ok, label = False, "%s  [raised %s]" % (label, e)
+        bad_dk += 0 if ok else 1
+        print("  %-4s diff-keys: %s" % ("ok" if ok else "FAIL", label))
+
     print("self-test: %d case(s), %d failure(s)"
-          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit) + len(cdr_unit) + len(mv_unit),
-             bad + bad_unit + bad_ne + bad_cf + bad_cv + bad_cdr + bad_mv))
+          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit) + len(cdr_unit) + len(mv_unit) + len(dk_unit),
+             bad + bad_unit + bad_ne + bad_cf + bad_cv + bad_cdr + bad_mv + bad_dk))
     # bad_cf and bad_cv were BOTH missing from this return. A failing carry-forward or
     # composition-version unit printed FAIL and still exited 0, so CI would have passed it.
-    return 1 if (bad or bad_unit or bad_ne or bad_cf or bad_cv or bad_cdr or bad_mv) else 0
+    return 1 if (bad or bad_unit or bad_ne or bad_cf or bad_cv or bad_cdr or bad_mv or bad_dk) else 0
 
 
 def main():
