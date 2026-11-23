@@ -1585,6 +1585,20 @@
                     "templateId": {
                       "description": "Template id from the Model Armor console.",
                       "type": "string"
+                    },
+                    "scope": {
+                      "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results — valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                      "items": {
+                        "enum": [
+                          "SystemPrompt",
+                          "Messages",
+                          "ToolInput",
+                          "ToolOutput"
+                        ],
+                        "type": "string"
+                      },
+                      "maxItems": 4,
+                      "type": "array"
                     }
                   },
                   "type": "object"
@@ -1694,6 +1708,20 @@
                         }
                       },
                       "type": "object"
+                    },
+                    "scope": {
+                      "description": "Which parts of the payload the guard inspects. Empty = the default, SystemPrompt + Messages. ToolInput/ToolOutput also cover tool arguments and tool results — valuable on this fleet, whose tools return live cluster state, but masking inside opaque tool-argument JSON can rewrite it into invalid JSON.",
+                      "items": {
+                        "enum": [
+                          "SystemPrompt",
+                          "Messages",
+                          "ToolInput",
+                          "ToolOutput"
+                        ],
+                        "type": "string"
+                      },
+                      "maxItems": 4,
+                      "type": "array"
                     }
                   },
                   "type": "object"
@@ -3467,6 +3495,20 @@
                     }
                   },
                   "type": "object"
+                },
+                "ui": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "The kagent dashboard Service, read by uiTokenHop (its non-API upstream) and by the containment policy that makes the hop the only way in. This chart does not install the UI; the kagent chart does.",
+                  "properties": {
+                    "port": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "service": {
+                      "type": "string"
+                    }
+                  }
                 }
               },
               "type": "object"
@@ -4287,6 +4329,45 @@
                     }
                   },
                   "type": "object"
+                },
+                "turnBudget": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Bounds an agent turn so it must end. Every agent-loop iteration POSTs the whole conversation, so the iteration count is in the request body; past `maxMessages` a CEL transformation clamps `tool_choice` to \"none\" so the provider cannot return further tool calls and the turn concludes on its next message. Renders on the AgentgatewayBackend — `tool_choice` as its own transformation and the nudge as a stage of the composed messages rewrite — because a backend transformations list replaces a route-attached one whole. Off by default; run examples/turn-budget-probe for one turn first.",
+                  "properties": {
+                    "bodyRoot": {
+                      "type": "string",
+                      "default": "llmRequest",
+                      "minLength": 1,
+                      "description": "The CEL variable holding the LLM request body. Describes the request shape, so it governs every messages rewrite this chart renders, not just the budget. `llmRequest` is confirmed against a live gateway."
+                    },
+                    "enabled": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Render the turn budget. Leave false until the probe has confirmed `bodyRoot` on a real request in this environment."
+                    },
+                    "maxMessages": {
+                      "type": "integer",
+                      "default": 150,
+                      "minimum": 1,
+                      "description": "Messages a turn may reach before tool calls are clamped off. MESSAGES, not tool calls — a tool-call round trip adds two (the assistant reply carrying tool_calls, then the tool result), so ~30 calls is ~62 messages. Set it above every healthy turn and below every grind, and take the figure from the probe rather than from a call count."
+                    },
+                    "messagesField": {
+                      "type": "string",
+                      "default": "messages",
+                      "minLength": 1,
+                      "description": "Body field holding the conversation array. `messages` for chat-completions."
+                    },
+                    "nudge": {
+                      "type": "string",
+                      "description": "System message appended when the budget is spent, so the model answers from what it has instead of apologising. Empty clamps tool_choice only."
+                    },
+                    "routeName": {
+                      "type": "string",
+                      "default": "",
+                      "description": "INERT — setting it FAILS the render. It named the HTTPRoute the budget attached to, which cannot work now the budget renders on the backend, and could not work before either: a backend transformations list replaces a route one. One backend serves every LLM route this chart renders, so per-agent scoping needs a per-agent backend, which this chart does not render."
+                    }
+                  }
                 }
               },
               "type": "object"
