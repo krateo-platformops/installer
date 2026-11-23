@@ -290,7 +290,7 @@ data:
   {{- $patchSpec := dict "components" ((include "inst.componentsPatchList" $) | fromJsonArray) "componentValues" ((include "inst.componentValuesPatch" $) | fromJson) "exposure" .Values.exposure "vertexAI" .Values.vertexAI "registryAuth" .Values.registryAuth "hitlApproval" .Values.hitlApproval -}}
   {{- if (default dict .Values.internalTls).certManagerNamespace -}}
   {{- $_ := set $patchSpec "internalTls" .Values.internalTls -}}
-  {{- end -}}
+  {{- end }}
   components-patch.json: {{ dict "spec" $patchSpec | toJson | quote }}
 ---
 {{- /*
