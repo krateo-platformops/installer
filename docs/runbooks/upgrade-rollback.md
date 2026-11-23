@@ -209,6 +209,19 @@ blocked (e.g. the previous chart is unpublished).
 - **A pruned served version must be re-servable.** Down-upgrading re-registers the older
   CompositionDefinition, so core-provider regenerates and re-serves `v<old>` — but if the
   older *chart* was deleted from the registry, that path is gone; use the surgical CR edit.
+- **Tags before 0.3.701 cannot enable `features.capabilityRoles`.** That feature pins
+  `krateo-capability-roles` from `oci://ghcr.io/krateo-platformops/krateo-saas`, and every
+  version below 0.7.1 was deleted from that registry on 2026-11-23 — a deliberate one-time
+  purge of 107 versions across its 7 packages, approved by the user before the packages were
+  made public ("delete old, then public"), not a retention policy. New versions accumulate
+  normally, so 0.7.2 will sit beside 0.7.1. Measured at the time: 0.7.1 PRESENT; 0.7.0,
+  0.6.3, **0.6.2**, 0.6.1, 0.6.0 and 0.5.0 all absent, and 0.6.2 absent from the default
+  registry too. **0.3.700 pins 0.6.2**, so installing it — or any earlier tag — with that
+  feature on fails to pull the chart. 057 and demo are unaffected: the feature is off on 057
+  and there is no CompositionDefinition for it, and demo adopts 0.7.1. The user's decision
+  was to accept this rather than restore 0.6.2, since old tags are not re-installed. **Probe
+  the pin's own `repo` key, not the default registry** — three probes against the wrong
+  registry return "absent" for a chart that exists.
 - **CRD schema shrink.** If a component's newer chart added required fields to its own CRD
   and stored CRs use them, rolling that component back to a chart whose CRD lacks those
   fields can strand the stored objects. Roll components back one minor at a time and watch
