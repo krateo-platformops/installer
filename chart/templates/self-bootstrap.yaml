@@ -188,7 +188,7 @@ data:
        components-patch.json + the post-upgrade branch), so chart-side pins reach the cluster
        while spec.features and other runtime edits are preserved (not clobbered by a full
        re-apply). Single-entry in-place CR edits remain safe (whole list shipped). */}}
-{{- $spec := pick .Values "ociRepo" "installDefinitions" "namespaces" "exposure" "features" "vertexAI" "hitlApproval" "componentValues" "registryAuth" }}
+{{- $spec := pick .Values "ociRepo" "installDefinitions" "namespaces" "exposure" "features" "vertexAI" "hitlApproval" "componentValues" "registryAuth" "internalTls" }}
 {{- /* componentValues goes through inst.componentValuesResolved so the FRESH-INSTALL CR carries the
        same derived required keys as the surgical upgrade patch. Without this the two paths differ:
        an upgrade would supply keycloak-config-kog's baseUrl and a fresh install would not, so the
@@ -280,7 +280,18 @@ data:
   # merge patch on `helm upgrade` (see the post-upgrade branch below): the `components` list is
   # replaced wholesale; the object fields deep-merge, so chart/values-set keys win and any user-only
   # keys are preserved.
-  components-patch.json: {{ dict "spec" (dict "components" ((include "inst.componentsPatchList" $) | fromJsonArray) "componentValues" ((include "inst.componentValuesPatch" $) | fromJson) "exposure" .Values.exposure "vertexAI" .Values.vertexAI "registryAuth" .Values.registryAuth "hitlApproval" .Values.hitlApproval) | toJson | quote }}
+  {{- /* internalTls rides the patch ONLY when certManagerNamespace is non-empty (installer#1084,
+       found by snowplow's bench 2026-11-23). Unconditional inclusion would blank a hand-set CR
+       value on any upgrade run without it in the values file -- and an EMPTY certManagerNamespace
+       with features.internalTls on makes compositions.yaml:923 `fail`, which aborts the WHOLE
+       umbrella render for every component, not just this one. So the asymmetry is closed in the
+       direction that can only add information. Same polarity as the vertexAI.secretName guard
+       above: propagate a value, never propagate an absence over a present one. */}}
+  {{- $patchSpec := dict "components" ((include "inst.componentsPatchList" $) | fromJsonArray) "componentValues" ((include "inst.componentValuesPatch" $) | fromJson) "exposure" .Values.exposure "vertexAI" .Values.vertexAI "registryAuth" .Values.registryAuth "hitlApproval" .Values.hitlApproval -}}
+  {{- if (default dict .Values.internalTls).certManagerNamespace -}}
+  {{- $_ := set $patchSpec "internalTls" .Values.internalTls -}}
+  {{- end }}
+  components-patch.json: {{ dict "spec" $patchSpec | toJson | quote }}
 ---
 {{- /*
   The bootstrap is FOUR ordered, bounded, idempotent hook WAVES (helm hook-weights) instead of one
