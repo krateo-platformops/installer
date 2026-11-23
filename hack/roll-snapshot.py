@@ -141,6 +141,26 @@ CD_FAILED_REASONS = ("Unavailable", "RemoteChartUnreachable", "SchemaDefaultCont
 # compositionDefinition.converging, mirrored for the same dependency-free reason.
 CD_CONVERGING_REASONS = ("Creating", "Deleting")
 
+# THE COMPOSITION Ready CLASSIFICATION, all four buckets, mirrored from hack/ready-reasons.yaml
+# which is the source of truth. Duplicated as literals because this tool must stay dependency-free
+# (`python3 -I`, no PyYAML, run during a roll on whatever machine holds it); check-roll-snapshot
+# asserts each tuple EQUALS its list in that file, so the duplication is gated rather than trusted.
+#
+# WHY ALL FOUR AND NOT JUST `failed`. Until 2026-11-24 only the failed set existed here and the
+# classifier was a membership filter with no else, so an unrecognised reason was silently dropped.
+# Adding an unclassified bucket on top of the failed set ALONE was wrong in the other direction and
+# the self-test caught it immediately: AvailablePartialCoverage (15 of 86 compositions on 057),
+# ReconcilePaused and ZeroEvidence all landed in it. Reporting those would train the reader to
+# ignore the check, which is worse than the gap it closes. So the bucket means "in none of the
+# four", not "not failed".
+COMP_CONVERGED_REASONS = ("Available", "AvailablePartialCoverage", "ReconcileGracefullyPaused",
+                          "ReconcilePaused", "UpdateWithheldByPolicy")
+COMP_CONVERGING_REASONS = ("Creating", "HelmOperationInProgress", "PendingHelmOperation",
+                           "ChildrenForbidden", "InventoryNotRecorded", "Deleting")
+# ZeroEvidence / ObserveFailed are owned by never_evaluated() and stuck_converging(), which read
+# the coverage SCALARS rather than the reason -- see the block at the top of never_evaluated().
+COMP_UNEVALUATED_REASONS = ("ZeroEvidence", "ObserveFailed")
+
 # MigratedValuesValid, core-provider#614 (PR #622, 2.13.125). A SEPARATE condition type, not a
 # Ready reason -- core-provider confirmed it never touches Ready, so the Ready classification above
 # is unaffected and no existing gate sees a new Ready reason.
@@ -868,8 +888,31 @@ def diff(pre, post, expect_delta=None, matching=None):
     # 3m poll, so **a CD can read Available while its own controller is not up at all**. So on
     # 2.13.105 and 2.13.107 a green CD is not evidence that its controller is running, and the
     # composition is the better of the two signals -- the reverse of the advice above.
-    failed = {k: v.get("Ready") for k, v in (post.get("compositions") or {}).items()
-              if str(v.get("Ready", "")).split("/", 1)[-1] in FAILED_REASONS}
+    # THREE-WAY, not a membership filter. Until 2026-11-24 this was a bare comprehension over
+    # FAILED_REASONS with NO else, so a composition reading an UNRECOGNISED reason was neither
+    # reported as failed nor reported at all -- silently dropped. The definitions classifier below
+    # has had an `else -> unclassified` bucket all along; compositions did not, and the asymmetry
+    # was invisible because every reason core-provider had shipped was already in the tuple.
+    # Found 2026-11-23 when core-provider announced `InstallFailing` BEFORE merging it: a component
+    # whose install hooks never pass would have produced NO FINDING AT ALL on this path.
+    # Fixing the CLASS, not the instance: adding one string to the tuple would leave the next new
+    # reason equally silent. Same shape as the blind diff shipped in #1136 and fixed in #1139.
+    comps = (post.get("compositions") or {})
+    failed, comp_other = {}, {}
+    for k, v in comps.items():
+        ready = str(v.get("Ready", ""))
+        if ready == "True/Available":
+            continue
+        reason = ready.split("/", 1)[-1]
+        if reason in FAILED_REASONS:
+            failed[k] = v.get("Ready")
+        elif reason in COMP_CONVERGING_REASONS or reason in COMP_CONVERGED_REASONS \
+                or reason in COMP_UNEVALUATED_REASONS:
+            continue            # owned by stuck_converging() / never_evaluated(), or healthy
+        elif ready in ("", "None") or reason in ("", "None"):
+            continue            # a gap in the capture is not a finding about the cluster
+        else:
+            comp_other[k] = v.get("Ready")
     if failed:
         out["problems"].append(
             "COMPOSITIONS FAILED: %d -- %s. The umbrella inherits these. RE-SNAPSHOT BEFORE "
@@ -883,6 +926,16 @@ def diff(pre, post, expect_delta=None, matching=None):
             "the rule is a SECOND SNAPSHOT after the composition's resync interval (3m default) "
             "plus slack -- the 900s stuck bound above is that slack."
             % (len(failed), json.dumps(failed, sort_keys=True)))
+
+    if comp_other:
+        out["problems"].append(
+            "COMPOSITIONS with an UNCLASSIFIED reason: %d of %d -- %s. Not True/Available, not a "
+            "known failed reason, and not a known converging one. This bucket exists because a "
+            "membership filter silently DROPS a reason nobody has taught it: core-provider ships "
+            "new Ready reasons (InstallFailing is one), and an unrecognised reason must be LOUD "
+            "rather than absent. Classify it -- if it is a failure add it to FAILED_REASONS and to "
+            "hack/ready-reasons.yaml, if it is transient add it to COMP_CONVERGING_REASONS."
+            % (len(comp_other), len(comps), json.dumps(comp_other, sort_keys=True)))
 
     pd, pod = pre.get("definitions", {}), post.get("definitions", {})
     out["definitions"]["gone"] = sorted(set(pd) - set(pod))
@@ -1559,6 +1612,41 @@ def _self_test():
         ("FALSIFIER: an IDENTICAL pair reports nothing, so the above are not vacuous",
          lambda: _defs_diff(dict(_BASE), dict(_BASE)) == {}),
     ]
+    # co_unit, 2026-11-24. THE COMPOSITIONS UNCLASSIFIED BUCKET. Until today the compositions
+    # classifier was a bare membership filter over FAILED_REASONS with no else, so a reason nobody
+    # had taught it was silently dropped -- not failed, not reported. core-provider announced
+    # `InstallFailing` before merging it, which is how the gap was found rather than discovered on
+    # a cluster. These assert the OBSERVABLE (which bucket a reason lands in, via the problem text)
+    # and the last two are the falsifiers: a KNOWN failed reason must not land in the unclassified
+    # bucket, and a healthy composition must produce neither.
+    def _co(ready):
+        pre = {"compositions": {"k": {"Ready": "True/Available"}}, "definitions": {}, "releases": {}, "secrets": {}}
+        post = {"compositions": {"k": {"Ready": ready}}, "definitions": {}, "releases": {}, "secrets": {}}
+        probs = " ".join(diff(pre, post).get("problems") or [])
+        return ("UNCLASSIFIED" in probs, "COMPOSITIONS FAILED" in probs)
+    co_unit = [
+        ("an UNKNOWN reason lands in the unclassified bucket",
+         lambda: _co("False/InstallFailing") == (True, False)),
+        ("a second unknown reason behaves the same (not special-cased)",
+         lambda: _co("False/SomeReasonNobodyShippedYet") == (True, False)),
+        ("FALSIFIER: a KNOWN failed reason is FAILED, not unclassified",
+         lambda: _co("False/Unavailable") == (False, True)),
+        ("FALSIFIER: a KNOWN converging reason is NEITHER",
+         lambda: _co("False/Creating") == (False, False)),
+        ("HelmOperationInProgress is converging, not unclassified",
+         lambda: _co("False/HelmOperationInProgress") == (False, False)),
+        ("FALSIFIER: True/Available produces NEITHER, so the bucket is not vacuous",
+         lambda: _co("True/Available") == (False, False)),
+    ]
+    bad_co = 0
+    for label, fn in co_unit:
+        try:
+            ok = bool(fn())
+        except Exception as e:
+            ok, label = False, "%s  [raised %s]" % (label, e)
+        bad_co += 0 if ok else 1
+        print("  %-4s comp-unclassified: %s" % ("ok" if ok else "FAIL", label))
+
     bad_dk = 0
     for label, fn in dk_unit:
         try:
@@ -1569,8 +1657,8 @@ def _self_test():
         print("  %-4s diff-keys: %s" % ("ok" if ok else "FAIL", label))
 
     print("self-test: %d case(s), %d failure(s)"
-          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit) + len(cdr_unit) + len(mv_unit) + len(dk_unit),
-             bad + bad_unit + bad_ne + bad_cf + bad_cv + bad_cdr + bad_mv + bad_dk))
+          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit) + len(cdr_unit) + len(mv_unit) + len(dk_unit) + len(co_unit),
+             bad + bad_unit + bad_ne + bad_cf + bad_cv + bad_cdr + bad_mv + bad_dk + bad_co))
     # bad_cf and bad_cv were BOTH missing from this return. A failing carry-forward or
     # composition-version unit printed FAIL and still exited 0, so CI would have passed it.
     return 1 if (bad or bad_unit or bad_ne or bad_cf or bad_cv or bad_cdr or bad_mv or bad_dk) else 0

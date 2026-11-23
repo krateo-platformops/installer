@@ -107,6 +107,28 @@ jobs:
                   "%s is %s but ready-reasons.yaml compositionDefinition.%s is %s"
                   % (const, got, key, want))
           print("cross-check: CD_FAILED_REASONS and CD_CONVERGING_REASONS match the CD namespace")
+
+          # THE COMPOSITION namespace's other three buckets, added 2026-11-24 alongside the
+          # unclassified bucket in roll-snapshot's compositions classifier. That bucket reports any
+          # reason in NONE of the four, so a reason silently dropped from one of these tuples would
+          # start being reported as unclassified on a HEALTHY cluster -- AvailablePartialCoverage
+          # alone is 15 of 86 compositions on krateo-057. Ungated, these three would drift exactly
+          # the way FAILED_REASONS could before its own gate existed.
+          cy = yaml.safe_load(open("hack/ready-reasons.yaml", encoding="utf-8"))["composition"]
+          for const, key in (("COMP_CONVERGED_REASONS", "converged"),
+                             ("COMP_CONVERGING_REASONS", "converging"),
+                             ("COMP_UNEVALUATED_REASONS", "unevaluated")):
+              m3 = re.search(r"^%s = \((.*?)\)$" % const, src, re.M | re.S)
+              assert m3, "%s not found in hack/roll-snapshot.py" % const
+              got3 = sorted(re.findall(r'"([^"]+)"', m3.group(1)))
+              assert got3, "%s parsed as EMPTY -- the regex matched nothing useful" % const
+              foreign3 = []
+              for w in (yaml.safe_load(open("hack/ready-reasons.yaml", encoding="utf-8")).get("foreignWriters") or {}).values():
+                  foreign3 += ((w.get("composition") or {}).get(key) or [])
+              want3 = sorted(list(cy[key]) + foreign3)
+              assert got3 == want3, (
+                  "%s is %s but ready-reasons.yaml composition.%s is %s" % (const, got3, key, want3))
+          print("cross-check: COMP_CONVERGED/CONVERGING/UNEVALUATED match the composition namespace")
           print("roll-snapshot.py FAILED_REASONS : %s" % tool)
           print("ready-reasons.yaml failed       : %s" % vendored)
           assert tool, "FAILED_REASONS parsed as EMPTY -- the regex matched nothing useful, which "\
