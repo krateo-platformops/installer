@@ -1,0 +1,128 @@
+# kagent's per-user RBAC: both halves derived together, or the render dies.
+#
+# THE DEFECT THIS CLOSES, found by agentiko-mcp-server 2026-11-24 and verified on krateo-057.
+# Rendered from published kagent 0.1.24 with THIS chart's defaults -- componentValues.kagent =
+# {kagentapp: {fullnameOverride: kagent}}, no perUserRbac -- kagent-tools gets ClusterRole
+# `kagent-tools-cluster-admin-role` (* on *, plus nonResourceURLs *) and TOKEN_PASSTHROUGH=false.
+# agentgateway-policies' default rules deny only the WRITE tools, so on a fresh install with
+# coreAgents on, READS INCLUDING SECRETS ARE OPEN TO ANYONE SIGNED IN.
+#
+# 057 was safe ONLY because an operator wrote both values onto its CR by hand; this repository set
+# neither, so 057's safety was not reconstructible from the repo.
+#
+# THE PAIRING IS A HARD TEMPLATE-TIME FAILURE. This chart's own schema says "setting one alone is a
+# hard template-time failure in the kagent chart", which is why the two are derived from ONE
+# condition and never independently, and why forcePath rather than set-if-absent: a partial
+# operator override would be a failed render, not a degraded install.
+#
+# CASES 3, 4 AND 5 ARE THE FALSIFIERS AND THEY ARE THE POINT. Without them an implementation that
+# wrote the pair unconditionally -- taking the agents' Kubernetes tools away on every no-gateway
+# install -- would pass cases 1 and 2. The agentGateway-off case is a DIFFERENT decision,
+# deliberately not taken, so it must be proven untouched.
+suite: "kagent per-user RBAC - both halves, derived from both features"
+templates:
+  - templates/compositions.yaml
+tests:
+  - it: "CASE 1 (THE FIX): both features on -> BOTH halves derived, together"
+    set:
+      features.coreAgents: true
+      features.agentGateway: true
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider:
+      scheme: &scheme
+        "apiextensions.k8s.io/v1/CustomResourceDefinition":
+          gvr: {version: v1, group: apiextensions.k8s.io, resource: customresourcedefinitions}
+        "composition.krateo.io/v0-1-6/KagentCrds":
+          gvr: {group: composition.krateo.io, version: v0-1-6, resource: kagentcrdses}
+          namespaced: true
+        "composition.krateo.io/v0-1-24/Kagent":
+          gvr: {group: composition.krateo.io, version: v0-1-24, resource: kagents}
+          namespaced: true
+      objects: &objs
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: kagentcrdses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: KagentCrds}
+            versions: [{name: v0-1-6, served: true}]
+        # THE SUBJECT: Kagent v0-1-24 DECLARES both perUserRbac and kagentapp
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: kagents.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: Kagent}
+            versions:
+              - name: v0-1-24
+                served: true
+                schema:
+                  openAPIV3Schema:
+                    type: object
+                    properties:
+                      spec:
+                        type: object
+                        properties:
+                          perUserRbac: {type: object}
+                          kagentapp: {type: object}
+        - apiVersion: composition.krateo.io/v0-1-6
+          kind: KagentCrds
+          metadata: {name: kagent-crds, namespace: krateo-system}
+          status:
+            conditions: [{type: Ready, status: "True"}, {type: Synced, status: "True"}]
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.perUserRbac.enabled
+          value: true
+        documentSelector: {path: kind, value: Kagent}
+      - equal:
+          path: spec.kagentapp.kagent-tools.enabled
+          value: false
+        documentSelector: {path: kind, value: Kagent}
+
+  - it: "CASE 2: the two halves AGREE -- never one without the other"
+    set:
+      features.coreAgents: true
+      features.agentGateway: true
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider:
+      scheme: *scheme
+      objects: *objs
+    asserts:
+      - notFailedTemplate: {}
+      # perUserRbac on REQUIRES kagent-tools off; either alone is a template-time failure upstream
+      - exists: {path: spec.perUserRbac.enabled}
+        documentSelector: {path: kind, value: Kagent}
+      - exists: {path: spec.kagentapp.kagent-tools.enabled}
+        documentSelector: {path: kind, value: Kagent}
+
+  - it: "CASE 3 FALSIFIER: agentGateway OFF -> NEITHER half written, byte-identical to today"
+    set:
+      features.coreAgents: true
+      features.agentGateway: false
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider:
+      scheme: *scheme
+      objects: *objs
+    asserts:
+      - notFailedTemplate: {}
+      # With no gateway there is no caller token, so closing the tools route would take the
+      # agents' Kubernetes tools away. That is a SEPARATE decision, deliberately not taken here.
+      - notExists: {path: spec.perUserRbac.enabled}
+        documentSelector: {path: kind, value: Kagent}
+      - notExists: {path: spec.kagentapp.kagent-tools.enabled}
+        documentSelector: {path: kind, value: Kagent}
+
+  - it: "CASE 4 FALSIFIER: the Kagent document exists at all in CASE 3, so case 3 is not vacuous"
+    set:
+      features.coreAgents: true
+      features.agentGateway: false
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider:
+      scheme: *scheme
+      objects: *objs
+    asserts:
+      - notFailedTemplate: {}
+      - exists: {path: spec}
+        documentSelector: {path: kind, value: Kagent}

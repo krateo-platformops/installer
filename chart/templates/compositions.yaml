@@ -432,6 +432,46 @@
 {{- end }}
 {{- end }}
 {{- end }}
+{{- /* kagent's TWO HALVES, DERIVED TOGETHER, because the chart's DEFAULT is cluster-admin-for-all.
+
+       THE DEFECT, found by agentiko-mcp-server 2026-11-24 and verified on 057. Rendered from
+       published kagent 0.1.24 with THIS chart's defaults -- componentValues.kagent =
+       {kagentapp: {fullnameOverride: kagent}}, no perUserRbac at all -- kagent-tools gets
+       ClusterRole `kagent-tools-cluster-admin-role` (* on *, plus nonResourceURLs *) and
+       TOKEN_PASSTHROUGH=false. agentgateway-policies' default rules deny only the WRITE tools, so
+       on a fresh install with coreAgents on, READS INCLUDING SECRETS ARE OPEN TO ANYONE SIGNED IN.
+       That is against the rule Diego confirmed: a Kubernetes tool uses the PERSON'S certificate
+       when the interaction started with a physical user.
+
+       057 IS SAFE AND ONLY BY HAND. Its CR carries perUserRbac {enabled: true} and
+       kagentapp['kagent-tools'] {enabled: false}, written by an operator; this repository sets
+       NEITHER, so 057's safety was not reconstructible from the repo. Measured 2026-11-24:
+       0 ClusterRoles matching kagent-tools, TOKEN_PASSTHROUGH=true.
+
+       THE TWO HALVES MUST MOVE TOGETHER OR THE RENDER DIES. This chart's own schema says so:
+       "setting one alone is a hard template-time failure in the kagent chart". So they are
+       derived in ONE place, from ONE condition, and never independently -- which is also why
+       forcePath is right here rather than a set-if-absent: a partial operator override would be
+       a template-time failure, not a degraded install.
+
+       THE CONDITION IS BOTH FEATURES (Diego, 2026-11-24): per-user RBAC needs a caller token, and
+       the token comes from the gateway's cert-replay hop. With agentGateway OFF there is no caller
+       token, so closing the tools route would take the agents' Kubernetes tools away entirely --
+       a DIFFERENT decision, deliberately NOT taken here, and left for Diego on its own. With
+       agentGateway off this block does nothing and the behaviour is byte-identical to today.
+       Neither cluster I own is in that case: 057 has both ON, demo has both OFF.
+
+       inst.canHold guards each write, as for vertexAI and hitlApproval: where the CRD version the
+       CR is written AT does not declare the key, the apiserver PRUNES it and the write reports
+       success. */}}
+{{- if and (eq $c.name "kagent") $top.Values.features.agentGateway $top.Values.features.coreAgents }}
+{{- if eq (include "inst.canHold" (list $c.kind $emit $allCRDs "perUserRbac")) "true" }}
+{{- include "inst.forcePath" (dict "target" $spec "path" (list "perUserRbac" "enabled") "value" true) }}
+{{- end }}
+{{- if eq (include "inst.canHold" (list $c.kind $emit $allCRDs "kagentapp")) "true" }}
+{{- include "inst.forcePath" (dict "target" $spec "path" (list "kagentapp" "kagent-tools" "enabled") "value" false) }}
+{{- end }}
+{{- end }}
 {{- /* keycloak-config-kog's TWO URLS AND ITS BOOTSTRAP NAMESPACE, derived HERE rather than filled
        into the CR -- and that distinction is the whole bug fix.
 
