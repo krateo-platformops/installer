@@ -13131,6 +13131,86 @@
                   "title": "Client",
                   "type": "object"
                 },
+                "clientoptionalclientscope": {
+                  "type": "object",
+                  "title": "Client optional client scope",
+                  "description": "KeycloakClientOptionalClientScope RestDefinition: one client scope assigned to one client as an optional scope. Lifecycle verbs are delegated to Snowplow RESTActions because Keycloak ignores optionalClientScopes on a client update and addresses the assignment only by server UUIDs.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakClientOptionalClientScope RestDefinition plus its backing RESTActions.",
+                      "default": true
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD.",
+                      "default": "KeycloakClientOptionalClientScope"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "clientpolicies": {
+                  "type": "object",
+                  "title": "Client policies",
+                  "description": "KeycloakClientPolicies RestDefinition: a realm's client policies (which profiles apply to which clients), adopted and replaced as a whole.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakClientPolicies RestDefinition.",
+                      "default": true
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD.",
+                      "default": "KeycloakClientPolicies"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "clientprofiles": {
+                  "type": "object",
+                  "title": "Client profiles",
+                  "description": "KeycloakClientProfiles RestDefinition: a realm's client-policies profiles (executor bundles), adopted and replaced as a whole.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakClientProfiles RestDefinition.",
+                      "default": true
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD.",
+                      "default": "KeycloakClientProfiles"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "clientregistrationpolicy": {
+                  "type": "object",
+                  "title": "Client registration policy",
+                  "description": "KeycloakClientRegistrationPolicy RestDefinition: one client-registration policy component (adopts the realm's defaults by name + subType).",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakClientRegistrationPolicy RestDefinition.",
+                      "default": true
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD.",
+                      "default": "KeycloakClientRegistrationPolicy"
+                    }
+                  },
+                  "additionalProperties": false
+                },
                 "clientscope": {
                   "additionalProperties": false,
                   "properties": {
@@ -13147,6 +13227,46 @@
                   },
                   "title": "Client scope",
                   "type": "object"
+                },
+                "clientscopeprotocolmapper": {
+                  "type": "object",
+                  "title": "Client scope protocol mapper",
+                  "description": "KeycloakClientScopeProtocolMapper RestDefinition: one protocol mapper on a client scope.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakClientScopeProtocolMapper RestDefinition.",
+                      "default": true
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD.",
+                      "default": "KeycloakClientScopeProtocolMapper"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "defaultclientregistrationpolicy": {
+                  "type": "object",
+                  "title": "Default client registration policy",
+                  "description": "KeycloakDefaultClientRegistrationPolicy RestDefinition: one of the realm's default client-registration policies, adopted and updated, never created or deleted.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "title": "Enabled",
+                      "description": "Emit the KeycloakDefaultClientRegistrationPolicy RestDefinition.",
+                      "default": true
+                    },
+                    "kind": {
+                      "type": "string",
+                      "title": "Kind",
+                      "description": "Kubernetes kind for the generated CRD.",
+                      "default": "KeycloakDefaultClientRegistrationPolicy"
+                    }
+                  },
+                  "additionalProperties": false
                 },
                 "group": {
                   "additionalProperties": false,
@@ -17171,6 +17291,24 @@
         "otel-collector-daemonset": {
           "additionalProperties": false,
           "properties": {
+            "auditCollector": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Replicated audit collector, off by default.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "replicas": {
+                  "type": "integer",
+                  "minimum": 2
+                },
+                "resources": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            },
             "global": {
               "additionalProperties": false,
               "description": "Context keys the composition-dynamic-controller injects when this chart installs as a component (plumbing InjectGlobalValues), plus the helm-standard imageRegistry override.",
