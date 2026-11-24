@@ -137,31 +137,30 @@ def measure():
             "no_node": no_node, "no_node_empty": sorted(no_node_empty)}
 
 
-# Components the gate could not pull. MEASURED, not assumed: the first CI run pulled 59 of 78 and
-# named exactly these 19 -- every one from krateo-agentiko (private by design) plus two
-# krateo-blueprints charts.
+# Components excluded from the COMPARISON. Empty since 2026-11-24, and the mechanism is kept
+# because a component sliding out of CI's reach must still be a failure, not a silent skip.
 #
-# THE REASON THEY WERE DARK HAS CHANGED, AND THIS LIST IS NOW STALE BY CONSTRUCTION. The old comment
-# here said they live "in a registry CI's GITHUB_TOKEN cannot read" and that closing the gap "needs
-# credentials, which is a separate decision and not this gate's". That was WRONG: check-pin-ci and
-# check-chart-requires-floors both use secrets.PAT and read these same charts in CI today, so the
-# 19 were unguarded through an asymmetry between three gates in one repository rather than through
-# any decision. Diego chose to switch this gate to the PAT (2026-11-22).
+# WHY IT IS EMPTY NOW, MEASURED. The 19 names here were recorded by the first run of this gate,
+# which used GITHUB_TOKEN and could not read krateo-agentiko. Diego switched the gate to
+# secrets.PAT on 2026-11-22 and the workflow has logged in with it since. Two things followed that
+# nobody then re-derived:
+#   - measure() attempts EVERY one of the 78 targets with no out-of-scope skip, and the
+#     PAT-credentialed runs report `unpullable` EMPTY -- so CI pulls all 78, including these 19.
+#   - the comparison loop below nevertheless `continue`d on them and write_baseline() omitted them,
+#     so the gate MEASURED their sites every run and threw the measurement away.
+# The printed label "registry CI cannot read" was therefore false, and the 19 were unratcheted
+# through stale bookkeeping rather than through any decision or any missing credential.
 #
-# SO THIS LIST MUST BE RE-DERIVED FROM THE FIRST PAT-CREDENTIALED RUN, not edited by hand here.
-# Whatever that run still cannot pull is the real out-of-scope set, and it will name them exactly as
-# the original run named these -- the gate's lost-component guard reports anything that drops out.
-# Until then the list stays as-is, which is conservative in the right direction: the gate checks MORE
-# than the list claims and cannot report a false pass because of it. It can only under-claim.
+# THE ASYMMETRY THAT JUSTIFIED THE SKIP IS GONE, and that is what makes rewriting the baseline
+# safe. The old comment warned that a laptop can pull these while CI cannot, so a locally written
+# baseline would claim coverage CI could not honour. Measured 2026-11-24, same script, same pins:
+#   CI run 45327907989  78 targets / 59 in scope / 74 pulled / 98 sites in 40 components
+#   this laptop         78 targets / 59 in scope / 74 pulled / 98 sites in 40 components
+# Identical, so the baseline written here is the one CI measures.
 #
-# The gate still REFUSES to let the list GROW, so a component sliding out of reach is a failure.
-OUT_OF_SCOPE = {
-    "agentgateway-controller", "agentgateway-policies", "agentiko", "authn-agent",
-    "clickhouse-mcp-server", "clickstack-agent", "config-refs-mcp-server", "core-provider-agent",
-    "frontend-agent", "incident-agent", "installer-agent", "kagent", "kagent-crds",
-    "krateo-capability-roles", "model-configs", "repo-mcp-server", "snowplow-agent",
-    "structure-graph-mcp-server", "tenant-onboarding",
-}
+# Emptying this set TIGHTENS the ratchet: the baseline grows from 26 components / 67 sites to 40 /
+# 98, and drift inside the agent fleet becomes visible for the first time.
+OUT_OF_SCOPE: set[str] = set()
 
 
 def main() -> int:
