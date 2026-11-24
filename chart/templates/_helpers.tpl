@@ -1108,6 +1108,25 @@ overridable; all other pin fields (kind/chart/deps/tier/feature/exposure) remain
          <plural>-<a SERVED crd version>-jsonschema-configmap exactly. The 55th is
          installer-core-provider-jsonschema-configmap, not a composition CRD, so out of scope.
 
+     THE NAME IS A CONTRACT, AND IT IS NOW TEST-PROTECTED UPSTREAM (asked and answered
+     2026-11-24). core-provider#651 makes the ConfigMaps MOUNTED ON THE CORE-PROVIDER POD
+     immutable and named by content digest -- `<fullname>-cdc-deployment-<digest>` and so on --
+     so an old pod keeps its own templates instead of the kubelet refreshing a new chart's
+     templates underneath it (acmp's globex incident rolled 7 broken controllers that way).
+     THAT CHANGE DOES NOT TOUCH THESE OBJECTS. The per-composition
+     `<plural>-<version>-jsonschema-configmap` names are rendered by core-provider from
+     assets/jsonSchemaConfigmap.yaml, whose `name:` is unchanged, and the portal depends on the
+     same name (Diego, 2026-11-16). core-provider has asked their build to keep a test on it.
+     Four ConfigMaps are mounted on 057, not five: the fifth,
+     `<fullname>-service-configmap`, appears only with cdc.metrics.enabled, which 057 does not
+     set.
+     WHY THIS IS WORTH A PARAGRAPH RATHER THAN A LINE: the derivation below would have broken
+     SILENTLY. A name that does not resolve reads as "no such ConfigMap", not as an error, so a
+     digest-renaming of these objects would have produced an absence rather than a failure. The
+     answer is recorded here because the next person to read this lookup will ask the same
+     question, and the announcement that prompted it did not distinguish the 4 mounted objects
+     from the 55 per-composition ones.
+
      THE PLURAL COMES FROM THE CRD, NOT FROM A RULE. `SelfserviceKrateo` pluralises to
      `selfservicekrateoes`, which crdgen decides and no pluralisation rule I could write would
      reproduce. So it is read from the CRD whose group is composition.krateo.io and whose names.kind
