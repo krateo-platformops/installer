@@ -13894,6 +13894,26 @@
           "additionalProperties": false,
           "description": "Overrides for krateo-keycloak-realm. Every object here is a keycloak-config-kog custom resource, so this component renders nothing until the KOG has generated its CRDs -- which is what requiresApiGroups keycloak.ogen.krateo.io gates on. The key list is keycloak-provider-kog's final one for 0.1.0; resourceGroup is deliberately NOT exposed, because it names the API group the KOG generates into and belongs to keycloak-config-kog, not to a per-install override. NO `default:` anywhere below: a default here would propagate into the Installer CR and become a silent live override. The chart's own values.yaml carries the defaults instead.",
           "properties": {
+            "agentRegistration": {
+              "type": "object",
+              "title": "Agent registration",
+              "description": "Anonymous dynamic client registration for personal agents: clients start disabled, loopback-only redirects, mcp scope only.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enabled",
+                  "default": false
+                },
+                "maxClients": {
+                  "type": "integer",
+                  "title": "Max clients",
+                  "description": "Keycloak's Max Clients Limit policy.",
+                  "minimum": 1,
+                  "default": 200
+                }
+              },
+              "additionalProperties": false
+            },
             "clients": {
               "description": "Confidential relying parties (e.g. Keystone), one KeycloakClient each, with a generated client secret. New in krateo-keycloak-realm 0.5.0. The item-level `required` is retained from the chart and is safe: array items may require their own keys, because the requirement is only evaluated for items somebody wrote.",
               "items": {
@@ -14020,6 +14040,29 @@
               },
               "type": "array"
             },
+            "hermesClient": {
+              "type": "object",
+              "title": "Hermes client",
+              "description": "Hermes Agent, pre-registered public client (PKCE S256), redirect http://127.0.0.1/callback.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "title": "Enabled",
+                  "default": false
+                },
+                "clientId": {
+                  "type": "string",
+                  "title": "Client ID",
+                  "default": "hermes"
+                },
+                "name": {
+                  "type": "string",
+                  "title": "Name",
+                  "default": "Hermes Agent (MCP)"
+                }
+              },
+              "additionalProperties": false
+            },
             "ideClient": {
               "additionalProperties": false,
               "description": "The PUBLIC client IDEs (Claude Code, Cursor) sign in with to reach the platform's MCP endpoint: authorization code + PKCE S256, loopback redirects, preferred_username, the portal's groups claim, and `audience` in the access token's aud. New in krateo-keycloak-realm 0.5.0. Chart defaults it OFF, so there is no transient-on window on the roll that introduces it.",
@@ -14109,6 +14152,20 @@
               },
               "title": "identity-lifecycle client",
               "type": "object"
+            },
+            "mcp": {
+              "type": "object",
+              "title": "MCP resource",
+              "description": "The MCP resource every MCP client's access token names, and the claims authn reads.",
+              "properties": {
+                "audience": {
+                  "type": "string",
+                  "title": "Audience",
+                  "description": "The MCP resource in the access token's aud, e.g. https://cmp.example.com/mcp. Required when ideClient, hermesClient or agentRegistration is enabled.",
+                  "default": ""
+                }
+              },
+              "additionalProperties": false
             },
             "oidcConfig": {
               "additionalProperties": false,
@@ -14260,6 +14317,21 @@
                 },
                 "name": {
                   "type": "string"
+                },
+                "offlineSessions": {
+                  "type": "object",
+                  "title": "Offline sessions",
+                  "additionalProperties": false,
+                  "description": "Offline sessions (offline_access refresh tokens, e.g. personal agents).",
+                  "properties": {
+                    "maxLifespan": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "title": "Max lifespan",
+                      "default": 2592000,
+                      "description": "Maximum lifetime of an offline session from its creation, in seconds. 0 = no maximum (Keycloak's default). Realm-wide."
+                    }
+                  }
                 },
                 "registrationAllowed": {
                   "description": "Self-registration. Off in the demo design: accounts are created only through an administrator-approved joiner flow.",
