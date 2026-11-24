@@ -259,6 +259,35 @@ def tag_sha(slug, tag):
 TEST_RUN_RE = re.compile(r"(^|[^a-z])(go )?test(s|ing)?([^a-z]|$)|^(vet|kind|drift|gate)$", re.I)
 
 
+def _run_id_from_url(url):
+    """The workflow-run id out of a check-run's details_url.
+
+    details_url is .../actions/runs/<run_id>/job/<job_id>. The RUN id is what the runs API is
+    keyed by; the job id is not. Returns None rather than guessing.
+    """
+    import re as _re
+    m = _re.search(r"/actions/runs/(\d+)", url or "")
+    return m.group(1) if m else None
+
+
+def _run_events(slug, sha):
+    """{run_id: triggering event} for every workflow run at `sha`, or {} if unreadable.
+
+    {} means UNKNOWN, and the caller must then treat every failure as the code's. An unreadable
+    events map must never turn a red commit green: that would be this gate reporting a pass for
+    something it could not read, which is the exact failure this file exists to prevent.
+    """
+    out, rc, _err = sh("gh", "api", f"repos/{slug}/actions/runs?head_sha={sha}&per_page=100",
+                       "--jq", '[.workflow_runs[] | {i:(.id|tostring), e:.event}]')
+    if rc != 0:
+        return {}
+    try:
+        rows = json.loads(out or "[]")
+    except json.JSONDecodeError:
+        return {}
+    return {r["i"]: r.get("e") for r in rows if r.get("i")}
+
+
 def ci_at(slug, sha, chart=None):
     """(verdict, detail). verdict in {green, red, norun, notested, running}.
 
@@ -271,7 +300,7 @@ def ci_at(slug, sha, chart=None):
     component's own CI is red for any reason, that is not a commit to pin.
     """
     out, rc, _err = sh("gh", "api", f"repos/{slug}/commits/{sha}/check-runs?per_page=100",
-                 "--jq", '[.check_runs[] | {n:.name, c:.conclusion, s:.status}]')
+                 "--jq", '[.check_runs[] | {n:.name, c:.conclusion, s:.status, u:.details_url}]')
     if rc != 0:
         # Say what the API actually refused with. Collapsing 403/404/rate-limit into one
         # opaque "could not read" cost an afternoon of guessing at token scopes: the gate
@@ -285,9 +314,52 @@ def ci_at(slug, sha, chart=None):
     if not runs:
         return "norun", f"NO check-run of any kind for {sha[:8]}"
 
-    bad = sorted({r["n"] for r in runs if r.get("c") in ("failure", "timed_out", "cancelled", "action_required")})
+    BAD_CONCLUSIONS = ("failure", "timed_out", "cancelled", "action_required")
+    bad_runs = [r for r in runs if r.get("c") in BAD_CONCLUSIONS]
+    bad = sorted({r["n"] for r in bad_runs})
     pending = sorted({r["n"] for r in runs if r.get("s") != "completed"})
     if bad:
+        # A MANUAL DISPATCH IS NOT THE COMMIT'S CI, and conflating the two reported a release as
+        # broken on the evidence that its fix WORKS.
+        #
+        # Measured 2026-11-24 on core-provider 2.13.129 (bf0a422e). Two check-runs named
+        # `exercise (kind)`, both workflow_dispatch, dispatched two seconds apart by the release's
+        # author: one exercising 2.13.129 PASSED, one exercising 2.13.128 FAILED -- the latter a
+        # deliberate NEGATIVE CONTROL for #636, whose failure is its wanted outcome and which the
+        # release notes cite as evidence. A green control would have proved nothing. All four
+        # `push` runs at that commit were green (release-tag, preflight-refs, lint, security).
+        # This gate called the commit RED and blocked the pin.
+        #
+        # So the triggering EVENT decides what a failure is evidence about:
+        #   push / pull_request  -- ran because the code arrived. A failure is the code's.
+        #   workflow_dispatch / schedule / repository_dispatch -- ran because a human or a timer
+        #     asked, with inputs this gate cannot see. The run may target a DIFFERENT version
+        #     entirely, as it did here, so its failure says nothing about this commit.
+        #
+        # IT IS RECLASSIFIED, NOT FORGIVEN. A dispatch failure still FAILS THIS GATE, under its own
+        # verdict and its own message, because "not the commit's CI" is not the same as "fine" and
+        # a gate must not make a judgement call that belongs to a person. What changes is that the
+        # message now says what is true: a manual run failed, the commit's own CI did not.
+        # Passing it would need a named, recorded exception -- deliberately NOT built here, by the
+        # author who was blocked by this gate when writing it.
+        events = _run_events(slug, sha)
+        if events:
+            def _ev(r):
+                rid = _run_id_from_url(r.get("u") or "")
+                return events.get(rid)
+            code_bad = sorted({r["n"] for r in bad_runs if _ev(r) in ("push", "pull_request", None)})
+            disp_bad = sorted({"%s [%s]" % (r["n"], _ev(r)) for r in bad_runs
+                               if _ev(r) not in ("push", "pull_request", None)})
+            if code_bad:
+                return "red", f"{len(runs)} check-runs at {sha[:8]}, FAILED: {code_bad[:4]}"
+            if disp_bad:
+                n_push = sum(1 for e in events.values() if e in ("push", "pull_request"))
+                return "dispatch-red", (
+                    f"{len(runs)} check-runs at {sha[:8]}: the commit's own CI "
+                    f"({n_push} push/pull_request run(s)) is NOT failing, but a manually "
+                    f"triggered run failed: {disp_bad[:4]}. A dispatch can target another "
+                    f"version, so this is not a verdict on this commit -- and not a pass either. "
+                    f"Someone must state why that failure is expected.")
         return "red", f"{len(runs)} check-runs at {sha[:8]}, FAILED: {bad[:4]}"
     if pending:
         return "running", f"{len(runs)} check-runs at {sha[:8]}, still running: {pending[:3]}"
@@ -918,6 +990,15 @@ def main():
                 failures.append(f"{name} {version}: {slug} — {detail}")
             elif verdict == "testskipped":
                 failures.append(f"{name} {version}: {slug} — {detail}")
+            elif verdict == "dispatch-red":
+                # Fails the gate, with a message that does not claim the CODE was red. The remedy
+                # is a human statement recorded on the PR -- not a change to this gate, and not a
+                # deleted check-run: deleting a red run to satisfy a gate is weakening it.
+                failures.append(
+                    f"{name} {version}: {slug} — {detail} Resolve it by recording, on this PR, "
+                    f"why that dispatch failure is expected (e.g. a deliberate negative control "
+                    f"on the PREVIOUS version), with the run id and who confirmed it. Do not "
+                    f"delete the run and do not relax this gate.")
             elif verdict != "green" and verdict != "notests":
                 # FAIL CLOSED ON A VERDICT THIS DISPATCH DOES NOT KNOW. Until this arm existed the
                 # chain ended at `tree-tested` with no `else`, so a verdict added to ci_at() and not
