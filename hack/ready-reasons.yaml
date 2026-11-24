@@ -168,6 +168,16 @@ composition:
   # desired state was never applied and nothing is retrying it on its own.
   - CreateWithheldByPolicy
   - RecoveryWithheldByPolicy
+  # core-provider#636, vendored 2026-11-24 -- found by this gate on the day 2.13.129 rolled to 057.
+  # recordInstallFailure sets it from the THIRD consecutive failed attempt of a FIRST install (the
+  # first two read Creating), and it is KEPT while a retry is in flight, with what is running in its
+  # message. Indefinite: it clears only when an attempt succeeds. The message names
+  # status.installFailures.count, status.installRecovery.count and the last error. A retried
+  # interruption is NOT a failed attempt.
+  # core-provider asked me to report this reason ON SIGHT during the 0.3.705 roll. It was
+  # unclassified here, so my verification would have read it as unknown -- the gate caught that
+  # before the roll's verdict went out, not after.
+  - InstallFailing
   unevaluated:
   - ZeroEvidence
   - ObserveFailed
@@ -298,6 +308,18 @@ compositionDefinition:
       - Applied
       unhealthy:
       - AuthnNotInstalled
+      # vendored 2026-11-24. The cluster serves the mapping kind, and the controller's mapping or
+      # core-provider's own is absent or does not authorize its ServiceAccount; the message names
+      # which. Rewritten by the next pass that may write; it persists only while a policy withholds
+      # update (#642).
+      - MappingMissing
+      unevaluated:
+      # A mapping could not be READ on this pass, so it is not known to be present or absent.
+      # THE SAME SPELLING UNDER THREE CONDITIONS: NotObserved is also a definition Ready reason
+      # (provider-runtime, rolls up as healthy) and a ControllerActive reason (core-provider, two
+      # entries below). That is precisely why this file keys reasons PER CONDITION and the gate
+      # refuses a merged comparison.
+      - NotObserved
       note: core-provider#595. False/AuthnNotInstalled IS A HEALTHY DEFINITION -- it means authn is not
         installed, not that anything failed. Parent verdict `-`, so it never reaches Ready.
     ControllerActive:
