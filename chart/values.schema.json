@@ -17304,8 +17304,34 @@
                   "minimum": 2
                 },
                 "resources": {
-                  "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": false,
+                  "properties": {
+                    "limits": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "type": "string"
+                        },
+                        "memory": {
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "requests": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cpu": {
+                          "type": "string"
+                        },
+                        "memory": {
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
                 }
               }
             },
