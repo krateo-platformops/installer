@@ -101,7 +101,12 @@ CONVERGED = ("True/Available", "True/AvailablePartialCoverage",
 # a time-bounded wait on it never succeeds. Both ship in core-provider 2.13.120, NOT CUT YET,
 # so these two branches are UNEXERCISED and a clean run proves nothing about them.
 FAILED_REASONS = ("Unavailable", "CreateOutcomeUnknown", "HooksMayNotHaveRun",
-                  "CreateWithheldByPolicy", "RecoveryWithheldByPolicy")
+                  "CreateWithheldByPolicy", "RecoveryWithheldByPolicy",
+                  # core-provider#636, mirrored 2026-11-24. The 3rd consecutive failed attempt of a
+                  # FIRST install; kept while a retry is in flight. core-provider asked for this
+                  # reason to be reported on sight during the 0.3.705 roll and this tool could not
+                  # have named it -- check-ready-reasons-current caught that it was unclassified.
+                  "InstallFailing")
 
 # The COMPOSITIONDEFINITION failed set, which is a DIFFERENT namespace from the one above.
 # ready-reasons.yaml carries both and check-roll-snapshot.yaml cross-checks each against its own
@@ -1625,8 +1630,15 @@ def _self_test():
         probs = " ".join(diff(pre, post).get("problems") or [])
         return ("UNCLASSIFIED" in probs, "COMPOSITIONS FAILED" in probs)
     co_unit = [
+        # WAS `False/InstallFailing` UNTIL 2026-11-24, when that reason got CLASSIFIED (it is
+        # core-provider#636 and now sits in FAILED_REASONS). The case then failed, correctly: its
+        # subject had stopped being unknown. A real-but-unclassified reason makes a realistic
+        # fixture and a self-invalidating test, so the unclassified case now uses a name nothing
+        # will ever ship, and the reason that moved gets its own assertion below.
         ("an UNKNOWN reason lands in the unclassified bucket",
-         lambda: _co("False/InstallFailing") == (True, False)),
+         lambda: _co("False/ReasonThatWillNeverBeShipped") == (True, False)),
+        ("InstallFailing is now FAILED, not unclassified (core-provider#636, classified 11-24)",
+         lambda: _co("False/InstallFailing") == (False, True)),
         ("a second unknown reason behaves the same (not special-cased)",
          lambda: _co("False/SomeReasonNobodyShippedYet") == (True, False)),
         ("FALSIFIER: a KNOWN failed reason is FAILED, not unclassified",
