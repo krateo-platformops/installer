@@ -46,6 +46,10 @@ produces the same trace.
     python3 hack/roll-snapshot.py --self-test
 """
 import argparse
+import datetime
+import io
+import os
+import hashlib
 import json
 import subprocess
 import sys
@@ -509,9 +513,48 @@ def coverage_problems(snap):
     return unreadable, unevaluated, broken
 
 
+TOOL_SHA_LEN = 16
+
+
+def tool_identity():
+    """This script's own sha256, so a snapshot names the instrument that produced it.
+
+    WHY A SNAPSHOT MUST CARRY THIS. Measured 2026-11-25: three snapshot files in one scratchpad
+    were byte-identical (sha256 881a39bf...), and I concluded they were copies of one capture. Then
+    I measured the cluster for the window they spanned -- 0 helm releases updated, 0 objects created
+    -- so a deterministic capture at ANY two times inside it would be byte-identical. The matching
+    bytes were therefore expected from a WORKING instrument on a frozen cluster, and a real capture
+    could not be distinguished from a copy IN EITHER DIRECTION. A filename and an mtime are not
+    provenance: `cp` resets both.
+
+    AND THE TOOL ITSELF MOVES. installer#1165 added observedGeneration rows and changed this file's
+    sha from 3183c8cb to fcbfb7fe the same morning a peer was holding a baseline taken with the old
+    one. Diffing across that boundary would have shown dozens of "new" fields that are the tool
+    changing, not the cluster. The peer caught it only because they named the sha they expected.
+    """
+    try:
+        with io.open(os.path.abspath(__file__), "rb") as fh:
+            return hashlib.sha256(fh.read()).hexdigest()[:TOOL_SHA_LEN]
+    except (IOError, OSError, NameError):
+        return "unknown"
+
+
+def provenance(ctx):
+    return {
+        "captured_at": datetime.datetime.now(datetime.timezone.utc)
+                               .strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "tool_sha256": tool_identity(),
+        "context": ctx,
+    }
+
+
 def capture(ctx, secrets=()):
     snap = {"context": ctx, "releases": {}, "compositions": {},
-            "definitions": {}, "secrets": {}}
+            "definitions": {}, "secrets": {},
+            # STAMPED FIRST, before any cluster read, so the time is the capture's START. A time
+            # written afterwards would date a snapshot by when its slowest query returned, which on
+            # a large cluster is minutes later and on a failed query is never.
+            "provenance": provenance(ctx)}
 
     for rel in json.loads(_run(["helm", "--kube-context", ctx, "list", "-A", "-o", "json"]) or "[]"):
         snap["releases"]["%s/%s" % (rel["namespace"], rel["name"])] = {
@@ -756,10 +799,59 @@ compared nor listed here, so a future key cannot be forgotten the way MigratedVa
 """
 
 
+def provenance_problems(pre, post):
+    """Reasons this PAIR cannot be diffed. Empty list means the pair is auditable.
+
+    These are REFUSALS, not warnings, and there is deliberately no flag to bypass them. Every one
+    describes a diff whose output would look plausible and mean something other than what the reader
+    takes it to mean -- which is worse than no diff at all, because a gap is visible and a wrong
+    attribution is not.
+    """
+    bad = []
+    a, b = (pre or {}).get("provenance"), (post or {}).get("provenance")
+    for label, prov in (("pre", a), ("post", b)):
+        if not isinstance(prov, dict):
+            bad.append(
+                "the %s snapshot carries NO provenance block, so it cannot be dated or attributed "
+                "to a tool version. Written by a roll-snapshot older than the provenance stamp; "
+                "re-capture rather than diff it. An undatable snapshot is what let three identical "
+                "files pass for three observations." % label)
+    if bad:
+        return bad
+    if a.get("tool_sha256") != b.get("tool_sha256"):
+        bad.append(
+            "TOOL VERSIONS DIFFER: pre was captured by %s, post by %s. A field this tool started "
+            "recording between those versions appears in the post snapshot only, and reads as a "
+            "cluster change. Re-capture BOTH ends with one version." % (
+                a.get("tool_sha256"), b.get("tool_sha256")))
+    if a.get("context") != b.get("context"):
+        bad.append(
+            "DIFFERENT CLUSTERS: pre is %s, post is %s. Every row would differ and the diff would "
+            "describe nothing." % (a.get("context"), b.get("context")))
+    pa, pb = a.get("captured_at"), b.get("captured_at")
+    if pa and pb and pb < pa:
+        bad.append(
+            "THE PAIR IS TRANSPOSED: post (%s) is EARLIER than pre (%s). Reversed, every bump reads "
+            "as a rollback and every new object as a deletion." % (pb, pa))
+    if pa and pb and pa == pb:
+        bad.append(
+            "BOTH ENDS CARRY THE SAME capture time (%s), so they are one observation used twice. "
+            "The diff would be empty whatever the cluster did." % pa)
+    return bad
+
+
 def diff(pre, post, expect_delta=None, matching=None):
     """Pure, so the self-test drives it without a cluster."""
     out = {"releases": {}, "compositions": {}, "definitions": {},
            "secrets": {}, "problems": []}
+
+    # BEFORE anything is compared. A provenance refusal is not one problem among many: it says the
+    # rows below cannot be attributed, so reporting them next to it would invite reading them anyway.
+    _prov = provenance_problems(pre, post)
+    if _prov:
+        out["problems"].extend("UNAUDITABLE PAIR: %s" % p for p in _prov)
+        out["refused"] = True
+        return out
 
     pr, po = pre.get("releases", {}), post.get("releases", {})
     out["releases"]["gone"] = sorted(set(pr) - set(po))
@@ -1189,10 +1281,15 @@ def _excl_probe():
     keep = DEFINITION_DIFF_EXCLUDED
     try:
         DEFINITION_DIFF_EXCLUDED = frozenset({"Ready"})
+        # PROVENANCE ON BOTH ENDS, with a later time on the post. Without it diff() refuses the
+        # pair and `changed` is absent -- which this probe would read as "the exclusion worked",
+        # since an absent row and an excluded row look identical from here. That is the shape of
+        # false pass this probe exists to prevent, so it must not be vulnerable to it itself.
+        _pv = lambda t: {"captured_at": t, "tool_sha256": "exclprobe000000", "context": "probe"}
         pre = {"definitions": {"x/y": {"Ready": "a"}}, "compositions": {}, "releases": {},
-               "secrets": {}}
+               "secrets": {}, "provenance": _pv("2026-11-25T10:00:00Z")}
         post = {"definitions": {"x/y": {"Ready": "b"}}, "compositions": {}, "releases": {},
-                "secrets": {}}
+                "secrets": {}, "provenance": _pv("2026-11-25T11:00:00Z")}
         quiet = not (diff(pre, post).get("definitions", {}).get("changed", {}) or {})
         DEFINITION_DIFF_EXCLUDED = frozenset()
         loud = bool(diff(pre, post).get("definitions", {}).get("changed", {}) or {})
@@ -1203,7 +1300,42 @@ def _excl_probe():
 
 def _self_test():
     import datetime as _dt_mod
+
+    # THE FIXTURES CARRY PROVENANCE BECAUSE REAL SNAPSHOTS DO. When _diff() began refusing a pair it
+    # cannot attribute, all 95 cases here failed -- they modelled snapshots with no capture time and
+    # no tool identity, which is exactly the artifact that caused installer#1165's baseline
+    # confusion. The fix is the fixtures, not an exemption: a test corpus that cannot reach the new
+    # refusal would leave it unexercised, and a gate nothing exercises is a gate nobody can trust.
+    _TOOL = "testtool00000000"
+
+    def _prov(when, tool=_TOOL, ctx="test-ctx"):
+        return {"captured_at": when, "tool_sha256": tool, "context": ctx}
+
+    def _stamp(snap, when, **kw):
+        """Return snap with a provenance block, so a case can build a POST from a dict literal."""
+        out = dict(snap)
+        out["provenance"] = _prov(when, **kw)
+        return out
+
+    _real_diff = diff
+
+    def _diff(pre, post, *a, **kw):
+        """_diff() with the fixtures stamped as capture() would stamp them.
+
+        The cases hold POST snapshots as dict literals, which real snapshots never are. This gives
+        an unstamped one the provenance capture() would have written -- same tool, a LATER time --
+        so the cases exercise the comparison logic they were written for. The refusal itself is
+        exercised by the dedicated prov_unit cases below, which call the real _diff() directly, so
+        nothing here hides it.
+        """
+        if isinstance(pre, dict) and "provenance" not in pre:
+            pre = _stamp(pre, "2026-11-25T10:00:00Z")
+        if isinstance(post, dict) and "provenance" not in post:
+            post = _stamp(post, "2026-11-25T11:00:00Z")
+        return _real_diff(pre, post, *a, **kw)
+
     PRE = {
+        "provenance": _prov("2026-11-25T10:00:00Z"),
         "releases": {
             "krateo-system/publish-a": {"chart": "builder-publish-1.8.128", "revision": "72", "status": "deployed"},
             "krateo-system/publish-b": {"chart": "builder-publish-1.8.128", "revision": "80", "status": "deployed"},
@@ -1246,6 +1378,12 @@ def _self_test():
     def post(**kw):
         import copy
         p = copy.deepcopy(PRE)
+        # A SECOND OBSERVATION HAS A LATER TIME. deepcopy(PRE) inherits PRE's provenance verbatim,
+        # which diff() refuses as "one observation used twice" -- correctly, because that is what it
+        # would be on a real cluster. Advancing the clock here is what makes the fixture a POST
+        # rather than a relabelled PRE, and it is the one line that was missing from every snapshot
+        # taken before 2026-11-25.
+        p["provenance"] = _prov("2026-11-25T11:00:00Z")
         for k, v in kw.items():
             if k == "rev_a": p["releases"]["krateo-system/publish-a"]["revision"] = v
             if k == "rev_b": p["releases"]["krateo-system/publish-b"]["revision"] = v
@@ -1282,7 +1420,15 @@ def _self_test():
         return p
 
     cases = [
-        ("identical snapshots -> no problems", PRE, None, None, 0),
+        # SPLIT 2026-11-25. This case used to pass PRE as its own POST and assert "no problems",
+        # which conflated two different properties: that the comparison logic is quiet on equal
+        # CONTENT, and that a snapshot diffed against ITSELF is acceptable. The second is false and
+        # is exactly the degenerate case that let three copies of one capture pass for three
+        # observations -- an empty diff from one observation used twice is indistinguishable from an
+        # empty diff from a cluster that did not move. `post()` now advances the capture time, so
+        # this case tests ONLY the first property: a real second observation of an unchanged cluster
+        # reports nothing. The second property is tested as a REFUSAL in prov_unit below.
+        ("a SECOND observation of an unchanged cluster -> no problems", post(), None, None, 0),
         # CHILD-SYNCED CASES, 2026-11-17. The gap: demo's KeycloakServiceAccountRoleMapping sat
         # at Synced=False/ReconcileError under a parent reading Ready=True/AvailablePartialCoverage,
         # because the rollup EXCLUDES a child it never health-evaluated. Validated end-to-end
@@ -1596,7 +1742,7 @@ def _self_test():
             "releases": {}, "secrets": {}}
 
     def _cd_problem_kind(reason):
-        probs = " ".join(diff(_cd_snap(reason), _cd_snap(reason)).get("problems", []))
+        probs = " ".join(_diff(_cd_snap(reason), _cd_snap(reason)).get("problems", []))
         if "COMPOSITIONDEFINITIONS FAILED" in probs:
             return "failed"
         if "COMPOSITIONDEFINITIONS" in probs and "classif" in probs.lower():
@@ -1620,9 +1766,64 @@ def _self_test():
         if not ok:
             print("        want=%r got=%r" % (want, got))
 
+    # prov_unit, 2026-11-25. THE REFUSAL HAS TO BE TESTED AGAINST THE REAL diff(), NOT _diff():
+    # _diff stamps an unstamped fixture, which is right for the comparison cases and would hide
+    # every case here. These call diff() directly.
+    #
+    # WHY THIS EXISTS AT ALL. Three snapshot files in one scratchpad were byte-identical, and the
+    # cluster they described had not changed in the window they spanned -- 0 helm releases updated,
+    # 0 objects created. So a working capture and a `cp` produce the same bytes, and neither the
+    # filename nor the mtime distinguishes them, because `cp` resets both. Every refusal below
+    # describes a diff whose output would look plausible and mean something else.
+    def _pvx(t, tool="testtool00000000", ctx="test-ctx"):
+        return {"captured_at": t, "tool_sha256": tool, "context": ctx}
+
+    _ok_pre = {"releases": {}, "compositions": {}, "definitions": {}, "secrets": {},
+               "provenance": _pvx("2026-11-25T10:00:00Z")}
+
+    def _with(prov):
+        d = dict(_ok_pre)
+        if prov is None:
+            d.pop("provenance", None)
+        else:
+            d["provenance"] = prov
+        return d
+
+    prov_unit = [
+        ("a well-formed pair is NOT refused -- so the refusals below are not unconditional",
+         _ok_pre, _with(_pvx("2026-11-25T11:00:00Z")), False),
+        ("a snapshot diffed against ITSELF is refused: one observation used twice",
+         _ok_pre, _ok_pre, True),
+        ("the SAME capture time on both ends is refused even for different content",
+         _ok_pre, _with(_pvx("2026-11-25T10:00:00Z")), True),
+        ("a TRANSPOSED pair is refused -- reversed, every bump reads as a rollback",
+         _with(_pvx("2026-11-25T12:00:00Z")), _with(_pvx("2026-11-25T11:00:00Z")), True),
+        ("DIFFERENT TOOL VERSIONS are refused: a field one version added reads as a cluster change",
+         _ok_pre, _with(_pvx("2026-11-25T11:00:00Z", tool="otherversion0000")), True),
+        ("DIFFERENT CLUSTERS are refused",
+         _ok_pre, _with(_pvx("2026-11-25T11:00:00Z", ctx="other-ctx")), True),
+        ("a PRE with no provenance at all is refused -- an old snapshot cannot be dated",
+         _with(None), _with(_pvx("2026-11-25T11:00:00Z")), True),
+        ("a POST with no provenance at all is refused",
+         _ok_pre, _with(None), True),
+    ]
+    bad_prov = 0
+    for label, _a, _b, want_refused in prov_unit:
+        got = diff(_a, _b)
+        refused = bool(got.get("refused"))
+        # A refusal must also SAY why, and must not report rows alongside it: rows printed next to
+        # "unauditable" get read anyway.
+        said = any(str(x).startswith("UNAUDITABLE PAIR:") for x in got.get("problems", []))
+        ok = (refused == want_refused) and (said == want_refused)
+        bad_prov += 0 if ok else 1
+        print("  %-4s provenance: %s" % ("ok" if ok else "FAIL", label))
+        if not ok:
+            print("        want_refused=%s got refused=%s explained=%s"
+                  % (want_refused, refused, said))
+
     bad_cv = 0
     for label, _po, want_row in cv_unit:
-        got_row = diff(PRE, _po)["compositions"]["changed"].get(_CVK)
+        got_row = _diff(PRE, _po)["compositions"]["changed"].get(_CVK)
         ok = got_row == want_row
         bad_cv += 0 if ok else 1
         print("  %-4s composition-version: %s" % ("ok" if ok else "FAIL", label))
@@ -1663,7 +1864,7 @@ def _self_test():
     for case in cases:
         label, po, delta, match, want = case[:5]
         want_text = case[5] if len(case) > 5 else None
-        d = diff(PRE, po, expect_delta=delta, matching=match)
+        d = _diff(PRE, po, expect_delta=delta, matching=match)
         got = len(d["problems"])
         ok = (got > 0) == (want > 0)
         if ok and want_text is not None:
@@ -1697,7 +1898,7 @@ def _self_test():
         return d
 
     def _mv_kind(raw):
-        probs = " ".join(diff(_mv_snap(raw), _mv_snap(raw)).get("problems", []))
+        probs = " ".join(_diff(_mv_snap(raw), _mv_snap(raw)).get("problems", []))
         if "MIGRATED VALUES REFUSED" in probs:
             return "refused"
         if "MIGRATED VALUES NOT JUDGED" in probs:
@@ -1738,7 +1939,7 @@ def _self_test():
     def _defs_diff(a_row, b_row):
         pre = {"definitions": {"x/y": a_row}, "compositions": {}, "releases": {}, "secrets": {}}
         post = {"definitions": {"x/y": b_row}, "compositions": {}, "releases": {}, "secrets": {}}
-        return (diff(pre, post).get("definitions", {}).get("changed", {}) or {}).get("x/y", {})
+        return (_diff(pre, post).get("definitions", {}).get("changed", {}) or {}).get("x/y", {})
 
     _BASE = {"Ready": "True/Available", "Synced": "True/", "chartVersion": "1.0.0",
              "compositionId": "abc123", "parent": "p", "readyAt": "t", "uid": "u",
@@ -1778,7 +1979,7 @@ def _self_test():
     def _co(ready):
         pre = {"compositions": {"k": {"Ready": "True/Available"}}, "definitions": {}, "releases": {}, "secrets": {}}
         post = {"compositions": {"k": {"Ready": ready}}, "definitions": {}, "releases": {}, "secrets": {}}
-        probs = " ".join(diff(pre, post).get("problems") or [])
+        probs = " ".join(_diff(pre, post).get("problems") or [])
         return ("UNCLASSIFIED" in probs, "COMPOSITIONS FAILED" in probs)
     co_unit = [
         # WAS `False/InstallFailing` UNTIL 2026-11-24, when that reason got CLASSIFIED (it is
@@ -1820,11 +2021,19 @@ def _self_test():
         print("  %-4s diff-keys: %s" % ("ok" if ok else "FAIL", label))
 
     print("self-test: %d case(s), %d failure(s)"
-          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit) + len(cdr_unit) + len(mv_unit) + len(dk_unit) + len(co_unit),
-             bad + bad_unit + bad_ne + bad_cf + bad_cv + bad_cdr + bad_mv + bad_dk + bad_co))
-    # bad_cf and bad_cv were BOTH missing from this return. A failing carry-forward or
-    # composition-version unit printed FAIL and still exited 0, so CI would have passed it.
-    return 1 if (bad or bad_unit or bad_ne or bad_cf or bad_cv or bad_cdr or bad_mv or bad_dk) else 0
+          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit) + len(cdr_unit) + len(mv_unit) + len(dk_unit) + len(co_unit) + len(prov_unit),
+             bad + bad_unit + bad_ne + bad_cf + bad_cv + bad_cdr + bad_mv + bad_dk + bad_co
+             + bad_prov))
+    # THE PRINTED COUNT AND THE EXIT CODE ARE BUILT FROM THE SAME TUPLE, 2026-11-25, because they
+    # had drifted twice. `bad_cf` and `bad_cv` were once both missing from the return: a failing
+    # carry-forward or composition-version unit printed FAIL and still exited 0, so CI passed it.
+    # `bad_co` was then added to the printed sum and NOT to the return, so the same hole was open
+    # again -- found while adding prov_unit, which would have been the third. Enumerating the
+    # accumulators in one place is what stops a fourth: a tally that disagrees with its own exit
+    # code is a gate that reports success while failing, which is worse than no gate.
+    _ACCUMULATORS = (bad, bad_unit, bad_ne, bad_cf, bad_cv, bad_cdr, bad_mv, bad_dk, bad_co,
+                     bad_prov)
+    return 1 if any(_ACCUMULATORS) else 0
 
 
 def main():
