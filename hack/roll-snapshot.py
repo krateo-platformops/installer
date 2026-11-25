@@ -856,7 +856,27 @@ def capture(ctx, secrets=()):
             hay = ("%s %s" % (name, ns)).lower()
             if not any(t in hay for t in ("krateo", "core-provider", "installer", "composition",
                                           "cdc", "snowplow", "kagent", "agentgateway",
-                                          "clickstack", "oasgen")):
+                                          "clickstack", "oasgen",
+                                          # ADDED 2026-11-25, within an hour of the list being
+                                          # written, because a peer about to install a probe named
+                                          # its two CLUSTER-SCOPED objects for me -- ClusterRole and
+                                          # ClusterRoleBinding `agentiko-prompt-probe` -- and
+                                          # "agentiko" was not a pattern. Their objects would have
+                                          # been invisible and the diff would have shown no RBAC
+                                          # change, which reads as "nothing left behind".
+                                          #
+                                          # THE LESSON IS ABOUT THE FILTER'S SHAPE, not this entry.
+                                          # A name-pattern allowlist fails CLOSED-BLIND: an object
+                                          # it does not match is absent from the snapshot and
+                                          # therefore absent from the diff, with nothing saying the
+                                          # filter declined it. Every addition below exists because
+                                          # something was nearly missed, and the next one will too.
+                                          # Prefer asking the owner what their objects are CALLED
+                                          # over assuming this list covers them -- which is how this
+                                          # entry got here, and the only reason it did.
+                                          "agentiko", "probe", "bench", "marketplace",
+                                          "builder", "portal", "authn", "keycloak",
+                                          "identity-lifecycle", "incident", "alert")):
                 continue
             key = "%s/%s" % (scope, ("%s/%s" % (ns, name)) if ns else name)
             row = {"kind": kind}
