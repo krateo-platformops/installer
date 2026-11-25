@@ -1,0 +1,53 @@
+{{/* ---------------------------------------------------------------------------------------------
+     ConfigMap krateo-system/selfservice-platform -- the platform configuration selfservice reads.
+
+     WHY THE INSTALLER WRITES IT. On demo this object is HAND-APPLIED. Measured 2026-11-25: zero
+     templates of this chart mentioned `selfservice-platform` and none of its keys was expressible
+     in values.schema.json, so every one of demo's nine keys got there by hand. That is the same
+     class as a hand-installed helm release, which this project forbids: it works, nothing records
+     why it exists, and the next rebuild of the cluster loses it silently.
+
+     THE NAME AND NAMESPACE ARE A CONTRACT, NOT A CHOICE, which is why they are LITERALS here and
+     not `.Values.namespaces.krateo` the way installed-versions.yaml does it. selfservice looks this
+     ConfigMap up ONLY at `krateo-system/selfservice-platform` -- a constant in six lookups on their
+     side -- and acmp will treat a rename as a breaking change. Deriving the namespace from values
+     would let a cluster with a different `namespaces.krateo` write where selfservice never reads,
+     and the symptom would be every platform default silently reverting to the chart's own. The
+     deviation from this chart's convention is deliberate and this paragraph is why.
+
+     PLATFORM-RELEASE ONLY, via `not .Values.bootstrap.coreProvider.enabled`, the same gate
+     installed-versions.yaml and imagepull-secret.yaml use. 057 runs TWO releases of this chart --
+     `installer` (bootstrap: core-provider and chart-inspector, coreProvider.enabled TRUE) and
+     `installer-platform` (the platform CR and every composition, FALSE). Without this gate both
+     releases would render the ConfigMap and fight over ownership on every upgrade. Measured
+     2026-11-25 while auditing why seven settings on 057 are inert (installer#1164).
+
+     NO LABELS, deliberately, for the reason installed-versions.yaml records: helm forces
+     `app.kubernetes.io/managed-by` to "Helm", a chart-set value can never converge, and cdc would
+     see drift every cycle.
+
+     RENDERED ONLY WHEN SET. With `selfservicePlatform` absent or empty this emits NOTHING, so a
+     cluster that does not run selfservice is byte-identical to before -- and a cluster whose
+     ConfigMap is still hand-managed is not taken over by surprise on the next upgrade. Taking it
+     over is a deliberate act: populate the values.
+
+     EVERY VALUE IS QUOTED. ConfigMap data must be strings, and `agents-enabled: true` unquoted
+     would render a YAML boolean and be rejected. The schema constrains these to strings; the
+     quoting here is the other half of that.
+*/}}
+{{- $ssp := .Values.selfservicePlatform | default dict }}
+{{- if and $ssp (not .Values.bootstrap.coreProvider.enabled) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: selfservice-platform
+  namespace: krateo-system
+  annotations:
+    krateo.io/contract: >-
+      selfservice reads this object only at krateo-system/selfservice-platform; the name and
+      namespace are fixed on its side and a rename is a breaking change
+data:
+  {{- range $k, $v := $ssp }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+{{- end }}
