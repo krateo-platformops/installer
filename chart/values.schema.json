@@ -13574,6 +13574,11 @@
                 },
                 "schedule": {
                   "type": "string"
+                },
+                "credentialsSecret": {
+                  "description": "the ClickHouse user the SEAL job authenticates as. 0.1.9's whole point: at 0.1.8 both audit jobs read `otel-clickhouse-credentials`, the collectors' shared `otelcollector` login, whose upstream grant is SELECT/INSERT/CREATE/SHOW on default.* -- enough to INSERT forged rows into krateo_audit, krateo_audit_worm and krateo_audit_seal, which the sealer would then hash in. Not enough to ALTER or DELETE, so the exposure is forgery rather than rewriting. 0.1.9 moves the seal job to `audit_sealer`, which may INSERT only into the worm and seal tables. Measured on 057 2026-11-25; the contrast is that krateo-slo-rollup and nightly-review already each had a dedicated user and audit-worm alone did not.\nDeclared WITHOUT a `default:` on purpose: crdgen materialises installer-schema defaults into every CR, and the CR then beats the chart's own values.yaml forever. The chart's defaults (clickhouse-audit-sealer-credentials / clickhouse-audit-verifier-credentials) are correct and both Secrets exist on 057 and demo, so this key exists to be OVERRIDABLE, not to be set.",
+                  "type": "string",
+                  "minLength": 1
                 }
               },
               "type": "object"
@@ -13589,6 +13594,11 @@
                   "description": "Age past which an unextended chain is reported as stale. A verifier that only fails on a BROKEN chain cannot tell a healthy quiet period from a seal CronJob that stopped running.",
                   "minimum": 0,
                   "type": "integer"
+                },
+                "credentialsSecret": {
+                  "description": "the ClickHouse user the VERIFY job authenticates as -- `audit_verifier`, which reads only. Same history as `seal.credentialsSecret` above.\nDeclared WITHOUT a `default:` on purpose: crdgen materialises installer-schema defaults into every CR, and the CR then beats the chart's own values.yaml forever. The chart's defaults (clickhouse-audit-sealer-credentials / clickhouse-audit-verifier-credentials) are correct and both Secrets exist on 057 and demo, so this key exists to be OVERRIDABLE, not to be set.",
+                  "type": "string",
+                  "minLength": 1
                 }
               },
               "type": "object"
