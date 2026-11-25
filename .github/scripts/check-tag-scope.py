@@ -24,9 +24,17 @@ meaningful relative to what the cluster is running -- the repo's newest tag may 
 rolled anywhere, and comparing against it would declare a roll empty that is in fact five versions
 deep.
 
-USAGE
-    check-tag-scope.py --context <kube-context> --release installer \\
+USAGE -- A PRE-TAG TOOL, RUN BY HAND, NOT A CI GATE. It is deliberately not wired into a workflow:
+the containment check below compares against origin/main, so on an unmerged PR branch it would fail
+every time and teach everyone to ignore it. Run it on the ref you are about to tag:
+
+    check-tag-scope.py --context <kube-context> --ref origin/main --release installer \\
         --declare otel-collector-deployment [--declare ...] [--allow-template-changes]
+
+Pair it with `python3 hack/tag-delta.py <tag>`, which GENERATES the PINS-CHANGED block the tag
+message must carry. This script says whether the scope is right; that one says it in the form
+check-tag-delta requires. Skipping it is how tag 0.3.708's message ended up factually correct and
+still refused.
 
 Exit 0 only when the set of pins differing between the deployed tag and HEAD is EXACTLY the declared
 set. It names every undeclared difference, and it also fails when a DECLARED pin does not move --
@@ -119,6 +127,31 @@ def main():
     print("  pins differing: %d     declared: %d" % (len(moved), len(declared)))
 
     problems = []
+
+    # MAIN-CONTAINMENT, added after this gate PASSED a tag that could never be released.
+    # On 2026-11-25 it approved 0.3.708 -- scope genuinely one pin -- and release-oci refused it at
+    # its first step: "tag 0.3.708 points at 450ff88..., which is NOT contained in main. Release tags
+    # must be cut from main." No chart was published and the number was burned (installer#1173).
+    #
+    # A SCOPE CHECK THAT CLEARS AN UNRELEASABLE TAG IS WORSE THAN NO CHECK, because its OK reads as
+    # clearance for the whole operation. The scope was right and the tag was impossible, and nothing
+    # in this script knew the difference.
+    #
+    # The consequence is worth stating because it constrains every future single-component roll:
+    # a tag must be contained in main, so ONE PIN PER TAG IS ONLY AVAILABLE WHEN MAIN IS ONE PIN
+    # AHEAD OF THE DEPLOYED TAG. When main has accumulated more, the choice is to hold the others
+    # back per component on the cluster's own CR, or to roll them together -- not to cut a narrower
+    # tag off to the side.
+    merge_base = subprocess.run(["git", "merge-base", "--is-ancestor", args.ref, "origin/main"],
+                                capture_output=True, text=True)
+    if merge_base.returncode != 0:
+        head = subprocess.run(["git", "rev-parse", args.ref], capture_output=True, text=True)
+        problems.append(
+            "NOT CONTAINED IN main: %s (%s) is not an ancestor of origin/main, so release-oci will "
+            "REFUSE the tag at its first step and publish no chart. Merge to main first and tag the "
+            "merge commit. A narrow tag cut beside main cannot be released, however correct its "
+            "scope." % (args.ref, (head.stdout or "").strip()[:9]))
+
     for name in sorted(undeclared):
         a, b = undeclared[name]
         problems.append("UNDECLARED: %s %s -> %s would roll in this tag" % (name, a, b))
@@ -142,9 +175,9 @@ def main():
         print("::error::check-tag-scope: this tag carries more or less than declared. "
               "A RELEASED TAG IS NEVER RE-CUT, so this is the last point at which it is free.")
         return 1
-    print("check-tag-scope: OK -- %d pin(s) move and all %d were declared%s"
+    print("check-tag-scope: OK -- %d pin(s) move, all %d declared, contained in main%s"
           % (len(moved), len(declared),
-             "" if args.allow_template_changes else "; no template/values/schema changes"))
+             "" if args.allow_template_changes else ", no template/values/schema changes"))
     return 0
 
 
