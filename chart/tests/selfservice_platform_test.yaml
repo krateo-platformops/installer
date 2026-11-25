@@ -1,0 +1,72 @@
+suite: selfservice-platform ConfigMap
+templates:
+  - templates/selfservice-platform.yaml
+tests:
+  # demo's NINE LIVE KEYS, read from the cluster at 2026-11-25 rather than invented, plus the
+  # etcd-snapshot-class Diego added. The point of using the real values is that a fixture made up
+  # here could not catch a shape the real object has and the schema refuses.
+  - it: "CASE 1: demo's real keys render as a quoted-string ConfigMap at the contract address"
+    set:
+      bootstrap.coreProvider.enabled: false
+      selfservicePlatform:
+        agents-enabled: "true"
+        cluster-issuer: krateo-acme-dns01
+        ingress-domain: cmp.krateo.dev
+        llm-budget-daily-usd-standard: "4"
+        llm-budget-daily-usd-trial: "2.5"
+        llm-gateway-url: https://llm.cmp.krateo.dev/v1
+        registry-pull-secret: agentiko-tenant-pull
+        sso-federation: "false"
+        etcd-snapshot-class: etcd-delete
+    asserts:
+      - hasDocuments: {count: 1}
+      - equal: {path: metadata.name, value: selfservice-platform}
+      # THE CONTRACT: literal krateo-system, NOT .Values.namespaces.krateo
+      - equal: {path: metadata.namespace, value: krateo-system}
+      - equal: {path: data.agents-enabled, value: "true"}
+      - equal: {path: data.etcd-snapshot-class, value: etcd-delete}
+      - equal: {path: data.llm-budget-daily-usd-trial, value: "2.5"}
+
+  - it: "CASE 2: the namespace does NOT follow namespaces.krateo, because the contract is fixed"
+    set:
+      bootstrap.coreProvider.enabled: false
+      namespaces.krateo: somewhere-else
+      selfservicePlatform:
+        ingress-domain: cmp.krateo.dev
+    asserts:
+      - equal: {path: metadata.namespace, value: krateo-system}
+
+  - it: "CASE 3 FALSIFIER: absent selfservicePlatform renders NOTHING, so a cluster that does not
+         run selfservice is untouched and a hand-managed ConfigMap is not taken over by surprise"
+    set:
+      bootstrap.coreProvider.enabled: false
+    asserts:
+      - hasDocuments: {count: 0}
+
+  - it: "CASE 4 FALSIFIER: an EMPTY map renders nothing either -- `if $ssp` must test emptiness,
+         not just presence"
+    set:
+      bootstrap.coreProvider.enabled: false
+      selfservicePlatform: {}
+    asserts:
+      - hasDocuments: {count: 0}
+
+  - it: "CASE 5 FALSIFIER: on the BOOTSTRAP release it renders nothing, so the two installer
+         releases on 057 cannot fight over ownership (installer#1164)"
+    set:
+      bootstrap.coreProvider.enabled: true
+      selfservicePlatform:
+        ingress-domain: cmp.krateo.dev
+    asserts:
+      - hasDocuments: {count: 0}
+
+  - it: "CASE 6: a value that would be a YAML boolean or number stays a STRING, because ConfigMap
+         data must be strings and an unquoted true is refused by the apiserver"
+    set:
+      bootstrap.coreProvider.enabled: false
+      selfservicePlatform:
+        agents-enabled: "false"
+        llm-budget-daily-usd-pro: "10"
+    asserts:
+      - equal: {path: data.agents-enabled, value: "false"}
+      - equal: {path: data.llm-budget-daily-usd-pro, value: "10"}

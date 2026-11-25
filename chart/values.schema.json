@@ -22575,6 +22575,113 @@
       },
       "title": "Gemini Vertex AI",
       "type": "object"
+    },
+    "selfservicePlatform": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ingress-domain": {
+          "type": "string",
+          "title": "The platform's DNS domain; a child is served at <instance>.<domain>"
+        },
+        "cluster-issuer": {
+          "type": "string",
+          "title": "cert-manager ClusterIssuer the children's certificates are issued by"
+        },
+        "gateway-class": {
+          "type": "string",
+          "title": "gatewayClassName the children's Gateways reference"
+        },
+        "llm-gateway-url": {
+          "type": "string",
+          "title": "The parent LLM gateway a child's agents call"
+        },
+        "llm-gateway-service": {
+          "type": "string",
+          "title": "The gateway's log ServiceName the budget alert filters on; default krateo-gateway"
+        },
+        "agents-enabled": {
+          "type": "string",
+          "pattern": "^(true|false)$",
+          "title": "Whether children get agents; the string \"true\" or \"false\""
+        },
+        "sso-federation": {
+          "type": "string",
+          "pattern": "^(true|false)$",
+          "title": "Runs a Keycloak INSIDE each child. NOT parent-sso, which signs in through the parent's"
+        },
+        "registry-pull-secret": {
+          "type": "string",
+          "title": "Name of the Secret holding the agent registry credential"
+        },
+        "registry-pull-secret-key": {
+          "type": "string",
+          "title": "Data key inside that Secret; the chart defaults to `token`"
+        },
+        "pod-security-standard": {
+          "type": "string",
+          "title": "`restricted` raises a child's pod-security floor; any other value leaves the default `baseline`. It NEVER lowers it."
+        },
+        "etcd-snapshot-class": {
+          "type": "string",
+          "title": "A VolumeSnapshotClass with deletionPolicy: Delete, turning on nightly snapshots of every etcd child's disk. A class that KEEPS its snapshots, or does not exist, REFUSES the render."
+        },
+        "tenant-isolation": {
+          "type": "string",
+          "title": "A JSON object, as a string, merged over the chart's tenantIsolation defaults. On a platform a SelfserviceKrateo's own tenantIsolation is IGNORED.",
+          "description": "Keys include enabled, podCIDRs, serviceCIDRs, nodeCIDRs, apiServerCIDRs, dnsCIDRs, internetEgressTCPPorts and nodeResolverCIDRs. TWO TRAPS FROM selfservice's OWN DOCS, recorded because neither is visible in this schema: `nodeResolverCIDRs` is REQUIRED with any port limit and the render FAILS without it (GKE: 169.254.169.254/32) -- and a render failure there stops reconciling EVERY tenant on the platform, not just one. `internetEgressTCPPorts` defaults to [443]; [] allows every port."
+        },
+        "parent-sso-enabled": {
+          "type": "string",
+          "pattern": "^(true|false)$",
+          "title": "\"true\" turns parent SSO on; absent or \"false\" leaves it off. ANY OTHER VALUE FAILS THE RENDER"
+        },
+        "parent-sso-issuer": {
+          "type": "string",
+          "title": "parent-sso: issuer"
+        },
+        "parent-sso-realm": {
+          "type": "string",
+          "title": "parent-sso: realm"
+        },
+        "parent-sso-client-configuration": {
+          "type": "string",
+          "title": "parent-sso: client configuration"
+        },
+        "parent-sso-group-configuration": {
+          "type": "string",
+          "title": "parent-sso: group configuration"
+        },
+        "parent-sso-hook-url": {
+          "type": "string",
+          "title": "parent-sso: hook url"
+        },
+        "parent-sso-hook-realm": {
+          "type": "string",
+          "title": "parent-sso: hook realm"
+        },
+        "parent-sso-hook-client-id": {
+          "type": "string",
+          "title": "parent-sso: hook client id"
+        },
+        "parent-sso-hook-secret": {
+          "type": "string",
+          "title": "parent-sso: hook secret"
+        },
+        "parent-sso-hook-secret-key": {
+          "type": "string",
+          "title": "parent-sso: hook secret key"
+        }
+      },
+      "patternProperties": {
+        "^llm-budget-daily-usd-[a-z0-9-]+$": {
+          "type": "string",
+          "pattern": "^([0-9]+(\\.[0-9]+)?)$",
+          "title": "Daily USD limit for tenants on that plan, greater than 0"
+        }
+      },
+      "title": "Contents of the ConfigMap krateo-system/selfservice-platform, which the installer writes",
+      "description": "WHY THE INSTALLER OWNS THIS. On demo the ConfigMap is HAND-APPLIED today -- measured 2026-11-25: 0 templates of this chart mention selfservice-platform, and none of these keys was expressible. A hand-applied config object is the same class as a hand-installed release: it works, nothing records why it exists, and the next rebuild loses it silently. THE NAME AND NAMESPACE ARE A CONTRACT, fixed by selfservice: it looks the ConfigMap up only at krateo-system/selfservice-platform, as a constant in 6 lookups, and acmp will treat a rename as a breaking change. DECLARED EXPLICITLY AND CLOSED, not as a free map, on acmp's suggestion and for the reason this repository keeps rediscovering: a free map accepts `etcd-snapshot-clas` and silently does nothing. 22 named keys plus the per-plan budget pattern. KEY LIST PROVENANCE: read from selfservice's own docs/configuration.md platform tables, NOT from a chat message -- which found `pod-security-standard`, absent from the message. acmp then found `registry-pull-secret-key`, which the DOCS omitted and the chart reads at _helpers.tpl:120. So neither source alone was complete, and a contract test must read what the CHART reads: acmp is shipping chart/files/platform-keys.yaml, enforced by a helper that fails the render on an undeclared key, and this repo's gate will read THAT at the pinned version. A PER-TENANT PRECONDITION, from selfservice's docs: a tenant's childAdmin.password must be removed BEFORE parent-sso-enabled turns true, or that tenant's render fails until it is."
     }
   },
   "title": "Krateo PlatformOps Installer",
