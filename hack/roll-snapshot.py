@@ -566,6 +566,11 @@ def capture(ctx, secrets=()):
             #   both moved, same uid         an in-place update (the existing falsifier)
             snap["compositions"][key] = {
                 "apiVersion": o["apiVersion"],
+                # The composition controller writes its own status.observedGeneration on a
+                # successful pass (it predates core-provider#644), so unlike a definition this is
+                # expected to be present. A PAUSED composition legitimately stays behind.
+                "generation": o["metadata"].get("generation"),
+                "observedGeneration": st.get("observedGeneration"),
                 "compositionVersion": (o["metadata"].get("labels") or {}).get(
                     "krateo.io/composition-version"),
                 "hooksUnverified": hooks_unverified,
@@ -665,6 +670,18 @@ def capture(ctx, secrets=()):
             # classify_migrated() below refuses to call None a pass.
             "MigratedValuesValid": ("%s/%s" % (mv.get("status"), mv.get("reason", ""))
                                     if (mv := conds.get("MigratedValuesValid")) else None),
+            # generation vs status.observedGeneration. FOUND BY ACCIDENT 2026-11-25: I used
+            # `observedGeneration` as the POSITIVE CONTROL for an unrelated grep and got ZERO hits
+            # across hack/ and .github/scripts/ -- this tool had never read it, while keycloak's
+            # rows report "58/58 observedGeneration == generation" and I had been relaying that
+            # figure as part of what cleared a core-provider release.
+            #
+            # BOTH ARE CAPTURED AS-IS, INCLUDING None. core-provider: the field exists on a
+            # CompositionDefinition only from 2.13.130, and 057 runs 2.13.129 -- so ABSENT MEANS
+            # UNKNOWN, NOT BEHIND. A check that read None as 0 would report every definition on
+            # 057 as a finding on its first run.
+            "generation": m.get("generation"),
+            "observedGeneration": st.get("observedGeneration"),
         }
 
     # Secrets: metadata only. Never a value, and the data KEY NAMES only so a key appearing or
@@ -973,6 +990,52 @@ def diff(pre, post, expect_delta=None, matching=None):
     out["definitions"]["changed"] = dch
     if out["definitions"]["gone"]:
         out["problems"].append("COMPOSITIONDEFINITIONS DISAPPEARED: %s" % out["definitions"]["gone"])
+
+    # observedGeneration LAGGING generation, at the END of the window. Added 2026-11-25 after a
+    # reader control exposed that this tool had never read the field at all: I used
+    # `observedGeneration` as the POSITIVE CONTROL for an unrelated grep, got ZERO hits across
+    # hack/ and .github/scripts/, and found that keycloak's rows report "58/58
+    # observedGeneration == generation" while my own converged/not-converged verdict ignored it.
+    #
+    # THREE WAYS THIS WOULD HAVE MISFIRED, all named by core-provider BEFORE I wrote it:
+    #   (1) ON A CompositionDefinition THE FIELD EXISTS ONLY FROM core-provider 2.13.130. 057 runs
+    #       2.13.129, so it is ABSENT there -- and ABSENT MEANS UNKNOWN, NOT BEHIND. Gating on
+    #       presence is why this does not report all 79 definitions on 057 on its first run.
+    #   (2) IT CAN BE BEHIND LEGITIMATELY: during a version bump's update (Ready kept from the old
+    #       version), while paused, under a withheld update, or while Observe errors
+    #       (NotObserved). So "any pair disagrees" would fire at EVERY chart bump -- which is what
+    #       a roll IS. This runs in `diff`, which the caller invokes AFTER the window closes, and
+    #       it reports the Ready reason beside each lag so a legitimate one is recognisable.
+    #   (3) ON A COMPOSITION the composition controller writes its own observedGeneration on a
+    #       successful pass (predating core-provider#644), and a PAUSED composition legitimately
+    #       stays behind -- so the converged/paused reasons are excluded here too.
+    #
+    # A check that fires on every roll is worse than no check, because it trains the reader to
+    # skip the line. That is the same reason AvailablePartialCoverage is not in FAILED_REASONS.
+    lag = {}
+    for scope, rows in (("definition", pod), ("composition", post.get("compositions", {}))):
+        for k, v in sorted(rows.items()):
+            g, og = v.get("generation"), v.get("observedGeneration")
+            if g is None or og is None:
+                continue  # (1) absent means unknown
+            if og >= g:
+                continue
+            ready = v.get("Ready") or "<none>"
+            reason = str(ready).split("/", 1)[-1]
+            # (2)/(3) a lag with a converged-or-paused reason is the legitimate case
+            if reason in ("ReconcilePaused", "ReconcileGracefullyPaused", "UpdateWithheldByPolicy",
+                          "NotObserved"):
+                continue
+            lag["%s %s" % (scope, k)] = {"generation": g, "observedGeneration": og, "Ready": ready}
+    if lag:
+        out["problems"].append(
+            "observedGeneration BEHIND generation on %d object(s) at the END of the window -- %s. "
+            "The controller has not yet acknowledged the spec it was given, so a Ready condition "
+            "here may describe the PREVIOUS generation. Absent observedGeneration is NOT reported "
+            "(on a CompositionDefinition the field exists only from core-provider 2.13.130), and a "
+            "lag whose Ready reason is paused/withheld/NotObserved is NOT reported either, because "
+            "those lag legitimately."
+            % (len(lag), json.dumps(lag, sort_keys=True)))
     # THE ONE THAT PROTECTS THE ROLL VERIFICATION. A CD still reading False/Unavailable after the
     # roll is the state krateoEval maps to FAILED, which the umbrella inherits and
     # check-ready-gate blocks on. Not-yet-settled and genuinely broken look identical in a single
@@ -1190,6 +1253,11 @@ def _self_test():
             # the three --secret asymmetry knobs. drop_secret = that ref was never watched in the
             # POST capture (key absent); extra_secret = watched only in the post; secret_gone =
             # watched on BOTH sides and genuinely deleted, which must still report DISAPPEARED.
+            # observedGeneration knobs. cd_* act on the definition row, comp_* on the composition.
+            if k == "cd_gen": p["definitions"]["krateo-system/portal"]["generation"] = v
+            if k == "cd_og": p["definitions"]["krateo-system/portal"]["observedGeneration"] = v
+            if k == "comp_gen": p["compositions"]["portals/krateo-system/portal"]["generation"] = v
+            if k == "comp_og": p["compositions"]["portals/krateo-system/portal"]["observedGeneration"] = v
             if k == "drop_secret": del p["secrets"]["krateo-system/cj"]
             if k == "extra_secret": p["secrets"]["krateo-system/other"] = {
                 "present": True, "dataKeys": ["k"], "resourceVersion": "9", "writes": []}
@@ -1306,6 +1374,23 @@ def _self_test():
         ("a Secret's resourceVersion moving is reported as WRITTEN, not as a problem",
          post(secret_rv="200"), None, None, 0),
         ("a Secret's KEY SET changing IS a problem", post(secret_keys=["password", "token"]), None, None, 1),
+        # --- observedGeneration lag. The FOUR cases that matter are the three misfire guards and
+        # the real one; without the guards this check would fire on every roll.
+        ("observedGeneration BEHIND generation on a definition IS a problem",
+         post(cd_gen=7, cd_og=6), None, None, 1, "observedGeneration BEHIND generation"),
+        ("GUARD 1: observedGeneration ABSENT is NOT reported -- 057 runs core-provider 2.13.129 "
+         "where the field does not exist on a CompositionDefinition, and absent means UNKNOWN",
+         post(cd_gen=7), None, None, 0),
+        # want=1 because changing Ready also trips the CD-not-Available check; the SIXTH field
+        # asserts the observedGeneration problem specifically did NOT fire.
+        ("GUARD 2: a lag whose Ready reason is ReconcilePaused does not raise an "
+         "observedGeneration problem -- a paused object legitimately stays behind",
+         post(cd_gen=7, cd_og=6, cd_ready="True/ReconcilePaused"), None, None, 1,
+         "!observedGeneration BEHIND generation"),
+        ("GUARD 3: observedGeneration AHEAD of or EQUAL to generation is NOT reported",
+         post(cd_gen=7, cd_og=7), None, None, 0),
+        ("FALSIFIER: a lag on a COMPOSITION is reported too, so the check is not definition-only",
+         post(comp_gen=4, comp_og=3), None, None, 1, "observedGeneration BEHIND generation"),
         # --- asymmetric --secret sets. Both directions used to INVENT a problem: an unwatched
         # Secret read as deleted one way and as a key-set change the other. The watched set is
         # the key set, because capture() writes an entry for every --secret including an absent
@@ -1582,7 +1667,15 @@ def _self_test():
         got = len(d["problems"])
         ok = (got > 0) == (want > 0)
         if ok and want_text is not None:
-            ok = any(want_text in str(x) for x in d["problems"])
+            # A leading "!" asserts the text is ABSENT. Added 2026-11-25: the observedGeneration
+            # guards need "no observedGeneration problem fired", which is NOT the same as "no
+            # problems at all" -- setting a Ready reason to prove a guard also trips the
+            # unrelated CD-not-Available check, so a total count of 0 is the wrong assertion and
+            # would have made me weaken the guard instead of the harness.
+            if want_text.startswith("!"):
+                ok = not any(want_text[1:] in str(x) for x in d["problems"])
+            else:
+                ok = any(want_text in str(x) for x in d["problems"])
         bad += 0 if ok else 1
         print("  %-4s %s" % ("ok" if ok else "FAIL", label))
         if not ok:
