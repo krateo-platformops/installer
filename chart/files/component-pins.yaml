@@ -5883,7 +5883,7 @@ components:
   #   0.1.48 resolves (positive control), 0.1.45 resolves (second control), 9.9.9 absent.
   #   Schema `required` read AT PIN TIME: identical to 0.1.48 -- no root `required`, two
   #   items-level blocks (defaultAlerts.alerts.items, defaultMetrics.items). No umbrella wedge.
-  version: 0.1.55
+  version: 0.1.59
   deps:
   - clickhouse-operator
   - mongodb-operator

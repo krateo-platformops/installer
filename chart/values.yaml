@@ -985,6 +985,28 @@ componentValues:
 # live change means a post-roll problem has one candidate, not three. Diego's call, 2026-11-22.
 componentValuesUnset:
   - agentgateway-policies.llm.retry
+  # krateo-observability 0.1.59 takes ownership of the `chops` ClickHouse user: its hash comes only
+  # from Secret clickhouse-chops-credentials via @from_env, and THE CHART'S RENDER FAILS if the
+  # composition's spec still carries the inline hash. Both 057 and demo carried it (verified
+  # 2026-11-25: users=['chops'], hash present on both), so the pin ALONE would have broken the
+  # render on both -- the pin and this entry are one change.
+  #
+  # AN OMITTED KEY IS PRESERVED, which is why an unset is needed at all: componentValues reaches
+  # the CR as an RFC-7386 merge patch, so dropping the key from values changes nothing. Only an
+  # explicit null clears it, and that is what this list produces.
+  #
+  # THE REMOVAL IS SUFFICIENT, measured on three legs rather than assumed:
+  #   the cdc passes the CR's spec as the COMPLETE values -- core-provider read it in code,
+  #     ValuesFromSpec + InjectGlobalValues, and ZERO hits for ReuseValues/ResetValues in helm/v3,
+  #     so no old revision's values survive
+  #   THIS schema defaults nothing on that path -- 0 `default` keys anywhere under
+  #     componentValues.krateo-observability, and none in the compiled CRD at v0-3-707 either.
+  #     That leg mattered most and only this repo could check it: a default here propagates into
+  #     every CR through crdgen and the CR then beats the chart's values.yaml forever, so a default
+  #     would have put the leaf straight back with nothing in sight to explain the failure
+  #   the one default that DOES supply the path is krateo-observability's own values.yaml, and it
+  #     is the @from_env form its guard accepts -- so a clean spec renders
+  - krateo-observability.clickstack.clickhouse.cluster.spec.settings.extraUsersConfig.users.chops
 authn:
   jwt:
     keyGeneration: 1

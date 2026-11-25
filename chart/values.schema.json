@@ -14841,22 +14841,126 @@
                                             "type": "array"
                                           },
                                           "password_sha256_hex": {
-                                            "description": "sha256 hex of the user's password. The pattern is enforced so a plaintext password cannot be put here by mistake -- a cleartext value will fail schema validation rather than silently become a credential in the CR.",
-                                            "pattern": "^[0-9a-f]{64}$",
-                                            "type": "string"
+                                            "description": "This user's password hash, in EITHER of the two forms the chart itself uses.\n  * a literal lowercase SHA-256 hex digest -- what 057 and demo carry today for `chops`;\n  * `{'@from_env': '<ENV NAME>'}` -- the form krateo-observability adopted in 0.1.59, where\n    the hash is delivered to the ClickHouse container as an environment variable from a\n    Secret and never appears in values or in the Installer CR at all.\nBOTH are declared because the chart ships the second for 12 of its 13 users as of 0.1.59, and a schema that accepts only the literal cannot express the chart's own defaults -- the object would be PRUNED on the way into the CR while the write reported success, and the chart's default would silently win. PREFER the `@from_env` form for anything new: a literal hash in values is a credential in git, which is what observability#218 moved `chops` away from. The literal stays declarable because removing it would refuse the two live clusters' current CRs.",
+                                            "oneOf": [
+                                              {
+                                                "description": "A literal lowercase SHA-256 hex digest.",
+                                                "type": "string",
+                                                "pattern": "^[0-9a-f]{64}$"
+                                              },
+                                              {
+                                                "description": "Read the hash from an environment variable the chart wires from a Secret. The name must match an entry the chart puts on the ClickHouse container; a name nothing supplies yields an empty hash, and ClickHouse then refuses every login for this user.",
+                                                "type": "object",
+                                                "additionalProperties": false,
+                                                "required": [
+                                                  "@from_env"
+                                                ],
+                                                "properties": {
+                                                  "@from_env": {
+                                                    "description": "The environment variable's name, e.g. CLICKHOUSE_USER_CHOPS_SHA256.",
+                                                    "type": "string",
+                                                    "pattern": "^[A-Z][A-Z0-9_]*$",
+                                                    "minLength": 1
+                                                  }
+                                                }
+                                              }
+                                            ]
                                           },
                                           "profile": {
                                             "description": "ClickHouse settings profile, e.g. default.",
                                             "type": "string"
+                                          },
+                                          "no_password": {
+                                            "description": "Declares this user as passwordless, INSTEAD OF `password_sha256_hex` -- the two are alternatives and `anyOf` below requires exactly one path. The chart ships this for `exec_reader` (0.1.58), paired with `networks.ip` restricted to loopback: a user reachable only from inside the pod needs no secret, and giving it one would create a credential nobody rotates. NEVER set this without `networks`: a passwordless user with no network restriction is reachable from anywhere the service is.",
+                                            "type": "boolean"
+                                          },
+                                          "networks": {
+                                            "description": "Restricts where this user may connect from. Required in practice whenever `no_password` is set. The chart ships `ip: ['127.0.0.1', '::1']` for `exec_reader`, which is what makes a passwordless user safe: it is dialable only from inside the ClickHouse pod.",
+                                            "type": "object",
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "ip": {
+                                                "description": "Literal addresses or CIDRs this user may connect from.",
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "minItems": 1
+                                              }
+                                            }
                                           }
                                         },
-                                        "required": [
-                                          "password_sha256_hex"
+                                        "type": "object",
+                                        "anyOf": [
+                                          {
+                                            "required": [
+                                              "password_sha256_hex"
+                                            ]
+                                          },
+                                          {
+                                            "required": [
+                                              "no_password"
+                                            ]
+                                          }
                                         ],
-                                        "type": "object"
+                                        "description": "One ClickHouse user. EVERY user must declare its authentication exactly one way -- `password_sha256_hex` or `no_password` -- and `anyOf` enforces that a user declaring neither is REFUSED. That refusal is the point: a user object with no authentication key is accepted by ClickHouse as passwordless and reachable, so a typo in the key name would silently create an open account. Declared without a `default:` on any sub-key, because crdgen materialises installer-schema defaults into every CR and the CR then beats the chart's own values.yaml."
                                       },
                                       "description": "username -> user definition. USE password_sha256_hex, NOT password.\n\nWHY THIS MATTERS MORE THAN STYLE. The component chart's own defaults are PLAINTEXT literals (hyperdx.secrets.CLICKHOUSE_PASSWORD: \"otelcollectorpass\", CLICKHOUSE_APP_PASSWORD: \"hyperdx\") and the chart offers no secret reference for them -- its only *SecretName knob is mongodb's scram. A `password:` set here therefore travels as cleartext into the Installer CR, into etcd, and into the helm release Secret, readable by anything with get on them. `password_sha256_hex` is a verifier rather than a secret and is ClickHouse's native field for exactly this, so it is what this knob is for. The installer's own credential-reference pattern (registryAuth.passwordRef, a name/namespace/key Secret ref) is NOT available here, because the chart templates the password as a plain string into the cluster CR and resolves no ref. Making a ref work is a krateo-observability chart change.\n\nSCOPE THE GRANTS. `INSERT ON default.*` includes default.krateo_audit, so a third-party writer granted it can insert rows that krateo_audit_worm_mv hashes and seals as genuine -- a forgery path through the tamper-evidence the audit trail exists to provide. Grant per table, never per database, for anything that is not the audit writer itself.",
                                       "type": "object"
+                                    },
+                                    "profiles": {
+                                      "description": "ClickHouse settings profiles, referenced by a user's `profile`. Undeclarable before this release: `extraUsersConfig` is `additionalProperties: false` and only `users` was declared, so the whole node was PRUNED on the way into the Installer CR while the write reported success. The chart has shipped 8 profiles since 0.1.57, and krateo-observability 0.1.58 added `exec_reader`. Mirrors the chart's own values.yaml, which is the authority here because the chart's values.schema.json stops at `cluster` and does not reach this path.",
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "readonly": {
+                                            "description": "0 writes allowed, 1 read-only, 2 read-only plus SET. The chart uses 0 for `exec_reader` and 1 for the readers.",
+                                            "type": "integer"
+                                          },
+                                          "max_execution_time": {
+                                            "description": "Seconds a query may run.",
+                                            "type": "integer"
+                                          },
+                                          "max_threads": {
+                                            "description": "Threads per query.",
+                                            "type": "integer"
+                                          },
+                                          "max_memory_usage": {
+                                            "description": "Bytes per query. The chart's `exec_reader` uses 4294967296.",
+                                            "type": "integer"
+                                          },
+                                          "max_concurrent_queries_for_user": {
+                                            "description": "Concurrent queries this user may hold.",
+                                            "type": "integer"
+                                          },
+                                          "cancel_http_readonly_queries_on_client_close": {
+                                            "description": "1 cancels a read-only HTTP query when the client disconnects.",
+                                            "type": "integer"
+                                          },
+                                          "constraints": {
+                                            "description": "Caps a user cannot raise with SET. Keyed by the setting name it constrains. Only the two forms the chart ships are declared: `max` (a ceiling) and `const` (a flag forbidding any change). A form not declared here is PRUNED silently, so add it when a chart starts shipping it rather than in advance.",
+                                            "type": "object",
+                                            "additionalProperties": {
+                                              "type": "object",
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "max": {
+                                                  "description": "Highest value the user may SET.",
+                                                  "type": "integer"
+                                                },
+                                                "const": {
+                                                  "description": "Renders ClickHouse's <const/> flag: the setting cannot be changed at all.",
+                                                  "type": "boolean"
+                                                }
+                                              },
+                                              "minProperties": 1
+                                            }
+                                          }
+                                        }
+                                      }
                                     }
                                   },
                                   "type": "object"
