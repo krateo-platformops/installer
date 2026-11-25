@@ -366,7 +366,6 @@
       "clickstack/clickhouse/cluster/spec",
       "clickstack/clickhouse/cluster/spec/containerTemplate",
       "clickstack/clickhouse/cluster/spec/settings",
-      "clickstack/clickhouse/cluster/spec/settings/extraUsersConfig",
       "clickstack/hyperdx",
       "clickstack/hyperdx/deployment",
       "clickstack/mongodb/spec"

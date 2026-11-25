@@ -1,0 +1,40 @@
+name: check-clickhouse-users-schema
+# Asserts the PINNED krateo-observability's own ClickHouse users and profiles can be expressed
+# through componentValues -- by TYPE, not just by key path.
+#
+# WHY THIS EXISTS SEPARATELY FROM check-componentvalues-coverage. That gate compares the key PATHS a
+# pinned chart offers against the paths this schema declares, which is the right question for a key
+# that appears or disappears. It cannot see a key whose TYPE changed under a path that stayed the
+# same -- and that is precisely what krateo-observability 0.1.59 did: `password_sha256_hex` became
+# `{'@from_env': '<ENV NAME>'}` for 12 of its 13 users while this schema declared a 64-hex STRING.
+# The coverage gate stayed green on all twelve.
+#
+# WHY A TYPE MISMATCH IS THE WORSE FAILURE. The Installer CRD carries these nodes with
+# `additionalProperties` unset, so the apiserver PRUNES a value it cannot place and reports SUCCESS.
+# The value vanishes on the way into the CR, the chart's own default wins, and nothing is red and
+# nothing is logged. A refusal at `helm upgrade` is the loud outcome and the one worth building for.
+#
+# IT PULLS THE PINNED VERSION ITSELF rather than taking a path or a version argument, so the NEXT
+# type change is caught by the pin PR that introduces it with no edit to the gate. A pull failure is
+# a FAILURE, never a skip: an unreachable registry and an unexpressible chart are indistinguishable
+# from a silent pass, and the silent pass is the one that lets a regression through.
+on:
+  pull_request:
+    paths:
+      - 'chart/values.schema.json'
+      - 'chart/files/component-pins.yaml'
+      - '.github/scripts/check-clickhouse-users-schema.py'
+      - '.github/workflows/check-clickhouse-users-schema.yaml'
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: v3.16.3
+      - name: Install PyYAML and jsonschema
+        run: pip install --quiet pyyaml jsonschema
+      - name: Assert the pinned chart's users and profiles are expressible
+        run: python3 .github/scripts/check-clickhouse-users-schema.py
