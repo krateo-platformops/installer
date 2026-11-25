@@ -550,7 +550,7 @@ def provenance(ctx):
 
 def capture(ctx, secrets=()):
     snap = {"context": ctx, "releases": {}, "compositions": {},
-            "definitions": {}, "secrets": {},
+            "definitions": {}, "secrets": {}, "rbac": {},
             # STAMPED FIRST, before any cluster read, so the time is the capture's START. A time
             # written afterwards would date a snapshot by when its slowest query returned, which on
             # a large cluster is minutes later and on a failed query is never.
@@ -786,6 +786,99 @@ def capture(ctx, secrets=()):
                         "time": f.get("time"), "fields": sorted((f.get("fieldsV1") or {}).keys())}
                        for f in (m.get("managedFields") or [])],
         }
+
+    # ---- RBAC ----------------------------------------------------------------------------------
+    # ADDED 2026-11-25 because this tool was BLIND to a permission change, and a peer's release made
+    # that blindness load-bearing: core-provider 2.13.132's chart adds `get/list/watch` on
+    # `coordination.k8s.io` leases to its ClusterRole. With only releases/compositions/definitions/
+    # secrets captured, a roll that widens a ClusterRole produces a BYTE-IDENTICAL snapshot -- so
+    # "nothing changed outside the declared scope" would have been emitted across a cluster-wide
+    # permission grant: truthful about every object this tool knew, silent about the one that
+    # mattered.
+    #
+    # WHY TRIPLES AND NOT resourceVersion. A ClusterRole's resourceVersion moves on any write,
+    # including an identical re-apply, so it reports churn rather than change. What a reader needs is
+    # whether the set of permitted (apiGroup, resource, verb) triples GREW -- so rules are normalised
+    # into sorted triples and diffed as sets. An identical re-apply is then silent and an added verb
+    # is loud.
+    #
+    # WHY BOTH SCOPES FROM THE START. A ClusterRole is the wide case and the one that bit here. But
+    # core-provider#677 proposes moving exactly this grant to a NAMESPACED Role, which would make a
+    # ClusterRole-only capture miss the next change -- so Roles and RoleBindings are captured too,
+    # rather than learning the same lesson twice.
+    for scope, kind, args in (
+            ("clusterroles", "ClusterRole",
+             ["kubectl", "--context", ctx, "get", "clusterroles", "-o", "json"]),
+            ("clusterrolebindings", "ClusterRoleBinding",
+             ["kubectl", "--context", ctx, "get", "clusterrolebindings", "-o", "json"]),
+            ("roles", "Role",
+             ["kubectl", "--context", ctx, "get", "roles", "-A", "-o", "json"]),
+            ("rolebindings", "RoleBinding",
+             ["kubectl", "--context", ctx, "get", "rolebindings", "-A", "-o", "json"]),
+    ):
+        raw = _run(args)
+        if not raw:
+            # NOT silently empty. A failed read and an empty cluster are indistinguishable once the
+            # rows are gone, and "0 ClusterRoles" would read as a measurement. Recorded as a gap so
+            # the diff can refuse rather than report quiet.
+            snap["rbac"]["%s/_read_failed" % scope] = {"kind": kind, "readFailed": True}
+            continue
+        try:
+            items = json.loads(raw).get("items", [])
+        except ValueError:
+            snap["rbac"]["%s/_unparseable" % scope] = {"kind": kind, "readFailed": True}
+            continue
+        for obj in items:
+            meta = obj.get("metadata") or {}
+            name = meta.get("name") or ""
+            ns = meta.get("namespace") or ""
+            # KRATEO-RELATED ONLY, and here is what that filter ACTUALLY excludes, measured on
+            # krateo-057 on 2026-11-25 rather than asserted:
+            #
+            #   clusterroles          209 of 442    47%  <- real filtering
+            #   clusterrolebindings   173 of 393    44%  <- real filtering
+            #   roles                 458 of 496    92%  <- NEARLY VACUOUS
+            #   rolebindings          458 of 500    92%  <- NEARLY VACUOUS
+            #
+            # The namespaced halves are near-vacuous BY CONSTRUCTION: the match runs over
+            # "<name> <namespace>", and almost every Role here lives in krateo-system, so the
+            # namespace alone matches. That is the behaviour wanted (krateo-system's Roles are in
+            # scope) but it is NOT the filter doing the work, and a later reader should not infer
+            # from "92% kept" that the patterns were chosen well for namespaced objects.
+            #
+            # The cost of the filter is that a grant whose NAME and NAMESPACE both fall outside these
+            # patterns is invisible here. The patterns are written out so that is a choice rather
+            # than a surprise.
+            #
+            # SIZE, since this is 62% of a snapshot (641 KB with, 241 KB without, 057 today): worth
+            # it for a diagnostic artifact, and the reason the rows are normalised triples rather
+            # than raw rules -- raw rules would be several times larger and diff as churn.
+            hay = ("%s %s" % (name, ns)).lower()
+            if not any(t in hay for t in ("krateo", "core-provider", "installer", "composition",
+                                          "cdc", "snowplow", "kagent", "agentgateway",
+                                          "clickstack", "oasgen")):
+                continue
+            key = "%s/%s" % (scope, ("%s/%s" % (ns, name)) if ns else name)
+            row = {"kind": kind}
+            rules = obj.get("rules")
+            if rules is not None:
+                triples = set()
+                for r in rules:
+                    for g in (r.get("apiGroups") or [""]):
+                        for res in (r.get("resources") or []):
+                            for verb in (r.get("verbs") or []):
+                                triples.add("%s/%s:%s" % (g or "core", res, verb))
+                row["permits"] = sorted(triples)
+                row["nonResourceURLs"] = sorted(
+                    u for r in rules for u in (r.get("nonResourceURLs") or []))
+            if obj.get("subjects") is not None:
+                row["subjects"] = sorted(
+                    "%s:%s/%s" % (sub.get("kind"), sub.get("namespace") or "-", sub.get("name"))
+                    for sub in (obj.get("subjects") or []))
+                ref = obj.get("roleRef") or {}
+                row["roleRef"] = "%s/%s" % (ref.get("kind"), ref.get("name"))
+            snap["rbac"][key] = row
+
     return snap
 
 
@@ -843,7 +936,7 @@ def provenance_problems(pre, post):
 def diff(pre, post, expect_delta=None, matching=None):
     """Pure, so the self-test drives it without a cluster."""
     out = {"releases": {}, "compositions": {}, "definitions": {},
-           "secrets": {}, "problems": []}
+           "secrets": {}, "rbac": {}, "problems": []}
 
     # BEFORE anything is compared. A provenance refusal is not one problem among many: it says the
     # rows below cannot be attributed, so reporting them next to it would invite reading them anyway.
@@ -1256,6 +1349,56 @@ def diff(pre, post, expect_delta=None, matching=None):
                              "can answer that, and this tool never reads one."),
                     "writes": b.get("writes"),
                 }
+
+    # ---- RBAC, 2026-11-25 ----------------------------------------------------------------------
+    # A PERMISSION GRANT IS A PROBLEM, not an informational row. Every other section here reports
+    # movement and lets the reader judge; a widened grant is reported as a PROBLEM because the
+    # whole reason this section exists is that its absence let "nothing changed" stand across one.
+    pr, po = pre.get("rbac", {}) or {}, post.get("rbac", {}) or {}
+    blind = sorted(k for k in set(pr) | set(po) if k.endswith(("/_read_failed", "/_unparseable")))
+    if blind:
+        # A READ FAILURE IS NOT A QUIET DIFF. Without this, a cluster whose clusterroles could not be
+        # listed reports no RBAC change -- the exact shape of false reassurance this section was
+        # added to remove.
+        out["problems"].append(
+            "RBAC NOT READ on one or both ends (%s): this diff says NOTHING about permissions. "
+            "A failed list and an unchanged cluster are indistinguishable once the rows are gone."
+            % json.dumps(blind, sort_keys=True))
+    out["rbac"]["gone"] = sorted(k for k in set(pr) - set(po) if not k.endswith(("/_read_failed", "/_unparseable")))
+    out["rbac"]["new"] = sorted(k for k in set(po) - set(pr) if not k.endswith(("/_read_failed", "/_unparseable")))
+    widened, narrowed, subj = {}, {}, {}
+    for k in sorted(set(pr) & set(po)):
+        a, b = pr[k] or {}, po[k] or {}
+        pa, pb = set(a.get("permits") or []), set(b.get("permits") or [])
+        gained, lost = sorted(pb - pa), sorted(pa - pb)
+        if gained:
+            widened[k] = gained
+        if lost:
+            narrowed[k] = lost
+        sa, sb = set(a.get("subjects") or []), set(b.get("subjects") or [])
+        if sa != sb or a.get("roleRef") != b.get("roleRef"):
+            subj[k] = {"subjectsAdded": sorted(sb - sa), "subjectsRemoved": sorted(sa - sb),
+                       "roleRef": [a.get("roleRef"), b.get("roleRef")]}
+    out["rbac"]["widened"] = widened
+    out["rbac"]["narrowed"] = narrowed
+    out["rbac"]["subjectsChanged"] = subj
+    if out["rbac"]["new"]:
+        out["problems"].append(
+            "NEW RBAC OBJECT(S): %s" % json.dumps(out["rbac"]["new"], sort_keys=True))
+    if widened:
+        out["problems"].append(
+            "PERMISSIONS WIDENED on %d object(s): %s -- each entry is an (apiGroup/resource:verb) "
+            "triple the subject could NOT exercise before this roll."
+            % (len(widened), json.dumps(widened, sort_keys=True)))
+    if subj:
+        out["problems"].append(
+            "RBAC SUBJECTS OR roleRef CHANGED on %d binding(s): %s -- a binding whose subject moved "
+            "grants an existing role to someone new, which no permits diff would show."
+            % (len(subj), json.dumps(subj, sort_keys=True)))
+    # narrowed is NOT a problem: removing a permission is the safe direction, and reporting it as one
+    # would train the reader to ignore this section during a deliberate tightening (core-provider#677
+    # moves exactly one grant from a ClusterRole to a namespaced Role, which will narrow here).
+
     return out
 
 
@@ -1789,6 +1932,82 @@ def _self_test():
             d["provenance"] = prov
         return d
 
+    # rbac_unit, 2026-11-25. THE SECTION EXISTS BECAUSE ITS ABSENCE LET A VERDICT STAND ACROSS A
+    # PERMISSION GRANT, so it needs cases that fail when the comparison is removed -- not just cases
+    # that pass while it is there.
+    #
+    # The shape under test is core-provider 2.13.132's real change: its chart adds
+    # get/list/watch on coordination.k8s.io leases to core-provider's ClusterRole. Before this
+    # section, that roll produced a byte-identical snapshot.
+    def _rb(permits=None, subjects=None, roleRef=None, kind="ClusterRole", failed=False):
+        row = {"kind": kind}
+        if failed:
+            row["readFailed"] = True
+            return row
+        if permits is not None:
+            row["permits"] = sorted(permits)
+        if subjects is not None:
+            row["subjects"] = sorted(subjects)
+            row["roleRef"] = roleRef
+        return row
+
+    _LEASE = ["coordination.k8s.io/leases:get", "coordination.k8s.io/leases:list",
+              "coordination.k8s.io/leases:watch"]
+    _BASE = ["core/secrets:get", "core/secrets:list"]
+    _CR = "clusterroles/installer-core-provider"
+    _CRB = "clusterrolebindings/installer-core-provider"
+
+    def _snap(rbac):
+        return {"releases": {}, "compositions": {}, "definitions": {}, "secrets": {},
+                "rbac": rbac, "provenance": _prov("2026-11-25T10:00:00Z")}
+
+    def _snap2(rbac):
+        d = _snap(rbac)
+        d["provenance"] = _prov("2026-11-25T11:00:00Z")
+        return d
+
+    rbac_unit = [
+        ("2.13.132's REAL change: three Lease verbs appear -> reported as WIDENED and a problem",
+         _snap({_CR: _rb(_BASE)}), _snap2({_CR: _rb(_BASE + _LEASE)}),
+         {"widened": True, "problem": "PERMISSIONS WIDENED"}),
+        ("FALSIFIER: an IDENTICAL grant on both ends is silent, so the case above is not vacuous",
+         _snap({_CR: _rb(_BASE + _LEASE)}), _snap2({_CR: _rb(_BASE + _LEASE)}),
+         {"widened": False, "problem": None}),
+        ("a grant REMOVED is narrowed and NOT a problem -- core-provider#677 will narrow here",
+         _snap({_CR: _rb(_BASE + _LEASE)}), _snap2({_CR: _rb(_BASE)}),
+         {"widened": False, "problem": None, "narrowed": True}),
+        ("a WHOLLY NEW ClusterRole is a problem on its own",
+         _snap({}), _snap2({_CR: _rb(_BASE)}),
+         {"widened": False, "problem": "NEW RBAC OBJECT"}),
+        ("A BINDING'S SUBJECT MOVING is a problem no permits diff would show",
+         _snap({_CRB: _rb(subjects=["ServiceAccount:krateo-system/a"], roleRef="ClusterRole/x")}),
+         _snap2({_CRB: _rb(subjects=["ServiceAccount:krateo-system/a",
+                                     "ServiceAccount:krateo-system/b"], roleRef="ClusterRole/x")}),
+         {"widened": False, "problem": "RBAC SUBJECTS OR roleRef CHANGED"}),
+        ("A FAILED RBAC READ must say the diff is silent about permissions, not report quiet",
+         _snap({"clusterroles/_read_failed": _rb(failed=True)}), _snap2({_CR: _rb(_BASE)}),
+         {"widened": False, "problem": "RBAC NOT READ"}),
+    ]
+    bad_rbac = 0
+    for label, _a, _b, want in rbac_unit:
+        got = diff(_a, _b)
+        rb = got.get("rbac") or {}
+        probs = " || ".join(str(x) for x in got.get("problems", []))
+        ok = bool(rb.get("widened")) == want["widened"]
+        if want.get("narrowed"):
+            ok = ok and bool(rb.get("narrowed"))
+        if want["problem"]:
+            ok = ok and (want["problem"] in probs)
+        else:
+            ok = ok and not any(t in probs for t in ("WIDENED", "NEW RBAC", "SUBJECTS OR roleRef",
+                                                     "RBAC NOT READ"))
+        bad_rbac += 0 if ok else 1
+        print("  %-4s rbac: %s" % ("ok" if ok else "FAIL", label))
+        if not ok:
+            print("        widened=%s narrowed=%s problems=%s"
+                  % (bool(rb.get("widened")), bool(rb.get("narrowed")), probs[:150]))
+
+
     prov_unit = [
         ("a well-formed pair is NOT refused -- so the refusals below are not unconditional",
          _ok_pre, _with(_pvx("2026-11-25T11:00:00Z")), False),
@@ -2021,9 +2240,9 @@ def _self_test():
         print("  %-4s diff-keys: %s" % ("ok" if ok else "FAIL", label))
 
     print("self-test: %d case(s), %d failure(s)"
-          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit) + len(cdr_unit) + len(mv_unit) + len(dk_unit) + len(co_unit) + len(prov_unit),
+          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit) + len(cdr_unit) + len(mv_unit) + len(dk_unit) + len(co_unit) + len(prov_unit) + len(rbac_unit),
              bad + bad_unit + bad_ne + bad_cf + bad_cv + bad_cdr + bad_mv + bad_dk + bad_co
-             + bad_prov))
+             + bad_prov + bad_rbac))
     # THE PRINTED COUNT AND THE EXIT CODE ARE BUILT FROM THE SAME TUPLE, 2026-11-25, because they
     # had drifted twice. `bad_cf` and `bad_cv` were once both missing from the return: a failing
     # carry-forward or composition-version unit printed FAIL and still exited 0, so CI passed it.
@@ -2032,7 +2251,7 @@ def _self_test():
     # accumulators in one place is what stops a fourth: a tally that disagrees with its own exit
     # code is a gate that reports success while failing, which is worse than no gate.
     _ACCUMULATORS = (bad, bad_unit, bad_ne, bad_cf, bad_cv, bad_cdr, bad_mv, bad_dk, bad_co,
-                     bad_prov)
+                     bad_prov, bad_rbac)
     return 1 if any(_ACCUMULATORS) else 0
 
 
