@@ -329,7 +329,7 @@ components:
   svcMatch: krateo-clickstack
 - name: otel-collector-deployment
   kind: OtelCollectorDeployment
-  version: 0.3.23
+  version: 0.3.24
   deps:
   - krateo-observability
   tier: observability
