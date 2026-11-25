@@ -1060,23 +1060,47 @@ def diff(pre, post, expect_delta=None, matching=None):
             % (len(cd_other), len(pod), json.dumps(cd_other, sort_keys=True)))
 
     ps, pos = pre.get("secrets", {}), post.get("secrets", {})
-    for k in sorted(set(ps) | set(pos)):
-        a, b = ps.get(k, {}), pos.get(k, {})
-        if a.get("present") and not b.get("present"):
-            out["problems"].append("SECRET DISAPPEARED: %s" % k)
-            continue
-        if a.get("dataKeys") != b.get("dataKeys"):
-            out["problems"].append("SECRET KEY SET CHANGED: %s %s -> %s"
-                                   % (k, a.get("dataKeys"), b.get("dataKeys")))
-        if a.get("resourceVersion") != b.get("resourceVersion"):
-            out["secrets"][k] = {
-                "written": True,
-                "note": ("resourceVersion moved, so it WAS written. This does NOT establish that "
-                         "any VALUE changed -- a controller re-applying identical bytes produces "
-                         "the same trace. Only a functional test with the credential can answer "
-                         "that, and this tool never reads one."),
-                "writes": b.get("writes"),
-            }
+    # THE WATCHED SET IS THE KEY SET, and an absent key means NEVER WATCHED, not deleted.
+    # capture() writes an entry for EVERY ref passed in --secret, including {"present": False}
+    # for one that does not exist. So a ref missing from a side's `secrets` map was never asked
+    # for on that side, and the two sides are then answering different questions.
+    #
+    # WITHOUT THIS CHECK BOTH DIRECTIONS INVENT A PROBLEM, which is how I found it: a pre
+    # captured with --secret A and a post with --secret A --secret B reported
+    # "SECRET KEY SET CHANGED: B None -> [...]", and the reverse reported
+    # "SECRET DISAPPEARED: B" for a Secret that was alive and simply unwatched. Both read as a
+    # roll having destroyed a credential.
+    #
+    # IT REFUSES RATHER THAN SKIPPING THE ASYMMETRIC REFS. Skipping would compare fewer Secrets
+    # than the operator asked about and report success, which is the failure this whole tool
+    # exists to avoid -- a narrowed comparison that says nothing about having narrowed. A diff
+    # whose two sides watched different sets is not a weaker answer, it is a different question.
+    if set(ps) != set(pos):
+        only_pre, only_post = sorted(set(ps) - set(pos)), sorted(set(pos) - set(ps))
+        out["problems"].append(
+            "REFUSING THE SECRET DIFF: the two snapshots watched DIFFERENT --secret sets, so no"
+            " comparison between them is meaningful. pre watched %d, post watched %d;"
+            " only in pre: %s; only in post: %s. Re-capture both sides with the same --secret"
+            " arguments. Nothing about these Secrets is being asserted either way."
+            % (len(ps), len(pos), json.dumps(only_pre), json.dumps(only_post)))
+    else:
+        for k in sorted(ps):
+            a, b = ps.get(k, {}), pos.get(k, {})
+            if a.get("present") and not b.get("present"):
+                out["problems"].append("SECRET DISAPPEARED: %s" % k)
+                continue
+            if a.get("dataKeys") != b.get("dataKeys"):
+                out["problems"].append("SECRET KEY SET CHANGED: %s %s -> %s"
+                                       % (k, a.get("dataKeys"), b.get("dataKeys")))
+            if a.get("resourceVersion") != b.get("resourceVersion"):
+                out["secrets"][k] = {
+                    "written": True,
+                    "note": ("resourceVersion moved, so it WAS written. This does NOT establish "
+                             "that any VALUE changed -- a controller re-applying identical bytes "
+                             "produces the same trace. Only a functional test with the credential "
+                             "can answer that, and this tool never reads one."),
+                    "writes": b.get("writes"),
+                }
     return out
 
 
@@ -1163,6 +1187,13 @@ def _self_test():
             if k == "rev_a": p["releases"]["krateo-system/publish-a"]["revision"] = v
             if k == "rev_b": p["releases"]["krateo-system/publish-b"]["revision"] = v
             if k == "drop_a": del p["releases"]["krateo-system/publish-a"]
+            # the three --secret asymmetry knobs. drop_secret = that ref was never watched in the
+            # POST capture (key absent); extra_secret = watched only in the post; secret_gone =
+            # watched on BOTH sides and genuinely deleted, which must still report DISAPPEARED.
+            if k == "drop_secret": del p["secrets"]["krateo-system/cj"]
+            if k == "extra_secret": p["secrets"]["krateo-system/other"] = {
+                "present": True, "dataKeys": ["k"], "resourceVersion": "9", "writes": []}
+            if k == "secret_gone": p["secrets"]["krateo-system/cj"] = {"present": False}
             if k == "uid": p["compositions"]["portals/krateo-system/portal"]["uid"] = v
             if k == "av": p["compositions"]["portals/krateo-system/portal"]["apiVersion"] = v
             if k == "cv": p["compositions"]["portals/krateo-system/portal"]["compositionVersion"] = v
@@ -1275,6 +1306,24 @@ def _self_test():
         ("a Secret's resourceVersion moving is reported as WRITTEN, not as a problem",
          post(secret_rv="200"), None, None, 0),
         ("a Secret's KEY SET changing IS a problem", post(secret_keys=["password", "token"]), None, None, 1),
+        # --- asymmetric --secret sets. Both directions used to INVENT a problem: an unwatched
+        # Secret read as deleted one way and as a key-set change the other. The watched set is
+        # the key set, because capture() writes an entry for every --secret including an absent
+        # one as {"present": False}.
+        # BOTH of these name the expected TEXT, not just a count, and the first one is why.
+        # Written with `want=1` alone it PASSED with the fix disabled: the old code reported
+        # "SECRET DISAPPEARED" for the unwatched ref, which is also exactly one problem. A case
+        # that cannot fail is not a test, and only running the falsifier revealed it.
+        ("a Secret watched only in PRE is REFUSED, not reported as DISAPPEARED",
+         post(drop_secret=True), None, None, 1, "REFUSING THE SECRET DIFF"),
+        ("a Secret watched only in POST is REFUSED, not reported as a KEY SET change",
+         post(extra_secret=True), None, None, 1, "REFUSING THE SECRET DIFF"),
+        ("FALSIFIER: the refusal names the ASYMMETRY and NOT a disappearance, so the two causes "
+         "stay distinguishable in the output an operator reads",
+         post(drop_secret=True), None, None, 1, "REFUSING THE SECRET DIFF"),
+        ("FALSIFIER: a genuinely DELETED Secret -- watched on BOTH sides, present on one -- is "
+         "still reported as DISAPPEARED, so the refusal did not swallow the real finding",
+         post(secret_gone=True), None, None, 1, "SECRET DISAPPEARED"),
         # CompositionDefinitions. The first case is the one that protects a roll verification:
         # a CD left at False/Unavailable is what krateoEval maps to FAILED and the umbrella
         # inherits, so it must be REPORTED rather than passed over.
@@ -1521,14 +1570,23 @@ def _self_test():
         if not ok:
             print("        want=%s got=%s" % (want, got))
     bad = 0
-    for label, po, delta, match, want in cases:
+    # A case may carry a SIXTH field: a substring the problem text MUST contain. Counting problems
+    # alone cannot tell two different causes apart -- an asymmetric --secret set and a genuinely
+    # deleted Secret both produce exactly one problem, so without this the pair of falsifiers below
+    # them would pass whichever message fired. The field is optional so the other cases are
+    # untouched.
+    for case in cases:
+        label, po, delta, match, want = case[:5]
+        want_text = case[5] if len(case) > 5 else None
         d = diff(PRE, po, expect_delta=delta, matching=match)
         got = len(d["problems"])
         ok = (got > 0) == (want > 0)
+        if ok and want_text is not None:
+            ok = any(want_text in str(x) for x in d["problems"])
         bad += 0 if ok else 1
         print("  %-4s %s" % ("ok" if ok else "FAIL", label))
         if not ok:
-            print("        want_problems=%s got=%s" % (want, d["problems"]))
+            print("        want_problems=%s want_text=%r got=%s" % (want, want_text, d["problems"]))
     # mv_unit, 2026-11-22. The constants and the classification are otherwise UNGUARDED: nothing
     # above reads MigratedValuesValid, so deleting the whole block would leave all 68 cases green --
     # the same mistake cv_unit and cdr_unit exist for. These assert the OBSERVABLE: which problem
