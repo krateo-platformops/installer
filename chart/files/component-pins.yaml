@@ -391,7 +391,7 @@ components:
   # this carries no schema change on top of 1.8.54's Dropdown CRD.
   #
   # Credential-scan delta for the sandbox capture: NOTHING the scan would flag.
-  version: 1.8.85
+  version: 1.8.97
   tier: platform
   feature: portal
   # 1.12.15: BYTE-IDENTICAL, verified by diffing the packaged snowplow-crds templates against 1.12.13
@@ -3065,7 +3065,7 @@ components:
   # frontend-crds >= 1.8.54 is on installer MAIN, so the portal change that uses Dropdown is blocked
   # on this merge -- not on the tag and not on a roll. Merging unblocks them; the tag waits.
   # Moves with the frontend line (one tag publishes all three). See frontend-crd above.
-  version: 1.8.85
+  version: 1.8.97
   deps:
   - frontend-crd
   - authn
@@ -7294,7 +7294,7 @@ components:
   # publishes all three charts, and check-same-version-line REFUSES a pin set where they disagree.
   # The recorded reason is that an app pinned past its -crd pin prunes fields silently.
   # Moves with the frontend line (one tag publishes all three). See frontend-crd above.
-  version: 1.8.85
+  version: 1.8.97
   deps:
     - portal
     - kagent
