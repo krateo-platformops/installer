@@ -15,7 +15,7 @@
 # condition and never independently, and why forcePath rather than set-if-absent: a partial
 # operator override would be a failed render, not a degraded install.
 #
-# CASES 3 TO 5 ARE THE FALSIFIERS AND THEY ARE THE POINT. Without them an implementation that
+# CASES 3 TO 7 ARE THE FALSIFIERS AND THEY ARE THE POINT. Without them an implementation that
 # wrote the pair unconditionally -- taking the agents' Kubernetes tools away on every no-gateway
 # install -- would pass cases 1 and 2. The agentGateway-off case is a DIFFERENT decision,
 # deliberately not taken, so it must be proven untouched.
@@ -138,6 +138,95 @@ tests:
       - hasDocuments:
           count: 0
           documentSelector: {path: kind, value: Kagent}
+
+  - it: "CASE 6: a CRD declaring ONLY perUserRbac FAILS LOUDLY, it does not half-write"
+    # agentiko-mcp-server found the defect AND built this fixture after my own attempt failed. It
+    # is CASE 1 deep-copied with ONE change: spec.properties holds a single key. My version
+    # rebuilt the CRD minimally and broke the emit path -- their note says why: "if your narrowed
+    # CRD changed the version name or `served`, inst.emitDecision would withhold the CR before
+    # the derivation runs. Keeping CASE 1's version entry intact reaches the path."
+    set:
+      features.coreAgents: true
+      features.agentGateway: true
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider:
+      scheme: *scheme
+      objects:
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: kagentcrdses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: KagentCrds}
+            versions: [{name: v0-1-6, served: true}]
+        # THE SUBJECT: Kagent v0-1-24 DECLARES both perUserRbac and kagentapp
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: kagents.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: Kagent}
+            versions:
+              - name: v0-1-24
+                served: true
+                schema:
+                  openAPIV3Schema:
+                    type: object
+                    properties:
+                      spec:
+                        type: object
+                        properties:
+                          perUserRbac: {type: object}
+        - apiVersion: composition.krateo.io/v0-1-6
+          kind: KagentCrds
+          metadata: {name: kagent-crds, namespace: krateo-system}
+          status:
+            conditions: [{type: Ready, status: "True"}, {type: Synced, status: "True"}]
+    asserts:
+      - failedTemplate:
+          errorPattern: "kagent per-user RBAC cannot be derived: the Kagent CRD version being written at declares only ONE"
+
+  - it: "CASE 7: the OTHER split direction -- only kagentapp declared -- fails the same way"
+    set:
+      features.coreAgents: true
+      features.agentGateway: true
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider:
+      scheme: *scheme
+      objects:
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: kagentcrdses.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: KagentCrds}
+            versions: [{name: v0-1-6, served: true}]
+        # THE SUBJECT: Kagent v0-1-24 DECLARES both perUserRbac and kagentapp
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata: {name: kagents.composition.krateo.io}
+          spec:
+            group: composition.krateo.io
+            names: {kind: Kagent}
+            versions:
+              - name: v0-1-24
+                served: true
+                schema:
+                  openAPIV3Schema:
+                    type: object
+                    properties:
+                      spec:
+                        type: object
+                        properties:
+                          kagentapp: {type: object}
+        - apiVersion: composition.krateo.io/v0-1-6
+          kind: KagentCrds
+          metadata: {name: kagent-crds, namespace: krateo-system}
+          status:
+            conditions: [{type: Ready, status: "True"}, {type: Synced, status: "True"}]
+    asserts:
+      - failedTemplate:
+          errorPattern: "kagent per-user RBAC cannot be derived: the Kagent CRD version being written at declares only ONE"
 
   - it: "CASE 4 FALSIFIER: the Kagent document exists at all in CASE 3, so case 3 is not vacuous"
     set:

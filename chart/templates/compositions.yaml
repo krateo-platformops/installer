@@ -479,7 +479,7 @@
 {{- include "inst.forcePath" (dict "target" $spec "path" (list "perUserRbac" "enabled") "value" true) }}
 {{- include "inst.forcePath" (dict "target" $spec "path" (list "kagentapp" "kagent-tools" "enabled") "value" false) }}
 {{- else if or $holdRbac $holdApp }}
-{{- fail (printf "kagent per-user RBAC cannot be derived: the Kagent CRD version being written at declares only ONE of `perUserRbac` (%v) and `kagentapp` (%v). Writing one alone is a hard template-time failure in the kagent chart, and writing neither would leave kagent-tools on its cluster-admin default (ClusterRole `*` on `*`) with reads including Secrets open to anyone signed in. Pin a kagent whose CRD declares both, or set both explicitly in componentValues.kagent." $holdRbac $holdApp) }}
+{{- fail (printf "kagent per-user RBAC cannot be derived: the Kagent CRD version being written at declares only ONE of `perUserRbac` (%v) and `kagentapp` (%v). Writing one alone is a hard template-time failure in the kagent chart, and writing neither would leave kagent-tools on its cluster-admin default (ClusterRole `*` on `*`) with reads including Secrets open to anyone signed in. Pin a kagent whose CRD declares both." $holdRbac $holdApp) }}
 {{- end }}
 {{- end }}
 {{- /* keycloak-config-kog's TWO URLS AND ITS BOOTSTRAP NAMESPACE, derived HERE rather than filled
