@@ -135,7 +135,7 @@ components:
   feature: portal
 - name: portal
   kind: Portal
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - frontend
   - git-provider
@@ -150,14 +150,14 @@ components:
       memory: 512Mi
 - name: portal-agents
   kind: PortalAgents
-  version: 1.8.163
+  version: 1.8.187
   deps: ['portal']
   tier: platform
   feature: portal
   chart: portal-agents
 - name: marketplace-page
   kind: MarketplacePage
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
@@ -173,105 +173,105 @@ components:
   feature: selfservice
 - name: service-desk-page
   kind: ServiceDeskPage
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
   feature: serviceDesk
 - name: incidents-page
   kind: IncidentsPage
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
   feature: portal
 - name: alerts-page
   kind: AlertsPage
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
   feature: portal
 - name: dashboard-page
   kind: DashboardPage
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
   feature: portal
 - name: compositions-page
   kind: CompositionsPage
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
   feature: portal
 - name: blueprints-page
   kind: BlueprintsPage
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
   feature: portal
 - name: resources-page
   kind: ResourcesPage
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
   feature: portal
 - name: search-page
   kind: SearchPage
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
   feature: portal
 - name: builders-page
   kind: BuildersPage
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
   feature: portal
 - name: clusters-page
   kind: ClustersPage
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
   feature: portal
 - name: reviews-page
   kind: ReviewsPage
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
   feature: portal
 - name: settings-page
   kind: SettingsPage
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
   feature: portal
 - name: observability-page
   kind: ObservabilityPage
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
   feature: portal
 - name: audit-page
   kind: AuditPage
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
   feature: portal
 - name: public-pages
   kind: PublicPages
-  version: 1.8.163
+  version: 1.8.187
   deps:
   - portal
   tier: platform
