@@ -15,7 +15,7 @@
 # condition and never independently, and why forcePath rather than set-if-absent: a partial
 # operator override would be a failed render, not a degraded install.
 #
-# CASES 3, 4 AND 5 ARE THE FALSIFIERS AND THEY ARE THE POINT. Without them an implementation that
+# CASES 3 TO 5 ARE THE FALSIFIERS AND THEY ARE THE POINT. Without them an implementation that
 # wrote the pair unconditionally -- taking the agents' Kubernetes tools away on every no-gateway
 # install -- would pass cases 1 and 2. The agentGateway-off case is a DIFFERENT decision,
 # deliberately not taken, so it must be proven untouched.
@@ -113,6 +113,31 @@ tests:
         documentSelector: {path: kind, value: Kagent}
       - notExists: {path: spec.kagentapp.kagent-tools.enabled}
         documentSelector: {path: kind, value: Kagent}
+
+  - it: "CASE 5 FALSIFIER: agentGateway ON but coreAgents OFF writes NEITHER half"
+    # agentiko-mcp-server found this missing on #1160: only the agentGateway-off arm was proven,
+    # so an implementation that IGNORED features.coreAgents entirely would have passed every
+    # case. The condition is BOTH features, Diego's decision, and this is the half that was
+    # asserted nowhere.
+    set:
+      features.coreAgents: false
+      features.agentGateway: true
+      bootstrap.coreProvider.enabled: false
+    kubernetesProvider:
+      scheme: *scheme
+      objects: *objs
+    asserts:
+      - notFailedTemplate: {}
+      # NO Kagent DOCUMENT EXISTS AT ALL, which is stronger than "the keys are absent" and is
+      # why the first version of this case failed with "document not found". kagent's pin
+      # carries `feature: coreAgents`, so with coreAgents off the component is not emitted.
+      # That makes the `coreAgents` term in the derivation's condition DEFENSIVE rather than
+      # load-bearing -- the component's own feature gate already implies it. agp's concern
+      # ("an implementation that ignored coreAgents would pass") is true of the TEST and moot
+      # in the CHART, and recording which of the two it is matters more than the assertion.
+      - hasDocuments:
+          count: 0
+          documentSelector: {path: kind, value: Kagent}
 
   - it: "CASE 4 FALSIFIER: the Kagent document exists at all in CASE 3, so case 3 is not vacuous"
     set:

@@ -465,11 +465,21 @@
        CR is written AT does not declare the key, the apiserver PRUNES it and the write reports
        success. */}}
 {{- if and (eq $c.name "kagent") $top.Values.features.agentGateway $top.Values.features.coreAgents }}
-{{- if eq (include "inst.canHold" (list $c.kind $emit $allCRDs "perUserRbac")) "true" }}
+{{- /* ONE CONDITION FOR THE PAIR, not one per half. agentiko-mcp-server found this on #1160:
+     with a canHold guard on each half, a Kagent CRD version declaring only ONE of the two keys
+     writes ONE half alone -- which is exactly the "hard template-time failure in the kagent
+     chart" this block exists to prevent, produced by the block itself. Their words: "to match
+     the 'one condition, never independently' claim, guard the pair with ONE condition".
+     So: both keys holdable, or NEITHER is written -- and the split case FAILS LOUDLY rather
+     than leaving the cluster-admin default silently in place, because a silent half-write is
+     indistinguishable from this block not running. */ -}}
+{{- $holdRbac := eq (include "inst.canHold" (list $c.kind $emit $allCRDs "perUserRbac")) "true" }}
+{{- $holdApp := eq (include "inst.canHold" (list $c.kind $emit $allCRDs "kagentapp")) "true" }}
+{{- if and $holdRbac $holdApp }}
 {{- include "inst.forcePath" (dict "target" $spec "path" (list "perUserRbac" "enabled") "value" true) }}
-{{- end }}
-{{- if eq (include "inst.canHold" (list $c.kind $emit $allCRDs "kagentapp")) "true" }}
 {{- include "inst.forcePath" (dict "target" $spec "path" (list "kagentapp" "kagent-tools" "enabled") "value" false) }}
+{{- else if or $holdRbac $holdApp }}
+{{- fail (printf "kagent per-user RBAC cannot be derived: the Kagent CRD version being written at declares only ONE of `perUserRbac` (%v) and `kagentapp` (%v). Writing one alone is a hard template-time failure in the kagent chart, and writing neither would leave kagent-tools on its cluster-admin default (ClusterRole `*` on `*`) with reads including Secrets open to anyone signed in. Pin a kagent whose CRD declares both, or set both explicitly in componentValues.kagent." $holdRbac $holdApp) }}
 {{- end }}
 {{- end }}
 {{- /* keycloak-config-kog's TWO URLS AND ITS BOOTSTRAP NAMESPACE, derived HERE rather than filled
