@@ -174,6 +174,40 @@ sources:
     charts:
       - snowplow
       - snowplow-crds
+  # incident-provider's retracted-versions.yaml landed on their main 2026-11-25 (their PR #45,
+  # merge 88d98dc). Declared AFTER that merge and not before: a declared source whose list 404s
+  # FAILS CLOSED and blocks every pull request here, not only an incident-provider one. Probed in
+  # this same change, with controls:
+  #   krateo-platformops/incident-provider  HTTP 200, 1361 bytes
+  #   krateo-platformops/core-provider      HTTP 200   positive control, known live
+  #   krateo-platformops/installer          HTTP 404   negative control
+  #
+  # THE CHARTS LIST IS THEIRS, enumerated by them, not inferred by me from component names -- the
+  # mistake oasgen and core-provider each corrected me on. Both charts the repository publishes are
+  # authorised; their single entry names only `incident-provider`, because the crds chart at those
+  # versions is unaffected. `charts` here is about who MAY speak, not what we consume.
+  #
+  # WHAT THE ENTRY SAYS, read from the file and not from their message: versions 0.15.0, 0.16.0,
+  # 0.17.0 and 0.17.1, use 0.17.2. The controller exits at start -- "failed to determine if
+  # *v1alpha1.Incident is namespaced: no kind is registered" -- because the manager's cache names
+  # the Incident kind before it is registered (their #44).
+  #
+  # AND THEIR REASON SEPARATES MEASURED FROM INFERRED, the property this whole file exists to
+  # preserve: MEASURED on 0.17.1, released chart and image on a fresh cluster, CrashLoopBackOff.
+  # INFERRED from the source and not run: 0.15.0, 0.16.0 and 0.17.0 share the order and the cache,
+  # and 0.14.0 does not. So three of the four are a source reading, stated as such by its author.
+  #
+  # Their file uses `versions:` (a LIST). This gate's parser handles that at line 125 alongside the
+  # singular `version:`, with self-test cases for both and for an empty list. Checked BEFORE
+  # declaring, rather than after a red pull request.
+  #
+  # alert-provider has NOTHING to retract and is deliberately NOT declared: acmp said they would
+  # tell me if that changes rather than leave a source that 404s. A declared source with no file is
+  # a gate that passes vacuously, which is worse than an honest gap.
+  - repo: krateo-platformops/incident-provider
+    charts:
+      - incident-provider
+      - incident-provider-crds
   - repo: krateo-platformops/observability
     charts:
       - clickhouse-operator
