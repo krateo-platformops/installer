@@ -693,7 +693,7 @@ components:
   feature: specialistAgents
 - name: agentgateway-controller
   kind: AgentgatewayController
-  version: 0.2.0
+  version: 0.3.3
   resources:
     requests:
       cpu: 50m
@@ -705,7 +705,7 @@ components:
   feature: agentGateway
 - name: agentgateway-policies
   kind: AgentgatewayPolicies
-  version: 0.2.39
+  version: 0.3.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller

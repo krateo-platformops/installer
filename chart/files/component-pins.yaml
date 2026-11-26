@@ -9166,7 +9166,7 @@ components:
   # Giving the controller its own tag line, or an org-wide skip-unchanged rule, is Diego's call --
   # patching release-oci.yaml in one repo would break its byte-identical property. Documented
   # upstream in krateo-agentiko/agentgateway-policies#91.
-  version: 0.2.0
+  version: 0.3.3
   # resources: per-Kind override, 2026-11-15. observability's 7-day container
   #   working-set max for this cdc was 185.3 MiB on 60s samples, so treat it as a FLOOR
   #   rather than a peak. 224Mi is that x1.15 rounded up to 16Mi (core-provider's method).
@@ -9506,7 +9506,7 @@ components:
   # than to remove ([[componentvalues-cannot-be-unset-via-values]] is the installer-side version).
   #
   # agentgateway-controller STAYS at 0.2.0. See the note above on why these two versions diverge.
-  version: 0.2.39
+  version: 0.3.3
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
