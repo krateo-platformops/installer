@@ -6451,7 +6451,7 @@ components:
   # VERIFY AFTER THE ROLL (its owner's two checks): the scripts ConfigMap contains
   # `HAS_SOURCE=$(has`, and the next seal and verify Jobs exit 0.
   # The seal window skipped at 19:15 is NOT lost -- the next seal covers (last window_end, now-lag].
-  version: 0.1.8
+  version: 0.1.9
   # 0.1.1 (observability#83, repo tag 3.1.27) drops `appVersion`, which 0.1.0 set to 0.1.0. The
   # chart builds NO image -- both CronJobs run upstream clickhouse/clickhouse-server:24.8-alpine --
   # so there is no component repo whose CI check-pin-ci could resolve, and appVersion 0.1.0 matched
