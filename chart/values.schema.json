@@ -908,6 +908,14 @@
                     ],
                     "type": "string"
                   },
+                  "sessionRouting": {
+                    "description": "MCP session routing for this server. Default: mcpSessionRouting, or the gateway's own default (Stateful) for an SSE server.",
+                    "enum": [
+                      "Stateful",
+                      "Stateless"
+                    ],
+                    "type": "string"
+                  },
                   "toolRules": {
                     "description": "Layer 2 \u2014 each entry restricts the named tools to the given subjects. Rules are AND'd into one expression, so a rule can only narrow access. Tools named nowhere stay open.",
                     "items": {
@@ -4435,6 +4443,14 @@
                     ],
                     "type": "string"
                   },
+                  "sessionRouting": {
+                    "description": "MCP session routing for this server. Default: mcpSessionRouting, or the gateway's own default (Stateful) for an SSE server.",
+                    "enum": [
+                      "Stateful",
+                      "Stateless"
+                    ],
+                    "type": "string"
+                  },
                   "toolRules": {
                     "description": "Layer 2 \u2014 each entry restricts the named tools to the given subjects. Rules are AND'd into one expression, so a rule can only narrow access. Tools named nowhere stay open.",
                     "items": {
@@ -4493,6 +4509,14 @@
                 "type": "object"
               },
               "type": "array"
+            },
+            "mcpSessionRouting": {
+              "description": "How MCP sessions reach mcpServers and extraMcpServers: Stateless opens one per request, Stateful pins a client's session to one server pod, and breaks it when that pod is replaced.",
+              "enum": [
+                "Stateful",
+                "Stateless"
+              ],
+              "type": "string"
             },
             "mcpTraffic": {
               "additionalProperties": false,
