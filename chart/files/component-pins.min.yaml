@@ -532,7 +532,7 @@ components:
 - name: agentiko
   kind: Agentiko
   agentName: agentiko
-  version: 0.8.6
+  version: 0.8.14
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
     - repo-mcp-server
@@ -629,7 +629,7 @@ components:
   agent: true
 - name: core-provider-agent
   kind: CoreProviderAgent
-  version: 0.62.1
+  version: 0.62.4
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
