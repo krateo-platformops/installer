@@ -22016,6 +22016,33 @@
       "properties": {
         "cdc": {
           "properties": {
+            "ownershipLease": {
+              "additionalProperties": false,
+              "description": "Leader-election lease timings of the core-provider cdc. All three are required together; the cross-field rule (duration > renewDeadline > retryPeriod x 1.2, non-zero) is enforced by the core-provider chart at render time, not here. No defaults here by design: the component chart owns them.",
+              "properties": {
+                "duration": {
+                  "description": "Lease duration (positive Go duration, e.g. 30s, 1500ms, 1m30s); chart default: 30s. No schema default by design.",
+                  "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|\u00b5s|\u03bcs|ms|s|m|h))+$",
+                  "type": "string"
+                },
+                "renewDeadline": {
+                  "description": "Renew deadline (positive Go duration, e.g. 30s, 1500ms, 1m30s); chart default: 20s. No schema default by design.",
+                  "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|\u00b5s|\u03bcs|ms|s|m|h))+$",
+                  "type": "string"
+                },
+                "retryPeriod": {
+                  "description": "Retry period (positive Go duration, e.g. 30s, 1500ms, 1m30s); chart default: 5s. No schema default by design.",
+                  "pattern": "^(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|\u00b5s|\u03bcs|ms|s|m|h))+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "duration",
+                "renewDeadline",
+                "retryPeriod"
+              ],
+              "type": "object"
+            },
             "pool": {
               "additionalProperties": false,
               "properties": {
