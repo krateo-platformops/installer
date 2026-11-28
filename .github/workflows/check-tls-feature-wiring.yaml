@@ -23,6 +23,7 @@ on:
       - chart/values.schema.json
       - chart/templates/_helpers.tpl
       - chart/templates/definitions.yaml
+      - chart/templates/compositions.yaml
       - .github/scripts/check-tls-feature-wiring.py
       - .github/workflows/check-tls-feature-wiring.yaml
   push:

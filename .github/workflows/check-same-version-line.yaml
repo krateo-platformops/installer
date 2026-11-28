@@ -14,6 +14,8 @@ on:
   pull_request:
     paths:
       - 'chart/files/component-pins.yaml'
+      # core-provider and core-provider-crds are SUBCHARTS declared only here, never in the pins file.
+      - 'chart/Chart.yaml'
       - '.github/pin-version-lines.yaml'
       - '.github/scripts/check-same-version-line.py'
       - '.github/workflows/check-same-version-line.yaml'

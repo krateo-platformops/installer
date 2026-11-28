@@ -1,0 +1,37 @@
+name: check-gate-trigger-paths
+
+# Refuses a gate whose workflow `paths:` filter omits a file the gate reads. A path-filtered workflow
+# that does not trigger produces NO check at all, so the gate silently vanishes: PR #1179 changed only
+# chart/Chart.yaml and same-version-line, which reads that file, was absent from its ~50 checks.
+#
+# Triggers on `.github/**` so this gate re-runs whenever any gate or workflow changes, including itself.
+# It runs its own self-test first so a detector that stopped detecting cannot pass.
+
+on:
+  pull_request:
+    paths:
+      - '.github/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  gate-trigger-paths:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Prove the detector still detects
+        run: python3 .github/scripts/check-gate-trigger-paths.py --self-test
+      - name: Refuse a gate its own trigger paths can skip
+        run: python3 .github/scripts/check-gate-trigger-paths.py
