@@ -150,10 +150,33 @@ def check_docs(fname, docs, pins, by_kind, allow):
 
 
 def load_allow(path):
+    """Parse the deliberately-stale allowlist, NAMING a malformed entry rather than raising.
+
+    A bare e["tag"] raises KeyError on a plausible typo (servedTag: for tag:), and the gate then
+    fails closed with `KeyError: 'tag'` -- safe, but it tells the next author the name of an
+    exception class instead of what is wrong with their file. A guard whose failure message does
+    not name the input is still a guard, but it is a worse one.
+    """
     with open(path) as f:
         d = yaml.safe_load(f)
+    if not isinstance(d, dict) or "entries" not in d:
+        raise ValueError("%s: expected a mapping with an `entries:` key" % path)
+    entries = d["entries"]
+    if entries is None:
+        entries = []
+    if not isinstance(entries, list):
+        raise ValueError("%s: `entries:` must be a list, got %s" % (path, type(entries).__name__))
+    REQUIRED = ("fixture", "crd", "tag")
     out = set()
-    for e in d["entries"]:
+    for i, e in enumerate(entries):
+        if not isinstance(e, dict):
+            raise ValueError("%s: entry %d is %s, expected a mapping with %s"
+                             % (path, i, type(e).__name__, ", ".join(REQUIRED)))
+        missing = [k for k in REQUIRED if k not in e]
+        if missing:
+            raise ValueError("%s: entry %d is missing %s (has %s). Required: %s"
+                             % (path, i, ", ".join(missing), ", ".join(sorted(e)) or "nothing",
+                                ", ".join(REQUIRED)))
         out.add((e["fixture"], e["crd"], e["tag"]))
     return out
 
@@ -320,6 +343,34 @@ def selftest():
         yaml.safe_dump({"entries": [{"fixture": "good.yaml", "crd": "snowplows.composition.krateo.io", "tag": "v1-12-77"}]}, open(sp, "w"))
         tot, f, r = run(tdir, pp, sp)
         expect("dead allowlist entry", len(r), 1)
+
+    # A MALFORMED allowlist entry must NAME the problem, not raise a bare KeyError. The coordinator
+    # hit this with a plausible typo (servedTag: for tag:) and got `KeyError: 'tag'` -- fail-closed,
+    # but it reports an exception class instead of what is wrong with the file. Asserted here so a
+    # refactor back to bare subscripts fails rather than silently regressing the message.
+    for label, body, want in (
+        ("missing key",      "entries:\n  - fixture: a.yaml\n    crd: b.io\n    servedTag: v1-0-0\n", "is missing tag"),
+        ("entries not list", "entries: notalist\n",                                                     "must be a list"),
+        ("entry not mapping","entries:\n  - juststring\n",                                             "expected a mapping"),
+        ("no entries key",   "other: 1\n",                                                              "`entries:` key"),
+    ):
+        fd, ap = tempfile.mkstemp(suffix=".yaml")
+        os.write(fd, body.encode()); os.close(fd)
+        try:
+            load_allow(ap)
+            expect("malformed allowlist (%s) must refuse" % label, "parsed", "ValueError")
+        except ValueError as e:
+            expect("malformed allowlist (%s) names the input" % label, want in str(e), True)
+        except KeyError as e:
+            expect("malformed allowlist (%s) raised a bare KeyError" % label, repr(e), "a ValueError")
+        finally:
+            os.unlink(ap)
+    # an EMPTY entries list is legal, not malformed
+    fd, ap = tempfile.mkstemp(suffix=".yaml"); os.write(fd, b"entries:\n"); os.close(fd)
+    try:
+        expect("empty allowlist is legal", load_allow(ap), set())
+    finally:
+        os.unlink(ap)
 
     if fails:
         for x in fails:
