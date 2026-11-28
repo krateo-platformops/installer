@@ -7397,7 +7397,7 @@ components:
   # from 0.8.4; the composer rule is in 0.8.6 only. Cumulative, so one pin carries both.
   #
   # ORDERING IS ALREADY SATISFIED: this depends on kagent 0.1.24, live on 057 since 22:57Z.
-  version: 0.8.6
+  version: 0.8.11
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
     - repo-mcp-server
@@ -7801,7 +7801,7 @@ components:
   # was pinned to the 1.6.64 frontend: ahead of the frontend, the gate passes charts as "edges enforced"
   # that the live frontend does not gate. The reverse skew was checked too — 1.6.64...1.6.66 touches
   # nothing matching lint, schema, gate or verb — so a frontend AHEAD of the pinned kernel is fine.
-  version: 0.62.1
+  version: 0.62.4
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
