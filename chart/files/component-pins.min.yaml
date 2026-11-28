@@ -493,7 +493,7 @@ components:
   agent: true
 - name: repo-mcp-server
   kind: RepoMcpServer
-  version: 0.1.6
+  version: 0.1.9
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
@@ -552,7 +552,7 @@ components:
   orchestrator: true
 - name: incident-agent
   kind: IncidentAgent
-  version: 0.3.9
+  version: 0.3.14
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -615,7 +615,7 @@ components:
   requireApproval: []
 - name: clickstack-agent
   kind: ClickstackAgent
-  version: 3.1.10
+  version: 3.1.15
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
