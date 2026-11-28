@@ -482,7 +482,7 @@ components:
   modelOwner: true
 - name: installer-agent
   kind: InstallerAgent
-  version: 0.3.11
+  version: 0.3.12
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
