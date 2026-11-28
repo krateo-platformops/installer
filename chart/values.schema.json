@@ -5931,7 +5931,7 @@
             "toolTokenExchange": {
               "type": "object",
               "additionalProperties": false,
-              "description": "Tool-only tokens, gateway side (docs/per-user-tool-servers.md). Off by default: nothing renders.",
+              "description": "Tool-only tokens, gateway side (docs/per-user-tool-servers.md). Off by default: nothing renders. With enabled=true the schema itself refuses an empty or missing clientId, endpoint.service, endpoint.namespace, caRef.name or clientAssertionSecret.name (the render guard in templates/guards.yaml stays as a second check).",
               "properties": {
                 "enabled": {
                   "type": "boolean",
@@ -5948,7 +5948,7 @@
                     },
                     "namespace": {
                       "type": "string",
-                      "description": "authn's namespace. Required when enabled."
+                      "description": "authn's namespace. Required when enabled (the schema refuses empty)."
                     },
                     "port": {
                       "type": "integer",
@@ -5964,7 +5964,7 @@
                 },
                 "clientId": {
                   "type": "string",
-                  "description": "authn actor mapping name for the gateway (client assertion iss/sub, and client_id). Required when enabled."
+                  "description": "authn actor mapping name for the gateway (client assertion iss/sub, and client_id). Required when enabled (the schema refuses empty)."
                 },
                 "assertionAudience": {
                   "type": "string",
@@ -5978,7 +5978,7 @@
                   "properties": {
                     "name": {
                       "type": "string",
-                      "description": "Required when enabled."
+                      "description": "Required when enabled (the schema refuses empty)."
                     },
                     "kind": {
                       "type": "string",
@@ -5999,7 +5999,7 @@
                   "properties": {
                     "name": {
                       "type": "string",
-                      "description": "Required when enabled."
+                      "description": "Required when enabled (the schema refuses empty)."
                     },
                     "key": {
                       "type": "string",
@@ -6014,6 +6014,63 @@
                     "minLength": 1
                   },
                   "description": "mcpServers/extraMcpServers names whose calls carry an exchanged token."
+                }
+              },
+              "if": {
+                "properties": {
+                  "enabled": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "enabled"
+                ]
+              },
+              "then": {
+                "required": [
+                  "clientId",
+                  "endpoint",
+                  "caRef",
+                  "clientAssertionSecret"
+                ],
+                "properties": {
+                  "clientId": {
+                    "minLength": 1
+                  },
+                  "endpoint": {
+                    "required": [
+                      "service",
+                      "namespace"
+                    ],
+                    "properties": {
+                      "service": {
+                        "minLength": 1
+                      },
+                      "namespace": {
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "caRef": {
+                    "required": [
+                      "name"
+                    ],
+                    "properties": {
+                      "name": {
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "clientAssertionSecret": {
+                    "required": [
+                      "name"
+                    ],
+                    "properties": {
+                      "name": {
+                        "minLength": 1
+                      }
+                    }
+                  }
                 }
               }
             },
