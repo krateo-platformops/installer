@@ -8694,7 +8694,7 @@ components:
   # 0.2.6 (annotated tag on 5931f8d, PR #61; every check passed, one skipped). Contains all of
   # 0.2.6: version-only change from 0.2.5 apart from the version itself (observability).
   # Moves with nightly-review as a declared version line.
-  version: 0.2.6
+  version: 0.2.8
   tier: observability
   feature: specialistAgents
   # 0.1.12: THE ALLOWLIST IS REMOVED, at Diego's direction. It bounded which repository a proposal
@@ -9114,7 +9114,7 @@ components:
   # nothing. The two must move together. No cluster sets reviewer.* today.
   agent: true
   agentName: nightly-review-agent
-  version: 0.2.6
+  version: 0.2.8
   # Reads ClickHouse (krateo-observability) and kagent sessions through kagent's own API — which is why
   # kagent is a dep and why there is no Postgres reader: the API path inherits the per-user RBAC that
   # a direct database read would have had none of. It no longer consults krateo-autopilot at all; the

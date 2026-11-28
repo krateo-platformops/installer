@@ -674,14 +674,14 @@ components:
 - name: nightly-review-crd
   kind: NightlyReviewCrds
   chart: nightly-review-crds
-  version: 0.2.6
+  version: 0.2.8
   tier: observability
   feature: specialistAgents
 - name: nightly-review
   kind: NightlyReview
   agent: true
   agentName: nightly-review-agent
-  version: 0.2.6
+  version: 0.2.8
   deps:
   - nightly-review-crd
   - kagent
