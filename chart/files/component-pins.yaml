@@ -104,7 +104,7 @@ components:
   # 0.28.1: co-versioned with oasgen-provider. Same k8s >= 1.36 floor; carries no part of the
   # regression fix, which is provider-side only.
   # 0.64.0: moves with the oasgen line (one tag publishes all three charts).
-  version: 0.90.0
+  version: 0.98.0
   tier: platform
   feature: oasgenProvider
   # 1.6.67: BYTE-IDENTICAL to the 1.6.66 copy taken when 1.6.66 was rolled — verified against LIVE,
@@ -3568,7 +3568,7 @@ components:
   # Registry probed with controls: 0.15.0 present, 0.12.0 present, 9.9.9 absent, in
   # krateo-blueprints -- NOT the default registry; the repo key is the authority.
   # Not in .github/retraction-sources.yaml (checked the file, not its silence).
-  version: 0.15.0
+  version: 0.16.1
   # 0.7.0 adds two kinds and removes none -- measured on the published chart, not read from the
   # release notes: rendered at --kube-version 1.33.0, rc=0 on both sides, 8104 -> 8882 lines (floor
   # asserted), RestDefinition docs 30 -> 32, ADDED {RepoContent, UserRepository}, REMOVED {} . 0.7.1
@@ -5319,7 +5319,7 @@ components:
   #   not render (oasgen#628). Declared in componentValues in THIS SAME CHANGE: the node is closed,
   #   so a split would prune maxBodyMiB silently while kubectl printed "patched".
   #   The bounds are mirrored; the chart's `default: 4` deliberately is NOT.
-  version: 0.90.0
+  version: 0.98.0
   tier: platform
   feature: portal
   chart: controller-render-service
@@ -5534,7 +5534,7 @@ components:
   #   genuinely create-less and would then report it, correctly.
   #   github-provider-kog verified its 32+32 CRDs render byte-identically to 0.63.1's, same 5
   #   warnings, 0 whole-object differences, with a maxLength positive control present in both.
-  version: 0.90.0
+  version: 0.98.0
   # 0.43.0, NOT the 0.42.0 this PR first proposed. The two extra releases are correctness fixes a
   # consumer feels, both reported by the openstack-nova-operator-kog session and CLOSED upstream:
   #   #322 a populated spec object compared EQUAL to an EMPTY remote object, so
