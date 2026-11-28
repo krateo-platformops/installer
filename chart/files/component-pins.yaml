@@ -9506,7 +9506,7 @@ components:
   # than to remove ([[componentvalues-cannot-be-unset-via-values]] is the installer-side version).
   #
   # agentgateway-controller STAYS at 0.2.0. See the note above on why these two versions diverge.
-  version: 0.3.3
+  version: 0.4.0
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - agentgateway-controller
