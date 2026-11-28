@@ -7098,7 +7098,7 @@ components:
   # DECISIVE POST-CHECK, one line:
   #   kubectl logs -n krateo-system deploy/repo-mcp-server | grep "runtime pin"
   # must read frontend@1.6.52, NOT 1.6.48.
-  version: 0.1.6
+  version: 0.1.9
   mcpBackend: true  # #116 roll-guard: hashed into gateway.mcpBackendHash + every agent rollGuard
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
@@ -7464,7 +7464,7 @@ components:
   # alert-provider#107's ApplyActionStale prompt and re-resolves against the served schema. The
   # second half is INERT until acmp's provider-side condition ships. The Agent's system-prompt
   # ConfigMap changes and the agent pod restarts once.
-  version: 0.3.9
+  version: 0.3.14
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
@@ -7760,7 +7760,7 @@ components:
   # One pod roll, no window.
   # CONTROLS: 3.1.8 and 3.1.7 and 3.1.6 resolve; 3.1.9 does not. Chart in krateo-agentiko.
   kind: ClickstackAgent
-  version: 3.1.10
+  version: 3.1.15
   repo: oci://ghcr.io/krateo-agentiko/charts
   deps:
   - repo-mcp-server
