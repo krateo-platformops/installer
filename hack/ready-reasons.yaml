@@ -197,7 +197,7 @@ compositionDefinition:
   source:
     repo: krateo-platformops/core-provider
     path: docs/cd-ready-reasons.md
-    checked_against: 6d067a21e7de7a345299222b35c07c210bd6c147
+    checked_against: c08430d
     checked_on: '2026-11-21'
     released_in:
       # All four below land in 2.13.120, which is NOT CUT YET. #602 merged AFTER the 2.13.119 tag
@@ -336,6 +336,38 @@ compositionDefinition:
         and False here; Unavailable is FAILED on Ready and False here; NotObserved is UNEVALUATED on Ready
         and Unknown here. Never classify any of these strings without its condition. Parent verdict `-`
         on all four, and Ready already carries the controller state, so this condition adds no Ready information.'
+    SchemaDefaultsMatchValues:
+      # core-provider#690 (PR #686), shipping in 2.13.137 ALONE -- not in 2.13.136 (cc4c07f).
+      # INFORMATIONAL: it does NOT feed Ready and adds no Ready reason, so every row's parent
+      # verdict is `-`, exactly like SpecSchemaCurrent above.
+      #
+      # WHY IT IS VENDORED BEFORE THE RELEASE EXISTS. This gate compares the vendored copy against
+      # core-provider's `main`, not against the version pinned here -- so an upstream MERGE breaks
+      # the scheduled run immediately. #690 merged at c08430d and the gate went to exit 1 with three
+      # MISSING CONDITION errors before 2.13.137 was tagged. That is the right design for a
+      # classifier (it must recognise any reason a cluster might show, including before the pin
+      # catches up) and it is why core-provider's merge-time pings are load-bearing rather than
+      # courtesy.
+      #
+      # 2.13.137 also adds `status.schemaDefaults: {differ: [{path, schema, values, kind}], dropped}`
+      # -- the machine-readable form of SchemaDefaultsDiffer's path list, because prose is not a
+      # contract. Status only, omitted when Aligned. Neither this gate nor hack/roll-snapshot.py
+      # collects it: the gate reads condition TYPES and REASONS from this table, and the snapshot
+      # keeps ten NAMED per-definition fields. Verified, not assumed.
+      universal: true
+      healthy:
+        - Aligned
+      unhealthy:
+        - SchemaDefaultsDiffer
+      unevaluated:
+        - OwnedByAnotherDefinition
+      note: >-
+        core-provider#690. Informational; parent verdict `-` on all rows. SchemaDefaultsDiffer names
+        each differing path and is NOT a failure of the definition: at upgrade core-provider rewrites
+        such a CRD in place at the same chart version, and envtest proves existing compositions' helm
+        values byte-identical before and after. NEW compositions of a chart whose schema default
+        disagrees with values.yaml take values.yaml's value -- at least keystone-operator-kog and
+        zendesk-provider-kog go false -> true. Neither is installed on krateo-057 today.
     SchemaFullyEnforced:
       universal: true
       healthy:
