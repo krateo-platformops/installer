@@ -4415,6 +4415,38 @@
               },
               "type": "object"
             },
+            "mcpServerSubjects": {
+              "type": "object",
+              "description": "Who may use each MCP server, keyed by its mcpServers[].name. No entry: anyone signed in. Holds for every tool the server has or gains.",
+              "additionalProperties": {
+                "type": "object",
+                "description": "Who a rule grants access to. The matchers are OR'd; at least one must be set, otherwise the rule would deny everyone. `anyAuthenticated` is IGNORED when `users` or `groups` is set: these blocks are deep-merged maps, so a caller narrowing a rule to a group never sees the default `anyAuthenticated: true` disappear, and OR'ing it back in would silently restore access to everyone. Widen again with `anyAuthenticated: true` and no users/groups.",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "anyAuthenticated": {
+                    "type": "boolean",
+                    "description": "Any request carrying a token this gateway validated. Ignored when `users` or `groups` is set."
+                  },
+                  "users": {
+                    "type": "array",
+                    "description": "Values of the user claim (authn: the username in `sub`).",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "groups": {
+                    "type": "array",
+                    "description": "Values that must appear in the groups claim (authn: `groups`, a list of strings).",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            },
             "mcpServers": {
               "description": "In-cluster MCP servers to front. Each entry renders an AgentgatewayBackend + route (required once the kagent controller proxies agent egress) and its per-tool rules. External MCP servers are not proxied and must not be listed.",
               "items": {
@@ -5895,6 +5927,152 @@
                 "type": "object"
               },
               "type": "array"
+            },
+            "toolTokenExchange": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Tool-only tokens, gateway side (docs/per-user-tool-servers.md). Off by default: nothing renders. With enabled=true the schema itself refuses an empty or missing clientId, endpoint.service, endpoint.namespace, caRef.name or clientAssertionSecret.name (the render guard in templates/guards.yaml stays as a second check).",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Render the per-server RFC 8693 exchange at authn and the audience refusal on every MCP route. Needs jwt.enabled."
+                },
+                "endpoint": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "authn's internal /delegate/token endpoint, TLS only.",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "description": "authn's internal Service name."
+                    },
+                    "namespace": {
+                      "type": "string",
+                      "description": "authn's namespace. Required when enabled (the schema refuses empty)."
+                    },
+                    "port": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535
+                    },
+                    "path": {
+                      "type": "string",
+                      "pattern": "^/",
+                      "description": "Token endpoint path."
+                    }
+                  }
+                },
+                "clientId": {
+                  "type": "string",
+                  "description": "authn actor mapping name for the gateway (client assertion iss/sub, and client_id). Required when enabled (the schema refuses empty)."
+                },
+                "assertionAudience": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Client assertion aud; authn's default is authn."
+                },
+                "caRef": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "CA that signed authn's internal certificate. Referenced by name, same namespace.",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Required when enabled (the schema refuses empty)."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "ConfigMap",
+                        "Secret"
+                      ]
+                    },
+                    "key": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "clientAssertionSecret": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Secret with the private key for the client assertion (private_key_jwt). Referenced by name only.",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Required when enabled (the schema refuses empty)."
+                    },
+                    "key": {
+                      "type": "string",
+                      "description": "Empty = the CRD default, signingKey."
+                    }
+                  }
+                },
+                "servers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "description": "mcpServers/extraMcpServers names whose calls carry an exchanged token."
+                }
+              },
+              "if": {
+                "properties": {
+                  "enabled": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "enabled"
+                ]
+              },
+              "then": {
+                "required": [
+                  "clientId",
+                  "endpoint",
+                  "caRef",
+                  "clientAssertionSecret"
+                ],
+                "properties": {
+                  "clientId": {
+                    "minLength": 1
+                  },
+                  "endpoint": {
+                    "required": [
+                      "service",
+                      "namespace"
+                    ],
+                    "properties": {
+                      "service": {
+                        "minLength": 1
+                      },
+                      "namespace": {
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "caRef": {
+                    "required": [
+                      "name"
+                    ],
+                    "properties": {
+                      "name": {
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "clientAssertionSecret": {
+                    "required": [
+                      "name"
+                    ],
+                    "properties": {
+                      "name": {
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              }
             },
             "tracing": {
               "additionalProperties": false,

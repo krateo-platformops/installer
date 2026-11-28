@@ -53,7 +53,28 @@ CASES = [
     ({"create": True}, True, "CONTROL: create true needs no name"),
     ({"create": True, "name": ""}, True, "CONTROL: the rule must not fire when create is true"),
 ]
-EXPECTED_CONDITIONALS = 1  # componentValues.authn.serviceAccount. Changing this is a DECISION.
+EXPECTED_CONDITIONALS = 2  # Changing this is a DECISION. Each entry below is one admission rule.
+#   1. componentValues.authn.serviceAccount
+#        if create is false then name is required (minLength 1). Mirrored from authn's own schema
+#        (#170); the chart has enforced it with a template `fail` since 0.53.0.
+#   2. componentValues.agentgateway-policies.toolTokenExchange        ADDED 2026-11-28
+#        if enabled is true then clientId, endpoint, caRef and clientAssertionSecret are required,
+#        endpoint additionally requires service and namespace, and five fields carry minLength 1.
+#        Mirrored from agentgateway-policies' OWN values.schema.json at commit 68545b1, the commit
+#        0.4.3 will be tagged at -- not from a description. The four fields were previously marked
+#        "Required when enabled" in PROSE only, and the owner's prior schema ACCEPTED
+#        {"enabled": true} alone, a configuration that cannot work.
+#        WHY IT IS SAFE TO ADD, which is what this constant exists to make someone check:
+#          - no live CR carries the key. Measured 2026-11-28 09:2xZ: 1 Installer CR on krateo-057
+#            and 1 on demo, ZERO with componentValues.agentgateway-policies.toolTokenExchange, so
+#            zero would become unupdatable. The scanner was proved to flag violators first
+#            (4 missing / 2 missing / 0 / 0 / 0 across five planted shapes).
+#          - it is NOT under an unbounded collection: no array and no map sits above it on the path,
+#            so the CEL cost reasoning that keeps check-cel-cost-shape silent for
+#            authn.serviceAccount applies unchanged. That gate reports 0 errors with it present.
+#          - `required` and `minLength` do different work on the two sides: Helm validates MERGED
+#            values and the owner's values.yaml defaults several of these to "", so `required` alone
+#            always passes there; this schema has no defaults, so `required` is what bites here.
 
 
 def node_at(schema, path):
