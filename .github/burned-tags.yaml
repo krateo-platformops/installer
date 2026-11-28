@@ -1,0 +1,5 @@
+# Tags that must never be cut again. Mapping of tag -> {reason: "..."}.
+# A released (or burned) tag is never re-cut in this repo. hack/assert-taggable.py refuses
+# any --tag listed here, and refuses to parse an entry without a `reason`.
+"0.3.717":
+  reason: "cut at 617e1c5, ten commits behind main; annotation claimed eleven components but ten were at the old version; permanently skipped"
