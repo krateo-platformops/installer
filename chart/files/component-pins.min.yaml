@@ -8,7 +8,7 @@ components:
 - name: oasgen-provider-crd
   kind: OasgenProviderCrds
   chart: oasgen-provider-crds
-  version: 0.90.0
+  version: 0.98.0
   tier: platform
   feature: oasgenProvider
 - name: frontend-crd
@@ -127,7 +127,7 @@ components:
   version: 0.9.0
 - name: github-provider-kog
   kind: GithubProviderKog
-  version: 0.15.0
+  version: 0.16.1
   requiresApiGroups:
   - ogen.krateo.io
   repo: oci://ghcr.io/krateo-blueprints/charts
@@ -284,14 +284,14 @@ components:
   chart: blueprint-render-service
 - name: controller-render-service
   kind: ControllerRenderService
-  version: 0.90.0
+  version: 0.98.0
   tier: platform
   feature: portal
   chart: controller-render-service
 - name: oasgen-provider
   kind: OasgenProvider
   chart: oasgen-provider
-  version: 0.90.0
+  version: 0.98.0
   deps:
   - oasgen-provider-crd
   tier: platform
