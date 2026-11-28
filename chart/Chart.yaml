@@ -375,14 +375,19 @@ dependencies:
 # EVERY CDC ROLLS ONCE for the new image; their ConfigMap is unchanged. Requires snowplow >= 1.12.70
 # (core-provider's hold is ON <= 1.12.69, which they have agreed to write that way from now on);
 # 057 runs 1.12.70.
+# TEMPORARY HOLD, both members: core-provider AND core-provider-crds are held at 2.13.130 so the
+# eleven-component installer tag can be cut and measured on its own. 2.13.136 is pinned, verified
+# (six artifacts, 2.13.135 beside each, 9.9.9 at 404, digests re-pulled and matching) and replaces
+# every composition controller once -- 79 on krateo-057 -- so it rolls in its own tag. A follow-up
+# PR restores BOTH core-provider and core-provider-crds to 2.13.136 before that tag is cut.
 - condition: bootstrap.coreProvider.enabled
   name: core-provider
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.136
+  version: 2.13.130
 - condition: bootstrap.coreProvider.enabled
   name: core-provider-crds
   repository: oci://ghcr.io/krateo-platformops/charts
-  version: 2.13.136
+  version: 2.13.130
 description: Umbrella orchestrator blueprint that sequences the per-component Krateo
   PlatformOps blueprints into one ordered, readiness-gated install.
 home: https://krateo.io
