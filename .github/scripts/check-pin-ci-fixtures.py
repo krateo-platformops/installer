@@ -19,8 +19,12 @@ chain must be followed, AND a target that reaches no test command must still fai
 the guard can SEE must not widen what it will ACCEPT.
 """
 import importlib.util
+import io
+import contextlib
 import pathlib
+import subprocess
 import sys
+import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("pc", ROOT / ".github" / "scripts" / "check-pin-ci.py")
@@ -200,6 +204,124 @@ def _provenance_fixtures():
     return failures, len(PROV_CASES) + 2
 
 
+# BASE-READABILITY CASES. changed_pins() used to `continue` past a failed `git show`, so an
+# unreadable base returned the same empty list as a PR changing no pin, and main() printed "no pin
+# version changed" and exited 0. These build real throwaway git repos and run main() end to end.
+PINS_BASE = "components:\n  - name: alpha\n    version: 1.0.0\n  - name: beta\n    version: 2.0.0\n"
+CHART_BASE = "dependencies:\n  - name: core-provider\n    version: 2.13.57\n"
+
+
+def _git(root, *a):
+    subprocess.run(["git", "-C", str(root), "-c", "user.email=t@t", "-c", "user.name=t", *a],
+                   check=True, capture_output=True)
+
+
+def _repo(pins_base=PINS_BASE, chart_base=CHART_BASE, pins_head=PINS_BASE, chart_head=CHART_BASE,
+          with_pins_in_base=True):
+    d = pathlib.Path(tempfile.mkdtemp(prefix="pinci-"))
+    _git(d, "init", "-q", "-b", "main")
+    (d / "chart" / "files").mkdir(parents=True)
+    if with_pins_in_base:
+        (d / "chart/files/component-pins.yaml").write_text(pins_base)
+    (d / "chart/Chart.yaml").write_text(chart_base)
+    _git(d, "add", "-A")
+    _git(d, "commit", "-q", "-m", "base")
+    sha = subprocess.run(["git", "-C", str(d), "rev-parse", "HEAD"], capture_output=True,
+                         text=True).stdout.strip()
+    (d / "chart/files/component-pins.yaml").write_text(pins_head)
+    (d / "chart/Chart.yaml").write_text(chart_head)
+    return d, sha
+
+
+def _run_main(root, base):
+    """Run pin-ci's main() with cwd=root, BASE_REF=base. Returns (rc, stdout)."""
+    import os
+    old = os.getcwd()
+    os.chdir(root)
+    os.environ["BASE_REF"] = base
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            try:
+                rc = pc.main()
+            except Exception as e:  # the pre-fix code must FAIL the assertions, not crash the suite
+                rc = f"EXC:{type(e).__name__}"
+    finally:
+        os.chdir(old)
+    return rc, buf.getvalue()
+
+
+def _base_cases():
+    """(failures, count)."""
+    failures = []
+    n = 0
+
+    def check(label, ok, detail=""):
+        nonlocal n
+        n += 1
+        if not ok:
+            failures.append(label)
+        print(f"  {'ok  ' if ok else 'FAIL'} {label:<62} {'' if ok else detail}")
+
+    # 1. base ref unresolvable -> REFUSAL, nonzero, names the ref, quotes git, never "nothing to check"
+    d, _ = _repo()
+    rc, out = _run_main(d, "origin/does-not-exist")
+    check("unresolvable base ref -> exit nonzero", rc not in (0, None) and rc != 0, f"rc={rc!r}")
+    check("unresolvable base ref -> says REFUSES and names the ref",
+          "REFUSES" in out and "origin/does-not-exist" in out, out)
+    check("unresolvable base ref -> quotes git's error / command",
+          "rev-parse" in out and "exit" in out, out)
+    check("unresolvable base ref -> NEVER prints 'nothing to check'",
+          "nothing to check" not in out, out)
+
+    # 2. ref resolves, PATH missing in it -> REFUSAL, a DIFFERENT message from case 1
+    d, sha = _repo(with_pins_in_base=False)
+    rc, out = _run_main(d, "main")
+    check("path missing inside a readable base -> exit nonzero", rc not in (0, None) and rc != 0,
+          f"rc={rc!r}")
+    check("path missing -> names ref, resolved SHA and the path",
+          "component-pins.yaml" in out and sha in out and "main" in out, out)
+    check("path missing is NOT conflated with an unresolvable ref",
+          "does not resolve" not in out and "cannot be read in it" in out, out)
+
+    # 3. readable base, 0 changed -> exit 0, denominator and resolved sha printed
+    d, sha = _repo()
+    rc, out = _run_main(d, "main")
+    check("readable base, 0 changed -> exit 0", rc == 0, f"rc={rc!r}")
+    check("0 changed -> prints denominator 0 changed of 3 compared",
+          "0 changed of 3 pin entries compared against main @ " + sha in out, out)
+    check("0 changed -> keeps the original 'nothing to check' wording",
+          "pin-ci: no pin version changed in this PR — nothing to check" in out, out)
+
+    # 4. WHOLE-OUTCOME assertion for one fixture: exact output and exit for the 0-changed case.
+    want = ("pin-ci: no pin version changed in this PR — nothing to check "
+            f"(0 changed of 3 pin entries compared against main @ {sha})\n")
+    check("0 changed -> the ENTIRE stdout and rc are exactly as specified",
+          (rc, out) == (0, want), repr(out))
+
+    # 5. readable base, N pins changed -> exactly those N reported (changed_pins level)
+    d, sha = _repo(pins_head=PINS_BASE.replace("1.0.0", "1.0.1").replace("2.0.0", "2.1.0"),
+                   chart_head=CHART_BASE.replace("2.13.57", "2.13.58"))
+    res = pc.changed_pins("main", root=str(d))
+    got = sorted((p["name"], p["previous"], p["version"], p["source_file"]) for p in res["pins"])
+    want_pins = sorted([("alpha", "1.0.0", "1.0.1", "chart/files/component-pins.yaml"),
+                        ("beta", "2.0.0", "2.1.0", "chart/files/component-pins.yaml"),
+                        ("core-provider", "2.13.57", "2.13.58", "chart/Chart.yaml")])
+    check("N changed -> exactly the 3 changed pins, with previous/new/file", got == want_pins,
+          repr(got))
+    check("N changed -> denominator 3 compared and the resolved sha",
+          res["compared"] == 3 and res["base_sha"] == sha, repr((res["compared"], res["base_sha"])))
+    check("N changed -> NOT silently an empty list", len(res["pins"]) == 3)
+
+    # 6. a pin ADDED relative to base counts as changed (previous None) and is still in the denominator
+    d, sha = _repo(pins_head=PINS_BASE + "  - name: gamma\n    version: 3.0.0\n")
+    res = pc.changed_pins("main", root=str(d))
+    check("added pin -> reported with previous None; compared = 4",
+          [(p["name"], p["previous"]) for p in res["pins"]] == [("gamma", None)]
+          and res["compared"] == 4, repr(res["pins"]))
+    return failures, n
+
+
 def main():
     failures = []
     for label, text, targets, want in CASES:
@@ -229,11 +351,14 @@ def main():
     print()
     prov_failures, prov_n = _provenance_fixtures()
     failures.extend(prov_failures)
+    print()
+    base_failures, base_n = _base_cases()
+    failures.extend(base_failures)
     if failures:
         print(f"::error::{len(failures)} fixture(s) failed: {', '.join(failures)}")
         return 1
     print(f"check-pin-ci-fixtures: OK — {len(CASES)} Makefile cases + {prov_n} provenance "
-          f"cases, both directions, no network")
+          f"cases + {base_n} base-readability cases, both directions, no network")
     return 0
 
 

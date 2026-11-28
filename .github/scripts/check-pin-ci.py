@@ -105,18 +105,50 @@ def sh(*args, check=False):
     return p.stdout.strip(), p.returncode, p.stderr.strip()
 
 
-def changed_pins(base_ref):
-    """Pins whose `version:` differs from the base ref. Reads both files that carry pins."""
+class BaseUnreadable(Exception):
+    """The base ref (or a pin file inside it) could not be read.
+
+    A THIRD OUTCOME, deliberately not folded into "no pins changed". changed_pins() used to
+    `continue` past a failed `git show`, so an unreadable base returned the same empty list as a
+    PR that changes no pin, and main() printed "no pin version changed in this PR -- nothing to
+    check" and exited 0. A gate that cannot see its own input must not report on it."""
+
+
+def _resolve_base(base_ref, root):
+    """Resolved commit SHA of base_ref, or raise BaseUnreadable quoting git's own error."""
+    out, rc, err = sh("git", "-C", root, "rev-parse", "--verify", "--quiet", f"{base_ref}^{{commit}}")
+    if rc != 0 or not out:
+        raise BaseUnreadable(
+            f"base ref '{base_ref}' does not resolve to a commit "
+            f"(git rev-parse --verify '{base_ref}^{{commit}}' exit {rc}: {err or 'no output'}). "
+            f"The workflow must fetch the base branch before this gate runs.")
+    return out
+
+
+def changed_pins(base_ref, root="."):
+    """Compare pins against base_ref. Returns {"pins": [...], "compared": int, "base_sha": str}.
+
+    Three outcomes, not two: pins changed (pins non-empty), no pins changed (pins empty, compared
+    > 0), and base unreadable (raises BaseUnreadable). `compared` is the denominator: how many pin
+    entries in the working tree were set against the base, so "0 changed of 95" is distinguishable
+    from "0 compared"."""
     out = []
+    compared = 0
+    base_sha = _resolve_base(base_ref, root)
     for path, loader in (("chart/files/component-pins.yaml", "pins"),
                          ("chart/Chart.yaml", "deps")):
-        before, rc, _err = sh("git", "show", f"{base_ref}:{path}")
+        # Read at the RESOLVED SHA: the ref resolved above, so a failure here is the PATH being
+        # absent inside a readable base -- a different fault from an unresolvable ref.
+        before, rc, err = sh("git", "-C", root, "show", f"{base_sha}:{path}")
         if rc != 0:
-            continue
+            raise BaseUnreadable(
+                f"base ref '{base_ref}' resolves to {base_sha} but '{path}' cannot be read in it "
+                f"(git show '{base_sha}:{path}' exit {rc}: {err or 'no output'})")
         try:
-            after = open(path).read()
+            after = open(os.path.join(root, path)).read()
         except FileNotFoundError:
-            continue
+            raise BaseUnreadable(f"'{path}' is missing from the working tree, so it cannot be "
+                                 f"compared against {base_ref} @ {base_sha}")
         b = yaml.safe_load(before) or {}
         a = yaml.safe_load(after) or {}
         if loader == "pins":
@@ -126,6 +158,7 @@ def changed_pins(base_ref):
             bm = {d["name"]: d for d in (b.get("dependencies") or [])}
             am = {d["name"]: d for d in (a.get("dependencies") or [])}
         for name, entry in am.items():
+            compared += 1
             old = (bm.get(name) or {}).get("version")
             new = entry.get("version")
             if new and old != new:
@@ -145,7 +178,7 @@ def changed_pins(base_ref):
                     "ciRepo": (entry.get("ciRepo") or "").strip() or None,
                     "source_file": path,
                 })
-    return out
+    return {"pins": out, "compared": compared, "base_sha": base_sha}
 
 
 def chart_metadata(oci_repo, chart, version):
@@ -741,10 +774,18 @@ def main():
     base = os.environ.get("BASE_REF", "origin/main")
     oci = os.environ.get("OCI_REPO", "oci://ghcr.io/krateo-platformops/charts")
 
-    pins = changed_pins(base)
+    try:
+        res = changed_pins(base)
+    except BaseUnreadable as e:
+        print(f"::error::pin-ci REFUSES: cannot read its input, so it cannot judge it. {e}")
+        print("pin-ci: REFUSED — base unreadable; this is NOT a pass and NOT 'no pin changed'")
+        return 1
+    pins = res["pins"]
+    denom = f"{len(pins)} changed of {res['compared']} pin entries compared against {base} @ {res['base_sha']}"
     if not pins:
-        print("pin-ci: no pin version changed in this PR — nothing to check")
+        print(f"pin-ci: no pin version changed in this PR — nothing to check ({denom})")
         return 0
+    print(f"pin-ci: {denom}")
 
     failures = []
     for pin in pins:
