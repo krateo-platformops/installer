@@ -1,0 +1,17 @@
+# Test fixtures that DELIBERATELY serve a composition CRD tag other than the component's pin.
+#
+# check-test-fixture-served-tags.py refuses any chart/tests fixture that serves a tag of a pinned
+# component at a version other than the pin. These are the cases where the stale tag IS the thing
+# under test. Each entry is a CLAIM THAT GETS CHECKED, not a suppression: the gate refuses an entry
+# that no longer matches a stale served tag in that fixture (the fixture was fixed, renamed, or the
+# pin caught up), so this list cannot rot into documentation nobody enforces.
+#
+# A dependency CRD (authn and snowplow-crd under snowplow, for example) needs no entry: a dep is
+# resolved by its OWN served tag, not the dependent's pin, so the gate exempts it structurally.
+entries:
+  - fixture: pinned_component_namespace_test.yaml
+    crd: kyvernoes.composition.krateo.io
+    tag: v3-9-3
+    reason: >-
+      CASE 5 CONTROL: a whitelisted version override (components[].version 3.9.3) on a pinned
+      component must still APPLY, so the fixture serves the override version, not the pin.

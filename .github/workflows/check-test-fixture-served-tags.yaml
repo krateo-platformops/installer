@@ -1,0 +1,31 @@
+name: check-test-fixture-served-tags
+# Refuses a chart/tests fixture that serves a composition CRD tag at a version its component is no
+# longer pinned to. inst.crdExists renders a composition only when a SERVED tag matches the pinned
+# version, so every snowplow pin bump (1.12.70, .74, .76, .77, .78) turned snowplow_seedauthn_test
+# red unless someone remembered a two-line hand edit. This makes it automatic.
+#
+# Trigger paths are EVERY FILE THE GATE READS: the fixtures, the pins, the deliberate-stale list,
+# the script itself and this workflow. A gate that does not run on its own input is the gap.
+on:
+  pull_request:
+    paths:
+      - 'chart/tests/**'
+      - 'chart/files/component-pins.yaml'
+      - '.github/test-fixture-deliberately-stale.yaml'
+      - '.github/scripts/check-test-fixture-served-tags.py'
+      - '.github/workflows/check-test-fixture-served-tags.yaml'
+  workflow_dispatch:
+jobs:
+  test-fixture-served-tags:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+      - name: Self-test the gate
+        run: python3 .github/scripts/check-test-fixture-served-tags.py --self-test
+      - name: Refuse fixtures that serve a stale component tag
+        run: python3 .github/scripts/check-test-fixture-served-tags.py
