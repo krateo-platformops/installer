@@ -27,7 +27,7 @@ components:
 - name: snowplow-crd
   kind: SnowplowCrds
   chart: snowplow-crds
-  version: 1.12.76
+  version: 1.12.77
   tier: platform
   feature: portal
 - name: authn
@@ -50,7 +50,7 @@ components:
 - name: snowplow
   kind: Snowplow
   chart: snowplow
-  version: 1.12.76
+  version: 1.12.77
   deps:
   - snowplow-crd
   - authn

@@ -73,7 +73,7 @@ tests:
           spec:
             group: composition.krateo.io
             names: {kind: Snowplow}
-            versions: [{name: v1-12-76, served: true}]
+            versions: [{name: v1-12-77, served: true}]
         - apiVersion: apiextensions.k8s.io/v1
           kind: CustomResourceDefinition
           metadata: {name: snowplowcrdses.composition.krateo.io}
@@ -148,7 +148,7 @@ tests:
           spec:
             group: composition.krateo.io
             names: {kind: Snowplow}
-            versions: [{name: v1-12-76, served: true}]
+            versions: [{name: v1-12-77, served: true}]
         - apiVersion: apiextensions.k8s.io/v1
           kind: CustomResourceDefinition
           metadata: {name: snowplowcrdses.composition.krateo.io}
