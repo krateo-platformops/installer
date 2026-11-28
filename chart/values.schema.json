@@ -12465,7 +12465,7 @@
             },
             "rbac": {
               "additionalProperties": false,
-              "description": "Narrow Role/RoleBinding granting patch on installers.composition.krateo.io.",
+              "description": "Narrow Role/RoleBinding for the installer-agent ServiceAccount: get/list/watch on composition.krateo.io/installers and core.krateo.io/compositiondefinitions. READ-ONLY -- it grants no patch, create or delete. The upstream chart's own description claimed patch and was wrong; its owner is fixing it at source, and this text was corrected here rather than mirrored onward. `create` defaults to FALSE from installer-agent 0.3.11 (upstream #37), so 057 sets it true explicitly to keep the grant across the pin -- a permission change must be its own decision, not a moved default riding on a prompt release.",
               "properties": {
                 "create": {
                   "type": "boolean"
