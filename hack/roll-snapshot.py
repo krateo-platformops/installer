@@ -51,6 +51,7 @@ import io
 import os
 import hashlib
 import json
+import re
 import subprocess
 import sys
 
@@ -953,6 +954,39 @@ def provenance_problems(pre, post):
     return bad
 
 
+_VER_RE = re.compile(r"^(?P<stem>.+)-(?P<ver>v\d+-\d+-\d+)$")
+
+
+def _split_rbac_key(key):
+    """('scope', 'ns', 'stem', 'ver') for an RBAC key whose NAME ends in -v<d>-<d>-<d>, else None.
+    Keys are `scope/name` (cluster-scoped) or `scope/ns/name`; the version is matched on the NAME
+    only, never the namespace."""
+    parts = key.split("/")
+    if len(parts) == 2:
+        scope, ns, name = parts[0], "", parts[1]
+    elif len(parts) == 3:
+        scope, ns, name = parts
+    else:
+        return None
+    m = _VER_RE.match(name)
+    if not m:
+        return None
+    return scope, ns, m.group("stem"), m.group("ver")
+
+
+def _rotate_ref(a, b, old_v, new_v):
+    """True when `a` (a pre-side ref such as `ServiceAccount:ns/<stem>-v<old>` or
+    `ClusterRole/<stem>-v<old>`) and `b` are the SAME reference with only the binding's own version
+    moved old -> new: same kind, same namespace, same stem, and a -> b carries exactly old_v -> new_v."""
+    def split(x):
+        head, _, name = x.rpartition("/")
+        m = _VER_RE.match(name)
+        return (head, m.group("stem"), m.group("ver")) if m else None
+    sa, sb = split(a), split(b)
+    return bool(sa and sb and sa[0] == sb[0] and sa[1] == sb[1]
+                and sa[2] == old_v and sb[2] == new_v)
+
+
 def diff(pre, post, expect_delta=None, matching=None):
     """Pure, so the self-test drives it without a cluster."""
     out = {"releases": {}, "compositions": {}, "definitions": {},
@@ -1399,6 +1433,75 @@ def diff(pre, post, expect_delta=None, matching=None):
         if sa != sb or a.get("roleRef") != b.get("roleRef"):
             subj[k] = {"subjectsAdded": sorted(sb - sa), "subjectsRemoved": sorted(sa - sb),
                        "roleRef": [a.get("roleRef"), b.get("roleRef")]}
+    # ---- VERSION-ROTATED RBAC PAIRING, 2026-11-28 -----------------------------------------------
+    # Composition RBAC carries the composition version IN ITS NAME (installers-v0-3-712), so a bump
+    # deletes one name and creates another. Matching by exact name alone reports every such object as
+    # new/gone and never compares the permits against its predecessor. Measured on krateo-057 0.3.712
+    # -> 0.3.713: a human had to pair the names by hand to learn nothing widened.
+    #
+    # PAIR only gone/new keys that differ ONLY by the trailing version of the NAME, in the same scope
+    # (bucket) and namespace, with an IDENTICAL stem and EXACTLY ONE candidate on each side. Two or
+    # more candidates on either side is NOT guessed at: they stay new/gone and a problem says so.
+    gone_l, new_l = list(out["rbac"]["gone"]), list(out["rbac"]["new"])
+    cand_g, cand_n = {}, {}
+    for k in gone_l:
+        sp = _split_rbac_key(k)
+        if sp:
+            cand_g.setdefault(sp[:3], []).append((k, sp[3]))
+    for k in new_l:
+        sp = _split_rbac_key(k)
+        if sp:
+            cand_n.setdefault(sp[:3], []).append((k, sp[3]))
+    paired, rotated, declined = [], 0, []
+    for sk in sorted(set(cand_g) & set(cand_n)):
+        gs, ns_ = cand_g[sk], cand_n[sk]
+        label = "%s/%s%s" % (sk[0], (sk[1] + "/") if sk[1] else "", sk[2])
+        if len(gs) != 1 or len(ns_) != 1:
+            declined.append(
+                "RBAC VERSION PAIRING DECLINED for stem %s: %d pre candidate(s) %s vs %d post "
+                "candidate(s) %s -- not guessing which replaces which, so these stay reported as "
+                "gone/new and their permits were NOT compared."
+                % (label, len(gs), json.dumps(sorted(k for k, _ in gs)),
+                   len(ns_), json.dumps(sorted(k for k, _ in ns_))))
+            continue
+        (ko, vo), (kn, vn) = gs[0], ns_[0]
+        a, b = pr[ko] or {}, po[kn] or {}
+        pair_label = "%s: %s -> %s" % (label, vo, vn)
+        bad = False
+        gained = sorted(set(b.get("permits") or []) - set(a.get("permits") or []))
+        gained_urls = sorted(set(b.get("nonResourceURLs") or []) - set(a.get("nonResourceURLs") or []))
+        if gained or gained_urls:
+            widened[pair_label] = gained + ["nonResourceURL:%s" % u for u in gained_urls]
+            bad = True
+        lost = sorted(set(a.get("permits") or []) - set(b.get("permits") or []))
+        if lost:
+            narrowed[pair_label] = lost
+        if "subjects" in a or "subjects" in b or "roleRef" in a or "roleRef" in b:
+            sa, sb = set(a.get("subjects") or []), set(b.get("subjects") or [])
+            rem, add = sorted(sa - sb), sorted(sb - sa)
+            # a subject that is just this binding's own version moving, same kind and namespace, is
+            # the mechanical consequence of the bump. Anything else is a real subject change.
+            for r in list(rem):
+                for ad in list(add):
+                    if _rotate_ref(r, ad, vo, vn):
+                        rem.remove(r)
+                        add.remove(ad)
+                        break
+            ra, rb_ = a.get("roleRef"), b.get("roleRef")
+            ref_changed = ra != rb_ and not (ra and rb_ and _rotate_ref(ra, rb_, vo, vn))
+            if rem or add or ref_changed:
+                subj[pair_label] = {"subjectsAdded": add, "subjectsRemoved": rem,
+                                    "roleRef": [ra, rb_]}
+                bad = True
+        paired.append((ko, kn))
+        if not bad:
+            rotated += 1
+    done_g, done_n = set(k for k, _ in paired), set(k for _, k in paired)
+    out["rbac"]["gone"] = [k for k in gone_l if k not in done_g]
+    out["rbac"]["new"] = [k for k in new_l if k not in done_n]
+    out["rbac"]["versionPaired"] = len(paired)
+    out["rbac"]["versionRotated"] = rotated
+    out["problems"].extend(declined)
     out["rbac"]["widened"] = widened
     out["rbac"]["narrowed"] = narrowed
     out["rbac"]["subjectsChanged"] = subj
@@ -2028,6 +2131,134 @@ def _self_test():
                   % (bool(rb.get("widened")), bool(rb.get("narrowed")), probs[:150]))
 
 
+    # ver_unit, 2026-11-28. Composition RBAC carries the composition version in its NAME, so a bump
+    # deletes one name and creates another. Measured on krateo-057 0.3.712 -> 0.3.713: clusterroles
+    # 58 -> 58 permits, roles 10 -> 10, nothing widened -- and the tool could only say "NEW RBAC
+    # OBJECT" because it matched by exact name. These cases pin the pairing AND its refusals.
+    _P = ["a.io/things:get", "a.io/things:list"]
+
+    def _vr(name, ns=None):
+        return "clusterroles/%s" % name if ns is None else "roles/%s/%s" % (ns, name)
+
+    def _vprobs(a, b):
+        got = diff(_snap(a), _snap2(b))
+        return got, [str(x) for x in got.get("problems", [])]
+
+    def _vcase_rotated():
+        g, pr_ = _vprobs({_vr("installers-v0-3-712"): _rb(_P)}, {_vr("installers-v0-3-713"): _rb(_P)})
+        return (pr_ == [] and g["rbac"].get("versionRotated") == 1
+                and g["rbac"]["new"] == [] and g["rbac"]["gone"] == [])
+
+    def _vcase_widened():
+        g, pr_ = _vprobs({_vr("installers-v0-3-712"): _rb(_P)},
+                         {_vr("installers-v0-3-713"): _rb(_P + ["a.io/secrets:delete"])})
+        txt = " || ".join(pr_)
+        return (len(pr_) == 1 and "PERMISSIONS WIDENED" in txt and "installers" in txt
+                and "v0-3-712" in txt and "v0-3-713" in txt and "a.io/secrets:delete" in txt
+                and g["rbac"].get("versionRotated") == 0)
+
+    def _vcase_nonresource():
+        a = _rb(_P)
+        b = _rb(_P)
+        b["nonResourceURLs"] = ["/metrics"]
+        g, pr_ = _vprobs({_vr("installers-v0-3-712"): a}, {_vr("installers-v0-3-713"): b})
+        return (len(pr_) == 1 and "PERMISSIONS WIDENED" in pr_[0] and "/metrics" in pr_[0])
+
+    def _vcase_narrowed():
+        g, pr_ = _vprobs({_vr("installers-v0-3-712"): _rb(_P)}, {_vr("installers-v0-3-713"): _rb(_P[:1])})
+        return pr_ == [] and bool(g["rbac"]["narrowed"]) and g["rbac"].get("versionRotated") == 1
+
+    _CB = lambda n: "clusterrolebindings/%s" % n
+    _SAV = lambda v: "ServiceAccount:krateo-system/installers-%s" % v
+
+    def _vcase_binding_rotated():
+        g, pr_ = _vprobs(
+            {_CB("installers-v0-1-0"): _rb(subjects=[_SAV("v0-1-0")], roleRef="ClusterRole/installers-v0-1-0")},
+            {_CB("installers-v0-2-0"): _rb(subjects=[_SAV("v0-2-0")], roleRef="ClusterRole/installers-v0-2-0")})
+        return pr_ == [] and g["rbac"].get("versionRotated") == 1 and g["rbac"]["subjectsChanged"] == {}
+
+    def _vcase_binding_extra_subject():
+        g, pr_ = _vprobs(
+            {_CB("installers-v0-1-0"): _rb(subjects=[_SAV("v0-1-0")], roleRef="ClusterRole/installers-v0-1-0")},
+            {_CB("installers-v0-2-0"): _rb(subjects=[_SAV("v0-2-0"), "ServiceAccount:krateo-system/intruder"],
+                                           roleRef="ClusterRole/installers-v0-2-0")})
+        return (len(pr_) == 1 and "RBAC SUBJECTS OR roleRef CHANGED" in pr_[0] and "intruder" in pr_[0]
+                and g["rbac"].get("versionRotated") == 0)
+
+    def _vcase_binding_other_ns():
+        # same stem, but the subject moved to a DIFFERENT namespace: not the mechanical rotation
+        g, pr_ = _vprobs(
+            {_CB("installers-v0-1-0"): _rb(subjects=[_SAV("v0-1-0")], roleRef="ClusterRole/installers-v0-1-0")},
+            {_CB("installers-v0-2-0"): _rb(subjects=["ServiceAccount:other-ns/installers-v0-2-0"],
+                                           roleRef="ClusterRole/installers-v0-2-0")})
+        return len(pr_) == 1 and "RBAC SUBJECTS OR roleRef CHANGED" in pr_[0]
+
+    def _vcase_ambiguous():
+        g, pr_ = _vprobs(
+            {_vr("installers-v0-3-712"): _rb(_P)},
+            {_vr("installers-v0-3-713"): _rb(_P), _vr("installers-v0-3-714"): _rb(_P)})
+        txt = " || ".join(pr_)
+        return ("PAIRING DECLINED" in txt and "NEW RBAC OBJECT" in txt
+                and g["rbac"]["gone"] == [_vr("installers-v0-3-712")]
+                and len(g["rbac"]["new"]) == 2 and g["rbac"].get("versionPaired") == 0)
+
+    def _vcase_other_namespace():
+        g, pr_ = _vprobs({_vr("installers-v0-3-712", "ns-a"): _rb(_P)},
+                         {_vr("installers-v0-3-713", "ns-b"): _rb(_P)})
+        return g["rbac"].get("versionPaired") == 0 and any("NEW RBAC OBJECT" in x for x in pr_)
+
+    def _vcase_whole_set():
+        # ONE fixture, the WHOLE problem list asserted -- not just that the new problem appears --
+        # so a refactor that silently stops reporting something else fails here.
+        pre = {
+            _vr("installers-v0-3-712"): _rb(_P),                      # paired, identical
+            _vr("agentgw-v0-3-3"): _rb(_P),                           # paired, widened
+            _vr("amb-v0-1-0"): _rb(_P),                               # ambiguous
+            _vr("exact"): _rb(_P),                                    # same name, widened
+            _CB("cdc-v0-1-0"): _rb(subjects=[_SAV("v0-1-0")], roleRef="ClusterRole/cdc-v0-1-0"),
+            _vr("gonly-v0-1-0"): _rb(_P),                             # no counterpart: gone
+        }
+        post = {
+            _vr("installers-v0-3-713"): _rb(_P),
+            _vr("agentgw-v0-3-4"): _rb(_P + ["a.io/pods:delete"]),
+            _vr("amb-v0-1-1"): _rb(_P), _vr("amb-v0-1-2"): _rb(_P),
+            _vr("exact"): _rb(_P + ["a.io/nodes:patch"]),
+            _CB("cdc-v0-2-0"): _rb(subjects=[_SAV("v0-2-0"), "ServiceAccount:x/y"], roleRef="ClusterRole/cdc-v0-2-0"),
+            _vr("brandnew"): _rb(_P),
+        }
+        g, pr_ = _vprobs(pre, post)
+        want = ["NEW RBAC OBJECT(S)", "PERMISSIONS WIDENED on 2 object(s)", "RBAC SUBJECTS OR roleRef CHANGED on 1 binding(s)"]
+        decl = [x for x in pr_ if x.startswith("RBAC VERSION PAIRING DECLINED for stem clusterroles/amb")]
+        rest = [x for x in pr_ if x not in decl]
+        return (len(pr_) == 4 and len(decl) == 1
+                and [x[:len(w)] for x, w in zip(rest, want)] == want
+                and g["rbac"]["gone"] == [_vr("amb-v0-1-0"), _vr("gonly-v0-1-0")]
+                and g["rbac"]["new"] == [_vr("amb-v0-1-1"), _vr("amb-v0-1-2"), _vr("brandnew")]
+                and g["rbac"]["versionPaired"] == 3 and g["rbac"]["versionRotated"] == 1
+                and set(g["rbac"]["widened"]) == {"clusterroles/agentgw: v0-3-3 -> v0-3-4", _vr("exact")}
+                and "a.io/nodes:patch" in " ".join(pr_) and "a.io/pods:delete" in " ".join(pr_))
+
+    ver_unit = [
+        ("version-rotated pair, identical permits: NO problem, counted versionRotated", _vcase_rotated),
+        ("version-rotated pair that ADDS a permit: WIDENED, naming stem, both versions, the permit", _vcase_widened),
+        ("version-rotated pair that adds a nonResourceURL: also WIDENED", _vcase_nonresource),
+        ("version-rotated pair that REMOVES a permit: narrowed, NOT a problem", _vcase_narrowed),
+        ("paired binding, subject + roleRef rotate in the same namespace: NO problem", _vcase_binding_rotated),
+        ("paired binding that also gains an UNRELATED ServiceAccount: a problem", _vcase_binding_extra_subject),
+        ("paired binding whose subject moves NAMESPACE is not the mechanical rotation: a problem", _vcase_binding_other_ns),
+        ("AMBIGUOUS stem (two post candidates): NOT paired, still new/gone, problem says declined", _vcase_ambiguous),
+        ("same stem in DIFFERENT namespaces is not paired", _vcase_other_namespace),
+        ("WHOLE problem set for one mixed fixture is exactly what is expected", _vcase_whole_set),
+    ]
+    bad_ver = 0
+    for label, fn in ver_unit:
+        try:
+            ok = bool(fn())
+        except Exception as e:
+            ok, label = False, "%s  [raised %s]" % (label, e)
+        bad_ver += 0 if ok else 1
+        print("  %-4s rbac-version: %s" % ("ok" if ok else "FAIL", label))
+
     prov_unit = [
         ("a well-formed pair is NOT refused -- so the refusals below are not unconditional",
          _ok_pre, _with(_pvx("2026-11-25T11:00:00Z")), False),
@@ -2259,10 +2490,6 @@ def _self_test():
         bad_dk += 0 if ok else 1
         print("  %-4s diff-keys: %s" % ("ok" if ok else "FAIL", label))
 
-    print("self-test: %d case(s), %d failure(s)"
-          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit) + len(cdr_unit) + len(mv_unit) + len(dk_unit) + len(co_unit) + len(prov_unit) + len(rbac_unit),
-             bad + bad_unit + bad_ne + bad_cf + bad_cv + bad_cdr + bad_mv + bad_dk + bad_co
-             + bad_prov + bad_rbac))
     # THE PRINTED COUNT AND THE EXIT CODE ARE BUILT FROM THE SAME TUPLE, 2026-11-25, because they
     # had drifted twice. `bad_cf` and `bad_cv` were once both missing from the return: a failing
     # carry-forward or composition-version unit printed FAIL and still exited 0, so CI passed it.
@@ -2271,7 +2498,10 @@ def _self_test():
     # accumulators in one place is what stops a fourth: a tally that disagrees with its own exit
     # code is a gate that reports success while failing, which is worse than no gate.
     _ACCUMULATORS = (bad, bad_unit, bad_ne, bad_cf, bad_cv, bad_cdr, bad_mv, bad_dk, bad_co,
-                     bad_prov, bad_rbac)
+                     bad_prov, bad_rbac, bad_ver)
+    print("self-test: %d case(s), %d failure(s)"
+          % (len(cases) + len(cov_unit) + len(ne_unit) + len(cf_unit) + len(cv_unit) + len(cdr_unit) + len(mv_unit) + len(dk_unit) + len(co_unit) + len(prov_unit) + len(rbac_unit) + len(ver_unit),
+             sum(_ACCUMULATORS)))
     return 1 if any(_ACCUMULATORS) else 0
 
 
