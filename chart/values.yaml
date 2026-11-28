@@ -724,6 +724,12 @@ componentValues:
   installer-agent:
     modelConfig:
       name: gemini-flash
+    # installer-agent 0.3.11 (upstream #37) flipped the chart's rbac.create default to false. Without
+    # this key the pin would silently REMOVE Role and RoleBinding krateo-system/installer-driver
+    # (get/list/watch on installers and compositiondefinitions). Kept true so the pin does not
+    # revoke the grant; removing it is a separate decision.
+    rbac:
+      create: true
   # pro-tier candidate: root-cause analysis is judgment work (rank competing causes, notice a missing piece of
   # evidence, refuse to guess) where the flash tier fabricates.
   # SEEDED DELIBERATELY, AND THE SEED IS THE WHOLE POINT. A schema `default:` on a nested leaf is
