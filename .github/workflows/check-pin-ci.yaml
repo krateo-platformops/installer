@@ -59,6 +59,14 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 — was v4 (Node 20, deprecated)
         with:
           fetch-depth: 0
+      # FETCH THE MERGE TARGET EXPLICITLY. This gate diffs the pin files against BASE_REF
+      # (origin/<base>). It used to rely on `fetch-depth: 0` alone and, when the ref could not be
+      # read, treated that as "no pin changed" and exited 0. The script now REFUSES instead; this
+      # step is what makes the refusal rare. Copied verbatim from check-no-silent-downgrade.yaml,
+      # which diffs pins against the base the same way. `fetch-depth: 0` above is kept: the
+      # refspec fetch needs the history to resolve the ref to a commit.
+      - name: Fetch the base branch
+        run: git fetch --no-tags origin "${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
       - name: Set up Helm
         uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0 — was v4 (Node 20, deprecated)
         with:
